@@ -1,0 +1,1077 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sketch 002 — Admin Character Table</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      body {
+        padding-top: 42px;
+      }
+
+      #variant-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9998;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 12px;
+        background: #07080a;
+        border-bottom: 1px solid var(--color-border);
+      }
+      #variant-nav .lbl {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--color-status-text);
+        margin-right: 6px;
+      }
+      .variant-tab {
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 5px;
+        border: 1px solid var(--color-border);
+        background: transparent;
+        color: var(--color-muted-foreground);
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .variant-tab:hover {
+        background: var(--color-secondary);
+        color: var(--color-foreground);
+      }
+      .variant-tab.active {
+        background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+        color: var(--color-primary);
+      }
+      .statepick {
+        height: 26px;
+        border-radius: 5px;
+        border: 1px solid var(--color-border);
+        background: #101418;
+        color: var(--color-muted-foreground);
+        font-family: inherit;
+        font-size: 11.5px;
+        padding: 0 6px;
+      }
+
+      .viewport-wrap {
+        margin: 0 auto;
+        transition: max-width 180ms ease;
+        container-type: inline-size;
+        container-name: vp;
+        border: 1px solid var(--color-border);
+        border-top: none;
+      }
+      .shell {
+        height: calc(100vh - 42px - var(--topbar-h));
+      }
+
+      /* ---- frame (inherited from sketch 001 winner C2) ------------------ */
+      .adminnav {
+        width: var(--adminnav-w);
+        flex-shrink: 0;
+        background: var(--color-sidebar-background);
+        border-right: 1px solid var(--color-border);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .adminnav-scroll {
+        flex: 1;
+        overflow: auto;
+        padding: 8px;
+      }
+      .whoami {
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--color-border);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 600;
+        background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+        color: var(--color-primary);
+        border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+      }
+      .navsearch {
+        margin: 8px 8px 2px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        height: 28px;
+        padding: 0 9px;
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        background: var(--color-input-background);
+        color: var(--color-status-text);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .navitem {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        height: 32px;
+        padding: 0 9px;
+        border-radius: 6px;
+        color: var(--color-muted-foreground);
+        text-decoration: none;
+        cursor: pointer;
+        position: relative;
+      }
+      .navitem:hover {
+        background: var(--color-secondary);
+        color: var(--color-foreground);
+      }
+      .navitem.is-active {
+        background: color-mix(in srgb, var(--color-primary) 13%, transparent);
+        color: var(--color-primary);
+      }
+      .navitem.is-active::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 7px;
+        bottom: 7px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--color-primary);
+      }
+      .navitem.is-planned {
+        color: var(--color-status-text);
+      }
+      .navitem .nav-label {
+        flex: 1;
+        font-size: 13px;
+      }
+      .rail-admin-group,
+      .rail-identity {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .rail-divider {
+        width: 20px;
+        height: 1px;
+        background: var(--color-border);
+        margin: 5px 0;
+      }
+      .rail-avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 600;
+        background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+        color: var(--color-primary);
+        border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+      }
+      @container vp (max-width: 1023px) {
+        .adminnav {
+          width: 0;
+          border-right-width: 0;
+          overflow: hidden;
+        }
+        .rail-admin-group,
+        .rail-identity {
+          display: flex;
+        }
+        .rail-btn.is-context {
+          opacity: 0.7;
+          cursor: default;
+        }
+        .rail-btn.is-context::before {
+          display: none;
+        }
+      }
+      @container vp (max-width: 767px) {
+        .shell > .rail {
+          width: 0;
+          border-right-width: 0;
+          overflow: hidden;
+        }
+        .page {
+          padding: 14px 14px 40px;
+        }
+        th.col-created,
+        td.col-created {
+          display: none;
+        }
+      }
+
+      /* ---- page -------------------------------------------------------- */
+      .content {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        min-height: 0;
+      }
+      .main {
+        flex: 1;
+        min-width: 0;
+        overflow: auto;
+      }
+      .page {
+        padding: 18px 22px 40px;
+      }
+      .crumb {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11.5px;
+        color: var(--color-status-text);
+        margin-bottom: 10px;
+      }
+      .crumb b {
+        color: var(--color-muted-foreground);
+        font-weight: 500;
+      }
+      .alertbar {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        padding: 9px 12px;
+        border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+        border-radius: 7px;
+        font-size: 12.5px;
+        color: var(--color-muted-foreground);
+        margin-bottom: 16px;
+      }
+      .alertbar b {
+        color: var(--color-foreground);
+        font-weight: 500;
+      }
+      .pagehead {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .pagehead h1 {
+        margin: 0;
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .pagesub {
+        margin: 3px 0 0;
+        font-size: 12.5px;
+        color: var(--color-muted-foreground);
+      }
+
+      /* ---- filter row (inline controls — NO sort dropdown, NO facets) --- */
+      .toolrow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 16px 0 10px;
+        flex-wrap: wrap;
+      }
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        height: 30px;
+        flex: 1;
+        min-width: 190px;
+        max-width: 300px;
+        padding: 0 10px;
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        background: var(--color-input-background);
+        color: var(--color-status-text);
+      }
+      .search input {
+        border: none;
+        background: none;
+        outline: none;
+        color: var(--color-foreground);
+        font-family: inherit;
+        font-size: 12.5px;
+        width: 100%;
+      }
+      .search input::placeholder {
+        color: var(--color-status-text);
+      }
+      .filterchip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 30px;
+        padding: 0 8px 0 10px;
+        border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--color-primary);
+      }
+      .filterchip button {
+        border: none;
+        background: none;
+        color: inherit;
+        cursor: pointer;
+        padding: 0;
+        display: flex;
+        opacity: 0.7;
+      }
+      .filterchip button:hover {
+        opacity: 1;
+      }
+      select.ctl {
+        height: 30px;
+        padding: 0 8px;
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        background: var(--color-input-background);
+        color: var(--color-foreground);
+        font-family: inherit;
+        font-size: 12.5px;
+      }
+
+      /* ---- table ------------------------------------------------------- */
+      table.chars {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      table.chars th {
+        text-align: left;
+        font-weight: 500;
+        font-size: 10.5px;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--color-status-text);
+        padding: 0 10px 7px;
+        border-bottom: 1px solid var(--color-border);
+        white-space: nowrap;
+      }
+      th.sortable {
+        cursor: pointer;
+        user-select: none;
+      }
+      th.sortable:hover {
+        color: var(--color-foreground);
+      }
+      th .arrow {
+        display: inline-block;
+        width: 9px;
+        margin-left: 3px;
+        opacity: 0;
+      }
+      th.sortable:hover .arrow {
+        opacity: 0.45;
+      }
+      th.sorted {
+        color: var(--color-primary);
+      }
+      th.sorted .arrow {
+        opacity: 1;
+      }
+      /* player_id is filter-only per SPEC 11.3 — no sort affordance at all */
+      th.nosort {
+        cursor: default;
+      }
+      table.chars td {
+        padding: 9px 10px;
+        border-bottom: 1px solid color-mix(in srgb, var(--color-border) 55%, transparent);
+        vertical-align: middle;
+      }
+      table.chars tbody tr {
+        cursor: pointer;
+      }
+      table.chars tbody tr:hover {
+        background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+      }
+      table.chars tbody tr.is-selected {
+        background: color-mix(in srgb, var(--color-primary) 11%, transparent);
+      }
+      .cname {
+        font-weight: 500;
+        color: var(--color-foreground);
+      }
+      .cid {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--color-status-text);
+      }
+      .playerlink {
+        color: var(--color-muted-foreground);
+        text-decoration: none;
+        border-bottom: 1px dashed color-mix(in srgb, var(--color-muted-foreground) 40%, transparent);
+      }
+      .playerlink:hover {
+        color: var(--color-primary);
+        border-bottom-color: var(--color-primary);
+      }
+      .rowact {
+        display: flex;
+        gap: 4px;
+        justify-content: flex-end;
+        opacity: 0;
+      }
+      tr:hover .rowact {
+        opacity: 1;
+      }
+      .iconbtn {
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        background: none;
+        color: var(--color-muted-foreground);
+        cursor: pointer;
+      }
+      .iconbtn:hover {
+        background: var(--color-secondary);
+        border-color: var(--color-border);
+        color: var(--color-foreground);
+      }
+      .iconbtn.danger:hover {
+        color: var(--color-destructive);
+        border-color: color-mix(in srgb, var(--color-destructive) 40%, transparent);
+      }
+      input[type='checkbox'] {
+        accent-color: var(--color-primary);
+        width: 14px;
+        height: 14px;
+        cursor: pointer;
+      }
+
+      /* ---- pagination -------------------------------------------------- */
+      .pager {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 14px;
+        font-size: 12.5px;
+        color: var(--color-muted-foreground);
+      }
+      .pagebtn {
+        min-width: 28px;
+        height: 28px;
+        padding: 0 8px;
+        border: 1px solid var(--color-border);
+        border-radius: 5px;
+        background: transparent;
+        color: var(--color-muted-foreground);
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .pagebtn:hover:not(:disabled) {
+        background: var(--color-secondary);
+        color: var(--color-foreground);
+      }
+      .pagebtn.is-current {
+        background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+        color: var(--color-primary);
+      }
+      .pagebtn:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+
+      /* ---- skeleton / empty -------------------------------------------- */
+      .sk {
+        height: 11px;
+        border-radius: 3px;
+        background: linear-gradient(
+          90deg,
+          var(--color-secondary) 25%,
+          color-mix(in srgb, var(--color-secondary) 55%, var(--color-muted-foreground)) 50%,
+          var(--color-secondary) 75%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.3s ease-in-out infinite;
+      }
+      @keyframes shimmer {
+        0% {
+          background-position: 200% 0;
+        }
+        100% {
+          background-position: -200% 0;
+        }
+      }
+      .empty {
+        text-align: center;
+        padding: 54px 20px;
+        border: 1px dashed var(--color-border);
+        border-radius: 9px;
+        margin-top: 4px;
+      }
+      .empty .glyph {
+        width: 40px;
+        height: 40px;
+        margin: 0 auto 12px;
+        border-radius: 9px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--color-border);
+        color: var(--color-status-text);
+      }
+      .empty h3 {
+        margin: 0 0 5px;
+        font-size: 14.5px;
+        font-weight: 600;
+      }
+      .empty p {
+        margin: 0 auto;
+        max-width: 380px;
+        font-size: 12.5px;
+        color: var(--color-muted-foreground);
+        line-height: 1.6;
+      }
+
+      /* ---- bulk bar (variant C) ---------------------------------------- */
+      .bulkbar {
+        position: sticky;
+        bottom: 12px;
+        margin-top: 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 12%, var(--color-card));
+        border-radius: 8px;
+        font-size: 12.5px;
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+      }
+
+      /* ---- detail pane (variant B) ------------------------------------- */
+      .detail {
+        width: 330px;
+        flex-shrink: 0;
+        border-left: 1px solid var(--color-border);
+        background: var(--color-card);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .detail-head {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--color-border);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .detail-body {
+        flex: 1;
+        overflow: auto;
+        padding: 14px 16px;
+      }
+      .detail-foot {
+        padding: 11px 16px;
+        border-top: 1px solid var(--color-border);
+        display: flex;
+        gap: 8px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 88px 1fr;
+        gap: 7px 10px;
+        font-size: 12.5px;
+        align-items: baseline;
+      }
+      .kv dt {
+        color: var(--color-status-text);
+        font-size: 11px;
+      }
+      .kv dd {
+        margin: 0;
+        color: var(--color-foreground);
+      }
+      @container vp (max-width: 1023px) {
+        .detail {
+          display: none;
+        }
+      }
+
+      .note {
+        margin-top: 22px;
+        padding: 10px 12px;
+        border-left: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+        font-size: 11.5px;
+        line-height: 1.65;
+        color: var(--color-muted-foreground);
+      }
+      .note code {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--color-primary);
+      }
+
+      #sketch-tools {
+        position: fixed;
+        bottom: 12px;
+        right: 12px;
+        z-index: 9999;
+        font-family: system-ui;
+        font-size: 12px;
+        background: rgba(0, 0, 0, 0.78);
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 8px;
+        opacity: 0.35;
+        transition: opacity 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #sketch-tools select,
+      #sketch-tools button {
+        background: #1a1a1a;
+        color: #fff;
+        border: 1px solid #383838;
+        border-radius: 4px;
+        font-size: 11px;
+        padding: 3px 7px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      #sketch-tools button.on {
+        background: #3dd6f7;
+        color: #04222e;
+        border-color: #3dd6f7;
+      }
+      #sketch-tools .sep {
+        width: 1px;
+        height: 16px;
+        background: #383838;
+      }
+    </style>
+  </head>
+  <body>
+    <svg style="display: none" aria-hidden="true">
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M9 22V12h6v10" /></symbol>
+      <symbol id="i-clap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1 .3-2.1 1.3-2.4l13.2-4c1-.3 2.1.3 2.4 1.3Z" /><path d="m6.2 5.3 3.1 3.9" /><path d="m12.4 3.4 3.1 4" /><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 0 0-16 0" /></symbol>
+      <symbol id="i-shieldalert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /><path d="M12 8v4" /><path d="M12 16h.01" /></symbol>
+      <symbol id="i-scroll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5" /><path d="M15 8h-5" /><path d="M19 17V5a2 2 0 0 0-2-2H4" /><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" /></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4" /><line x1="10" x2="3" y1="4" y2="4" /><line x1="21" x2="12" y1="12" y2="12" /><line x1="8" x2="3" y1="12" y2="12" /><line x1="21" x2="16" y1="20" y2="20" /><line x1="12" x2="3" y1="20" y2="20" /><line x1="14" x2="14" y1="2" y2="6" /><line x1="8" x2="8" y1="10" y2="14" /><line x1="16" x2="16" y1="18" y2="22" /></symbol>
+      <symbol id="i-puzzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 2.1a2 2 0 0 0-2.8 1.8v1.4a1 1 0 0 1-1 1H8.2a2 2 0 0 0-2 2v2.3a1 1 0 0 1-1 1H3.9a2 2 0 0 0-1.8 2.8 2 2 0 0 0 1.8 1.2h1.3a1 1 0 0 1 1 1V20a2 2 0 0 0 2 2h2.3a1 1 0 0 1 1 1v.1" /><path d="M22 12.5a2 2 0 0 1-1.8 2h-1.3a1 1 0 0 0-1 1V18a2 2 0 0 1-2 2h-2.4" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 6.2 17.8 2.8a2 2 0 0 0-2.8 0L3 14.8V21h6.2L21.2 9a2 2 0 0 0 0-2.8z" /></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></symbol>
+      <symbol id="i-dots" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12" /></symbol>
+      <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z" /></symbol>
+    </svg>
+
+    <div id="variant-nav">
+      <span class="lbl">SKETCH 002 · admin character table</span>
+      <button class="variant-tab active" onclick="showVariant('a', this)">A: Inline actions</button>
+      <button class="variant-tab" onclick="showVariant('b', this)">B: Row → detail pane</button>
+      <button class="variant-tab" onclick="showVariant('c', this)">C: Multi-select + bulk</button>
+      <span style="flex: 1"></span>
+      <select class="statepick" id="statepick" onchange="render()">
+        <option value="data">state: data (412)</option>
+        <option value="loading">state: loading</option>
+        <option value="empty">state: no results</option>
+        <option value="zero">state: zero characters</option>
+      </select>
+    </div>
+
+    <div class="viewport-wrap" id="vp">
+      <div class="topbar">
+        <span class="wordmark">&gt;holomush<span class="cursor">_</span></span>
+        <span class="muted" style="font-size: 12px">/ admin</span>
+      </div>
+      <div class="shell">
+        <nav class="rail">
+          <button class="rail-btn" title="Room"><svg width="18" height="18"><use href="#i-home" /></svg></button>
+          <button class="rail-btn" title="Scenes"><svg width="18" height="18"><use href="#i-clap" /></svg></button>
+          <button class="rail-btn is-active is-context" title="Admin"><svg width="18" height="18"><use href="#i-shield" /></svg></button>
+          <div class="rail-admin-group">
+            <div class="rail-divider"></div>
+            <button class="rail-btn is-active" title="Characters"><svg width="16" height="16"><use href="#i-users" /></svg></button>
+            <button class="rail-btn" title="Stats — planned" style="opacity: 0.55"><svg width="16" height="16"><use href="#i-chart" /></svg></button>
+            <button class="rail-btn" title="Players — planned" style="opacity: 0.55"><svg width="16" height="16"><use href="#i-user" /></svg></button>
+            <button class="rail-btn" title="Moderation — planned" style="opacity: 0.55"><svg width="16" height="16"><use href="#i-shieldalert" /></svg></button>
+            <button class="rail-btn" title="Audit — planned" style="opacity: 0.55"><svg width="16" height="16"><use href="#i-scroll" /></svg></button>
+            <button class="rail-btn" title="Config — planned" style="opacity: 0.55"><svg width="16" height="16"><use href="#i-sliders" /></svg></button>
+            <button class="rail-btn" title="Plugins — planned" style="opacity: 0.55"><svg width="16" height="16"><use href="#i-puzzle" /></svg></button>
+          </div>
+          <div class="rail-spacer"></div>
+          <div class="rail-identity">
+            <button class="rail-btn" title="Jump to…  ⌘K"><svg width="17" height="17"><use href="#i-search" /></svg></button>
+            <div class="rail-divider"></div>
+            <div class="rail-avatar" title="seanb — administrator">SB</div>
+          </div>
+          <button class="rail-btn" title="Settings"><svg width="18" height="18"><use href="#i-gear" /></svg></button>
+        </nav>
+
+        <div class="adminnav">
+          <div class="whoami">
+            <div class="avatar">SB</div>
+            <div style="min-width: 0">
+              <div style="font-size: 12.5px; font-weight: 500">seanb</div>
+              <div style="font-size: 10.5px" class="muted">administrator</div>
+            </div>
+          </div>
+          <div class="navsearch">
+            <svg width="12" height="12"><use href="#i-search" /></svg>
+            <span style="flex: 1">Jump to…</span><span class="kbd">⌘K</span>
+          </div>
+          <div class="adminnav-scroll">
+            <a class="navitem is-active"><svg width="15" height="15"><use href="#i-users" /></svg><span class="nav-label">Characters</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-chart" /></svg><span class="nav-label">Stats</span><span class="badge badge-planned">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-user" /></svg><span class="nav-label">Players</span><span class="badge badge-planned">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-shieldalert" /></svg><span class="nav-label">Moderation</span><span class="badge badge-planned">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-scroll" /></svg><span class="nav-label">Audit</span><span class="badge badge-planned">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-sliders" /></svg><span class="nav-label">Config</span><span class="badge badge-planned">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-puzzle" /></svg><span class="nav-label">Plugins</span><span class="badge badge-planned">planned</span></a>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="main">
+            <div class="page">
+              <div class="crumb"><span>Admin</span><svg width="12" height="12"><use href="#i-chev" /></svg><b>Characters</b></div>
+              <div class="alertbar">
+                <svg width="14" height="14" style="margin-top: 1px; flex-shrink: 0; color: var(--color-primary)"><use href="#i-lock" /></svg>
+                <div><b>You are acting as an administrator.</b> Actions here affect characters you do not own and are recorded to the audit log with your player id.</div>
+              </div>
+              <div class="pagehead">
+                <div>
+                  <h1>Characters</h1>
+                  <p class="pagesub">Every character in the game, across all players.</p>
+                </div>
+                <button class="btn btn-primary">New character</button>
+              </div>
+
+              <div class="toolrow" id="toolrow"></div>
+              <div id="tablezone"></div>
+              <div id="pagerzone"></div>
+
+              <div class="note">
+                <b>Sort/filter affordances are constrained by SPEC §11.3</b>, not by convention.
+                Sortable: <code>name</code>, <code>status</code>, <code>created_at</code>.
+                <code>player_id</code> is <b>filter-only</b> — "equality filter only, grouping a player's alts, never an ordering" — so its header carries no sort affordance at all.
+                <code>description</code>, <code>location_id</code> and every <code>profile.*</code> row are excluded outright.
+                There is deliberately <b>no sort dropdown and no facet panel</b>: §11.3 names a sort control drawn from the §7.2 field list as "the specific warning sign".
+              </div>
+            </div>
+          </div>
+
+          <div class="detail" id="detailpane" style="display: none"></div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="sketch-tools"
+      onmouseenter="this.style.opacity='1'"
+      onmouseleave="this.style.opacity='0.35'"
+    >
+      <select onchange="document.querySelector('link[href*=themes]').href='../themes/'+this.value+'.css'">
+        <option value="default">Default</option>
+      </select>
+      <span class="sep"></span>
+      <button onclick="setVp(375, this)">375</button>
+      <button onclick="setVp(768, this)">768</button>
+      <button onclick="setVp(1280, this)">1280</button>
+      <button class="on" onclick="setVp(0, this)">Full</button>
+    </div>
+
+    <script>
+      // ---- data ------------------------------------------------------------
+      // Columns are exactly what `characters` actually has (id, player_id, name,
+      // description, location_id, created_at, version, preferences) plus Phase 2's
+      // `status`. There is NO last-seen column in the schema, so none is shown.
+      const ROWS = [
+        { n: 'Ashwood, Miren', id: '01JQ7X…8F2', p: 'seanb', s: 'active', c: '12 Jun 2026', v: 7 },
+        { n: 'Bramble Teak', id: '01JR2A…3D1', p: 'ktrn', s: 'active', c: '02 Jul 2026', v: 2 },
+        { n: 'Corvid-9', id: '01JH4M…A1C', p: 'ktrn', s: 'retired', c: '03 Mar 2026', v: 19 },
+        { n: 'Dessa Rill', id: '01JN8P…6B4', p: 'mmilne', s: 'active', c: '21 Apr 2026', v: 4 },
+        { n: 'Ordinal Grey', id: '01JW5K…5E9', p: 'mmilne', s: 'active', c: '05 May 2026', v: 11 },
+        { n: 'Pellum Vosk', id: '01JC1D…9A7', p: 'ariah', s: 'retired', c: '14 Feb 2026', v: 3 },
+        { n: 'Quill Sedge', id: '01JT6R…2C8', p: 'seanb', s: 'active', c: '30 Jun 2026', v: 1 },
+        { n: 'Thessaly Vane', id: '01K2B9…07B', p: 'seanb', s: 'active', c: '28 Jul 2026', v: 1 },
+        { n: 'Umber Fane', id: '01JF3S…4E2', p: 'ariah', s: 'active', c: '08 Mar 2026', v: 6 },
+        { n: 'Vellum', id: '01J8H2…D44', p: '—', s: 'idle', c: '19 Jan 2026', v: 2 },
+        { n: 'Wren Calloway', id: '01JY7T…1F5', p: 'dpike', s: 'active', c: '17 Jul 2026', v: 5 },
+        { n: 'Yarrow Kest', id: '01JZ4V…8B3', p: 'dpike', s: 'active', c: '25 Jul 2026', v: 2 },
+      ];
+
+      let VARIANT = 'a';
+      let SORT = { key: 'n', dir: 'asc' };
+      let SELECTED = new Set();
+      let OPEN = null;
+      let PLAYER_FILTER = null;
+
+      const badgeFor = (s) =>
+        s === 'active'
+          ? '<span class="badge badge-available">active</span>'
+          : s === 'retired'
+            ? '<span class="badge badge-danger">retired</span>'
+            : '<span class="badge badge-outline">idle</span>';
+
+      function sorted(rows) {
+        const k = SORT.key;
+        const m = SORT.dir === 'asc' ? 1 : -1;
+        return [...rows].sort((a, b) => (a[k] > b[k] ? m : a[k] < b[k] ? -m : 0));
+      }
+
+      function toolrowHtml(state) {
+        const chip = PLAYER_FILTER
+          ? `<span class="filterchip">player = ${PLAYER_FILTER}
+               <button onclick="clearPlayer()" title="Clear filter"><svg width="11" height="11"><use href="#i-x"/></svg></button>
+             </span>`
+          : '';
+        const count =
+          state === 'data'
+            ? `<span class="muted" style="font-size:12px">${PLAYER_FILTER ? ROWS.filter((r) => r.p === PLAYER_FILTER).length : 12} of ${PLAYER_FILTER ? ROWS.filter((r) => r.p === PLAYER_FILTER).length : 412}</span>`
+            : '';
+        return `
+          <div class="search"><svg width="13" height="13"><use href="#i-search"/></svg>
+            <input placeholder="Search names…" /></div>
+          <select class="ctl"><option>Status: all</option><option>active</option><option>retired</option><option>idle</option></select>
+          ${chip}
+          <span style="flex:1"></span>
+          ${count}`;
+      }
+
+      function headHtml() {
+        const th = (key, label, cls = '') => {
+          const on = SORT.key === key;
+          const ar = on ? (SORT.dir === 'asc' ? '▲' : '▼') : '▲';
+          return `<th class="sortable ${cls} ${on ? 'sorted' : ''}" onclick="setSort('${key}')">${label}<span class="arrow">${ar}</span></th>`;
+        };
+        return `
+          ${VARIANT === 'c' ? '<th style="width:30px"><input type="checkbox" onclick="toggleAll(this)"></th>' : ''}
+          ${th('n', 'Character', '')}
+          <th class="nosort" title="SPEC §11.3 — player_id is equality-filter only, never an ordering">Player</th>
+          ${th('s', 'Status')}
+          ${th('c', 'Created', 'col-created')}
+          <th style="width:${VARIANT === 'a' ? '92' : '34'}px"></th>`;
+      }
+
+      function rowHtml(r) {
+        const acts =
+          VARIANT === 'a'
+            ? `<div class="rowact">
+                 <button class="iconbtn" title="Edit"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+                 <button class="iconbtn danger" title="Retire"><svg width="14" height="14"><use href="#i-archive"/></svg></button>
+                 <button class="iconbtn" title="More"><svg width="14" height="14"><use href="#i-dots"/></svg></button>
+               </div>`
+            : `<div class="rowact"><button class="iconbtn" title="More"><svg width="14" height="14"><use href="#i-dots"/></svg></button></div>`;
+        const sel = VARIANT === 'c' && SELECTED.has(r.id);
+        return `<tr class="${sel || OPEN === r.id ? 'is-selected' : ''}" onclick="rowClick('${r.id}')">
+          ${VARIANT === 'c' ? `<td onclick="event.stopPropagation()"><input type="checkbox" ${sel ? 'checked' : ''} onclick="toggleOne('${r.id}')"></td>` : ''}
+          <td><div class="cname">${r.n}</div><div class="cid">${r.id}</div></td>
+          <td><a class="playerlink" onclick="event.stopPropagation();setPlayer('${r.p}')">${r.p}</a></td>
+          <td>${badgeFor(r.s)}</td>
+          <td class="muted col-created">${r.c}</td>
+          <td>${acts}</td>
+        </tr>`;
+      }
+
+      function skeletonHtml() {
+        const cell = (w) => `<td><div class="sk" style="width:${w}"></div></td>`;
+        return `<table class="chars"><thead><tr>${headHtml()}</tr></thead><tbody>${Array.from(
+          { length: 8 },
+          () =>
+            `<tr>${VARIANT === 'c' ? '<td><div class="sk" style="width:14px;height:14px"></div></td>' : ''}
+             <td><div class="sk" style="width:56%"></div><div class="sk" style="width:32%;margin-top:5px;height:8px"></div></td>
+             ${cell('42%')}${cell('54px')}${cell('68%')}<td></td></tr>`,
+        ).join('')}</tbody></table>`;
+      }
+
+      function emptyHtml(kind) {
+        return kind === 'zero'
+          ? `<div class="empty">
+               <div class="glyph"><svg width="19" height="19"><use href="#i-users"/></svg></div>
+               <h3>No characters yet</h3>
+               <p>Nobody has created a character in this game. When they do, every character across all players appears here.</p>
+               <div style="margin-top:14px"><button class="btn btn-primary">New character</button></div>
+             </div>`
+          : `<div class="empty">
+               <div class="glyph"><svg width="19" height="19"><use href="#i-inbox"/></svg></div>
+               <h3>No characters match those filters</h3>
+               <p>Nothing matched the current search and filters. Character search matches the stored <b>normalized</b> name, not the display name — so punctuation and case are ignored.</p>
+               <div style="margin-top:14px"><button class="btn" onclick="clearAll()">Clear filters</button></div>
+             </div>`;
+      }
+
+      function pagerHtml() {
+        return `<div class="pager">
+          <button class="pagebtn" disabled>‹</button>
+          <button class="pagebtn is-current">1</button>
+          <button class="pagebtn">2</button>
+          <button class="pagebtn">3</button>
+          <span class="muted">…</span>
+          <button class="pagebtn">35</button>
+          <button class="pagebtn">›</button>
+          <span style="flex:1"></span>
+          <span class="muted">12 per page</span>
+        </div>`;
+      }
+
+      function detailHtml(r) {
+        return `<div class="detail-head">
+            <div>
+              <div style="font-size:14.5px;font-weight:600">${r.n}</div>
+              <div class="cid" style="margin-top:2px">${r.id}</div>
+            </div>
+            <button class="iconbtn" onclick="closeDetail()" title="Close"><svg width="14" height="14"><use href="#i-x"/></svg></button>
+          </div>
+          <div class="detail-body">
+            <dl class="kv">
+              <dt>Player</dt><dd>${r.p}</dd>
+              <dt>Status</dt><dd>${badgeFor(r.s)}</dd>
+              <dt>Created</dt><dd>${r.c}</dd>
+              <dt>Version</dt><dd class="mono">${r.v}</dd>
+            </dl>
+            <div class="note" style="margin-top:16px">
+              <code>version</code> is shown because every mutation must send it as
+              <code>expected_version</code> (§9.4). A stale value is how a concurrent
+              edit is refused rather than silently overwriting.
+            </div>
+          </div>
+          <div class="detail-foot">
+            <button class="btn" style="flex:1"><svg width="13" height="13"><use href="#i-pencil"/></svg> Edit</button>
+            <button class="btn"><svg width="13" height="13"><use href="#i-archive"/></svg> Retire</button>
+          </div>`;
+      }
+
+      // ---- render ----------------------------------------------------------
+      function render() {
+        const state = document.getElementById('statepick').value;
+        document.getElementById('toolrow').innerHTML = toolrowHtml(state);
+
+        const tz = document.getElementById('tablezone');
+        const pz = document.getElementById('pagerzone');
+        const dp = document.getElementById('detailpane');
+
+        if (state === 'loading') {
+          tz.innerHTML = skeletonHtml();
+          pz.innerHTML = '';
+          dp.style.display = 'none';
+          return;
+        }
+        if (state === 'empty' || state === 'zero') {
+          tz.innerHTML = emptyHtml(state);
+          pz.innerHTML = '';
+          dp.style.display = 'none';
+          return;
+        }
+
+        let rows = PLAYER_FILTER ? ROWS.filter((r) => r.p === PLAYER_FILTER) : ROWS;
+        rows = sorted(rows);
+        tz.innerHTML = `<table class="chars"><thead><tr>${headHtml()}</tr></thead><tbody>${rows
+          .map(rowHtml)
+          .join('')}</tbody></table>${
+          VARIANT === 'c' && SELECTED.size
+            ? `<div class="bulkbar">
+                 <b>${SELECTED.size} selected</b>
+                 <span style="flex:1"></span>
+                 <button class="btn"><svg width="13" height="13"><use href="#i-archive"/></svg> Retire selected</button>
+                 <button class="btn btn-ghost" onclick="clearSel()">Clear</button>
+               </div>`
+            : ''
+        }`;
+        pz.innerHTML = pagerHtml();
+
+        if (VARIANT === 'b' && OPEN) {
+          const r = ROWS.find((x) => x.id === OPEN);
+          dp.innerHTML = detailHtml(r);
+          dp.style.display = 'flex';
+        } else {
+          dp.style.display = 'none';
+        }
+      }
+
+      function setSort(k) {
+        if (SORT.key === k) SORT.dir = SORT.dir === 'asc' ? 'desc' : 'asc';
+        else SORT = { key: k, dir: 'asc' };
+        render();
+      }
+      function rowClick(id) {
+        if (VARIANT === 'b') {
+          OPEN = OPEN === id ? null : id;
+          render();
+        } else if (VARIANT === 'c') toggleOne(id);
+      }
+      function toggleOne(id) {
+        SELECTED.has(id) ? SELECTED.delete(id) : SELECTED.add(id);
+        render();
+      }
+      function toggleAll(el) {
+        SELECTED = el.checked ? new Set(ROWS.map((r) => r.id)) : new Set();
+        render();
+      }
+      function clearSel() {
+        SELECTED = new Set();
+        render();
+      }
+      function closeDetail() {
+        OPEN = null;
+        render();
+      }
+      function setPlayer(p) {
+        if (p !== '—') PLAYER_FILTER = p;
+        render();
+      }
+      function clearPlayer() {
+        PLAYER_FILTER = null;
+        render();
+      }
+      function clearAll() {
+        PLAYER_FILTER = null;
+        document.getElementById('statepick').value = 'data';
+        render();
+      }
+
+      function showVariant(v, btn) {
+        VARIANT = v;
+        SELECTED = new Set();
+        OPEN = v === 'b' ? ROWS[0].id : null;
+        document.querySelectorAll('.variant-tab').forEach((t) => t.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      }
+      function setVp(px, btn) {
+        document.getElementById('vp').style.maxWidth = px ? px + 'px' : 'none';
+        document.querySelectorAll('#sketch-tools button').forEach((b) => b.classList.remove('on'));
+        btn.classList.add('on');
+      }
+
+      render();
+    </script>
+  </body>
+</html>

@@ -43,6 +43,6 @@ Sketches are plain HTML; `themes/default.css` mirrors `web/src/app.css` verbatim
 | # | Name | Design Question | Winner | Tags |
 |---|------|----------------|--------|------|
 | 001 | admin-shell-frame | How does the three-column frame read, and how do available vs planned sections differentiate? | **C2 — Command Deck, merged collapse** | layout, nav, registry, responsive |
-| 002 | admin-character-table | What does a dense admin table look like in this dark theme, and how are row actions surfaced? | _not built_ | table, density |
+| 002 | admin-character-table | With only four sortable/filterable columns permitted by §11.3, how should the dense admin list surface row actions and its non-data states? | _pending_ | table, density, row-actions, empty-state |
 | 003 | planned-section-empty | What does "registered and gated, no handler yet" look like without reading as a dead end? | _not built_ | empty-state, extensibility |
 | 004 | character-edit-destructive | How do the field-mask edit surface and the irreversible delete read? | _not built_ | forms, destructive, audit |

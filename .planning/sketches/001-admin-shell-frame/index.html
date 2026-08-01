@@ -911,12 +911,16 @@
 
     <script>
       // ---- shared table (identical in every variant so nav is the variable)
+      // NOTE: an earlier draft carried a "Last seen" column. `characters` has no
+      // such column (id, player_id, name, description, location_id, created_at,
+      // version, preferences; + Phase 2's status) and presence is CURRENT-only,
+      // so it was fabricated. Removed — see sketch 002's README.
       const ROWS = [
-        { n: 'Ashwood, Miren', id: '01JQ…8F2', p: 'seanb', s: 'active', c: '12 Jun 2026', l: '2h ago' },
-        { n: 'Corvid-9', id: '01JH…A1C', p: 'ktrn', s: 'retired', c: '03 Mar 2026', l: '14d ago' },
-        { n: 'Thessaly Vane', id: '01K2…07B', p: 'seanb', s: 'active', c: '28 Jul 2026', l: 'just now' },
-        { n: 'Vellum', id: '01J8…D44', p: '—', s: 'idle', c: '19 Jan 2026', l: '31d ago' },
-        { n: 'Ordinal Grey', id: '01JW…5E9', p: 'mmilne', s: 'active', c: '05 May 2026', l: '6h ago' },
+        { n: 'Ashwood, Miren', id: '01JQ…8F2', p: 'seanb', s: 'active', c: '12 Jun 2026', v: 7 },
+        { n: 'Corvid-9', id: '01JH…A1C', p: 'ktrn', s: 'retired', c: '03 Mar 2026', v: 19 },
+        { n: 'Thessaly Vane', id: '01K2…07B', p: 'seanb', s: 'active', c: '28 Jul 2026', v: 1 },
+        { n: 'Vellum', id: '01J8…D44', p: '—', s: 'idle', c: '19 Jan 2026', v: 2 },
+        { n: 'Ordinal Grey', id: '01JW…5E9', p: 'mmilne', s: 'active', c: '05 May 2026', v: 11 },
       ];
       const badgeFor = (s) =>
         s === 'active'
@@ -929,7 +933,7 @@
         <table class="chars">
           <thead><tr>
             <th style="width:34%">Character</th><th>Player</th><th>Status</th>
-            <th>Created</th><th>Last seen</th><th style="width:34px"></th>
+            <th>Created</th><th>Ver</th><th style="width:34px"></th>
           </tr></thead>
           <tbody>
             ${ROWS.map(
@@ -938,7 +942,7 @@
               <td class="muted">${r.p}</td>
               <td>${badgeFor(r.s)}</td>
               <td class="muted">${r.c}</td>
-              <td class="muted">${r.l}</td>
+              <td class="muted mono">${r.v}</td>
               <td><button class="btn btn-ghost rowact" style="height:24px;padding:0 6px"><svg width="14" height="14"><use href="#i-dots"/></svg></button></td>
             </tr>`,
             ).join('')}
