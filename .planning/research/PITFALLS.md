@@ -407,6 +407,16 @@ grant test on the same fixture is unfalsifiable.
 `errors.Is` and will pass on a double-wrapped error. For an opacity/authorization contract,
 assert the **top-level** code via `oops.AsOops(err).Code()` per `.claude/rules/grpc-errors.md`.
 
+> **SUPERSEDED — see `.planning/phases/01-portal-spec/01-SPEC.md` §9.6.1, §12.1 rule 5, and §14
+> row 8.** The recorded caveat this repeats is itself wrong. Under the pinned
+> `github.com/samber/oops v1.22.0`, `OopsError.Code()` returns the code from the **deepest** error
+> in the chain (a recursive `getDeepestErrorCode` walk), and `errutil.AssertErrorCode`
+> (`pkg/errutil/testing.go:15-20`) is a thin wrapper over `oops.AsOops` plus that same `.Code()` —
+> the two spellings are behaviorally identical and **both** pass on a double-wrap. Assert **over
+> the wire** instead: `status.Code(err)` plus a generic `status.Convert(err).Message()` carrying no
+> internal code string. The paired-positive-control point above (which is this pitfall's actual
+> subject) stands unchanged. Tracked as issue **#4902**. Annotated 2026-08-01 by plan 01-05.
+
 ---
 
 ### Pitfall 7: The reserved nav section that gets wired later without its authorization
@@ -1023,7 +1033,10 @@ Domain-specific, beyond generic web security.
       two-viewer differential test asserting byte-identical responses modulo declared diffs
 - [ ] **Admin authorization:** often present only at the route — verify by calling each admin
       RPC directly with a non-admin session and asserting the **specific** `DENY_*` code
-      (top-level, via `oops.AsOops`), with a paired positive control proving the subject is
+      (~~top-level, via `oops.AsOops`~~ — **superseded**: assert over the wire via
+      `status.Code(err)` and a generic `status.Convert(err).Message()`; `oops.AsOops(err).Code()`
+      resolves the *deepest* chain code and passes on a double-wrap. See `01-SPEC.md` §12.1 rule 5
+      and §14 row 8; issue **#4902**), with a paired positive control proving the subject is
       otherwise valid
 - [ ] **Reserved admin sections:** often ungated — verify all six reserved sections are
       registered with a mandatory authorization descriptor and each returns a denial to an

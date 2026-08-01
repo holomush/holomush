@@ -28,7 +28,9 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       message shape per audience, such that a field a viewer may not see is **absent from the response**
       rather than present-and-hidden by the client.
 - [ ] **PORTAL-02**: The SPEC contains a **read-surface inventory** enumerating every character-returning
-      RPC — including the three existing public export surfaces — with the audience each serves.
+      RPC — including all **four** existing public export surfaces, the fourth being
+      `WebListPublishedScenes` whose `participants_snapshot` is a frozen participant projection
+      served unauthenticated in bulk — with the audience each serves.
 - [ ] **PORTAL-03**: The SPEC contains a **name-capture surface inventory**, giving each site a
       historical-vs-live verdict (display names are denormalized into immutable event payloads and
       `scene_log`, the latter served publicly by `WebGetPublicSceneArchive`; there is no update path).
@@ -64,8 +66,13 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
      in the client must not be able to pass.
   4. **Gates demonstrated RED against the pre-fix state** — specifically, the name-uniqueness gate
      against the current unindexed schema before the index lands.
-  5. **Top-level oops code assertions** via `oops.AsOops(err).Code()`; `errutil.AssertErrorCode`
-     chain-walks and passes on double-wrap.
+  5. **Wire-level assertion of every opacity and authorization contract** — the mapped
+     `status.Code(err)`, a generic `status.Convert(err).Message()` with no internal code string in
+     it, and a differential two-case assertion where the contract is indistinguishability.
+     `errutil.AssertErrorCode` stays correct for asserting *which* internal code a handler produced,
+     but is not evidence about what the wire carried: under the pinned `samber/oops v1.22.0` both it
+     and `oops.AsOops(err).Code()` resolve the **deepest** code in the chain, so both pass on a
+     double-wrap. (Amended — see `01-SPEC.md` §12.1 and §14 row 8; issue **#4902**.)
   6. **Invariant-scope discipline** — allocate in an existing scope (`ACCESS`, `PRIVACY`) or declare a
      boundary; never ad-hoc `INV-PROFILE-*` / `INV-ADMIN-*`, and ship `binding: pending` rather than
      fabricating a `// Verifies:`.
@@ -93,10 +100,14 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [ ] **IDENT-08**: Player usernames remain **ASCII-only** — a regression guard pinning the existing
       `^[a-zA-Z][a-zA-Z0-9_]*$` rule (`internal/auth/player.go:31`), not new validation.
 - [ ] **IDENT-09**: A **unique index on a stored normalized character name** lands **before or with**
-      `Rename`, closing the check-then-insert race that exists today across
-      `internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`.
-      Pre-existing duplicates are detected and resolved by a one-shot job first (migrations forbid
-      in-migration backfills).
+      `Rename`, closing the check-then-insert race that exists today across one shared existence
+      query (`internal/bootstrap/setup/adapters.go:38-50`) and **two** writers —
+      `internal/auth/character_service.go:112-121` and `internal/auth/guest_service.go:227`, the
+      latter calling the same `ExistsByName` inside the guest-name retry-on-collision loop. `Rename`
+      takes the writers from two to three. Pre-existing duplicates are detected and resolved by a
+      one-shot job first (migrations forbid in-migration backfills), and that audit MUST cover the
+      guest path, which provisions characters automatically and at volume. (Amended — see
+      `01-SPEC.md` §6.1.3 and §14 row 7.)
 - [ ] **IDENT-10**: Every new character mutation carries **`expected_version`** (migration `000049`) and
       emits through the **transactional outbox in-transaction**, preserving v0.12's MODEL-03/04
       guarantees.
@@ -133,8 +144,10 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       public `entity_properties` rows **and** the `characters.description` column (PROFILE-10a). It ships
       only after an audit of existing rows where `parent_type='character' AND visibility='public'`, and
       of existing character descriptions, because the policy widens read access to all of them.
-- [ ] **PROFILE-12**: The visibility toggle and the retirement flow **state in the UI** that privacy is
-      not retroactive over already-published history.
+- [ ] **PROFILE-12**: The retirement flow and the surface where a player authors profile fields
+      **state in the UI** that privacy is not retroactive over already-published history. (Amended —
+      the visibility toggle this originally named does not exist; visibility is game configuration,
+      not an owner control. See `01-SPEC.md` §14 row 3. The retirement half is unchanged.)
 
 ### Admin portal shell & character administration (ADMIN)
 
@@ -149,8 +162,11 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [ ] **ADMIN-05**: Admin disable/delete reuses the **same lifecycle states** as player-initiated retire;
       the irreversible `DeleteCharacter` path (which cascades `entity_properties` and emits a tombstone
       in one transaction) is **never wired to a player-facing button**.
-- [ ] **ADMIN-06**: **Every admin mutation emits an audit event** to the existing `events_audit`,
-      recording **before-values** and the acting **player** id (not only the character), in-transaction.
+- [ ] **ADMIN-06**: **Every admin mutation emits an audit envelope** in the same transaction as its
+      state change, recording **before-values** and the acting **player** id (not only the
+      character). The `events_audit` row is **projected** from that envelope by the asynchronous
+      audit projection, which is the only writer to that table — an admin mutation MUST NOT insert
+      into `events_audit` directly. (Amended — see `01-SPEC.md` §10.7 and §14 row 9.)
 - [ ] **ADMIN-07**: Admin navigation is **permission-filtered by registry contract**, not by template
       `{#if}` blocks.
 - [ ] **ADMIN-08**: `WebCheckSessionResponse` exposes roles for **nav hiding only** — never as the

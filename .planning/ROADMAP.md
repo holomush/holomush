@@ -116,7 +116,7 @@ plus the existing `web/src/lib/scenes/createFlow.ts` idiom.
 
 **PORTAL-10 is binding on every phase.** The six verification-integrity rules (census with set equality;
 paired positive controls on every denial test; assertions against marshaled response bytes; gates
-demonstrated RED against the pre-fix state; top-level `oops.AsOops(err).Code()` assertions; invariant-scope
+demonstrated RED against the pre-fix state; wire-level assertion of every opacity and authorization contract; invariant-scope
 discipline) are SPEC content, not a capability — but every phase plan below carries them as acceptance
 criteria. v0.12's audit catalogued 17 instances of *"a verification that cannot fail"*, and research found
 that the natural test for nearly every privacy and authorization property in this milestone **passes while
@@ -129,11 +129,11 @@ the property is false**.
 **Requirements**: PORTAL-01, PORTAL-02, PORTAL-03, PORTAL-04, PORTAL-05, PORTAL-06, PORTAL-07, PORTAL-08, PORTAL-09, PORTAL-10
 **Success Criteria** (what must be TRUE):
 
-1. The SPEC names an **audience matrix** (public / owner / admin) with a distinct message shape per audience, such that a field a viewer may not see is **absent from the response** rather than present-and-hidden by the client — and backs it with a **read-surface inventory** enumerating every character-returning RPC, including the three existing public export surfaces, with the audience each serves.
+1. The SPEC names an **audience matrix** (public / owner / admin) with a distinct message shape per audience, such that a field a viewer may not see is **absent from the response** rather than present-and-hidden by the client — and backs it with a **read-surface inventory** enumerating every character-returning RPC, including all **four** existing public export surfaces — the fourth is `WebListPublishedScenes`, whose `participants_snapshot` is a frozen participant projection served unauthenticated in bulk — with the audience each serves.
 2. The SPEC fixes the character **lifecycle** as three distinct operations — `retire`, `idle-out`, `purge` — states in normative language that **retire MUST NOT release the name**, and carries a **name-capture surface inventory** giving each denormalized-name site (immutable event payloads, `scene_log` via `WebGetPublicSceneArchive`) a historical-vs-live verdict.
 3. The SPEC defines the profile/media data model as `entity_properties` rows (`profile.*`, `profile.image.primary`, `profile.image.gallery.00..09`) with intrinsic values (`name`, `description`, lifecycle status, `version`) staying columns, and states character-name and player-username normalization as **two separate policies**.
 4. Every mutation request message in the SPEC's RPC surface carries **`expected_version`**; the SPEC records role mutation as an **explicit exclusion** from character administration; and it answers "does any v0.13 surface sort or filter on a profile field?" with a stated verdict rather than silence.
-5. The SPEC mandates the six **verification-integrity rules** (census set-equality, paired positive controls, marshaled-bytes assertions, gates demonstrated RED pre-fix, top-level `oops.AsOops(err).Code()`, invariant-scope discipline) as binding acceptance criteria that every later phase plan inherits.
+5. The SPEC mandates the six **verification-integrity rules** (census set-equality, paired positive controls, marshaled-bytes assertions, gates demonstrated RED pre-fix, wire-level opacity assertions, invariant-scope discipline) as binding acceptance criteria that every later phase plan inherits.
 
 **Plans**: 6 plans
 
@@ -210,7 +210,7 @@ Plans:
 
 1. The guest gate and ownership check exist in **exactly one place**, and a census with **set equality** over every character-returning RPC proves each one routes through it — so an RPC added later that skips the gate fails the test rather than shipping.
 2. A field the viewer may not see is **absent from the marshaled response bytes** — asserted against the wire, not a populated Go struct — and a character whose profile is unreachable returns a not-found-equivalent, never "this profile is private".
-3. An owner can set any profile field to `public` or `private` except `name` and `pronouns`, which the server refuses to make private; an unrecognized tier is denied by an exhaustive `switch` with `default: deny`.
+3. The **game-configured, per-attribute viewer-tier floor** governs every profile field — visibility is configuration, not an owner control (v0.13 ships no player or character agency over it) — and the configuration cannot raise `name` or `pronouns` above the profile's own reachability floor; an unrecognized tier is denied by an exhaustive `switch` with `default: deny`.
 4. An owner can edit prose profile fields and the in-world `characters.description` over the web, with over-cap input rejected server-side and the description write reaching the existing `world.Service.UpdateCharacterDescription` rather than a parallel path.
 5. The profile read path is built **exclusively** from the viewer-filtered property slice — a direct `PropertyReader.ListByParent`/`PropertyRepository.ListByParent` call from the facade fails the build or the test — and the proto ships the media shape now, empty: `ProfileImage{media_id, alt_text, content_warning}` + `primary_image` + `repeated gallery [max_items = 10]`.
 
@@ -230,7 +230,7 @@ Plans:
 1. A player creates a character through a **structured identity card** (name, pronouns as its own field, concept, species, age, faction) instead of the name-only stub, and manages every one of their characters — including which is default — from one place.
 2. A **logged-out visitor** loads a character's public profile at a stable URL and sees the in-world description alongside the public `profile.*` fields — rumors / RP-hooks, the volatile "Currently" line, the OOC RP-preferences block, and time zone — with blank fields hiding themselves and an initial-letter avatar placeholder where no image exists.
 3. Profile and sheet are **separate surfaces** and the sheet ships **empty**; the profile action bar carries a named empty slot for web DMs rather than a dead "message this character" button.
-4. An owner flips a field between public and private and the change is what a logged-out visitor sees on the next load; both the visibility toggle and the retirement flow **state in the UI** that privacy is not retroactive over already-published history.
+4. A change to the game's viewer-tier configuration is what a logged-out visitor sees on the **next load** — the floor is evaluated at read time and never stamped onto a row, so no backfill exists; and both the retirement flow and the surface where a player authors profile fields **state in the UI** that privacy is not retroactive over already-published history.
 5. One primary plus ten gallery image property rows insert through the **real schema** and read back, and an eleventh primary is rejected by `UNIQUE(parent_type,parent_id,name)` — demonstrating the "no migration later" claim rather than asserting it, with no uploader.
 
 **Plans**: TBD
@@ -247,9 +247,9 @@ Plans:
 **Requirements**: ADMIN-01, ADMIN-02, ADMIN-03, ADMIN-04, ADMIN-05, ADMIN-06, ADMIN-07, ADMIN-08, EXT-01, EXT-02, EXT-03, EXT-04
 **Success Criteria** (what must be TRUE):
 
-1. A non-admin calling an admin RPC **directly, bypassing the route entirely**, is denied — the decision is ABAC on an `admin_section:` resource, never a bare `PlayerHasRole` lookup and never a route-guard or gateway decision — with a typed `DENY_*` code asserted at the **top level** via `oops.AsOops(err).Code()` and a paired positive control proving an admin would have been permitted.
+1. A non-admin calling an admin RPC **directly, bypassing the route entirely**, is denied — the decision is ABAC on an `admin_section:` resource, never a bare `PlayerHasRole` lookup and never a route-guard or gateway decision — with the denial asserted **over the wire** — the mapped `status.Code(err)` plus a generic `status.Convert(err).Message()` in which no internal code string appears — the specific typed `DENY_*` code asserted with `errutil.AssertErrorCode`, and a paired positive control proving an admin would have been permitted.
 2. An admin lists, searches, opens, and edits characters; the edit surface accepts only an explicit **field-mask allowlist that excludes roles**, and admin disable/delete moves a character through the **same lifecycle states** as player-initiated retire — the irreversible `DeleteCharacter` path is reachable from no player-facing button.
-3. Every admin mutation writes an `events_audit` row **in the same transaction**, carrying the **before-values** and the acting **player** id, not only the character.
+3. Every admin mutation emits its audit envelope **in the same transaction** as the state change, carrying the **before-values** and the acting **player** id, not only the character; the `events_audit` row is projected from that envelope by the asynchronous audit projection, which is the only writer to that table.
 4. All six deferred sections (stats, players, moderation, audit, config, plugins) are registered, role-gated, and return `NOT_IMPLEMENTED` **after** the gate — a non-admin hitting one is *denied*, not told it is unimplemented — and a meta-test asserts **set equality** between the section registry and the authorization-descriptor set, so a section registered without a descriptor fails at compile time or at boot.
 5. Admin navigation is filtered from the **registry contract**, not template `{#if}` blocks; the roles exposed on `WebCheckSessionResponse` change only what is drawn, and drawing a link the viewer may not use still results in a denial at the RPC.
 

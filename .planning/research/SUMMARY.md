@@ -161,6 +161,20 @@ admin-edit-anyone matches `seed:admin-full-access`. **Exactly one new read polic
    `DENY_*` codes, the "prevents the three sites from drifting" rationale carried into the doc comment).
    Assert the **top-level** oops code via `oops.AsOops(err).Code()` — `errutil.AssertErrorCode` chain-walks
    and passes on double-wrap.
+
+   > **SUPERSEDED — see `01-SPEC.md` §9.6.1, §12.1 rule 5, and §14, row 8.** Both halves of that
+   > sentence are false against the pinned `github.com/samber/oops v1.22.0` (`go.mod:32`).
+   > `OopsError.Code()` is documented in the dependency as *"returns the error code from the deepest
+   > error in the chain"* and is a recursive `getDeepestErrorCode` walk;
+   > `errutil.AssertErrorCode` (`pkg/errutil/testing.go:15-20`) is a thin wrapper over `oops.AsOops`
+   > plus that same `.Code()`. The two spellings are **behaviorally identical** and **both** pass on
+   > a double-wrap, so a test written to this prescription asserts the inner code and passes while
+   > the wire leaks. (`oops.AsOops` also returns `(OopsError, bool)`, so the single-expression
+   > spelling does not compile.) Assert **over the wire** instead: `status.Code(err)` plus a generic
+   > `status.Convert(err).Message()` with no internal code string in it. `errutil.AssertErrorCode`
+   > remains correct for asserting *which* internal code was produced. The rest of item 4 — one
+   > shared helper, called first at every entry point, typed `DENY_*` codes — stands unchanged.
+   > Tracked as issue **#4902**. Annotated 2026-08-01 by plan 01-05.
 5. **Reserved capacity that rots.** Reserved room carries an implicit false promise that "the hard part is
    done." The fix is the milestone's highest-leverage single decision — see item 8 under Must Carry Forward.
 
@@ -255,6 +269,16 @@ its own facet above the fields** (private => return not-found-equivalent, never 
 which leaks existence), and **name/pronouns cannot be set private**. And PITFALLS' rule: exhaustive
 `switch` with `default: deny`, applied to >=2 fields at ship time.
 
+> **SUPERSEDED IN PART — see `.planning/phases/01-portal-spec/01-SPEC.md` §14, row 4.** The clause
+> *"ship `public` and `private` in the v0.13 UI"* no longer applies to an **owner-facing** UI: v0.13
+> ships no player or character agency over profile visibility, so there is no surface on which a
+> player selects a tier. **The tier-count decision above survives intact** — two tiers with real
+> evaluators, `restricted` present in the CHECK constraint but not surfaced, and the exhaustive
+> `switch` with `default: deny`. Only its owner-facing interface expression is superseded; the
+> reasoning that produced it (PITFALLS' fail-open-unimplemented-tier argument beating FEATURES'
+> three-tier proposal) is reasoning the SPEC still relies on, which is why this record is annotated
+> rather than rewritten. Annotated 2026-08-01 by plan 01-05.
+
 ### Minor discrepancy
 
 FEATURES says "seven `planned` registry entries"; PROJECT.md and ARCHITECTURE say **seven total** —
@@ -279,6 +303,15 @@ total / six planned.
    index, no `LOWER(name)` index, and normalization that does no NFKC / `Cf`-stripping / confusable folding
    (`internal/world/validation.go:114-126`). **Adding `Rename` doubles the writers into that race.** The
    unique index on a stored normalized-name column MUST land **before or with** `Rename`, not after.
+
+   > **SUPERSEDED IN PART — see `01-SPEC.md` §6.1.3 and §14, row 7.** The two sites named above are
+   > the shared existence **query** and **one** writer, not two writers. There is a **second**
+   > writer: `internal/auth/guest_service.go:227`, calling the same `ExistsByName` inside the
+   > guest-name retry-on-collision loop. So `Rename` takes the writers from **two to three**, not
+   > from two to four. The conclusion is unchanged and if anything strengthened — but the
+   > duplicate-detection audit MUST cover the **guest** path, which provisions characters
+   > automatically and at volume and is therefore the likeliest source of pre-existing duplicates.
+   > Annotated 2026-08-01 by plan 01-05.
 4. **Rename/retire cannot reach denormalized history** — `actor_display_name` in immutable event payloads
    and `CharacterName` in `scene_log`, the latter served publicly via `WebGetPublicSceneArchive`. Enumerate
    every name-capture surface in the SPEC with a historical-vs-live verdict; do **not** mass-update an
