@@ -785,7 +785,218 @@ says so — which is the precise failure this inventory exists to prevent.
 
 ## 6. Name Normalization Policy
 
-> *Placeholder — authored by plan 01-03.*
+This section is normative.
+
+**Character-name normalization and player-username validation are TWO SEPARATE
+POLICIES. They MUST NOT share an implementation, a validator, or a normalization
+function.** Not a shared helper with a mode flag, not a common `normalizeName`
+with a boolean, not one regex parameterized by caller.
+
+They are separate because they answer different questions against different
+threat models. A character name is an **in-world identity** that other characters
+read and act on, so its adversary is a visually-identical impersonator and its
+defense is Unicode-aware. A player username is an **out-of-character credential
+handle** that nobody reads as identity, is already ASCII-only, and is already
+backed by a real database constraint — so it needs no Unicode work and would only
+acquire risk from having some. Merging them means one policy's relaxation
+silently becomes the other's.
+
+### 6.1 Character names
+
+**Non-Latin scripts are permitted.** The platform is not English-only and this
+section does not make it so. What is constrained is not the script but the
+*confusability*.
+
+#### 6.1.1 The normalization pipeline, in order
+
+Order is part of the specification. Phase 2 implements these steps in exactly
+this sequence:
+
+| # | Step | What it does |
+| --- | --- | --- |
+| 1 | **NFKC normalization** | Unicode Normalization Form KC. Collapses compatibility variants — fullwidth `Ａ` (U+FF21) to `A`, the ligature `ﬁ` (U+FB01) to `fi`, superscripts and enclosed forms to their base — so two names that differ only in compatibility encoding become one string. |
+| 2 | **Strip `Cf` format codepoints** | Remove every codepoint in Unicode general category `Cf` — zero-width joiner (U+200D), zero-width non-joiner (U+200C), the bidi overrides (U+202A–U+202E), the invisible-separator family. These render as nothing, so they are pure padding for producing two distinct strings that look identical. |
+| 3 | **Whitespace canonicalization** | Trim leading and trailing whitespace; collapse each internal run to a single `U+0020`. This is the one step today's implementation already performs. |
+| 4 | **Case folding for the uniqueness key** | Unicode full case folding, producing the stored normalized form §6.1.3 uses as the uniqueness key. **The display name is not case-folded** — the character keeps the capitalization the player chose. |
+
+Steps 1–3 produce the **display name**. Step 4 additionally produces the
+**uniqueness key**. Both are stored; see §6.1.3.
+
+**A name whose normalized form is empty is REJECTED.** A submission consisting
+entirely of whitespace, entirely of `Cf` codepoints, or of anything else the
+pipeline removes normalizes to the empty string and **MUST** be rejected with a
+validation error — never accepted, never stored, never silently defaulted.
+
+#### 6.1.2 The confusable and mixed-script rule
+
+Two mechanisms, because neither alone is sufficient.
+
+**Mechanism A — the mixed-script restriction (catches cross-script splicing).**
+Resolve the name's script set using Unicode script extensions (UTS #24), treating
+codepoints of script `Common` and `Inherited` — spaces, punctuation, combining
+marks — as script-neutral and excluding them from the set. Then:
+
+| Resulting script set | Verdict |
+| --- | --- |
+| A single script | **Permitted** |
+| Latin + any of Han, Hiragana, Katakana (Japanese) | **Permitted** |
+| Latin + Han + Bopomofo (Chinese) | **Permitted** |
+| Latin + Han + Hangul (Korean) | **Permitted** |
+| **Latin + Cyrillic** | **Rejected** |
+| **Latin + Greek** | **Rejected** |
+| **Cyrillic + Greek** | **Rejected** |
+| Any other combination of two or more scripts | **Rejected** |
+
+This is UTS #39's **Moderately Restrictive** profile. It is named as a standard
+profile rather than described freehand so that Phase 2 implements against a
+specification rather than against a judgement call, and so a later reader can
+check the implementation against the same document. The three explicitly-named
+rejections are the confusable-rich pairs: Cyrillic `а` (U+0430) against Latin `a`
+(U+0061), Greek `ο` (U+03BF) against Latin `o` (U+006F).
+
+**Mechanism B — the skeleton check (catches whole-script confusables).**
+Mechanism A alone passes a name written **entirely** in Cyrillic that renders
+identically to an existing Latin name — it is single-script, so it is permitted.
+The second mechanism closes that: compute the name's **confusable skeleton** per
+UTS #39 §4 and **reject a create or rename whose skeleton equals the skeleton of
+an existing character's name**.
+
+**The skeleton is NOT the uniqueness key, and MUST NOT become one.** The
+uniqueness key is the §6.1.1 normalized form; the skeleton is a separate stored
+value backed by a **non-unique** index and checked by query. The reason is
+version stability: the Unicode confusables table changes between Unicode
+releases, so a skeleton computed today may differ from the same name's skeleton
+after a library upgrade. A `UNIQUE` constraint whose meaning shifts under a
+dependency bump is a migration hazard — existing rows can become retroactively
+non-compliant with a constraint nobody edited. A query-time check degrades
+gracefully under the same upgrade; a constraint does not.
+
+**The Unicode version used to compute skeletons MUST be pinned and recorded**
+alongside the stored skeleton, so a table upgrade is a deliberate, detectable
+recomputation rather than a silent drift in what "confusable" means.
+
+#### 6.1.3 The uniqueness key and the index that must land with rename
+
+**The stored normalized name is the uniqueness key.** Phase 2 adds it as a column
+on `characters` — the §6.1.1 pipeline's output through step 4 — with a **`UNIQUE`
+index over it**. Uniqueness is a database constraint, not an application check.
+
+**That index MUST land before or with `Rename`.** Not after. Today there is no
+unique index on `characters.name` and no `LOWER(name)` index — the baseline
+`characters` table (`internal/store/migrations/000001_baseline.up.sql:67-76`)
+carries only `idx_characters_location` (`:76`). Uniqueness is enforced entirely by
+a check-then-insert sequence with a window between the check and the write:
+
+| Participant | Location | Role |
+| --- | --- | --- |
+| The existence query | `internal/bootstrap/setup/adapters.go:38-50` — `SELECT EXISTS(SELECT 1 FROM characters WHERE LOWER(name) = LOWER($1))` | The shared read half of every check-then-insert. Note it compares `LOWER(name)`, which is ASCII-oriented case folding over a column that permits any script. |
+| Writer 1 — player character creation | `internal/auth/character_service.go:112-121` — `ExistsByName` then create | Races against itself under two concurrent creates. |
+| Writer 2 — guest provisioning | `internal/auth/guest_service.go:227` — `ExistsByName` inside the retry-on-collision loop | Races against writer 1 and against itself. |
+| Writer 3 — **`Rename`, not yet built** | Phase 3 | **Adding it triples the writers into a race that already has two.** |
+
+Landing `Rename` without the index does not merely leave the existing race open;
+it adds a third participant and a second write shape to it. That is why IDENT-09
+sequences the index first, and why this SPEC restates the sequencing as normative
+rather than leaving it to a requirement checkbox.
+
+> **Correction to the requirement text.** `.planning/REQUIREMENTS.md` IDENT-09 and
+> the source research both describe the race as spanning *two* sites, naming
+> `internal/bootstrap/setup/adapters.go:38-50` and
+> `internal/auth/character_service.go:112-121`. Those are the shared **query** and
+> **one** writer. The tree carries a **second writer** —
+> `internal/auth/guest_service.go:227` — which the enumeration above includes.
+> §14 carries this as a queued amendment.
+
+#### 6.1.4 The configurable block list
+
+**Character names are additionally checked against a configurable block/disallow
+list of regular expressions (IDENT-07).** The list is **evaluated server-side**,
+against the **normalized** form, at **both create and rename**. A block list
+enforced at create but not at rename is not a block list; it is a speed bump that
+one extra RPC call walks around.
+
+Client-side evaluation is not evaluation. The list **MUST NOT** be shipped to the
+client as the enforcement point, whether or not it is also shipped for
+convenience.
+
+#### 6.1.5 What today's implementation does not do
+
+Stated so Phase 2 knows it is **replacing** `NormalizeCharacterName`, not
+extending it.
+
+`NormalizeCharacterName` (`internal/world/validation.go:114-126`) performs
+exactly two operations: `strings.Fields` (which trims and collapses whitespace)
+and a per-word lowercase-then-title-case. It performs **no NFKC**, **no `Cf`
+stripping**, **no case folding for a uniqueness key**, **no script analysis**, and
+**no confusable detection**. It also conflates the display name with the
+normalized form — the title-cased output is what gets stored and displayed, so a
+player cannot choose their own capitalization today.
+
+`ValidateCharacterName` (`internal/world/validation.go:69-105`) runs after it and
+enforces UTF-8 validity, no leading/trailing or consecutive spaces, a rune-count
+range, and `characterNameRegex` — `^[\p{L}]+( [\p{L}]+)*$`
+(`internal/world/validation.go:60`), Unicode letters and single spaces only.
+
+**One honest note about that regex:** because `Cf` codepoints are category `Cf`
+and not `L`, the letters-and-spaces shape **already rejects** a name containing a
+zero-width joiner today. So the tree is not currently open on that specific axis.
+The pipeline still strips `Cf` in step 2 rather than relying on the rejection,
+because the two are different guarantees: the regex refuses such a name, while
+stripping guarantees that **no invisible codepoint survives into a stored display
+name** even if the shape rule is later relaxed to permit apostrophes, hyphens, or
+digits — a relaxation this SPEC neither makes nor forecloses. Defense that depends
+on an unrelated rule staying strict is defense that expires without notice.
+
+### 6.2 Player usernames
+
+**The existing ASCII-only rule is unchanged.** v0.13 writes no new username
+validation.
+
+| Property | Value |
+| --- | --- |
+| The rule | `^[a-zA-Z][a-zA-Z0-9_]*$` — starts with a letter, then letters, digits and underscores (`internal/auth/player.go:31`, applied at `internal/auth/player.go:167`) |
+| Length | 3 to 30 (`internal/auth/player.go:24-25`) |
+| Uniqueness | A real database constraint — `username TEXT UNIQUE NOT NULL` (`internal/store/migrations/000001_baseline.up.sql:54`). No check-then-insert race exists here. |
+
+**None of §6.1 applies to usernames. No NFKC, no `Cf` stripping, no case folding,
+no script analysis, and no confusable folding.** The character set is ASCII, so
+every one of those steps is either a no-op or a new failure mode with no threat to
+answer.
+
+**The v0.13 obligation is a regression guard, not new validation.** IDENT-08 is
+discharged by a test that **pins the existing rule** — asserting that the
+non-ASCII and leading-non-letter cases the regex rejects today are still rejected
+— so that a future change to the character-name pipeline cannot quietly reach the
+username path. That is the whole point of the pin: the guard exists to fail if
+someone later "unifies" the two policies this section separates.
+
+### 6.3 Pre-existing duplicates precede the index
+
+**Duplicate normalized names may already exist in production data.** The
+check-then-insert race described in §6.1.3 has been live for the whole life of the
+`characters` table, and the existing check compares `LOWER(name)` rather than any
+normalized form — so a pair differing only by NFKC-collapsible compatibility
+characters was never even a candidate for rejection.
+
+**Therefore the sequence is fixed:**
+
+1. **Detect.** A read-only query enumerating every set of characters sharing a normalized name under the §6.1.1 pipeline.
+2. **Resolve.** A one-shot job — separate from any migration — that resolves each collision.
+3. **Then** add the `UNIQUE` index.
+
+**The resolution MUST NOT run inside a migration.**
+`.claude/rules/database-migrations.md` forbids long-running data backfills in
+migrations, and this is one: it reads every character row, applies a Unicode
+pipeline to each, and writes to the colliding ones. It is also, unlike a
+migration, a step that can require a judgement call about which of two colliding
+characters keeps its name — and a migration is the wrong place for anything a
+human might need to decide.
+
+Adding the index before the resolution is not an option: the index creation
+simply fails on the first duplicate, at whatever moment the deployment reaches it.
+Discovering the duplicates from a failed migration in a deployment window is the
+same information the detection query gives for free, obtained at the worst
+possible time.
 
 ## 7. Profile and Media Data Model
 
@@ -1243,16 +1454,17 @@ registry's binding ratchet exists to catch. A `pending` entry carries no
 
 > *Placeholder — authored by plan 01-05.*
 
-> **Queued for plan 01-05 — SIX amendments, not four.** `01-CONTEXT.md:197-202`
+> **Queued for plan 01-05 — SEVEN amendments, not four.** `01-CONTEXT.md:197-202`
 > drafts four rows (ROADMAP Phase 4 criterion 3, ROADMAP Phase 5 criterion 4,
 > REQUIREMENTS PROFILE-12, research SUMMARY CONFLICT 4). Plan 01-01 added a
-> **fifth** and plan 01-02's tree enumeration forced a **sixth**. 01-05 MUST
-> carry both:
+> **fifth**, plan 01-02's tree enumeration forced a **sixth**, and plan 01-03's
+> writer enumeration forced a **seventh**. 01-05 MUST carry all three:
 >
 > | Artifact | Amendment |
 > | --- | --- |
 > | `docs/architecture/invariants.yaml` — the `INV-PRIVACY` scope record | The `boundary:` first sentence read *"Privacy-relevant gating on history reads."* and now reads *"Privacy-relevant gating on reads."* The scope is named PRIVACY; it was narrowed to history reads only because stream-history work minted it. The `"Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe authorization (→ INV-EVENTBUS)"` clause is **preserved verbatim and MUST NOT be widened** — that clause is what routes this SPEC's tier-floor evaluation to `ACCESS` (§13), and it is why splitting the four guarantees across two scopes is coherent rather than a fudge. The `description:` enumeration was extended in the same edit so the scope record describes the entry family it now owns. Landed by plan 01-01. |
 > | `.planning/REQUIREMENTS.md:31` (PORTAL-02) and `.planning/ROADMAP.md:132` (Phase 1 success criterion 1) | Both read *"including the **three** existing public export surfaces"*. The tree has **four**. Plan 01-02's enumeration found `WebListPublishedScenes` (`api/proto/holomush/web/v1/web.proto:339`) returning `repeated PublicSceneArchive`, whose `participants_snapshot` (`api/proto/holomush/scene/v1/scene.proto:1053`) carries the same frozen participant names as `WebGetPublicSceneArchive` — **in bulk**. Amend both to *"four"*. This is not cosmetic: a Phase-4 census built to the requirement's letter would enumerate three and miss the highest-volume unauthenticated name-export surface of the set, which is precisely the missing-census-member failure PORTAL-10 rule 1 exists to prevent. Verified against the tree by the orchestrator at the wave-2 boundary, not relayed. |
+> | `.planning/REQUIREMENTS.md:95-99` (IDENT-09) and `.planning/research/SUMMARY.md:277-281` ("Must carry forward" item 3) | Both describe the character-name check-then-insert race as spanning *"`internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`"*. Those two sites are the shared existence **query** and **one** writer — not two writers. Plan 01-03's enumeration found a **second** writer: `internal/auth/guest_service.go:227`, which calls the same `ExistsByName` inside the guest-name retry-on-collision loop. Amend both to enumerate one query and two writers, so the count reads three participants today and four once `Rename` lands. This is not cosmetic: SUMMARY item 3's own argument is *"adding `Rename` doubles the writers into that race"* — the true statement is that it takes the writers from two to three, and a Phase-2 planner sizing the duplicate-detection job from the requirement's letter would audit one creation path and miss the guest one, which is the path that provisions characters automatically and at volume. §6.1.3 carries the corrected enumeration. |
 
 ## 15. Out of Scope
 
