@@ -138,12 +138,28 @@ the property is false**.
 **Plans**: 6 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 01-01-PLAN.md — SPEC skeleton + profile/media data model + profile visibility model, declared and registered (tracer)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 01-02-PLAN.md — audience matrix + per-audience message shape + exhaustive read-surface inventory
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 01-03-PLAN.md — character lifecycle + name-capture surface inventory + name normalization policy
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 01-04-PLAN.md — full RPC surface with `expected_version` + admin IA and exclusions + sorting/filtering verdict
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 01-05-PLAN.md — verification-integrity rules + amendments/divergences table + applying the four amendments
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 01-06-PLAN.md — citation verification sweep + grounding trace + spec-location pointer edit + completeness gate
 
 ### Phase 2: ABAC & Schema Vocabulary
