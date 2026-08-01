@@ -296,9 +296,9 @@ Re-reviewed 2026-07-31 (`/gsd-review-backlog`): **17 entries kept, 999.3 removed
 > - **999.3 is REMOVED.** Its only real content was scene templates (SCENEFWD-01, descoped
 >   2026-07-08). Filed standalone as **#4897** and dropped from the backlog as someday/maybe —
 >   a one-item cluster, the same disposition 999.9's last item got via #4886. `holomush-5rh`'s
->   other children were already separately filed (#4643, #4728) or shipped (`.19` → Phase 2).
+>   other children were already separately filed (#4643, #4728) or shipped (`.19` → v0.11 Phase 2).
 > - **999.2 was 8 items and is actually 1.** Seven were Epic 10's *pre-implementation* breakdown
->   and shipped in Phase 1; only full-text search remains. See its entry.
+>   and shipped in v0.11 Phase 1; only full-text search remains. See its entry.
 > - **999.11's per-scope counts had drifted** and buried CRYPTO (102 pending, 40% of the total)
 >   as a "long tail". Recounted in its entry.
 >
@@ -352,14 +352,14 @@ Plans:
 ### Phase 999.2: Channels — remaining scope (BACKLOG)
 
 **Goal:** Full-text search over channel message history. **This is the only member of the
-original 8-item cluster that Phase 1 did not deliver.**
-**Scope reconciled 2026-07-31** (the entry's own "verify against what Phase 1 delivered"
+original 8-item cluster that v0.11 Phase 1 did not deliver.**
+**Scope reconciled 2026-07-31** (the entry's own "verify against what v0.11 Phase 1 delivered"
 caution, finally acted on). The other 7 beads members were Epic 10's *pre-implementation*
-breakdown and shipped in Phase 1 (10/10 plans, 2026-07-09), verified against the tree:
+breakdown and shipped in v0.11 Phase 1 (10/10 plans, 2026-07-09), verified against the tree:
 `.3` schema → `migrations/000001_channels.up.sql`; `.4` join/leave/list/say →
 `commands.go:63-85`; `.5` channel types → `types.go`; `.6` moderation mute/ban/ops →
 `mute`/`ban`/`kick`/`transfer` subcommands + `moderate-own-channel` policy; `.7` history +
-replay-on-join → `history` subcommand; `.2` implementation plan → consumed by Phase 1.
+replay-on-join → `history` subcommand; `.2` implementation plan → consumed by v0.11 Phase 1.
 Only `.8` (full-text search) remains: no `tsvector`, `GIN`, or `pg_trgm` exists in
 `plugins/core-channels/migrations/` (earlier greps for "search" matched `search_path`, the
 Postgres schema setting — a false positive worth not repeating).
