@@ -2,6 +2,10 @@
 
 Validated in sketch **001-admin-shell-frame**. Winner: **C2 — Command Deck, merged collapse**.
 
+Extended by **005-admin-mutation-in-shell** (the frame composed with a mutation surface) and
+**006-phone-band-parity** (the `<768px` band settled across *every* admin surface, not just
+the table). See "The phone band, settled" below.
+
 ## Design Decisions
 
 ### The frame is three columns, and the rail persists
@@ -55,7 +59,63 @@ a bounded region inside the app, not the viewport.
 
 The `< 768px` behavior matches the app's existing pattern — `(authed)/+layout.svelte` puts
 the Rail inside a `Sheet` drawer via `mobileNavOpen`. **The phone drawer must hold rail
-sections *and* admin sections together.**
+sections *and* admin sections together** — sketch 006 is where that finally got drawn.
+
+## The phone band, settled (sketch 006)
+
+**The `<768px` band was decided once, on one surface, and never promoted.** 006 verified the
+drift before designing anything:
+
+| Sketch | `@container vp (max-width: 767px)` | `.mobilebar` |
+| --- | --- | --- |
+| 001 admin-shell-frame | **full** — rail *and* adminnav zeroed, table columns dropped | **yes** |
+| 002 admin-character-table | **partial** — zeroes only `.rail` | **no** |
+| 003 planned-section-empty | **absent entirely** | **no** |
+| 004 character-edit-destructive | **absent** (no shell at all) | **no** |
+
+006 settles it across all of them. Three results are load-bearing:
+
+### 1. The drawer holds both nav levels, split by labels
+
+The drawer carries rail sections **and** admin sections together, separated by a divider and
+**two group labels**. Those labels are doing the hierarchy work that `.rail-btn.is-context`
+does at 768–1023px — a flat merged list has no equivalent device, so it needs an explicit
+one. (**Do not** use the game's name as the first group label — see `anti-patterns.md` §11.)
+
+### 2. Row actions cannot hover on a phone
+
+002-A's inline-on-hover row actions become **permanently visible** below 768px, and only
+`Edit` survives — `Retire` and `⋯` are dropped. **This is a real divergence from 002's
+winner, not an oversight.** Whether one always-visible action per row is right, or the row
+should open a sheet carrying all three, is a Phase-6 call this sketch does not settle.
+
+### 3. The planned-section empty state survives narrowing for free
+
+003-A had **no phone handling at all**. A centred, vertically-anchored block is naturally
+responsive — confirmed rather than assumed.
+
+### Dropped columns
+
+`Created` and `Ver` vanish below 768px. **`Ver` is load-bearing for the concurrency
+contract** — on a phone a stale-version conflict would arrive with no prior sight of the
+version at all. The sheet header still carries it, which *may* be sufficient; Phase 6 should
+decide deliberately.
+
+## The mutation surface composes with the frame (sketch 005)
+
+Sketch 004 was built **entirely standalone** — zero `shell`, zero `rail`, zero `adminnav`,
+no container query. Its outermost wrapper was a bare `.stage`. **The edit Sheet had never
+once rendered inside the frame it will live in.**
+
+The untested collision: **at 768–1023px the content column is at its narrowest** (the admin
+nav has merged into the rail, but content still starts at 48px) **exactly where a 380px
+Sheet is widest relative to it.**
+
+005 rendered it and the answer is that it holds — see `forms-and-destructive-actions.md` for
+the Sheet geometry decision and the `side="bottom"` override. The shell-side lesson:
+
+> **Rule: a surface validated standalone has not been validated.** Compose it with the frame
+> at the band where the frame is tightest before treating the decision as settled.
 
 ## The two defects merging exposed — and their fixes
 
@@ -228,6 +288,15 @@ Registry-derived nav item (status drives presentation, not a conditional):
   core-authoritative` footer). Rejected as implementation detail leaking into UI.
 - **Fabricating a `Last seen` column.** 001's first draft did exactly this; it does not
   exist in `characters`. See `anti-patterns.md`.
+- **Letting a surface inherit the phone band by accident.** Three of the four round-1
+  sketches half-inherited or ignored it. Every admin surface gets the `max-width: 767px`
+  treatment deliberately.
+- **A flat merged drawer with no hierarchy device.** The two group labels are load-bearing —
+  `.rail-btn.is-context` is unavailable once both columns are at `width: 0`.
+- **Hover-only row actions below 768px.** There is no hover. Actions must be visible or the
+  row must open something.
+- **Validating a surface standalone and calling it done.** 004 never rendered inside the
+  shell; 005 exists because of that.
 
 ## Open question this leaves for Phase 6
 
@@ -239,5 +308,12 @@ decision this sketch does not settle.
 
 ## Origin
 
-Synthesized from sketch: **001**
-Source file: `sources/001-admin-shell-frame/index.html`
+Synthesized from sketches: **001** (the frame), **005** (the frame under a mutation
+surface), **006** (the `<768px` band across every admin surface)
+
+Source files:
+`sources/001-admin-shell-frame/index.html` ·
+`sources/005-admin-mutation-in-shell/index.html` (drive the ten-step sequence dropdown, then
+**re-drive it at 768 and 375** — the answer changes by band) ·
+`sources/006-phone-band-parity/index.html` (**opens pinned to 390px**; above 768 it
+deliberately says nothing and tells you so)

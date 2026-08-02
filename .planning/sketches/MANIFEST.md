@@ -83,9 +83,13 @@ routed somewhere a phase workflow or a human will actually encounter it:
 | GitHub [#4903](https://github.com/holomush/holomush/issues/4903) | issue lists | missing `+error.svelte` |
 | `.claude/skills/sketch-findings-holomush/SKILL.md` | `discuss-phase:251`, `plan-phase:611,753` | the design decisions, as `<prior_decisions>` |
 
-**Wrap-up run 2026-08-01** — all four sketches included in full and packaged into
-`.claude/skills/sketch-findings-holomush/` (6 reference files + winning sources + theme).
-See [WRAP-UP-SUMMARY.md](WRAP-UP-SUMMARY.md).
+**Wrap-up run 1, 2026-08-01** — sketches 001–004 included in full and packaged into
+`.claude/skills/sketch-findings-holomush/` (6 reference files + sources + theme).
+
+**Wrap-up run 2 (append), 2026-08-01** — sketches 005–010 included in full. The skill now
+carries **all ten**: 8 reference files (two new — `profile-and-viewer-tiers.md`,
+`player-roster-and-creation.md`), 10 sources + theme, and `anti-patterns.md` grown from 9
+entries to 17. See [WRAP-UP-SUMMARY.md](WRAP-UP-SUMMARY.md).
 
 ## ⚠ Open SPEC amendments raised by sketches
 

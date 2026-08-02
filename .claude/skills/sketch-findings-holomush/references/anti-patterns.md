@@ -102,7 +102,21 @@ demonstrate a gate goes **RED** against a known-bad state before trusting its gr
 
 > **Rule:** a check never observed failing is indistinguishable from one that cannot fail.
 
-### 3d. The schema guard must be schema-level, not allowlist-level
+### 3d. The fingerprint check that passes by construction — **and its antidote**
+
+Sketch 010 compares four "nothing here" paths by fingerprinting each rendered panel. **In a
+correct implementation the renderer does not branch on which kind of miss occurred, so the
+panels are identical by construction and the check passes trivially.**
+
+So the sketch **ships the failure**: a `☣ inject leak` toggle makes one path render a
+bespoke "Access denied" page. Fingerprints diverge, the match border drops, the note flips
+to a disclosure warning. **Verified both directions — identical inputs → green, one panel
+changed → red.**
+
+> **This is the pattern to copy, not just the warning.** Any opacity/indistinguishability
+> test must ship a demonstrated red state alongside its green one.
+
+### 3e. The schema guard must be schema-level, not allowlist-level
 
 Because the real risk is a **future** field, §10.6 mandates **two** tests, not one:
 
@@ -214,6 +228,196 @@ It would **not** be safe on the public directory.
 
 ---
 
+## 10. Fabricated **copy** — and how far it travels before anyone checks
+
+**What happened.** Sketch 008's create card read *"Names are permanent once taken."* Sketch
+009's confirm step read *"I understand this name is permanent. It cannot be changed in this
+release."*
+
+**Both were false.** v0.13 ships player rename — **IDENT-03**,
+`CharacterAccessService.RenameCharacter`, owner-scoped, ABAC `write` on `character:<id>`,
+SPEC §9.4.2 line 1805, **Phase 3** — and Phase 3's own ROADMAP goal line names it
+explicitly. What *is* true is that a name is **reserved** once taken, and stays reserved
+after retire (§4.4, §4.5).
+
+**Why this is worse than the fabricated `last seen` column (§1).** Three reasons:
+
+1. **It propagated.** Two independent sketches asserted it. A fabricated *field* fails
+   loudly at build time; fabricated *copy* renders perfectly.
+2. **It would have inverted a decision.** 009's winner (A — submit & report, which lets the
+   server silently rewrite the name and reports afterwards) is only acceptable **because
+   rename exists**. Had "permanent" been true, A would have been the *wrong* choice.
+3. **It was caught by luck of process, not by review.** 008 wrote down "sketch 009 tests
+   this claim"; 009 went and checked. Nothing structural would have caught it.
+
+> **Rule:** UI copy that asserts a *property of the system* ("permanent", "cannot be
+> undone", "always", "never") is a **claim**, and claims get grounded to a SPEC section or a
+> `path:line` like any other. If it also carries a **dependency** — decision X is only safe
+> because claim Y holds — write the dependency down where the decision lives.
+
+---
+
+## 11. Conflating the platform brand with the game world
+
+**What happened.** Sketch 010's first draft shipped a **"Back to HoloMUSH"** button.
+
+Wrong twice over:
+
+1. **HoloMUSH is the platform, not the game.** `.claude/rules/branding.md` **INV-6**: the
+   brand is *"the software/platform only — never the game world / default setting."* A
+   player is in *a game that runs on* HoloMUSH.
+2. **The game's name is not the platform's to assume.** It exists as
+   `SettingConfig.DisplayName` (required on setting plugins, `internal/plugin/manifest.go:211`)
+   — **but it reaches no web surface.** No RPC carries it; the only `HoloMUSH` strings under
+   `web/src/` are SPDX headers.
+
+**Corrected to `Home`** — viewer-agnostic, no new surface, conflates nothing. The
+`>holomush_` wordmark stays in the top bar; that is platform chrome, which INV-6 permits.
+
+> **Rule:** never hardcode `HoloMUSH` in player-facing copy. If a surface needs the *game's*
+> identity, that is a plumbing gap to raise, not a string to invent.
+
+---
+
+## 12. The conditional disclosure notice — where "the obvious improvement" is the bug
+
+**What happened.** Sketch 007's variant B added *"Signed-in players see more on some
+profiles."* to signed-out profile views.
+
+That notice is **legal only because it is unconditional** — same text, every profile, every
+signed-out visitor, regardless of whether anything was withheld.
+
+**The natural later "improvement" — show it only when something *was* withheld — is a
+which-characters-have-populated-profiles oracle.** It is the more thoughtful-looking change,
+and it is precisely the leak §7.5/§8.9 exist to prevent.
+
+**B was rejected**, which closes the channel *by construction*: v0.13 never ships the notice,
+so nobody can later "improve" it.
+
+> **Rule:** when a UI element is safe only because it is **unconditional**, that
+> unconditionality is a **requirement**, not an implementation detail — state it where the
+> component lives. And prefer not shipping the element at all when the conditional version
+> is the obvious next step.
+
+Same family: counts, lock icons, greyed sections, progress indicators, "N more below"
+affordances. **Anything whose presence or value varies with how much was withheld.**
+
+---
+
+## 13. Building "coming soon" slots for a feature that ships no data
+
+**What happened.** Sketch 007 rendered a Gallery section. §7.3 ships the media model as
+*"the schema and the proto shape only, with **zero upload behavior**. There is no uploader,
+no storage backend, and no media-serving path."*
+
+So in a real v0.13 deployment **no media rows exist**, and by §8.9's absence rule the Gallery
+**never renders for anyone**. The sketch showed it only because its fixture asserts rows
+exist, to prove the model has a rendering.
+
+**Do not build empty dashed slots as a "coming soon" affordance.** That is §2's
+speculative-scope mistake one layer down: it invents a promise the SPEC does not make.
+
+> **Rule:** build the renderer so the data *would* render if present, and ship a page that
+> shows **nothing** when it is not. An empty placeholder is a claim about the roadmap.
+
+---
+
+## 14. Promising something across a two-moment gap
+
+**What happened.** Sketch 009's variant B checks name availability as you type and shows a
+green tick.
+
+**An availability check and an `INSERT` are two different moments.** Even with §6.1.3's
+`UNIQUE` index doing the real enforcement, "available ✓" can be followed by a `23505` on
+submit because someone took the name in between.
+
+This is **not** the legacy TOCTOU — the index closes the *correctness* hole. It is a **UI
+honesty** problem the index **cannot** close: the check is stale the moment it returns. B's
+tick means *"probably"*.
+
+> **Rule:** if the UI asserts a fact that a later write re-checks, the losing path is **the
+> variant's defining requirement**, not an edge case to discover in implementation. Or
+> choose a shape that never makes the promise — which is what A and C do.
+
+---
+
+## 15. Two vocabularies sharing one word on one surface
+
+**What happened.** The roster **already ships** a status badge, and it is **session** state
+(`hasActiveSession → 'Active'`, else `'Offline'`, `+page.svelte:132-136`). v0.13 adds
+`characters.status` — **lifecycle** state (`active | retired | idle`).
+
+They share the word **"status"** and the token **`active`**, while meaning entirely different
+things. A retired card renders **"Retired · Offline"**, where `Offline` is *meaningless* on
+a character that cannot be played at all — it is a second status competing with the first,
+distinguishable only by knowing which vocabulary each token belongs to.
+
+**Fix: a non-`active` lifecycle MUST suppress the session badge entirely.** Session state is
+only meaningful for a character that could be connected.
+
+> **Rule:** this is a `.claude/rules/terminology.md`-class problem — check whether a new
+> domain word **already means something else on the same screen**. When it does, the new
+> vocabulary avoids the collided token in its user-facing labels (which is why 008's
+> sections are `Playable` / `Not playable`, not `Active` / `Inactive`).
+
+---
+
+## 16. The polite "Access denied" page — and the nested error boundary
+
+**Two shapes, one failure.** Both destroy the not-found indistinguishability that three
+independent surfaces (003 `/admin`, 007 unreachable profiles, and the rejected 006-C) rest
+on.
+
+**16a — the bespoke refusal page.** *"Access denied — you don't have permission to view this
+area."* It is polite, it is helpful, it is what every other web app does — **and it is the
+single most natural thing an implementer would write.** It hands a prober the fact that
+`/admin/*` exists and they are merely excluded. This is exactly what 010's `☣ inject leak`
+toggle renders, to prove the check can go red (§3d).
+
+**16b — the second `+error.svelte`.** SvelteKit resolves the **nearest** boundary. Once
+boundaries are nestable, someone adds `routes/admin/+error.svelte` and **the property dies
+silently with no test failing** — a one-file PR that looks harmless. This is why 010's
+variant C (in-shell not-found) was rejected despite being the nicer experience.
+
+> **Rule:** one root `+error.svelte`, and a meta-test asserting **exactly one** exists under
+> `web/src/routes/`. Never a "forbidden" page, never a redirect, never an echo of the
+> requested path. And the renderer takes **no reason parameter** — if it has nothing, a
+> future change cannot surface it.
+
+**Calibration, so this is not over-applied:** indistinguishability is **per-viewer, not
+global**. An admin hitting `/admin/moderation` *should* see it resolve — that is the gate
+permitting them. Requiring global sameness would forbid ever showing an admin their own
+screen.
+
+---
+
+## 17. Validating a surface in isolation and calling the decision settled
+
+Two instances, one root cause.
+
+**17a — the surface with no frame.** Sketch 004 was built **entirely standalone**: zero
+`shell`, zero `rail`, zero `adminnav`, no container query, outermost wrapper a bare
+`.stage`. **The edit Sheet had never rendered inside the frame it will live in** — and the
+untested collision was specific: at 768–1023px the content column is at its **narrowest**
+exactly where a 380px Sheet is **widest relative to it**. Sketch 005 exists solely because
+of that.
+
+**17b — the band decided once and never promoted.** The `<768px` treatment was designed on
+**one** surface (001's table). 002 half-inherited it (zeroed only `.rail`, no `.mobilebar`);
+003 had **none**; 004 had no shell at all. Sketch 006 exists solely because of that.
+
+> **Rule:** a decision made on one surface is not a decision for the set. Before treating a
+> cross-cutting choice as settled, **enumerate the surfaces it should apply to and check each
+> one** — the drift is invisible per-sketch and obvious in a table.
+
+The corollary is a cheap-sequencing win worth copying: 005 picked the **simplest** geometry
+and *deliberately left the phone band wrong*, handing it to 006 rather than settling it by
+assumption. Paying only where it broke cost **one CSS block**; adopting the three-treatment
+design up front would have cost three.
+
+---
+
 ## Origin
 
-Synthesized from sketches: **001, 002, 003, 004** (plus the wrap-up's own verification pass)
+Synthesized from sketches: **001–010** (plus the wrap-up's own verification pass).
+Entries 1–9 come from round 1 (001–004); 10–17 from round 2 (005–010).

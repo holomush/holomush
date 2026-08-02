@@ -2,6 +2,11 @@
 
 Validated in sketch **004-character-edit-destructive**. Winner: **C — Two groups** (refined).
 
+Extended by **005-admin-mutation-in-shell** (where the Sheet sits, and the mutation loop as a
+*sequence*) and **006-phone-band-parity** (the one phone override). Player-facing form
+findings — the §6.1 name pipeline, confusables, live-availability honesty — live in
+`player-roster-and-creation.md`.
+
 ## ⚠ Read this first: there is no delete in the admin portal
 
 Earlier hand-off notes (including sketch 002's and 003's) described 004 as covering *"the
@@ -113,6 +118,113 @@ until something changes.**
 It states that the action is reversible **and that the name stays reserved** (§4.4, §4.5).
 Compare against how a delete dialog would read — the point is that this one genuinely is not
 that.
+
+## Where the Sheet sits — one geometry, one override (sketches 005 + 006)
+
+**The combined result is the cheap one:**
+
+> **005-A everywhere, plus exactly one `@container vp (max-width: 767px)` block that turns
+> the right drawer into a bottom-sheet.** No routing change, no three-treatment branching,
+> no per-band component swap. shadcn-svelte's `Sheet` supports `side="bottom"` natively, so
+> **this is a prop at a breakpoint, not a second component.**
+
+005 picked the simplest geometry (a fixed 380px right drawer with a scrim, the shadcn
+default) and **deliberately left the phone band wrong**, handing it to 006 rather than
+settling it by assumption. Paying only where it broke cost one CSS block; adopting 005's
+variant C (three treatments, one per band) up front would have cost three.
+
+**Rejected at 005:**
+
+- **B — Inset split.** No scrim; the Sheet is a sibling column and the table narrows. It
+  lost the same way sketch 002's variant B (a 330px detail pane) did — a side-by-side pane
+  does not earn its width on a column this narrow. **That is two independent sketches
+  reaching the same verdict on the same idea at two different layers: treat "show the list
+  beside the editor" as settled *against* for this portal.**
+- **C — Adaptive.** Overlay ≥1024, full-column takeover 768–1023, bottom-sheet <768. More
+  *correct* at 375 in isolation, and still lost: three treatments is three things to keep
+  true. Its bottom-sheet is exactly what 006 adopted as the single override.
+
+**Rejected at 006:**
+
+- **C — Full-screen takeover** with a `‹ Characters` back arrow. **Rejected, and the
+  rejection closes a routing question early.** A back arrow makes the sheet a **route**,
+  which makes it **deep-linkable**, which drags [#4903](https://github.com/holomush/holomush/issues/4903)
+  into the edit surface: a deep link to a character the viewer may not see would have to
+  render the ordinary not-found like any other unreachable path. **B keeps the sheet an
+  overlay, so that whole branch stays closed.** Record it as a deliberate scope reduction.
+
+```css
+/* A — 005's winner: 380px right drawer, every band ≥768. */
+.sheet {
+  position: absolute; z-index: 60; display: flex; flex-direction: column;
+  background: var(--color-surface); transition: transform 200ms ease;
+  top: 0; right: 0; bottom: 0; width: 380px;
+  border-left: 1px solid var(--color-border);
+  transform: translateX(102%);
+  box-shadow: -18px 0 40px rgba(0, 0, 0, .45);
+}
+.sheet.open { transform: none; }
+
+/* THE ONE OVERRIDE — Sheet side="bottom" below the phone breakpoint. */
+@container vp (max-width: 767px) {
+  .sheet {
+    top: auto; left: 0; right: 0; bottom: 0;
+    width: auto; height: 84%;
+    border-left: 0; border-top: 1px solid var(--color-border);
+    border-radius: 13px 13px 0 0;
+    transform: translateY(102%);
+    box-shadow: 0 -18px 40px rgba(0, 0, 0, .45);
+  }
+  .grabber { display: block; }
+}
+```
+
+### ⚠ The grab handle is an obligation, not decoration
+
+B ships a grabber, and **a grab handle promises drag-to-dismiss** (and usually a
+partial-height detent). Neither is implemented in the sketch.
+
+> **Phase 6 must either honor the affordance or drop it.** A handle that does not drag is a
+> *worse* affordance than no handle, because it invites a gesture that then fails silently.
+
+### Input font-size is 15px on the phone band, not 12.5px
+
+Any `<16px` font in a **focused input** triggers iOS Safari's zoom-on-focus, which then
+leaves the viewport scaled after blur. This is a genuine mobile constraint, not a style
+preference — **keep 15px (or go to 16px) rather than inheriting the desktop size.**
+
+```css
+.fieldrow input, .fieldrow textarea {
+  font-size: 15px;   /* <16px triggers iOS zoom-on-focus */
+}
+```
+
+## The mutation loop as a sequence (sketch 005)
+
+004 validated `editing` / `edited` / `conflict` / `retire confirm` / `retired` as five
+**separate frames**. Nobody had seen them as a **sequence**, so nothing was decided about
+what happens *between* them. 005 settles four things:
+
+| Moment | Decision |
+| --- | --- |
+| **After Save succeeds** | The row updates **in place** with a brief flash (`Ver 7 → 8`) — **not** a table refetch. This is what decides whether Phase 6 needs an optimistic-update path or can refetch the page. |
+| **Sheet vs toast ordering** | The sheet **closes first**, then the toast fires. Conventional — but it means the last thing you see of your edit is the toast's summary, not the form. *See the open question below.* |
+| **Toast copy** | Names the wire call: `AdminUpdateCharacter · update_mask: 2 paths · v7 → v8`. |
+| **Undo on retire** | Offered, and it sends **`AdminUnretireCharacter`** — never a status value (§10.6). |
+
+### Why the technical toast copy is *not* the mistake 001 and 003 rejected
+
+Sketches 001 (Registry Ledger footer) and 003 (gate provenance trace) both rejected
+implementation detail in the operator's face. The toast looks like the same thing and is
+not:
+
+> **A mutation is different from a nav or an empty state.** This is an admin acting on a
+> character they **do not own**, and §10.7 records the mutation to the audit log **with their
+> player id**. Naming the wire call reads as *accountability*, not debug output — the
+> operator is being told exactly what was written under their name.
+
+That distinction is the rule to carry: **narration is wrong on read surfaces and right on
+audited write surfaces.**
 
 ## HTML Structures
 
@@ -233,19 +345,57 @@ anyone thinks to add it to the mask.
 - **An enabled Save on an empty mask.** Empty mask is a no-op (§9.5 rule 4).
 - **An escalation test with no positive control.** It passes whether or not the property
   holds.
+- **A side-by-side list-plus-editor.** Rejected twice independently (002-B, 005-B). Settled.
+- **A back arrow on the phone sheet.** It makes the sheet a route, which makes it
+  deep-linkable, which drags #4903 into the edit surface.
+- **A grab handle with no drag-to-dismiss.** Honor it or drop it.
+- **Inheriting the desktop `12.5px` input size on the phone band.** iOS zooms on focus and
+  does not unzoom on blur.
 
-## Open question
+## Open questions
 
-**Where does `Rename…` go?** Variant B routes to it from the locked `Name` row, but rename
-is `RenameCharacter` at the world layer (Phase 3) and the SPEC does not say whether the
-admin portal exposes it at all — §9.3's admin census has update / retire / unretire and
-**no rename**. If admins cannot rename, B's button is a dead end and the locked row should
-say so; if they can, that is a census addition. **This needs settling before Phase 6 builds
-either variant.**
+### Where does `Rename…` go? — *narrowed, still open*
+
+Variant B routes to rename from the locked `Name` row.
+
+**Round 2 settled half of it: player rename definitely ships.** IDENT-03 /
+`CharacterAccessService.RenameCharacter` — **owner-scoped**, ABAC `write` on
+`character:<id>`, SPEC §9.4.2 line 1805, Phase 3. So the locked row is *not* pointing at
+something that does not exist.
+
+**What is still open is the *admin* half.** §9.3's admin census still has update / retire /
+unretire and **no `AdminRenameCharacter`.** So: if admins cannot rename, B's button is a
+dead end and the locked row should say *"the owner can rename this"*; if they can, that is a
+census addition. **Settle before Phase 6 builds either variant.**
+
+### Does the Sheet close before or after the toast fires?
+
+005 closes it first (the conventional choice) — but that means the last thing you see of
+your edit is the toast's summary, not the form. The alternative (sheet stays open, toast
+fires over it, user closes manually) keeps the edited values on screen for a double-check at
+the cost of an extra click. **Not settled.**
+
+### Is the sheet a route or an overlay?
+
+006's variant C forced the question; A and B dodge it. **B's win keeps it an overlay**,
+which is the answer for v0.13 — but it is a Phase-6 routing decision with a deep-link
+consequence (#4903), not purely visual, and it should be written down as such rather than
+inherited.
+
+### Do the dropped columns need a home?
+
+`Created` and `Ver` vanish below 768px. `Ver` is load-bearing for the concurrency contract —
+on a phone a stale-version conflict arrives with **no prior sight of the version at all**.
+The sheet header still carries it, which may be sufficient.
 
 ## Origin
 
-Synthesized from sketch: **004**
-Source file: `sources/004-character-edit-destructive/index.html`
-(state dropdown cycles `editing` / `edited (mask = 2 paths)` / `version conflict` /
-`retire confirm` / `retired → unretire`)
+Synthesized from sketches: **004** (the surface), **005** (its placement + the mutation
+sequence), **006** (the phone override)
+
+Source files:
+`sources/004-character-edit-destructive/index.html` (state dropdown cycles `editing` /
+`edited (mask = 2 paths)` / `version conflict` / `retire confirm` / `retired → unretire`) ·
+`sources/005-admin-mutation-in-shell/index.html` (a **ten-step sequence** across two paths,
+edit then retire — drive it at 1280, then again at 768 and 375) ·
+`sources/006-phone-band-parity/index.html` (phone-first; the `sheet` and `toast` screens)

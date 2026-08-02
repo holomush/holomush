@@ -2,6 +2,11 @@
 
 Validated in sketch **003-planned-section-empty**. Winner: **A — Minimal**.
 
+Extended by **010-not-found-page** (winner **B — + where you can go**), which designs the
+page 003 depends on, and by **007-public-profile-viewer-tiers**, which makes a **third**
+surface depend on it (§8.7: an unreachable profile returns a not-found-equivalent). See
+"The ordinary not-found" below.
+
 Six of the seven admin sections have no handler. §10.3 requires they **gate first, then
 refuse** — and that a non-admin is *denied*, not told the section is unimplemented. Two
 states, only one of which is the friendly one.
@@ -72,16 +77,20 @@ population the leaky codes disclose to.
 
 ## ⚠ Blocking gap: the not-found page does not exist
 
-There is **no `+error.svelte` anywhere under `web/src/routes/`** today. The page this whole
-design rests on is Phase 6 work. Tracked as
+There is **no `+error.svelte` anywhere under `web/src/routes/`** today — verified, count
+zero. The page this whole design rests on is Phase 6 work. Tracked as
 [#4903](https://github.com/holomush/holomush/issues/4903).
 
 **It must be the *ordinary* one.** The moment `/admin` gets its own bespoke not-found, the
 indistinguishability this design rests on is gone.
 
-Secondary: the "← Back to HoloMUSH" affordance on that page needs a sensible target per
-viewer. `nav/sections.ts` already carries `requiresPlayer` for exactly this class of
-problem.
+**Three independent surfaces now rest on it:**
+
+| Surface | Depends on it for |
+| --- | --- |
+| **003** — `/admin` invisibility | A deep link to a gated section must render the ordinary not-found, or the bounce itself confirms `/admin/*` is a real route family. |
+| **007** — unreachable profiles (§8.7) | A profile below its reachability floor must return a not-found-equivalent **indistinguishable from a character that does not exist**. |
+| **006** — the *rejected* variant C | A deep-linkable edit sheet would have needed the same treatment. Rejecting C avoided **adding** to this dependency; it did not remove the existing two. |
 
 ## ⚠ SPEC defect D1 — §10.3 and §10.4 disagree
 
@@ -185,6 +194,166 @@ The non-admin nav — no sections, no hint that any exist:
 </div>
 ```
 
+---
+
+# The ordinary not-found (sketch 010)
+
+Winner: **B — + where you can go**.
+
+## The property, stated precisely
+
+> **Indistinguishability is per-viewer, not global.**
+
+It has never been required that an admin and a stranger see the same thing — an admin
+hitting `/admin/moderation` **should** get 003's `Registered and gated. No handler yet.`
+That is the gate **permitting** them, which is the system working.
+
+What is required is that **one viewer cannot tell which kind of nothing they hit.**
+
+> **Getting this precision wrong in either direction is a design error: too weak and you
+> leak; too strong and you would be forbidden from ever showing an admin their own screen.**
+
+## Design Decisions
+
+### B — a dead end offers a way out, at zero disclosure cost
+
+Same head as A (glyph, `Not found`, one line), but the single button becomes a short list of
+**the viewer's own available destinations**.
+
+That costs nothing in disclosure: those destinations are the sections **already drawn in
+that viewer's rail**, already filtered by the same `requiresPlayer` gate
+(`nav/sections.ts:41-47`). A stranger and a player see different lists **because they have
+different sections** — not because the page inferred anything about what they were reaching
+for.
+
+**Rejected:**
+
+- **A — Minimal.** One glyph, one line, one button. Mirrors 003's restraint. Loses only
+  because B's list is free.
+- **C — In-shell.** For a signed-in viewer the not-found renders **inside** the app shell so
+  they never lose their place. **Rejected — and the rejection is structural, not aesthetic.**
+  Rendering in-shell forces a **nested `+error.svelte` boundary**, and that reopens exactly
+  the risk this page exists to close.
+
+### A single root `+error.svelte` is the safer shape
+
+SvelteKit resolves the **nearest** error boundary. Once boundaries are nestable, someone
+later adds `routes/admin/+error.svelte` and **the indistinguishability dies silently, with
+no test failing.** That is a one-file PR that looks harmless.
+
+> **Phase-6 note: ship a meta-test asserting there is exactly *one* `+error.svelte` under
+> `web/src/routes/`.** The property this page carries cannot be defended by review alone.
+
+### The copy is `Home` — never the platform brand
+
+The first draft's button read **"Back to HoloMUSH"**. That is wrong twice over:
+
+1. **HoloMUSH is the platform, not the game.** `.claude/rules/branding.md` **INV-6** is
+   explicit that the brand is *"the software/platform only — never the game world / default
+   setting"*. A player is in *a game that runs on* HoloMUSH.
+2. **The game's name is not the platform's to assume.** It exists —
+   `SettingConfig.DisplayName`, a **required** field on setting-type plugins
+   (`internal/plugin/manifest.go:211`) — **but it is not reachable from the web client.** No
+   RPC carries it, no `Web*` response has the field, and the only `HoloMUSH` strings under
+   `web/src/` are SPDX copyright headers.
+
+**Resolution: the copy is `Home`.** Viewer-agnostic, no new surface, conflates nothing. The
+`>holomush_` wordmark stays in the top bar — that is platform chrome, which INV-6 permits.
+
+> **The copy does not vary by viewer; only the number of *sections* under it does.** That
+> closes the open question 003 left ("the affordance still needs a sensible target per
+> viewer").
+
+**Carried forward as a gap:** the game's display name is **server-side-only**. Any
+player-facing game identity — a title tag, an OG card, a welcome line, this button — needs
+it exposed first. Not specific to this page; worth its own issue.
+
+### The copy says nothing about *why*
+
+`We couldn't find that page.` — no search, no suggestion, and **it does not echo the path
+back.** Echoing `/admin/moderation` at a prober **confirms the string was routed
+somewhere.**
+
+## ⚠ The negative control — this is the part to copy
+
+The fingerprint check 010 ships has an obvious weakness: **in a correct implementation the
+renderer does not branch on which kind of miss occurred**, so the panels are identical *by
+construction* and the check passes trivially.
+
+> **A check that cannot fail proves nothing.** This is the *verification-that-cannot-fail*
+> family this codebase keeps rediscovering — `oops.Code`, the fabricated `last seen` column,
+> the escalation test with no positive control. See `anti-patterns.md` §3.
+
+So **the sketch ships the failure.** A `☣ inject leak` toggle makes `/admin/moderation`
+render a bespoke *"Access denied — you don't have permission to view this area"* page. The
+fingerprints diverge, the panels lose their match border, and the note flips to a disclosure
+warning. **Verified both directions: identical inputs → green; one panel changed → red.**
+
+And the injected page is the point:
+
+> **That "Access denied" page is the single most natural thing an implementer would write.**
+> It is polite, it is helpful, it is what every other web app does — and it hands a prober
+> the fact that `/admin/*` exists and they are merely excluded.
+
+**Phase 6 should carry the same shape into its test**: assert the four paths render
+identically **and** demonstrate the assertion goes red against a deliberately-divergent
+render.
+
+### A real 404 status is not available — and that is a strength
+
+`web/svelte.config.js` uses `adapter-static` with `fallback: 'index.html'`, so **every**
+route returns HTTP 200 + `index.html` and the client router decides. So
+`/admin/moderation` and `/blahblah` are identical **at the HTTP layer by construction**,
+with no per-route work to keep them that way. The indistinguishability only has to be
+maintained in the **client render** — which is exactly what the fingerprint watches.
+
+## HTML Structures
+
+The not-found body (B). Note it takes **no reason parameter**:
+
+```html
+<!-- The renderer receives NOTHING about why it is rendering. There is
+     deliberately no `reason` prop for a future change to surface. -->
+<div class="nf">
+  <div class="glyph"><svg width="20" height="20"><use href="#i-nf"/></svg></div>
+  <h1>Not found</h1>
+  <p>We couldn't find that page.</p>   <!-- no path echo, no search, no why -->
+
+  <nav class="nf-dests">
+    <a href="/">Home</a>
+    <!-- the viewer's OWN sections — same requiresPlayer gate as the rail -->
+    {#each SECTIONS.filter(visibleTo(viewer)) as s}
+      <a href={s.href}>{s.label}</a>
+    {/each}
+  </nav>
+</div>
+```
+
+```css
+.nf {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 9px; padding: 70px 20px;
+}
+.nf .glyph {
+  width: 44px; height: 44px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-secondary); color: var(--color-status-text);
+  border: 1px solid var(--color-border);
+}
+```
+
+## Open questions this leaves for Phase 6
+
+1. **Does the client know *why* it is rendering not-found?** It often will (an RPC returned
+   a denial). **It must not act on it** — the safe rule is that the renderer takes **no
+   reason parameter at all**, so there is nothing for a future change to accidentally
+   surface.
+2. **Telemetry.** An operator reasonably wants to know how often gated deep links are hit.
+   **Logging that server-side is fine; deriving it client-side from which page rendered is
+   fine too** — but any **response-shaped** difference (a header, a status, a body field)
+   reopens the oracle. State this before someone adds an analytics event keyed on refusal
+   type.
+
 ## What to Avoid
 
 - **Redirecting a denied deep link.** A redirect is distinctive; it confirms the route
@@ -197,10 +366,31 @@ The non-admin nav — no sections, no hint that any exist:
 - **Speculative "coming soon" / scope copy** for the five undocumented sections.
 - **An authorization trace in front of an operator.** Prove the ordering with the §10.2
   denial test.
+- **A second `+error.svelte`.** One root boundary. A nested one destroys the property
+  silently with no test failing — ship the meta-test asserting exactly one.
+- **Echoing the requested path** on the not-found page. It confirms the string was routed.
+- **Passing a *reason* to the not-found renderer.** If it has nothing, a future change
+  cannot surface it.
+- **`Back to HoloMUSH` (or any platform-brand copy) in player-facing text.** INV-6 — the
+  brand is the software, never the game world. The copy is `Home`.
+- **Requiring *global* indistinguishability.** It is **per-viewer**. An admin seeing their
+  own gated section resolve is the gate working, not a leak.
+- **A fingerprint/opacity test never observed failing.** Demonstrate it goes red against a
+  deliberately-divergent render.
+- **A response-shaped telemetry signal** for refusal type — a header, a status, or a body
+  field reopens the oracle. Log it server-side instead.
 
 ## Origin
 
-Synthesized from sketch: **003**
-Source file: `sources/003-planned-section-empty/index.html`
-(two pickers: section — all six planned plus Characters and an `(unregistered id)`; and
-viewer — `admin` / `non-admin`. The two denied panels are byte-identical **by requirement**.)
+Synthesized from sketches: **003** (gating and the planned-section state), **010** (the
+not-found page it depends on), **007** (which adds the third dependency on that page)
+
+Source files:
+`sources/003-planned-section-empty/index.html` (two pickers: section — all six planned plus
+Characters and an `(unregistered id)`; and viewer — `admin` / `non-admin`. The two denied
+panels are byte-identical **by requirement**.) ·
+`sources/010-not-found-page/index.html` (**opens in compare mode**, all four paths side by
+side, each carrying a fingerprint of its own rendered markup — **then press `☣ inject leak`
+and watch the gate go red**) ·
+`sources/007-public-profile-viewer-tiers/index.html` (the players-only posture at the
+`anonymous` tier renders this same page, per §8.7)

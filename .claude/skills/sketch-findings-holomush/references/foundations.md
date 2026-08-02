@@ -1,6 +1,19 @@
 # Foundations — theme, palette, component inventory
 
-Cross-cutting substrate shared by sketches **001–004**.
+Cross-cutting substrate shared by sketches **001–010**.
+
+## Two idioms, deliberately
+
+The portal carries **two** list idioms, and the split is a decision rather than an
+inconsistency:
+
+| Surface class | Idiom | Established by |
+| --- | --- | --- |
+| **Operator** — admin character list, future admin sections | **dense data table**, inline hover row actions | sketch 002 (winner A) |
+| **The player's own things** — character roster | **Card grid** | sketch 008 (winner B; variant C converged on the table and was rejected *for* this reason) |
+
+> Convergence on a single idiom is a real benefit and was weighed. It lost because a
+> player's own characters should not feel like rows in someone's database.
 
 ## Palette — cyan is the accent, amber is the cursor
 
@@ -9,8 +22,26 @@ Per `.claude/rules/branding.md` **INV-1**:
 > `--color-cursor` (`#ffb300` amber) is the **CURSOR ONLY**. Never an accent, link, button,
 > badge, or status color. **The accent is cyan.**
 
-All four sketches honor this. Putting amber into `--sl-color-accent*` or any button/link/
+All ten sketches honor this. Putting amber into `--sl-color-accent*` or any button/link/
 badge is a branding bug, not a taste call.
+
+## ⚠ INV-6 — the brand is the platform, never the game
+
+`.claude/rules/branding.md` **INV-6**: the HoloMUSH brand is *"the software/platform only —
+never the game world / default setting."*
+
+**Do not hardcode `HoloMUSH` in player-facing copy.** A player is in *a game that runs on*
+HoloMUSH. The `>holomush_` wordmark in platform chrome (top bar) is exactly what INV-6
+permits; a button reading `Back to HoloMUSH` is not.
+
+**The game's own name is not reachable from the web client.** It exists as
+`SettingConfig.DisplayName` — a **required** field on setting-type plugins
+(`internal/plugin/manifest.go:211`) — but **no RPC carries it**, no `Web*` response has the
+field, and the only `HoloMUSH` strings under `web/src/` are SPDX copyright headers.
+
+> **Carried-forward gap:** any player-facing game identity — a title tag, an OG card, a
+> welcome line, a "back" target — needs `SettingConfig.DisplayName` **exposed to the web
+> client first**. Until then, viewer-agnostic copy (`Home`) is the correct answer.
 
 | Token | Value | Role |
 | --- | --- | --- |
@@ -81,11 +112,29 @@ Ten shadcn-svelte components the sketches exercise are **not currently in
 
 Install with `npx shadcn-svelte@latest add <name>`.
 
-Already installed and used: `badge`, `separator`, `checkbox`, `sheet`. Also needed:
-`alert-dialog` (the retire confirmation).
+Already installed and used: `badge`, `separator`, `checkbox`, `sheet`, `card`, `input`,
+`label`, `button`. Also needed: `alert-dialog` (the retire confirmation).
+
+**Sketches 005–010 added nothing to this list.** They exercise what is already on it —
+notably `sheet` in its **`side="bottom"`** configuration (natively supported, so the phone
+bottom-sheet is *a prop at a breakpoint*, not a second component), plus `alert-dialog` and
+`sonner`.
 
 **Component budget is open** — the maintainer's call at intake was "add whatever makes it
 genuinely good; log adds per sketch".
+
+## Mobile constraint: 15px inputs, not 12.5px
+
+Any `<16px` font in a **focused input** triggers iOS Safari's zoom-on-focus, which then
+leaves the viewport scaled after blur. **This is a platform constraint, not a style
+preference** — the phone band uses `15px` (or go to `16px`); do not inherit the desktop
+`12.5px`.
+
+```css
+.fieldrow input, .fieldrow textarea {
+  font-size: 15px;   /* <16px triggers iOS zoom-on-focus */
+}
+```
 
 ## Target stack
 
@@ -102,17 +151,22 @@ These are the grounding sources; prefer them over anything borrowed from outside
 | --- | --- |
 | Rail geometry, active-bar, hover colors, drawer variant | `web/src/lib/components/shell/SectionRail.svelte` |
 | The `as const satisfies` section-registry pattern (derived union + visibility gate) | `web/src/lib/nav/sections.ts:41-47` |
-| Existing Card + Badge character idiom | `web/src/routes/(authed)/characters/+page.svelte` |
+| Existing Card + Badge character idiom | `web/src/routes/(authed)/characters/+page.svelte:116-153` |
+| The existing badge is **session** state, not lifecycle | same file, `:132-136` |
 | Mobile drawer pattern (`Sheet` + `mobileNavOpen`) | `web/src/routes/(authed)/+layout.svelte` |
 | Every color + layout token | `web/src/app.css` |
 | Amber-cursor-only constraint | `.claude/rules/branding.md` INV-1 |
+| Platform-brand-is-not-the-game constraint | `.claude/rules/branding.md` INV-6 |
+| The game's display name (server-side only) | `internal/plugin/manifest.go:211` |
+| Static adapter ⇒ every route is HTTP 200 + `index.html` | `web/svelte.config.js` |
 | Normative admin registry, descriptor, gating contract | `.planning/phases/01-portal-spec/01-SPEC.md` §10 |
 
 **`nav/sections.ts` already implements the registry pattern the SPEC says to mirror — do not
-add a library for it.** It also already carries `requiresPlayer`, which is the right handle
-for the viewer-dependent "← Back to HoloMUSH" target on the not-found page.
+add a library for it.** It also already carries `requiresPlayer`, which is the gate the
+not-found page's destination list (sketch 010, variant B) flows through — the same gate the
+Rail and the command palette use, which is exactly why that list discloses nothing.
 
 ## Origin
 
-Synthesized from sketches: **001, 002, 003, 004**
+Synthesized from sketches: **001–010**
 Theme file: `sources/themes/default.css`

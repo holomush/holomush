@@ -265,7 +265,7 @@ VCS is **native git** (no jj): use `git` directly — no VCS skill is required.
 
 - **Directory structure**: `tree -L 2` / `ls`; contributor layout in `site/src/content/docs/contributing/`.
 - **Auto-loading `.claude/rules/`** (load on their paths): `event-interfaces.md` (`EventBus`/`ServiceRegistry`/`ServiceProvider`, eventbus/plugin code); `gateway-boundary.md` (gateway); `terminology.md` (`*.md` + domain code); `invariants.md` (invariant registry, its tooling, specs).
-- **Sketch findings for holomush** (validated design decisions, CSS patterns, visual direction — admin-portal shell/nav, dense tables, gated sections, field-masked forms) → `Skill("sketch-findings-holomush")`
+- **Sketch findings for holomush** (validated design decisions, CSS patterns, visual direction — admin-portal shell/nav, dense tables, gated sections, field-masked forms, the mutation loop and phone band; plus player-facing profiles under viewer tiers, the character roster, creation/name-collision, and the ordinary not-found page) → `Skill("sketch-findings-holomush")`
 
 ## Core Systems
 
