@@ -7,12 +7,13 @@ package store_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/store"
 )
 
 // eventMsFromULIDForTest mirrors the production eventMsFromULID helper
@@ -107,11 +108,20 @@ func TestMigration000052PartitionsEventsAudit(t *testing.T) {
 	require.NoError(t, err, "live write to a covering partition must succeed")
 
 	// (f) idempotent re-apply: running the up SQL body again is a no-op (the
-	// regclass/DO-block guards hold; golang-migrate itself won't re-run an
-	// applied version, so exercise the SQL directly).
-	upSQL, err := os.ReadFile("migrations/000052_events_audit_partition.up.sql")
+	// regclass/DO-block guards hold). goose will not re-run a version already
+	// recorded in goose_db_version, so the SQL is exercised directly.
+	//
+	// MigrationSectionForTest returns ONLY the up body: 000052 is a single
+	// goose file carrying both directions, so Exec-ing the whole file here
+	// would run the down body too and drop the partitioned parent this spec
+	// just probed. It also strips the +goose StatementBegin/End directives,
+	// which PostgreSQL must never see.
+	upSQL, err := store.MigrationSectionForTest("000052_events_audit_partition.sql", "up")
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(upSQL))
+	require.Contains(t, upSQL, "PARTITION BY RANGE (event_ms)",
+		"precondition: the section read back MUST be 000052's up body, or the re-apply "+
+			"assertion below would be made against unrelated SQL")
+	_, err = pool.Exec(ctx, upSQL)
 	require.NoError(t, err, "re-applying 000052 up must be a no-op")
 
 	// The probe row survives the re-apply (parent not clobbered).

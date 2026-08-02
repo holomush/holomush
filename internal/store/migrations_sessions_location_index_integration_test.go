@@ -25,9 +25,11 @@ const (
 	// it — the version the round trip steps back to.
 	sessionsLocationIndexPriorVersion = 52
 	// sessionsLocationIndexMigrationName is the migration's file stem, without
-	// the .up.sql / .down.sql suffix. Binding it here keeps the version check in
-	// the first spec and the embedded-source reads in the second spec naming the
-	// SAME migration.
+	// the .sql suffix. Under goose a migration is a SINGLE file carrying both
+	// the up and the down body, separated by -- +goose Up / -- +goose Down;
+	// store.MigrationName returns this same suffix-less stem. Binding it here
+	// keeps the version check in the first spec and the embedded-source reads
+	// in the second spec naming the SAME migration.
 	sessionsLocationIndexMigrationName = "000053_sessions_location_index"
 	// sessionsLocationIndexName is the index under test. Every assertion below
 	// is keyed on this exact name: counting indexes on the sessions table would
@@ -144,8 +146,13 @@ var _ = Describe("Migration 000053 sessions location index", func() {
 	// The statements are read out of the EMBEDDED migration source and executed
 	// verbatim. Re-typing them as Go string literals — what this spec used to do
 	// — asserts the idempotency of the string the test itself wrote: deleting
-	// IF NOT EXISTS from 000053_sessions_location_index.up.sql would leave the
+	// IF NOT EXISTS from 000053_sessions_location_index.sql would leave the
 	// spec green while the repo's stated migration rule was silently broken.
+	//
+	// The reads go through MigrationSectionForTest, which returns exactly ONE
+	// direction. Reading the whole merged goose file instead would Exec the
+	// down body too, dropping the very index this spec asserts — observed as
+	// "the index MUST be restored before this spec returns".
 	It("re-applies the migration's own SQL cleanly when the index already exists", func() {
 		connStr := testutil.RawDatabase(suiteT, sharedPG)
 
@@ -160,13 +167,13 @@ var _ = Describe("Migration 000053 sessions location index", func() {
 
 		Expect(sessionsLocationIndexDef(db, sessionsLocationIndexName)).NotTo(BeEmpty())
 
-		up, err := store.MigrationSQLForTest(sessionsLocationIndexMigrationName + ".up.sql")
+		up, err := store.MigrationSectionForTest(sessionsLocationIndexMigrationName+".sql", "up")
 		Expect(err).NotTo(HaveOccurred(), "the embedded up migration MUST be readable")
 		Expect(up).To(ContainSubstring(sessionsLocationIndexName),
 			"precondition: the file read back MUST be the migration under test, or the "+
 				"idempotency assertion below would be made against unrelated SQL")
 
-		down, err := store.MigrationSQLForTest(sessionsLocationIndexMigrationName + ".down.sql")
+		down, err := store.MigrationSectionForTest(sessionsLocationIndexMigrationName+".sql", "down")
 		Expect(err).NotTo(HaveOccurred(), "the embedded down migration MUST be readable")
 		Expect(down).To(ContainSubstring(sessionsLocationIndexName),
 			"precondition: the file read back MUST be the migration under test")
