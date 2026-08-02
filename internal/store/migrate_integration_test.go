@@ -88,7 +88,7 @@ func queryTableNames(t *testing.T, ctx context.Context, connStr string) []string
 		 WHERE n.nspname = 'public'
 		   AND c.relkind IN ('r', 'p')
 		   AND c.relispartition = false
-		   AND c.relname != 'schema_migrations'
+		   AND c.relname NOT IN ('schema_migrations', 'goose_db_version')
 		 ORDER BY c.relname`)
 	require.NoError(t, err)
 	defer rows.Close()

@@ -1791,11 +1791,11 @@ invariants:
       - {file: "internal/eventbus/history/cold_postgres_integration_test.go", token: "INV-TS-1"}
       - {file: "internal/pgnanos/doc.go", token: "INV-TS-1"}
       - {file: "internal/store/migrate_inv_ts_integration_test.go", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.sql", token: "INV-TS-1"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-1"}
       - {file: "internal/testsupport/holomushtest/server.go", token: "INV-TS-1"}
       - {file: "plugins/core-scenes/migrations/000007_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
@@ -1844,7 +1844,7 @@ invariants:
     refs:
       - {file: "internal/eventbus/publisher.go", token: "INV-TS-4"}
       - {file: "internal/eventbus/publisher_test.go", token: "INV-TS-4"}
-      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-4"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.sql", token: "INV-TS-4"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-4"}
       - {file: "test/integration/privacy/privacy_test.go", token: "INV-TS-4"}
   - id: INV-STORE-5
@@ -1861,7 +1861,7 @@ invariants:
       - {file: "internal/eventbus/history/plugin_aad_reconstruction_test.go", token: "INV-TS-5"}
       - {file: "internal/eventbus/history/readback.go", token: "INV-TS-5"}
       - {file: "internal/eventbus/publisher.go", token: "INV-TS-5"}
-      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-5"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.sql", token: "INV-TS-5"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-5"}
       - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-TS-5"}
       - {file: "plugins/core-scenes/migrations/000007_timestamps_to_bigint.up.sql", token: "INV-TS-5"}
@@ -1901,11 +1901,11 @@ invariants:
     binding: pending
     refs:
       - {file: "internal/store/migrate_clamp_integration_test.go", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.sql", token: "INV-TS-9"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-9",}
 
   # -- INV-TELEMETRY -- migrated from INV-LOAD-N (family LOAD, load-perf harness) (holomush-hz0v4.14.8).

@@ -52,7 +52,7 @@ func startPostgresContainer(t *testing.T) (string, func()) {
 	return connStr, cleanup
 }
 
-// schemaTableExists checks if the schema_migrations table exists.
+// schemaTableExists reports whether goose's migration ledger table exists.
 func schemaTableExists(ctx context.Context, connStr string) (bool, error) {
 	conn, err := pgx.Connect(ctx, connStr)
 	if err != nil {
@@ -64,13 +64,19 @@ func schemaTableExists(ctx context.Context, connStr string) (bool, error) {
 	query := `SELECT EXISTS (
 		SELECT FROM information_schema.tables
 		WHERE table_schema = 'public'
-		AND table_name = 'schema_migrations'
+		AND table_name = 'goose_db_version'
 	)`
 	err = conn.QueryRow(ctx, query).Scan(&exists)
 	return exists, err
 }
 
-// getMigrationVersion gets the current migration version from schema_migrations.
+// getMigrationVersion gets the current migration version from goose's ledger.
+//
+// goose records one row per applied migration rather than golang-migrate's single
+// mutable row, so "the current version" is MAX(version_id). The second return is
+// always false: goose has no dirty state, because it commits a migration's body and
+// its version row in one transaction. It is retained so the callers below still
+// assert the schema is not left in a broken state.
 func getMigrationVersion(ctx context.Context, connStr string) (int, bool, error) {
 	conn, err := pgx.Connect(ctx, connStr)
 	if err != nil {
@@ -79,25 +85,23 @@ func getMigrationVersion(ctx context.Context, connStr string) (int, bool, error)
 	defer conn.Close(ctx) //nolint:errcheck // best-effort cleanup
 
 	var version int
-	var dirty bool
-	query := `SELECT version, dirty FROM schema_migrations LIMIT 1`
-	err = conn.QueryRow(ctx, query).Scan(&version, &dirty)
-	if err != nil {
+	query := `SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version`
+	if err := conn.QueryRow(ctx, query).Scan(&version); err != nil {
 		return 0, false, err
 	}
-	return version, dirty, nil
+	return version, false, nil
 }
 
 var _ = Describe("autoMigration", func() {
 	Describe("runAutoMigration integration", func() {
-		It("runs on startup: creates schema_migrations and records a version > 0", func() {
+		It("runs on startup: creates goose_db_version and records a version > 0", func() {
 			ctx := context.Background()
 			connStr, cleanup := startPostgresContainer(adminAuthSuiteT)
 			DeferCleanup(cleanup)
 
 			exists, err := schemaTableExists(ctx, connStr)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeFalse(), "schema_migrations should not exist before auto-migrate")
+			Expect(exists).To(BeFalse(), "goose_db_version should not exist before auto-migrate")
 
 			Expect(runAutoMigration(connStr, func(url string) (bootstrap.AutoMigrator, error) {
 				return store.NewMigrator(url)
@@ -105,7 +109,7 @@ var _ = Describe("autoMigration", func() {
 
 			exists, err = schemaTableExists(ctx, connStr)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeTrue(), "schema_migrations should exist after auto-migrate")
+			Expect(exists).To(BeTrue(), "goose_db_version should exist after auto-migrate")
 
 			version, dirty, err := getMigrationVersion(ctx, connStr)
 			Expect(err).NotTo(HaveOccurred())
@@ -113,14 +117,14 @@ var _ = Describe("autoMigration", func() {
 			Expect(dirty).To(BeFalse(), "database should not be in dirty state after successful migration")
 		})
 
-		It("is skipped when auto-migrate is disabled: schema_migrations is not created", func() {
+		It("is skipped when auto-migrate is disabled: goose_db_version is not created", func() {
 			ctx := context.Background()
 			connStr, cleanup := startPostgresContainer(adminAuthSuiteT)
 			DeferCleanup(cleanup)
 
 			exists, err := schemaTableExists(ctx, connStr)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeFalse(), "schema_migrations should not exist initially")
+			Expect(exists).To(BeFalse(), "goose_db_version should not exist initially")
 
 			deps := &CoreDeps{
 				DatabaseURLGetter: func() string { return connStr },
@@ -137,7 +141,7 @@ var _ = Describe("autoMigration", func() {
 
 			exists, err = schemaTableExists(ctx, connStr)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exists).To(BeFalse(), "schema_migrations should not exist when auto-migrate is disabled")
+			Expect(exists).To(BeFalse(), "goose_db_version should not exist when auto-migrate is disabled")
 		})
 
 		It("is idempotent: re-running does not change migration version or dirty flag", func() {

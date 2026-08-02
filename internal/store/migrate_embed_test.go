@@ -11,42 +11,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMigrationsFSContainsMatchedUpDownPairsWithCorrectNaming(t *testing.T) {
+// expectedMigrationCount is the number of goose single-file migrations in the
+// embedded corpus. It is written out literally rather than derived from the
+// directory listing: deriving it from the same source the test walks would make
+// the assertion tautological and blind to a migration file that went missing.
+// Bump it in the same change that adds a migration.
+const expectedMigrationCount = 44
+
+// TestMigrationsFSContainsSingleFileGooseMigrationsWithBothAnnotations pins the
+// post-goose corpus shape. goose parses one file per version carrying both
+// directions, so the golang-migrate-era .up.sql/.down.sql pairing has no referent:
+// handing goose the old corpus makes it report a duplicate version for every
+// migration, because 000001_baseline.up.sql and 000001_baseline.down.sql both
+// parse as version 1.
+func TestMigrationsFSContainsSingleFileGooseMigrationsWithBothAnnotations(t *testing.T) {
 	entries, err := migrationsFS.ReadDir("migrations")
 	require.NoError(t, err, "should read embedded migrations directory")
 
-	assert.GreaterOrEqual(t, len(entries), 2, "should have at least 2 migration files (1 up + 1 down)")
+	require.Len(t, entries, expectedMigrationCount,
+		"embedded corpus should hold exactly %d single-file migrations", expectedMigrationCount)
 
-	fileNames := make(map[string]bool)
+	namePattern := regexp.MustCompile(`^\d{6}_\w+\.sql$`)
+	splitPattern := regexp.MustCompile(`\.(up|down)\.sql$`)
+
+	fileNames := make(map[string]bool, len(entries))
 	for _, entry := range entries {
-		fileNames[entry.Name()] = true
-	}
-	assert.True(t, fileNames["000001_baseline.up.sql"], "should contain baseline up migration")
-	assert.True(t, fileNames["000001_baseline.down.sql"], "should contain baseline down migration")
+		name := entry.Name()
+		fileNames[name] = true
 
-	pattern := regexp.MustCompile(`^\d{6}_\w+\.(up|down)\.sql$`)
-	for _, entry := range entries {
-		assert.True(t, pattern.MatchString(entry.Name()),
-			"file %s should match pattern NNNNNN_name.(up|down).sql", entry.Name())
+		assert.True(t, namePattern.MatchString(name),
+			"file %s should match pattern NNNNNN_name.sql", name)
+		assert.False(t, splitPattern.MatchString(name),
+			"file %s is a golang-migrate-era split file; goose takes one file per version", name)
+
+		// Every migration must carry BOTH directions. A file missing its Down
+		// annotation still applies cleanly on the way up and only fails when a
+		// rollback is attempted, which is the worst time to discover it.
+		content, readErr := migrationsFS.ReadFile("migrations/" + name)
+		require.NoError(t, readErr, "should read embedded migration %s", name)
+
+		assert.Contains(t, string(content), "-- +goose Up",
+			"migration %s must carry a -- +goose Up annotation", name)
+		assert.Contains(t, string(content), "-- +goose Down",
+			"migration %s must carry a -- +goose Down annotation", name)
 	}
 
-	upPattern := regexp.MustCompile(`\.up\.sql$`)
-	downPattern := regexp.MustCompile(`\.down\.sql$`)
-	ups := make(map[string]bool)
-	downs := make(map[string]bool)
-	for name := range fileNames {
-		base := name[:6]
-		if upPattern.MatchString(name) {
-			ups[base] = true
-		}
-		if downPattern.MatchString(name) {
-			downs[base] = true
-		}
-	}
-	for v := range ups {
-		assert.True(t, downs[v], "migration %s has .up.sql but no .down.sql", v)
-	}
-	for v := range downs {
-		assert.True(t, ups[v], "migration %s has .down.sql but no .up.sql", v)
-	}
+	assert.True(t, fileNames["000001_baseline.sql"], "should contain the baseline migration")
 }

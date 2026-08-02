@@ -896,7 +896,7 @@ tasks:
         host_cutoff=$(cat internal/store/migrations/.gfo6-cutoff 2>/dev/null || echo "000000")
 
         violations=0
-        for f in internal/store/migrations/*.up.sql; do
+        for f in internal/store/migrations/*.sql; do
           num=$(basename "$f" | rg -o "^[0-9]+")
           if [[ "$num" > "$host_cutoff" ]]; then
             if rg -n "TIMESTAMPTZ|TIMESTAMP WITH TIME ZONE|\bTIMESTAMP\b" "$f" | rg -v "pgnanos-exempt:" ; then

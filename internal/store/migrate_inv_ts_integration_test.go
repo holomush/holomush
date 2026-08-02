@@ -49,13 +49,35 @@ var _ = Describe("INV-STORE-1: no TIMESTAMPTZ columns after migration", func() {
 	})
 
 	It("contains no TIMESTAMPTZ/TIMESTAMP columns in public or plugin_core_scenes schemas", func() {
+		// goose's own bookkeeping table carries `tstamp timestamp NOT NULL DEFAULT now()`.
+		// That DDL is authored by the migration engine, not by HoloMUSH, and cannot be
+		// changed without forking goose. INV-STORE-1 is about HoloMUSH's PERSISTENT
+		// DOMAIN data being BIGINT epoch-ns, so the engine's ledger is out of its scope —
+		// the same reason D-15's schema comparison excludes it. The exclusion is by exact
+		// table name, so any HoloMUSH table that grows a timestamp column still trips this.
+		const migrationBookkeepingTable = "goose_db_version"
+
+		// Guard the exclusion against silently becoming a no-op: if the table were ever
+		// renamed, an exclusion keyed on a stale name would quietly stop excluding
+		// anything AND stop protecting anything. Assert it is really there.
+		var bookkeepingExists bool
+		Expect(pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.tables
+				WHERE table_schema = 'public' AND table_name = $1
+			)`, migrationBookkeepingTable).Scan(&bookkeepingExists)).To(Succeed())
+		Expect(bookkeepingExists).To(BeTrue(),
+			"%s must exist, or the exclusion below is masking nothing and hiding nothing",
+			migrationBookkeepingTable)
+
 		rows, err := pool.Query(ctx, `
 			SELECT table_schema, table_name, column_name, data_type
 			FROM information_schema.columns
 			WHERE table_schema = ANY($1)
+			  AND NOT (table_schema = 'public' AND table_name = $2)
 			  AND data_type IN ('timestamp without time zone', 'timestamp with time zone')
 			ORDER BY table_schema, table_name, column_name
-		`, []string{"public", "plugin_core_scenes"})
+		`, []string{"public", "plugin_core_scenes"}, migrationBookkeepingTable)
 		Expect(err).NotTo(HaveOccurred())
 		defer rows.Close()
 
