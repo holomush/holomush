@@ -136,6 +136,7 @@ the property is false**.
 5. The SPEC mandates the six **verification-integrity rules** (census set-equality, paired positive controls, marshaled-bytes assertions, gates demonstrated RED pre-fix, wire-level opacity assertions, invariant-scope discipline) as binding acceptance criteria that every later phase plan inherits.
 
 **Plans**: 6/6 plans executed
+**UI hint**: no
 
 Plans:
 **Wave 1**
@@ -176,6 +177,7 @@ Plans:
 5. `seed:admin-section-access` permits an admin and denies a builder, a plain player, and a guest across **all seven section ids** — each denial paired with a positive control proving the subject would otherwise have been permitted, and the id list asserted by set equality — and an eighth section added later needs no new policy.
 
 **Plans**: TBD
+**UI hint**: no
 **Research flag**: narrow slice only — the existing-public-character-property audit is a *data* question, not a design one, but it must be answered before `seed:profile-public-read` merges. Full `--research-phase` is not warranted.
 
 **Sketch findings** (must be answered in this phase): **A1** — `characters.last_active_at` does not exist and cannot be derived (`sessions` rows are reaped; `session_connections.last_seen_at` is a gateway lease). Needs a durable column (epoch-ns `BIGINT`) + a §11.3 row permitting sort/filter. **A2** — the admin list sorts by the joined `players.username`, which §11.3 never enumerates; §11.3's `characters.player_id` row ("never an ordering") stays correct, add a new row. **D1 (DEFECT, route to `abac-reviewer`)** — §10.3 requires a planned-section refusal to reveal nothing about which sections exist, but §10.4 defines two distinguishable denial codes (`DENY_ADMIN_SECTION` vs `DENY_ADMIN_SECTION_UNREGISTERED`), giving a registry-enumeration oracle. §13 pins none of it though `INV-PRIVACY-9` does the same job for profiles. Source: `.planning/sketches/002-*/README.md`, `003-*/README.md`. **Name pipeline UI** (009): §6.1's four steps run before every check, so "is it taken" is asked about the *normalized key*. Three accepted cases still **rewrite** what the player typed; the winner (submit-and-report) accepts that because rename exists. The confusable message MUST NOT name the colliding character, and it is safe **only because names are public at the `anonymous` floor** — if a game raises that floor (§8.6 permits it) the message becomes an oracle. A name of only invisibles looks like an empty box to the player, so "please enter a name" needs different wording.
@@ -197,6 +199,7 @@ Plans:
 4. The `writeCommands` census and the mutation taxonomy list the new commands in the same change that introduces them; the census meta-test fails if either is missing.
 
 **Plans**: TBD
+**UI hint**: no
 **Research flag**: `--research-phase` recommended — the `writeCommands` census bijection semantics (`internal/world/mutator.go:78-100`) are genuinely unverified, and this repo has a documented history of plans failing on unverified seam assumptions.
 
 **Sketch findings** (must be answered in this phase): **Where `last_active_at` is written** — session-store create is the seam; it MUST NOT be the lease-refresh path (`internal/session/session.go:485` `RefreshConnection`), which would make every character a hot write every lease interval. **Can admins rename at all?** §9.3's admin census has update/retire/unretire and no rename — if admins cannot, sketch 004's `Rename…` affordance is a dead end and the locked row must say so; if they can, that is a census addition. Source: `.planning/sketches/002-*/README.md`, `004-*/README.md`. **Rename is load-bearing for 009-A** — sketch 009 corrected "names are permanent" (FALSE; IDENT-03 ships rename) and the create UI's chosen shape depends on it; if rename slips or is gated, revisit 009. **Roster:** a non-`active` lifecycle MUST suppress the shipped session badge (`Active`/`Offline`), which is a *different vocabulary* from `characters.status`. Player self-retire is **not** specified — every retire path sketched is `AdminRetireCharacter`.
@@ -219,6 +222,7 @@ Plans:
 5. The profile read path is built **exclusively** from the viewer-filtered property slice — a direct `PropertyReader.ListByParent`/`PropertyRepository.ListByParent` call from the facade fails the build or the test — and the proto ships the media shape now, empty: `ProfileImage{media_id, alt_text, content_warning}` + `primary_image` + `repeated gallery [max_items = 10]`.
 
 **Plans**: TBD
+**UI hint**: no
 
 **Sketch findings** (must be answered in this phase): **A3** — `AdminSearchCharacters` (§9.2) currently "searches names" (character names); the admin list needs it extended to player usernames. **A2's RPC half** — the list RPC must accept a sort key for the joined `players.username`. **Admin rename census decision** (see Phase 3). Source: `.planning/sketches/002-*/README.md`.
 
