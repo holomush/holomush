@@ -163,6 +163,28 @@ Plans:
 
 - [x] 01-06-PLAN.md — citation verification sweep + grounding trace + spec-location pointer edit + completeness gate
 
+### Phase 01.1: Migration framework: adopt goose for Go migrations (INSERTED)
+
+**Goal**: Replace golang-migrate with goose so Go code can run as a numbered migration interleaved with the SQL ones — the capability Phase 2's normalized-name backfill requires and golang-migrate structurally cannot provide (it has no hook surface, and startup applies ALL migrations via `Up()` inline at `cmd/holomush/core.go:279-282` before any bootstrap step can run, so a same-release migration depending on a Go backfill is unreachable).
+**Requirements**: None — enabling work; no v0.13 REQ-ID maps to it.
+**Depends on:** Phase 1
+**Gates**: Phase 2 execution
+**Success Criteria** (what must be TRUE):
+
+1. All 49 migration pairs are converted to goose's single-file `-- +goose Up` / `-- +goose Down` format, and a fresh-database migrate-up produces a schema **byte-identical** to the pre-conversion schema — proven by a dump diff, not by tests passing.
+2. The recorded-state cutover from `schema_migrations` (a single current version) to `goose_db_version` (a row per applied migration) is proven against a database seeded at the pre-conversion version, **including the negative control that a second application is a no-op or refuses** — applying it twice is unrecoverable.
+3. `holomush migrate` keeps up/down/status/version/force parity, and startup auto-migration still runs before bootstrap with `HOLOMUSH_DB_AUTO_MIGRATE` honored.
+4. A Go migration registered between two SQL migrations runs in version order, demonstrated by a real migration — so the capability Phase 2 depends on is proven before Phase 2 relies on it.
+5. `.claude/rules/database-migrations.md` and the migration meta-tests are updated to the new format in the same change.
+
+**Plans:** 0 plans
+**UI hint**: no
+**Research flag**: narrow — whether goose offers a supported adopt-existing / baseline path for `goose_db_version`, since hand-synthesizing 49 rows is the one unrecoverable step.
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 01.1 to break down)
+
 ### Phase 2: ABAC & Schema Vocabulary
 
 **Goal**: Land the authorization vocabulary, name policy, and schema primitives every later phase gates on — `admin_section:` + `seed:admin-section-access`, `seed:profile-public-read`, the character **lifecycle column**, and the **normalized-name unique index** — with no UI and no new RPCs, which is where an unverified assumption surfaces cheapest.

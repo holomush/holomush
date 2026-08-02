@@ -176,7 +176,14 @@ or got wrong.
 - **D-20:** **goose adoption is a new phase inserted before this one**, and Phase
   2 **execution is gated on it**. Phase 2 planning proceeds now — every other
   decision here is independent of the migration framework. The phase MUST be
-  inserted with `/gsd-phase` (never by hand-editing `ROADMAP.md`). — **Reversibility:**
+  inserted with `/gsd-phase` (never by hand-editing `ROADMAP.md`).
+  **LANDED 2026-08-02 as Phase 01.1** ("Migration framework: adopt goose for Go
+  migrations", `ROADMAP.md:166`, directory
+  `.planning/phases/01.1-migration-framework-adopt-goose-for-go-migrations/`).
+  Note it is a **decimal insertion, NOT a renumbering** — GSD's insert-phase
+  workflow explicitly forbids renumbering existing phases, so Phases 2-6 keep
+  their numbers, this directory keeps its `02-` prefix, and every "Phase 2"/"Phase
+  4" reference in `01-SPEC.md` and `REQUIREMENTS.md` stays valid. — **Reversibility:**
   one-way — the cutover converts recorded migration state from golang-migrate's
   single-version `schema_migrations` to goose's row-per-migration
   `goose_db_version`; applied twice it is unrecoverable.

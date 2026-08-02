@@ -6,15 +6,15 @@ current_phase: 1
 current_phase_name: Portal SPEC
 status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-08-02T14:08:11.395Z"
+last_updated: "2026-08-02T15:30:57.410Z"
 last_activity: 2026-08-01
 last_activity_desc: "Phase 1 executed: `01-SPEC.md` (16 sections), 8 invariants registered"
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 1
   total_plans: 6
   completed_plans: 6
-  percent: 17
+  percent: 14
 ---
 
 # Project State
@@ -418,6 +418,11 @@ None yet.
 | 260728-sec | Add root `SECURITY.md` — vulnerability disclosure policy pointing at the repo's already-enabled GitHub private vulnerability reporting | 2026-07-28 | (this commit) |  | [260728-sec-…](./quick/260728-sec-add-security-md-vulnerability-disclosure/) |
 | 260730-wh1 | GH-4892: replace the drifted dependency-only exempt path list with shape-based globs anchored in `vars.DEPENDENCY_ONLY_PATHS`; exclude the E2E compose files, define the lockfile subset, qualify the `scripts/**` claim at all five sites | 2026-07-30 | 9cb8d8f53 |  | [260730-wh1-…](./quick/260730-wh1-fix-gh-issue-4892-dependency-only-exempt/) |
 | 260731-ea8 | GH-4890: implement the issue-first gate enforcement workflow — `Issue Gate` applies `gate-violation`, comments, and fails a check when a PR's linked issue lacks a gate label; never closes a PR. Exemption decided by git `:(glob)` pathspec against the Taskfile vars, plus a new `REPO_CONFIG_ONLY_PATHS` | 2026-07-31 | ddb99158f | Needs Review | [260731-ea8-…](./quick/260731-ea8-implement-the-issue-first-gate-enforceme/) |
+
+### Roadmap Evolution
+
+- Phase 01.1 inserted after Phase 1: Migration framework: adopt goose for Go migrations — Phase 2 execution gated on it (URGENT)
+- Phase 01.1 edited: goal, requirements, gates, success criteria, UI hint, research flag
 
 ## Deferred Items
 
