@@ -5,10 +5,10 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 1
 current_phase_name: Portal SPEC
 status: executing
-stopped_at: Phase 1 executed and verified — Portal SPEC complete, 3 gaps closed
-last_updated: "2026-08-01T17:13:08.412Z"
+stopped_at: Phase 2 context gathered
+last_updated: "2026-08-02T14:08:11.395Z"
 last_activity: 2026-08-01
-last_activity_desc: Phase 1 execution started
+last_activity_desc: "Phase 1 executed: `01-SPEC.md` (16 sections), 8 invariants registered"
 progress:
   total_phases: 6
   completed_phases: 1
@@ -431,11 +431,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-01T17:13:08.398Z
+Last session: 2026-08-02T14:08:11.383Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Phase 1 executed and verified — Portal SPEC complete, 3 gaps closed
+Stopped at: Phase 2 context gathered
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
@@ -449,7 +449,7 @@ docs-only pull requests, which `paths-ignore` routes to a lane that uploads no c
 Archived — Phase 8: all 9 plans executed, CoreServer 1891 → 657 LoC and plugin Manager 1876 → 702;
 shipped as PR #4832 with follow-ups #4828, #4829, #4830, #4831.
 Stopped at: Completed 09-19-PLAN.md — phase 09 final plan; all 21 plans executed
-Resume file: .planning/phases/01-portal-spec/01-VERIFICATION.md
+Resume file: .planning/phases/02-abac-schema-vocabulary/02-CONTEXT.md
 
 ## Operator Next Steps
 
