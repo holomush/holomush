@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 1
-current_phase_name: Portal SPEC
+current_phase: 01.1
+current_phase_name: migration-framework-adopt-goose-for-go-migrations
 status: executing
-stopped_at: Phase 01.1 context gathered
-last_updated: "2026-08-02T19:54:10.137Z"
-last_activity: 2026-08-01
-last_activity_desc: "Phase 1 executed: `01-SPEC.md` (16 sections), 8 invariants registered"
+stopped_at: Completed 01.1-01-PLAN.md
+last_updated: "2026-08-02T23:37:38.224Z"
+last_activity: 2026-08-02
+last_activity_desc: Phase 01.1 execution started
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 13
-  completed_plans: 6
+  completed_plans: 7
   percent: 14
 ---
 
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6). Give web players a
+**Current focus:** Phase 01.1 — migration-framework-adopt-goose-for-go-migrations
 complete character identity surface (creation, management, public profiles with privacy) and stand up the
 `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 1 (Portal SPEC) — EXECUTED, verified, 3 gaps closed
-Plan: 6 of 6 complete
+Phase: 01.1 (migration-framework-adopt-goose-for-go-migrations) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Progress: [███░░░░░░░░░░░░░░░░░] 17% (1/6 phases)
-Last activity: 2026-08-01 — Phase 1 executed: `01-SPEC.md` (16 sections), 8 invariants registered
+Progress: [█████░░░░░] 54% (1/6 phases)
+Last activity: 2026-08-02 — Phase 01.1 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -220,6 +220,7 @@ no action needed.
 | Phase 09 P18 | 150min | 3 tasks tasks | 71 files files |
 | Phase 09 P17 | 55m | 2 tasks | 1 files |
 | Phase 09 P19 | 70m | 3 tasks | 4 files |
+| Phase 01.1 P01 | 95m | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -394,6 +395,10 @@ the next milestone yet.
 - [Phase 09]: codecov project ratchet tightened to threshold: 0% (true no-drop); inert until #4875 resolves
 - [Phase 09]: D-04 deferred BOTH halves: codecov/project never posts (#4875); codecov/patch would deadlock docs-only PRs (#4876)
 - [Phase 09]: QUAL-02 stays Pending — cmd/holomush 70.09% and whole-repo 79.11% are measurably below their named floors
+- [Phase ?]: Task 1 checkpoint resolved option-a: two commits (engine, then corpus) as a non-independently-green unit
+- [Phase ?]: C1 upheld by execution: the third pg_dump exclusion (goose_db_version_id_seq) is a proven no-op; two -T flags used
+- [Phase ?]: PendingMigrations/AppliedMigrations kept version-derived, not Status-derived, to preserve a non-tautological 44-version census
+- [Phase ?]: INV-STORE-1 timestamp scan excludes goose_db_version by exact name, guarded by an existence assertion
 
 ### Pending Todos
 
@@ -439,11 +444,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-02T18:17:17.490Z
+Last session: 2026-08-02T23:37:28.952Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Phase 01.1 context gathered
+Stopped at: Completed 01.1-01-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
@@ -457,7 +462,7 @@ docs-only pull requests, which `paths-ignore` routes to a lane that uploads no c
 Archived — Phase 8: all 9 plans executed, CoreServer 1891 → 657 LoC and plugin Manager 1876 → 702;
 shipped as PR #4832 with follow-ups #4828, #4829, #4830, #4831.
 Stopped at: Completed 09-19-PLAN.md — phase 09 final plan; all 21 plans executed
-Resume file: .planning/phases/01.1-migration-framework-adopt-goose-for-go-migrations/01.1-CONTEXT.md
+Resume file: None
 
 ## Operator Next Steps
 

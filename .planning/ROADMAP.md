@@ -177,7 +177,7 @@ Plans:
 4. A Go migration registered between two SQL migrations runs in version order, demonstrated by an **integration test with a fixture chain** (a small SQL→Go→SQL chain in a testcontainer, with the Go step observing the prior SQL step's effect) — so the capability Phase 2 depends on is proven before Phase 2 relies on it, without adding anything permanent to the real 44-migration chain.
 5. `.claude/rules/database-migrations.md` and the migration meta-tests are updated to the new format in the same change.
 
-**Plans:** 7 plans
+**Plans:** 1/7 plans executed
 **UI hint**: no
 **Research flag**: resolved in discussion — goose ships no baseline / adopt-existing command, so adopt derives the 44 rows from the embedded migration FS (D-02/D-04). Seeding is the one unrecoverable step.
 
@@ -185,7 +185,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 01.1-01-PLAN.md — tracer: swap golang-migrate for goose and convert the 44 pairs to single-file format, proven end-to-end on a fresh database (criterion 1, criterion 3's `force` removal)
+- [x] 01.1-01-PLAN.md — tracer: swap golang-migrate for goose and convert the 44 pairs to single-file format, proven end-to-end on a fresh database (criterion 1, criterion 3's `force` removal)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
