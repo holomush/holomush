@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sketch 006 — Phone Band Parity</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      body { padding-top: 42px; }
+
+      #variant-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9998; height: 42px;
+        display: flex; align-items: center; gap: 6px; padding: 0 12px;
+        background: #07080a; border-bottom: 1px solid var(--color-border);
+      }
+      #variant-nav .lbl { font-family: var(--font-mono); font-size: 10.5px; color: var(--color-status-text); margin-right: 6px; }
+      .variant-tab {
+        height: 26px; padding: 0 10px; border-radius: 5px; border: 1px solid var(--color-border);
+        background: transparent; color: var(--color-muted-foreground); font-family: inherit;
+        font-size: 12px; cursor: pointer;
+      }
+      .variant-tab:hover { background: var(--color-secondary); color: var(--color-foreground); }
+      .variant-tab.active {
+        background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+        color: var(--color-primary);
+      }
+      .statepick {
+        height: 26px; border-radius: 5px; border: 1px solid var(--color-border);
+        background: #101418; color: var(--color-muted-foreground);
+        font-family: inherit; font-size: 11.5px; padding: 0 6px;
+      }
+      #sketch-tools {
+        position: fixed; right: 10px; bottom: 10px; z-index: 9999; opacity: 0.35;
+        transition: opacity 120ms; display: flex; align-items: center; gap: 4px;
+        padding: 5px 7px; border-radius: 7px; background: #07080a; border: 1px solid var(--color-border);
+      }
+      #sketch-tools button {
+        height: 22px; padding: 0 7px; border-radius: 4px; font-size: 11px;
+        border: 1px solid var(--color-border); background: transparent;
+        color: var(--color-muted-foreground); cursor: pointer;
+      }
+      #sketch-tools button.on { color: var(--color-primary); border-color: var(--color-primary); }
+      #sketch-tools .sep { width: 1px; height: 16px; background: var(--color-border); }
+      #sketch-tools select {
+        height: 22px; border-radius: 4px; border: 1px solid var(--color-border);
+        background: #101418; color: var(--color-muted-foreground); font-size: 11px;
+      }
+
+      /* This sketch is phone-first: the frame is pinned narrow by default. */
+      .viewport-wrap {
+        margin: 0 auto; transition: max-width 180ms ease; max-width: 390px;
+        container-type: inline-size; container-name: vp;
+        border: 1px solid var(--color-border); border-top: none;
+      }
+      .shell { height: calc(100vh - 42px - var(--topbar-h)); display: flex; min-height: 0; }
+      .rail {
+        width: var(--rail-w); flex-shrink: 0; background: var(--color-sidebar-background);
+        border-right: 1px solid var(--color-border); display: flex; flex-direction: column;
+        align-items: center; padding: 7px 0; gap: 4px;
+      }
+      .rail-btn {
+        width: 34px; height: 34px; border-radius: 7px; border: none; background: transparent;
+        color: var(--color-muted-foreground); display: flex; align-items: center;
+        justify-content: center; cursor: pointer; position: relative;
+      }
+      .rail-btn.is-active { color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
+      .adminnav { width: var(--adminnav-w); flex-shrink: 0; background: var(--color-sidebar-background); border-right: 1px solid var(--color-border); }
+
+      .main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+      .page { flex: 1; overflow: auto; padding: 12px 12px 40px; min-width: 0; }
+      .page h1 { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
+      .crumb { font-size: 11px; color: var(--color-status-text); margin-bottom: 10px; }
+
+      /* ---- the mobilebar (only 001 ever had one) ------------------------ */
+      .mobilebar {
+        display: none; align-items: center; gap: 9px; padding: 8px 12px;
+        border-bottom: 1px solid var(--color-border); background: var(--color-surface); flex-shrink: 0;
+      }
+      .hamburger {
+        width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+        border: 1px solid var(--color-border); border-radius: 6px; background: transparent;
+        color: var(--color-foreground); cursor: pointer; flex-shrink: 0;
+      }
+
+      /* ---- the drawer: rail sections AND admin sections, together -------- */
+      .drawer {
+        position: absolute; z-index: 50; top: 0; bottom: 0; left: 0; width: 268px;
+        background: var(--color-sidebar-background); border-right: 1px solid var(--color-border);
+        transform: translateX(-102%); transition: transform 180ms ease;
+        display: flex; flex-direction: column;
+      }
+      .drawer.open { transform: none; }
+      .drawer-scroll { flex: 1; overflow: auto; padding: 8px; }
+      .drawer .whoami { padding: 11px 12px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 9px; }
+      .avatar {
+        width: 28px; height: 28px; border-radius: 999px; flex-shrink: 0; display: flex;
+        align-items: center; justify-content: center; font-size: 11px; font-weight: 600;
+        background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+        color: var(--color-primary); border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+      }
+      .navgroup-label {
+        font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--color-status-text); padding: 10px 9px 4px;
+      }
+      .drawer-divider { height: 1px; background: var(--color-border); margin: 6px 9px; }
+      .navitem {
+        display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 9px;
+        border-radius: 6px; color: var(--color-muted-foreground); cursor: pointer;
+        font-size: 13.5px;
+      }
+      .navitem:hover { background: var(--color-secondary); color: var(--color-foreground); }
+      .navitem.is-active { background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); }
+      .navitem.is-planned { opacity: 0.55; }
+      .nav-label { flex: 1; }
+
+      .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity 140ms; z-index: 40; }
+      .scrim.show { opacity: 1; pointer-events: auto; }
+
+      /* ---- table -------------------------------------------------------- */
+      table.chars { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      table.chars th {
+        text-align: left; font-weight: 500; font-size: 10.5px; letter-spacing: .03em;
+        text-transform: uppercase; color: var(--color-status-text);
+        border-bottom: 1px solid var(--color-border); padding: 7px 6px; white-space: nowrap;
+      }
+      table.chars td { border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent); padding: 8px 6px; }
+      .cname { font-weight: 600; color: var(--color-foreground); }
+      .pill {
+        display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px;
+        font-size: 10.5px; border: 1px solid var(--color-border); color: var(--color-muted-foreground);
+      }
+      .pill.active { color: #7fd98f; border-color: color-mix(in srgb, #7fd98f 40%, transparent); }
+      .mono { font-family: var(--font-mono); }
+      .muted { color: var(--color-status-text); }
+      .btn-xs {
+        height: 24px; padding: 0 8px; border-radius: 5px; border: 1px solid var(--color-border);
+        background: var(--color-surface); color: var(--color-muted-foreground);
+        font-size: 11px; cursor: pointer; font-family: inherit;
+      }
+
+      /* ---- the planned-section empty state (003 winner A) ---------------- */
+      .state { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 44px 18px; gap: 9px; height: 100%; }
+      .glyph {
+        width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center;
+        background: var(--color-secondary); color: var(--color-status-text); border: 1px solid var(--color-border);
+      }
+      .state h2 { margin: 0; font-size: 15px; font-weight: 600; }
+      .state p { margin: 0; font-size: 12.5px; color: var(--color-status-text); }
+
+      /* ---- the Sheet — THE VARIABLE ------------------------------------- */
+      .sheet {
+        position: absolute; z-index: 60; display: flex; flex-direction: column;
+        background: var(--color-surface); transition: transform 200ms ease;
+      }
+      .sheet-head { padding: 12px 14px; border-bottom: 1px solid var(--color-border); display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-shrink: 0; }
+      .sheet-body { flex: 1; overflow: auto; padding: 12px 14px; }
+      .sheet-foot { padding: 10px 14px; border-top: 1px solid var(--color-border); display: flex; align-items: center; gap: 8px; background: var(--color-card); flex-shrink: 0; }
+
+      /* A — inherits 005's winner literally: 380px right drawer, unchanged. */
+      .v-a .sheet { top: 0; right: 0; bottom: 0; width: 380px; border-left: 1px solid var(--color-border); transform: translateX(102%); box-shadow: -18px 0 40px rgba(0,0,0,.45); }
+      .v-a .sheet.open { transform: none; }
+
+      /* B — bottom-sheet: 005 variant C's fallback, the platform convention. */
+      .v-b .sheet { left: 0; right: 0; bottom: 0; height: 84%; border-top: 1px solid var(--color-border); border-radius: 13px 13px 0 0; transform: translateY(102%); box-shadow: 0 -18px 40px rgba(0,0,0,.45); }
+      .v-b .sheet.open { transform: none; }
+      .v-b .grabber { width: 34px; height: 4px; border-radius: 999px; background: var(--color-border); margin: 8px auto 0; flex-shrink: 0; }
+
+      /* C — full-screen takeover: its own screen, with a back arrow. */
+      .v-c .sheet { inset: 0; transform: translateX(102%); }
+      .v-c .sheet.open { transform: none; }
+      .v-c .scrim { display: none; }
+
+      .grabber { display: none; }
+      .backbtn { display: none; }
+      .v-c .backbtn { display: flex; align-items: center; gap: 6px; }
+      .v-c .closebtn { display: none; }
+
+      .fieldrow { margin-bottom: 10px; }
+      .fieldrow label { display: block; font-size: 11px; color: var(--color-status-text); margin-bottom: 3px; }
+      .fieldrow input, .fieldrow textarea {
+        width: 100%; background: var(--color-input-background); color: var(--color-input-text);
+        border: 1px solid var(--color-input); border-radius: 6px; padding: 8px;
+        font-size: 15px; font-family: inherit; /* 15px: <16px triggers iOS zoom-on-focus */
+      }
+      .grouphead { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--color-status-text); margin: 10px 0 6px; }
+      .lockedsummary {
+        display: flex; align-items: center; gap: 7px; padding: 8px 9px; font-size: 11.5px;
+        border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-card);
+        color: var(--color-muted-foreground); flex-wrap: wrap;
+      }
+      .btn {
+        height: 34px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--color-border);
+        background: var(--color-surface); color: var(--color-muted-foreground);
+        font-size: 13px; cursor: pointer; font-family: inherit;
+      }
+      .btn-primary {
+        background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+        color: var(--color-primary);
+      }
+      .btn-primary[disabled] { opacity: .4; }
+
+      .toastwrap { position: absolute; z-index: 70; left: 12px; right: 12px; bottom: 12px; pointer-events: none; }
+      .toast {
+        display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border-radius: 8px;
+        background: var(--color-card); border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+        box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 12px;
+      }
+      .toast .trpc { display: block; margin-top: 3px; font-size: 10.5px; color: var(--color-status-text); }
+
+      .seqnote {
+        margin: 0 0 10px; padding: 8px 10px; border-radius: 7px; font-size: 11.5px; line-height: 1.6;
+        border: 1px dashed color-mix(in srgb, var(--color-primary) 35%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+        color: var(--color-muted-foreground);
+      }
+
+      /* ---- the band under test ------------------------------------------ */
+      @container vp (max-width: 1023px) {
+        .adminnav { width: 0; border-right-width: 0; overflow: hidden; }
+      }
+      @container vp (max-width: 767px) {
+        .shell > .rail { width: 0; border-right-width: 0; overflow: hidden; }
+        .mobilebar { display: flex; }
+      }
+      /* Above the phone band this sketch has nothing to say — say so. */
+      @container vp (min-width: 768px) {
+        .drawer, .scrim.show { display: none; }
+        .oob { display: flex !important; }
+      }
+      .oob {
+        display: none; align-items: center; gap: 8px; margin: 14px; padding: 10px 12px;
+        border-radius: 7px; border: 1px dashed var(--color-border);
+        color: var(--color-status-text); font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <svg style="display: none">
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></symbol>
+      <symbol id="i-clap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 14 6-6 8 8-6 6z" /><path d="m14 4 6 6" /></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 0 0-16 0" /></symbol>
+      <symbol id="i-shieldalert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /><path d="M12 8v4" /><path d="M12 16h.01" /></symbol>
+      <symbol id="i-scroll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5" /><path d="M15 8h-5" /><path d="M19 17V5a2 2 0 0 0-2-2H4" /></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4" /><line x1="21" x2="12" y1="12" y2="12" /><line x1="8" x2="3" y1="12" y2="12" /></symbol>
+      <symbol id="i-puzzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 2.1a2 2 0 0 0-2.8 1.8v1.4a1 1 0 0 1-1 1H8.2a2 2 0 0 0-2 2v2.3a1 1 0 0 1-1 1H3.9a2 2 0 0 0-1.8 2.8" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 6.2 17.8 2.8a2 2 0 0 0-2.8 0L3 14.8V21h6.2L21.2 9a2 2 0 0 0 0-2.8z" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12" /></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18" /></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
+    </svg>
+
+    <div id="variant-nav">
+      <span class="lbl">SKETCH 006 · phone band parity</span>
+      <button class="variant-tab active" onclick="showVariant('a', this)">A: Right drawer (005-A as-is)</button>
+      <button class="variant-tab" onclick="showVariant('b', this)">B: Bottom-sheet ★</button>
+      <button class="variant-tab" onclick="showVariant('c', this)">C: Full-screen</button>
+      <span style="flex: 1"></span>
+      <select class="statepick" id="scenepick" onchange="render()">
+        <option value="table">screen: character table</option>
+        <option value="drawer">screen: nav drawer open</option>
+        <option value="planned">screen: planned section (003-A)</option>
+        <option value="sheet">screen: edit sheet</option>
+        <option value="toast">screen: sheet + saved toast</option>
+      </select>
+    </div>
+
+    <div class="viewport-wrap" id="vp">
+      <div class="topbar" style="height: var(--topbar-h); display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--color-border); background: var(--color-surface)">
+        <span style="font-family: var(--font-mono); font-weight: 600">&gt;holomush<span style="color: var(--color-cursor)">_</span></span>
+        <span class="muted" style="font-size: 12px">/ admin</span>
+      </div>
+
+      <div class="shell v-a" id="shell">
+        <nav class="rail">
+          <button class="rail-btn" title="Room"><svg width="18" height="18"><use href="#i-home" /></svg></button>
+          <button class="rail-btn" title="Scenes"><svg width="18" height="18"><use href="#i-clap" /></svg></button>
+          <button class="rail-btn is-active" title="Admin"><svg width="18" height="18"><use href="#i-shield" /></svg></button>
+        </nav>
+        <aside class="adminnav"></aside>
+
+        <div class="main" id="main">
+          <div class="mobilebar">
+            <button class="hamburger" onclick="jump('drawer')"><svg width="16" height="16"><use href="#i-menu" /></svg></button>
+            <span style="font-size: 12.5px" id="crumbtext">Admin <span class="muted">›</span> Characters</span>
+          </div>
+
+          <div class="oob">
+            <svg width="15" height="15"><use href="#i-lock" /></svg>
+            <span>This sketch only speaks below 768px. Use the <b>375</b> button — above the phone band, 001 and 005 already decided the layout.</span>
+          </div>
+
+          <div class="page" id="page"></div>
+
+          <div class="scrim" id="scrim" onclick="jump('table')"></div>
+
+          <aside class="drawer" id="drawer">
+            <div class="whoami">
+              <div class="avatar">SB</div>
+              <div style="min-width: 0">
+                <div style="font-size: 12.5px; font-weight: 600">seanb</div>
+                <div style="font-size: 10.5px" class="muted">administrator</div>
+              </div>
+            </div>
+            <div class="drawer-scroll">
+              <div class="navgroup-label">HoloMUSH</div>
+              <div class="navitem"><svg width="16" height="16"><use href="#i-home" /></svg><span class="nav-label">Room</span></div>
+              <div class="navitem"><svg width="16" height="16"><use href="#i-clap" /></svg><span class="nav-label">Scenes</span></div>
+              <div class="drawer-divider"></div>
+              <div class="navgroup-label">Admin</div>
+              <div class="navitem is-active" onclick="jump('table')"><svg width="16" height="16"><use href="#i-users" /></svg><span class="nav-label">Characters</span></div>
+              <div class="navitem is-planned" onclick="jump('planned')"><svg width="16" height="16"><use href="#i-chart" /></svg><span class="nav-label">Stats</span><span class="pill">planned</span></div>
+              <div class="navitem is-planned" onclick="jump('planned')"><svg width="16" height="16"><use href="#i-user" /></svg><span class="nav-label">Players</span><span class="pill">planned</span></div>
+              <div class="navitem is-planned" onclick="jump('planned')"><svg width="16" height="16"><use href="#i-shieldalert" /></svg><span class="nav-label">Moderation</span><span class="pill">planned</span></div>
+              <div class="navitem is-planned" onclick="jump('planned')"><svg width="16" height="16"><use href="#i-scroll" /></svg><span class="nav-label">Audit</span><span class="pill">planned</span></div>
+              <div class="navitem is-planned" onclick="jump('planned')"><svg width="16" height="16"><use href="#i-sliders" /></svg><span class="nav-label">Config</span><span class="pill">planned</span></div>
+              <div class="navitem is-planned" onclick="jump('planned')"><svg width="16" height="16"><use href="#i-puzzle" /></svg><span class="nav-label">Plugins</span><span class="pill">planned</span></div>
+            </div>
+          </aside>
+
+          <div class="sheet" id="sheet"></div>
+          <div class="toastwrap" id="toasts"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="sketch-tools" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.35'">
+      <select onchange="document.querySelector('link[href*=themes]').href = '../themes/' + this.value + '.css'">
+        <option value="default">Default</option>
+      </select>
+      <span class="sep"></span>
+      <button class="on" onclick="setVp(390, this)">375</button>
+      <button onclick="setVp(768, this)">768</button>
+      <button onclick="setVp(1280, this)">1280</button>
+      <button onclick="setVp(0, this)">Full</button>
+    </div>
+
+    <script>
+      const ROWS = [
+        { n: 'Ashwood, Miren', p: 'seanb', s: 'active', c: '2026-03-02', v: 7 },
+        { n: 'Cael Vantrys', p: 'rowan', s: 'active', c: '2026-02-18', v: 3 },
+        { n: 'Dr. Ines Okafor', p: 'jules', s: 'active', c: '2026-01-30', v: 12 },
+        { n: 'Hollow', p: 'rowan', s: 'retired', c: '2025-11-04', v: 5 },
+        { n: 'Sable Quint', p: 'mika', s: 'idle', c: '2025-09-22', v: 2 },
+      ];
+      let VARIANT = 'a';
+      let SCENE = 'table';
+
+      const NOTE = {
+        table:
+          'Columns 4 and 5 (<code>Created</code>, <code>Ver</code>) drop below 768 — inherited from 001. What survives is Name / Player / Status plus the row action. <b>Row actions cannot be hover-revealed on a phone</b>, so they are permanently visible here; that is a real divergence from 002-A, not an oversight.',
+        drawer:
+          'The drawer holds <b>rail sections AND admin sections together</b>, split by a divider and two group labels. This is the shape 001 called for but never drew. Note the group labels are doing the hierarchy work <code>.rail-btn.is-context</code> does at 768–1023.',
+        planned:
+          '003 winner A on a phone. It has <b>no <code>max-width: 767px</code> block at all</b> today, so this is the first time it has been seen in the band. A centred, vertically-anchored empty state mostly survives narrowing for free.',
+        sheet:
+          'The variable. <b>A is 005’s winner unchanged</b> — a 380px right drawer inside a 390px viewport, which leaves a ~10px sliver of table. B and C are the two conventional phone answers.',
+        toast:
+          'The toast is full-bleed on a phone (<code>left/right: 12px</code>) rather than the 340px-max right-anchored card it is on desktop. In C it must sit above the full-screen sheet, which is why it is a sibling of the sheet rather than a child.',
+      };
+
+      function statusPill(s) {
+        if (s === 'active') return '<span class="pill active">active</span>';
+        return '<span class="pill">' + s + '</span>';
+      }
+
+      function tableHtml() {
+        return (
+          '<h1>Characters</h1><div class="crumb">412 characters · showing 5</div>' +
+          '<div class="seqnote">' + NOTE.table + '</div>' +
+          '<table class="chars"><thead><tr><th>Name</th><th>Player</th><th>Status</th><th></th></tr></thead><tbody>' +
+          ROWS.map(
+            (r) =>
+              '<tr><td><span class="cname">' + r.n + '</span></td><td class="muted">' + r.p + '</td>' +
+              '<td>' + statusPill(r.s) + '</td>' +
+              '<td style="text-align:right"><button class="btn-xs" onclick="jump(\'sheet\')">Edit</button></td></tr>',
+          ).join('') +
+          '</tbody></table>'
+        );
+      }
+
+      function plannedHtml() {
+        return (
+          '<div class="seqnote">' + NOTE.planned + '</div>' +
+          '<div class="state"><div class="glyph"><svg width="20" height="20"><use href="#i-shieldalert"/></svg></div>' +
+          '<h2>Moderation</h2><p>Registered and gated. No handler yet.</p></div>'
+        );
+      }
+
+      function sheetHtml() {
+        const head =
+          VARIANT === 'c'
+            ? '<div class="sheet-head"><button class="btn-xs backbtn" onclick="jump(\'table\')"><svg width="12" height="12"><use href="#i-back"/></svg> Characters</button>' +
+              '<div style="text-align:right"><div style="font-size:14px;font-weight:600">Edit character</div>' +
+              '<div class="mono muted" style="font-size:11px">01JQ7X…8F2 · v7</div></div></div>'
+            : '<div class="sheet-head"><div><div style="font-size:15px;font-weight:600">Edit character</div>' +
+              '<div class="mono muted" style="font-size:11.5px;margin-top:2px">01JQ7X…8F2 · v7</div></div>' +
+              '<button class="btn-xs closebtn" style="width:28px;padding:0" onclick="jump(\'table\')"><svg width="13" height="13"><use href="#i-x"/></svg></button></div>';
+
+        return (
+          (VARIANT === 'b' ? '<div class="grabber"></div>' : '') +
+          head +
+          '<div class="sheet-body">' +
+          '<div class="grouphead">Managed elsewhere</div>' +
+          '<div class="lockedsummary"><span><b>Name</b> Ashwood, Miren</span><span style="opacity:.5">·</span>' +
+          '<span><b>Status</b> active</span></div>' +
+          '<div class="grouphead">Editable here</div>' +
+          '<div class="fieldrow"><label>profile.concept</label><input value="Ex-legate turned archivist" /></div>' +
+          '<div class="fieldrow"><label>profile.species</label><input value="Human" /></div>' +
+          '<div class="fieldrow"><label>profile.currently</label><input value="Cataloguing the west stacks" /></div>' +
+          '<div class="fieldrow"><label>profile.appearance</label><textarea rows="4">Tall, grey at the temples, always carrying too many folios.</textarea></div>' +
+          '</div>' +
+          '<div class="sheet-foot"><span style="font-size:11px" class="muted">update_mask: 2 paths</span>' +
+          '<span style="flex:1"></span><button class="btn" onclick="jump(\'table\')">Cancel</button>' +
+          '<button class="btn btn-primary" onclick="jump(\'toast\')">Save</button></div>'
+        );
+      }
+
+      function render() {
+        SCENE = document.getElementById('scenepick').value;
+        document.getElementById('shell').className = 'shell v-' + VARIANT;
+
+        const showSheet = SCENE === 'sheet' || SCENE === 'toast';
+        const showDrawer = SCENE === 'drawer';
+
+        document.getElementById('page').innerHTML =
+          SCENE === 'planned' ? plannedHtml() : tableHtml();
+        document.getElementById('crumbtext').innerHTML =
+          SCENE === 'planned'
+            ? 'Admin <span class="muted">›</span> Moderation'
+            : 'Admin <span class="muted">›</span> Characters';
+
+        document.getElementById('drawer').className = 'drawer' + (showDrawer ? ' open' : '');
+        const sheet = document.getElementById('sheet');
+        sheet.className = 'sheet' + (showSheet ? ' open' : '');
+        sheet.innerHTML = showSheet ? sheetHtml() : '';
+
+        document.getElementById('scrim').className =
+          'scrim' + (showDrawer || (showSheet && VARIANT !== 'c') ? ' show' : '');
+
+        document.getElementById('toasts').innerHTML =
+          SCENE === 'toast'
+            ? '<div class="toast"><svg width="14" height="14" style="color:var(--color-primary);flex-shrink:0;margin-top:1px"><use href="#i-check"/></svg>' +
+              '<div>Saved <b>Ashwood, Mirén</b>.<span class="trpc">AdminUpdateCharacter · update_mask: 2 paths · v7 → v8</span></div></div>'
+            : '';
+
+        if (SCENE === 'drawer' || SCENE === 'sheet' || SCENE === 'toast') {
+          const n = document.createElement('div');
+          n.className = 'seqnote';
+          n.style.margin = '10px';
+          n.innerHTML = NOTE[SCENE];
+          document.getElementById('page').prepend(n);
+        }
+      }
+
+      function jump(scene) {
+        document.getElementById('scenepick').value = scene;
+        render();
+      }
+
+      function showVariant(v, btn) {
+        VARIANT = v;
+        document.querySelectorAll('.variant-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      }
+
+      function setVp(px, btn) {
+        document.querySelectorAll('#sketch-tools button').forEach((b) => b.classList.remove('on'));
+        btn.classList.add('on');
+        document.getElementById('vp').style.maxWidth = px ? px + 'px' : '';
+      }
+
+      render();
+    </script>
+  </body>
+</html>
