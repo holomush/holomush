@@ -8,6 +8,8 @@ package store_test
 import (
 	"context"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -27,6 +29,22 @@ import (
 // the FullCycle spec below asserts Up() lands exactly here, so a new migration
 // fails this spec until the constant follows it.
 const latestMigrationVersion = 53
+
+// Bookkeeping shape of goose's ledger after a fresh-database Up().
+//
+// goose writes ONE row per applied migration, PLUS a version-0 bootstrap row it
+// inserts when it first creates goose_db_version. golang-migrate kept a single
+// mutable row, so this is a genuine change of shape rather than a rename — and
+// it is why a bare `count(*) == 44` is WRONG against a correct database.
+//
+// The migration corpus has gaps (versions 21–29 are unused), so the highest
+// version is 53 while only 44 migrations exist. Bump these together with
+// latestMigrationVersion when a migration is added.
+const (
+	expectedAppliedMigrationRows = 44
+	gooseBootstrapRows           = 1
+	expectedGooseLedgerRows      = expectedAppliedMigrationRows + gooseBootstrapRows
+)
 
 // expectedTables lists every table present after all migrations have been applied.
 // NOTE: The `events` table was dropped by migration 000010 (F6 schema cutover);
@@ -189,6 +207,109 @@ var _ = Describe("Migrator", func() {
 			tables = queryTableNames(suiteT, ctx, connStr)
 			Expect(tables).To(Equal(expectedTables), "second Up() should recreate all tables")
 			verifySeedData(suiteT, ctx, connStr)
+		})
+	})
+
+	// GooseBookkeeping pins the ledger end-state of the golang-migrate → goose
+	// swap. The FullCycle spec above asserts the resulting SCHEMA; nothing
+	// asserted the BOOKKEEPING, so a regression that reverted the ledger table
+	// or double-recorded versions would have been invisible to the suite.
+	//
+	// The version-set equality is the load-bearing half. A row count alone
+	// cannot distinguish the real corpus from 44 phantom rows filling the
+	// unused 21–29 gap, and it is exactly the kind of correct-looking number
+	// that survives a broken migration source.
+	Describe("GooseBookkeeping", func() {
+		It("records one goose_db_version row per embedded migration plus the version-0 bootstrap row, and no schema_migrations table", func() {
+			ctx := context.Background()
+
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			// Read the EMBEDDED version set before applying anything: on a blank
+			// database every embedded version is pending, so this is the corpus
+			// as the filesystem describes it, derived independently of the ledger
+			// the assertions below read back.
+			embedded, err := migrator.PendingMigrations()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(embedded).To(HaveLen(expectedAppliedMigrationRows),
+				"precondition: the embedded corpus MUST hold %d migrations, or the set "+
+					"equality below would compare the ledger against an empty expectation",
+				expectedAppliedMigrationRows)
+
+			Expect(migrator.Up()).To(Succeed())
+
+			conn, err := pgx.Connect(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close(ctx)
+
+			// Three separate expectations rather than one compound check, so a
+			// failure names which property broke.
+			var appliedRows int
+			Expect(conn.QueryRow(ctx,
+				`SELECT count(*) FROM goose_db_version WHERE version_id > 0`).Scan(&appliedRows)).To(Succeed())
+			Expect(appliedRows).To(Equal(expectedAppliedMigrationRows),
+				"goose records one row per applied migration")
+
+			var totalRows int
+			Expect(conn.QueryRow(ctx,
+				`SELECT count(*) FROM goose_db_version`).Scan(&totalRows)).To(Succeed())
+			Expect(totalRows).To(Equal(expectedGooseLedgerRows),
+				"the ledger also carries goose's version-0 bootstrap row; asserting a bare "+
+					"%d total would fail against a CORRECT database",
+				expectedAppliedMigrationRows)
+
+			var minVersion int64
+			Expect(conn.QueryRow(ctx,
+				`SELECT min(version_id) FROM goose_db_version`).Scan(&minVersion)).To(Succeed())
+			Expect(minVersion).To(Equal(int64(0)),
+				"the extra row MUST be goose's version-0 bootstrap row, not a duplicate "+
+					"or an out-of-corpus version")
+
+			// golang-migrate's ledger table must not have been created. Asserted
+			// on the catalog rather than by catching a query error, so a
+			// connection-level failure cannot masquerade as absence. The paired
+			// goose_db_version probe is the positive control: without it a typo
+			// in the table name would make the absence assertion vacuously true.
+			var schemaMigrationsAbsent, gooseLedgerPresent bool
+			Expect(conn.QueryRow(ctx, `
+				SELECT to_regclass('public.schema_migrations') IS NULL,
+				       to_regclass('public.goose_db_version') IS NOT NULL
+			`).Scan(&schemaMigrationsAbsent, &gooseLedgerPresent)).To(Succeed())
+			Expect(gooseLedgerPresent).To(BeTrue(),
+				"positive control: to_regclass MUST resolve a table that does exist here")
+			Expect(schemaMigrationsAbsent).To(BeTrue(),
+				"schema_migrations is golang-migrate's ledger and MUST NOT exist after the swap")
+
+			// Set equality, not a count: the recorded versions must be exactly
+			// the embedded ones.
+			rows, err := conn.Query(ctx,
+				`SELECT version_id FROM goose_db_version WHERE version_id > 0 ORDER BY version_id`)
+			Expect(err).NotTo(HaveOccurred())
+			defer rows.Close()
+
+			var recorded []string
+			for rows.Next() {
+				var v int64
+				Expect(rows.Scan(&v)).To(Succeed())
+				recorded = append(recorded, strconv.FormatInt(v, 10))
+			}
+			Expect(rows.Err()).NotTo(HaveOccurred())
+
+			want := make([]string, 0, len(embedded))
+			for _, v := range embedded {
+				want = append(want, strconv.FormatUint(uint64(v), 10))
+			}
+			sort.Strings(want)
+			sort.Strings(recorded)
+
+			Expect(strings.Join(recorded, ",")).To(Equal(strings.Join(want, ",")),
+				"the recorded version set MUST equal the embedded version set — a matching "+
+					"count with different members (e.g. phantom rows filling the unused "+
+					"21–29 gap) is exactly what this comparison exists to catch")
 		})
 	})
 

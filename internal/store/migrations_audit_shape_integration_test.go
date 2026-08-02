@@ -176,8 +176,13 @@ var _ = Describe("Migration 000005 audit source/component", func() {
 		connStr := testutil.RawDatabase(suiteT, sharedPG)
 
 		// Apply migrations up to and including 000004 (but NOT 000005).
-		// The project's Migrator does not have a Migrate(version) method; it
-		// exposes Steps(n), so we apply exactly 4 steps from a fresh database.
+		//
+		// Steps(4) and Migrate(4) coincide here only because the corpus is
+		// gapless below 000005; Steps(n) is used because this spec is about
+		// "the first four migrations", not "the schema state named 4". The
+		// sibling rollback spec above uses Migrate(4) for the opposite reason.
+		// Migrator.Migrate compares the current version against the target and
+		// dispatches to goose UpTo/DownTo accordingly.
 		migratorEarly, err := store.NewMigrator(connStr)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(migratorEarly.Steps(4)).To(Succeed())
