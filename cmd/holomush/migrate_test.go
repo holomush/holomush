@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,6 +16,50 @@ import (
 
 	"github.com/holomush/holomush/pkg/errutil"
 )
+
+// TestMigrateCommandExposesExactlyUpDownStatusVersionAndNoForce pins the migrate
+// subcommand surface by SET EQUALITY rather than by asserting the absence of
+// "force". Set equality carries "no more" and "no fewer" in one assertion; a bare
+// NotContains("force") passes vacuously if the command tree fails to build at all,
+// and would not notice a subcommand being dropped.
+//
+// Criterion 3 of phase 01.1 removes `migrate force` outright — goose commits each
+// migration body and its version row in one transaction, so the dirty state that
+// `force` existed to repair cannot arise. This test is the mechanical gate that
+// goes red if anyone reintroduces the subcommand.
+func TestMigrateCommandExposesExactlyUpDownStatusVersionAndNoForce(t *testing.T) {
+	cmd := NewMigrateCmd()
+
+	names := make([]string, 0, len(cmd.Commands()))
+	for _, sub := range cmd.Commands() {
+		names = append(names, sub.Name())
+	}
+	sort.Strings(names)
+
+	assert.Equal(t, "down status up version", strings.Join(names, " "),
+		"the migrate subcommand set must be exactly up/down/status/version")
+}
+
+// TestMigrateCommandHelpMentionsNoForceOrDirtyRecovery guards the operator-facing
+// text separately from the command tree: help output is rendered from Short/Long
+// strings, so a stale "run migrate force to reset" line could survive the removal
+// of the subcommand itself.
+func TestMigrateCommandHelpMentionsNoForceOrDirtyRecovery(t *testing.T) {
+	cmd := NewMigrateCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--help"})
+
+	require.NoError(t, cmd.Execute())
+
+	output := buf.String()
+	require.NotEmpty(t, output, "help output must be non-empty or the assertions below are vacuous")
+	for _, forbidden := range []string{"force", "dirty", "DIRTY"} {
+		assert.NotContains(t, output, forbidden,
+			"migrate help must not mention %q", forbidden)
+	}
+}
 
 // migrateLogicMock implements the migrator interface for testing CLI output.
 type migrateLogicMock struct {
@@ -28,9 +74,6 @@ type migrateLogicMock struct {
 	stepsErr              error
 	versionErr            error
 	closeErr              error
-	forceErr              error
-	forceCalled           bool
-	forceVersion          int
 	versionAfterMigration uint
 	versionCallCount      int
 	// versionFunc allows custom Version behavior for testing warning paths
@@ -77,12 +120,6 @@ func (m *migrateLogicMock) Version() (uint, bool, error) {
 		return m.versionFunc()
 	}
 	return m.version, m.dirty, m.versionErr
-}
-
-func (m *migrateLogicMock) Force(version int) error {
-	m.forceCalled = true
-	m.forceVersion = version
-	return m.forceErr
 }
 
 func (m *migrateLogicMock) Close() error {
@@ -212,92 +249,6 @@ func TestMigrateDownLogic_StepsError(t *testing.T) {
 	assert.True(t, mock.stepsCalled)
 }
 
-func TestParseForceVersion(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       string
-		wantVersion int
-		wantErr     bool
-		wantErrCode string
-	}{
-		{
-			name:        "valid integer",
-			input:       "3",
-			wantVersion: 3,
-			wantErr:     false,
-		},
-		{
-			name:        "zero is valid",
-			input:       "0",
-			wantVersion: 0,
-			wantErr:     false,
-		},
-		{
-			name:        "non-numeric returns error",
-			input:       "abc",
-			wantErr:     true,
-			wantErrCode: "INVALID_VERSION",
-		},
-		{
-			name:        "float returns error (strict parsing)",
-			input:       "1.5",
-			wantErr:     true,
-			wantErrCode: "INVALID_VERSION",
-		},
-		{
-			name:        "trailing chars return error (strict parsing)",
-			input:       "3abc",
-			wantErr:     true,
-			wantErrCode: "INVALID_VERSION",
-		},
-		{
-			name:        "negative version returns error",
-			input:       "-1",
-			wantErr:     true,
-			wantErrCode: "INVALID_VERSION",
-		},
-		{
-			name:        "empty string returns error",
-			input:       "",
-			wantErr:     true,
-			wantErrCode: "INVALID_VERSION",
-		},
-		{
-			name:        "whitespace only returns error",
-			input:       "   ",
-			wantErr:     true,
-			wantErrCode: "INVALID_VERSION",
-		},
-		{
-			name:        "leading whitespace is trimmed",
-			input:       "  42",
-			wantVersion: 42,
-			wantErr:     false,
-		},
-		{
-			name:        "trailing whitespace is trimmed",
-			input:       "42  ",
-			wantVersion: 42,
-			wantErr:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			version, err := parseForceVersion(tt.input)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				errutil.AssertErrorCode(t, err, tt.wantErrCode)
-				assert.Equal(t, 0, version)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.wantVersion, version)
-			}
-		})
-	}
-}
-
 func TestGetDatabaseURL(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -359,31 +310,24 @@ func TestGetDatabaseURL(t *testing.T) {
 
 // Status command tests
 
-func TestRunMigrateStatusLogicReportsOKWhenTheSchemaIsNotDirty(t *testing.T) {
-	var buf bytes.Buffer
-	mock := &migrateLogicMock{version: 7, dirty: false}
+func TestRunMigrateStatusLogicReportsOKRegardlessOfTheInertDirtyFlag(t *testing.T) {
+	// goose has no dirty state, so the second return of Version() is inert and the
+	// DIRTY branch is gone. Driving the mock with dirty=true is what makes this a
+	// gate rather than a restatement: if anyone reintroduces the branch, the
+	// dirty=true case starts printing DIRTY and this test fails.
+	for _, dirty := range []bool{false, true} {
+		var buf bytes.Buffer
+		mock := &migrateLogicMock{version: 7, dirty: dirty}
 
-	err := runMigrateStatusLogic(&buf, mock)
+		err := runMigrateStatusLogic(&buf, mock)
 
-	require.NoError(t, err)
-	output := buf.String()
-	assert.Contains(t, output, "Current version: 7")
-	assert.Contains(t, output, "Status: OK")
-	assert.NotContains(t, output, "DIRTY")
-}
-
-func TestRunMigrateStatusLogicReportsDirtyAndTheForceRemedyWhenTheSchemaIsDirty(t *testing.T) {
-	var buf bytes.Buffer
-	mock := &migrateLogicMock{version: 5, dirty: true}
-
-	err := runMigrateStatusLogic(&buf, mock)
-
-	require.NoError(t, err)
-	output := buf.String()
-	assert.Contains(t, output, "Current version: 5")
-	assert.Contains(t, output, "Status: DIRTY")
-	assert.Contains(t, output, "manual intervention required")
-	assert.Contains(t, output, "migrate force VERSION")
+		require.NoError(t, err)
+		output := buf.String()
+		assert.Contains(t, output, "Current version: 7")
+		assert.Contains(t, output, "Status: OK")
+		assert.NotContains(t, output, "DIRTY")
+		assert.NotContains(t, output, "force")
+	}
 }
 
 func TestMigrateStatusLogicReturnsWrappedErrorWhenVersionQueryFails(t *testing.T) {
@@ -419,36 +363,6 @@ func TestMigrateVersionLogicReturnsWrappedErrorWhenVersionQueryFails(t *testing.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db unreachable")
 	errutil.AssertErrorContext(t, err, "operation", "get version")
-}
-
-// Force command tests
-
-func TestMigrateForceLogicForcesVersionAndReportsSuccess(t *testing.T) {
-	var buf bytes.Buffer
-	mock := &migrateLogicMock{}
-
-	err := runMigrateForceLogic(&buf, mock, 5)
-
-	require.NoError(t, err)
-	output := buf.String()
-	assert.Contains(t, output, "Forcing version to 5...")
-	assert.Contains(t, output, "Version forced successfully")
-	assert.True(t, mock.forceCalled)
-	assert.Equal(t, 5, mock.forceVersion)
-}
-
-func TestMigrateForceLogicReturnsWrappedErrorWhenForceFails(t *testing.T) {
-	var buf bytes.Buffer
-	mock := &migrateLogicMock{forceErr: errors.New("invalid version")}
-
-	err := runMigrateForceLogic(&buf, mock, -5)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid version")
-	errutil.AssertErrorContext(t, err, "operation", "force version")
-	output := buf.String()
-	assert.Contains(t, output, "Forcing version to -5...")
-	assert.NotContains(t, output, "successfully")
 }
 
 // Version warning path tests

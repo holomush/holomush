@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
@@ -25,7 +23,6 @@ type migrator interface {
 	Down() error
 	Steps(n int) error
 	Version() (uint, bool, error)
-	Force(version int) error
 	Close() error
 	PendingMigrations() ([]uint, error)
 	AppliedMigrations() ([]uint, error)
@@ -201,20 +198,19 @@ func runMigrateDownLogic(out io.Writer, migrator migrator, all bool) error {
 
 // runMigrateStatusLogic handles the migrate status logic with output.
 //
+// goose commits each migration's body and its version row in a single transaction,
+// so the partially-applied "dirty" condition golang-migrate reported cannot arise.
+// There is consequently no DIRTY branch and no recovery subcommand to point at.
+//
 //nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
 func runMigrateStatusLogic(out io.Writer, migrator migrator) error {
-	version, dirty, err := migrator.Version()
+	version, _, err := migrator.Version()
 	if err != nil {
 		return oops.With("operation", "get version").Wrap(err)
 	}
 
 	fmt.Fprintf(out, "Current version: %d\n", version)
-	if dirty {
-		fmt.Fprintln(out, "Status: DIRTY (migration failed, manual intervention required)")
-		fmt.Fprintln(out, "Use 'holomush migrate force VERSION' to reset")
-	} else {
-		fmt.Fprintln(out, "Status: OK")
-	}
+	fmt.Fprintln(out, "Status: OK")
 	return nil
 }
 
@@ -227,18 +223,6 @@ func runMigrateVersionLogic(out io.Writer, migrator migrator) error {
 		return oops.With("operation", "get version").Wrap(err)
 	}
 	fmt.Fprintln(out, version)
-	return nil
-}
-
-// runMigrateForceLogic handles the migrate force logic with output.
-//
-//nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
-func runMigrateForceLogic(out io.Writer, migrator migrator, version int) error {
-	fmt.Fprintf(out, "Forcing version to %d...\n", version)
-	if err := migrator.Force(version); err != nil {
-		return oops.With("operation", "force version").Wrap(err)
-	}
-	fmt.Fprintln(out, "Version forced successfully")
 	return nil
 }
 
@@ -255,7 +239,7 @@ func NewMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Database migration management",
-		Long:  `Manage PostgreSQL database schema migrations using golang-migrate.`,
+		Long:  `Manage PostgreSQL database schema migrations using goose.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// Default behavior: run migrate up
 			url, err := getDatabaseURL()
@@ -284,7 +268,6 @@ func NewMigrateCmd() *cobra.Command {
 	cmd.AddCommand(newMigrateDownCmd())
 	cmd.AddCommand(newMigrateStatusCmd())
 	cmd.AddCommand(newMigrateVersionCmd())
-	cmd.AddCommand(newMigrateForceCmd())
 
 	return cmd
 }
@@ -430,58 +413,6 @@ func newMigrateVersionCmd() *cobra.Command {
 
 			if err := runMigrateVersionLogic(cmd.OutOrStdout(), migrator); err != nil {
 				return oops.With("command", "migrate version").Wrap(err)
-			}
-			return nil
-		},
-	}
-}
-
-// parseForceVersion parses a version string for the migrate force command.
-// Negative versions are rejected as they have special meaning in golang-migrate
-// (NilVersion) that could accidentally clear version tracking.
-//
-// NOTE: This validation is intentionally duplicated in store.Migrator.Force() for
-// defense-in-depth. The store layer is authoritative; this CLI-layer check provides
-// a better user experience by failing early with a clear error message.
-func parseForceVersion(arg string) (int, error) {
-	version, err := strconv.Atoi(strings.TrimSpace(arg))
-	if err != nil {
-		return 0, oops.Code("INVALID_VERSION").Errorf("invalid version %q: must be an integer", arg)
-	}
-	if version < 0 {
-		return 0, oops.Code("INVALID_VERSION").Errorf("invalid version %d: must be non-negative", version)
-	}
-	return version, nil
-}
-
-func newMigrateForceCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "force VERSION",
-		Short: "Force set migration version (for dirty state recovery)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			url, err := getDatabaseURL()
-			if err != nil {
-				return oops.With("command", "migrate force").Wrap(err)
-			}
-
-			version, err := parseForceVersion(args[0])
-			if err != nil {
-				return oops.With("command", "migrate force").Wrap(err)
-			}
-
-			migrator, err := store.NewMigrator(url)
-			if err != nil {
-				return oops.With("command", "migrate force").Wrap(err)
-			}
-			defer func() {
-				if closeErr := migrator.Close(); closeErr != nil {
-					cmd.PrintErrf("Warning: failed to close migrator (connection may leak): %v\n", closeErr)
-				}
-			}()
-
-			if err := runMigrateForceLogic(cmd.OutOrStdout(), migrator, version); err != nil {
-				return oops.With("command", "migrate force").Wrap(err)
 			}
 			return nil
 		},

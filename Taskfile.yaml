@@ -1371,11 +1371,6 @@ tasks:
       - sh: command -v migrate
         msg: "migrate CLI not found. Install with: go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"
 
-  migrate:force:
-    desc: 'Force set migration version (usage: task migrate:force -- VERSION)'
-    cmds:
-      - go run {{.MAIN_PKG}} migrate force {{.CLI_ARGS}}
-
   migrate:plugin-actors-cutover:
     desc: One-time cutover for holomush-w9ml (TRUNCATE events_audit + JS PurgeStream)
     cmds:

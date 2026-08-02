@@ -57,8 +57,8 @@ func newPoolFromConnStr(t *testing.T, connStr string) *pgxpool.Pool {
 }
 
 // runMigrations applies migrations up/down to targetVersion against the pool's
-// database via store.NewMigrator (golang-migrate). The ctx parameter is accepted
-// for call-site symmetry; golang-migrate's Migrate does not take a context.
+// database via store.NewMigrator (goose). The ctx parameter is accepted
+// for call-site symmetry; Migrator.Migrate does not take a context.
 func runMigrations(ctx context.Context, pool *pgxpool.Pool, targetVersion uint) error {
 	_ = ctx
 	connStr := pool.Config().ConnConfig.ConnString()
