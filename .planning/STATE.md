@@ -6,13 +6,13 @@ current_phase: 1
 current_phase_name: Portal SPEC
 status: executing
 stopped_at: Phase 01.1 context gathered
-last_updated: "2026-08-02T18:17:17.503Z"
+last_updated: "2026-08-02T19:54:10.137Z"
 last_activity: 2026-08-01
 last_activity_desc: "Phase 1 executed: `01-SPEC.md` (16 sections), 8 invariants registered"
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 6
+  total_plans: 13
   completed_plans: 6
   percent: 14
 ---
@@ -35,7 +35,7 @@ complete character identity surface (creation, management, public profiles with 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 1 (Portal SPEC) — EXECUTED, verified, 3 gaps closed
 Plan: 6 of 6 complete
-Status: Phase 1 complete — not yet reviewed or pushed
+Status: Ready to execute
 Progress: [███░░░░░░░░░░░░░░░░░] 17% (1/6 phases)
 Last activity: 2026-08-01 — Phase 1 executed: `01-SPEC.md` (16 sections), 8 invariants registered
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
@@ -423,6 +423,9 @@ None yet.
 
 - Phase 01.1 inserted after Phase 1: Migration framework: adopt goose for Go migrations — Phase 2 execution gated on it (URGENT)
 - Phase 01.1 edited: goal, requirements, gates, success criteria, UI hint, research flag
+- Phase 01.1 edited: edited fields: success_criteria (criterion 1: 49->44 pairs, 'byte-identical' restated as application-schema with bookkeeping objects excluded per D-15; criterion 4: 'real migration' restated as integration-test fixture chain per D-07), research_flag (49->44, baseline question marked resolved per D-02/D-04)
+- Phase 01.1 edited: criterion 1 row-count corrected post-research: 'goose_db_version with 44 rows' -> '44 rows at version_id > 0 plus goose's version-0 bootstrap row (45 total)'. goose inserts a version-0 row at table creation (RESEARCH.md:875-877, verified by execution against postgres:18-alpine), so the prior assertion failed against a correct database.
+- Phase 01.1 edited: criterion 3 amended post-research (maintainer decision): 'up/down/status/version/force parity' -> 'up/down/status/version parity, force REMOVED with docs+tests'. goose commits body and version row in one transaction (provider_run.go:213-219), so the dirty state force repairs cannot arise; force has no analogue and no purpose (RESEARCH.md:777).
 
 ## Deferred Items
 

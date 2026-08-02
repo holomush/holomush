@@ -171,19 +171,33 @@ Plans:
 **Gates**: Phase 2 execution
 **Success Criteria** (what must be TRUE):
 
-1. All 49 migration pairs are converted to goose's single-file `-- +goose Up` / `-- +goose Down` format, and a fresh-database migrate-up produces a schema **byte-identical** to the pre-conversion schema — proven by a dump diff, not by tests passing.
+1. All 44 migration pairs (88 files) are converted to goose's single-file `-- +goose Up` / `-- +goose Down` format, and a fresh-database migrate-up produces an **application schema** byte-identical to the pre-conversion schema — proven by a one-time `pg_dump --schema-only` diff with the bookkeeping objects excluded (`schema_migrations`, `goose_db_version`, `goose_db_version_id_seq`), not by tests passing. The bookkeeping end-state is asserted separately: `goose_db_version` present with 44 rows at `version_id > 0` plus goose's version-0 bootstrap row (45 total), and no `schema_migrations`.
 2. The recorded-state cutover from `schema_migrations` (a single current version) to `goose_db_version` (a row per applied migration) is proven against a database seeded at the pre-conversion version, **including the negative control that a second application is a no-op or refuses** — applying it twice is unrecoverable.
-3. `holomush migrate` keeps up/down/status/version/force parity, and startup auto-migration still runs before bootstrap with `HOLOMUSH_DB_AUTO_MIGRATE` honored.
-4. A Go migration registered between two SQL migrations runs in version order, demonstrated by a real migration — so the capability Phase 2 depends on is proven before Phase 2 relies on it.
+3. `holomush migrate` keeps up/down/status/version parity, and `force` is **removed** along with its docs and tests in the same change — goose commits the migration body and its version row in one transaction, so the dirty state `force` exists to repair cannot arise. Startup auto-migration still runs before bootstrap with `HOLOMUSH_DB_AUTO_MIGRATE` honored.
+4. A Go migration registered between two SQL migrations runs in version order, demonstrated by an **integration test with a fixture chain** (a small SQL→Go→SQL chain in a testcontainer, with the Go step observing the prior SQL step's effect) — so the capability Phase 2 depends on is proven before Phase 2 relies on it, without adding anything permanent to the real 44-migration chain.
 5. `.claude/rules/database-migrations.md` and the migration meta-tests are updated to the new format in the same change.
 
-**Plans:** 0 plans
+**Plans:** 7 plans
 **UI hint**: no
-**Research flag**: narrow — whether goose offers a supported adopt-existing / baseline path for `goose_db_version`, since hand-synthesizing 49 rows is the one unrecoverable step.
+**Research flag**: resolved in discussion — goose ships no baseline / adopt-existing command, so adopt derives the 44 rows from the embedded migration FS (D-02/D-04). Seeding is the one unrecoverable step.
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 01.1 to break down)
+**Wave 1**
+
+- [ ] 01.1-01-PLAN.md — tracer: swap golang-migrate for goose and convert the 44 pairs to single-file format, proven end-to-end on a fresh database (criterion 1, criterion 3's `force` removal)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 01.1-02-PLAN.md — integration-tier rework: one-direction migration accessor, its three callers, and the bookkeeping end-state spec
+- [ ] 01.1-03-PLAN.md — format enforcement: D-13 `$$`↔StatementBegin/End meta-test and the static `lint:no-timestamptz` glob pins (criterion 5)
+- [ ] 01.1-04-PLAN.md — the adopt gate (D-01..D-06) with both negative controls and the ascending-order rollback guard (criterion 2)
+- [ ] 01.1-05-PLAN.md — supply-chain retirement: the five `osv-scanner.toml` docker/docker suppressions and issue #4817
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 01.1-06-PLAN.md — Go/SQL interleave proof and the D-08 package seam with its registration guard (criterion 4)
+- [ ] 01.1-07-PLAN.md — rules, contributor guide, `new-migration` skill, operator docs, and the D-16 rehearsal / D-18 expiring rollback (criterion 5)
 
 ### Phase 2: ABAC & Schema Vocabulary
 
