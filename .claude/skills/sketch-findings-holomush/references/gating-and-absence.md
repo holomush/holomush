@@ -254,8 +254,9 @@ The first draft's button read **"Back to HoloMUSH"**. That is wrong twice over:
 2. **The game's name is not the platform's to assume.** It exists —
    `SettingConfig.DisplayName`, a **required** field on setting-type plugins
    (`internal/plugin/manifest.go:211`) — **but it is not reachable from the web client.** No
-   RPC carries it, no `Web*` response has the field, and the only `HoloMUSH` strings under
-   `web/src/` are SPDX copyright headers.
+   RPC carries it and no `Web*` response has the field. Tracked as
+   [#4905](https://github.com/holomush/holomush/issues/4905), which also records the
+   competing `landing.hero.metadata.title` content path and its `'HoloMUSH'` fallback.
 
 **Resolution: the copy is `Home`.** Viewer-agnostic, no new surface, conflates nothing. The
 `>holomush_` wordmark stays in the top bar — that is platform chrome, which INV-6 permits.

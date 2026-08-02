@@ -123,19 +123,43 @@ The first draft's button read **"Back to HoloMUSH"**. That is wrong twice over:
    (`internal/plugin/manifest.go:211`; a setting plugin *is* the world content
    pack, e.g. `display_name: My World`).
 
-**But it is not reachable from the web client.** No RPC carries it, no `Web*`
-response has the field, and the client renders no game name anywhere today — the
-only `HoloMUSH` strings under `web/src/` are SPDX copyright headers. So v0.13
-**cannot** render the game name without new plumbing.
+**But it is not reachable from the web client.** No RPC carries it and no `Web*`
+response has the field. So v0.13 **cannot** render the game name without new
+plumbing.
 
-**Resolution: the copy is `Home`.** Viewer-agnostic, no new surface, and it
-conflates nothing. The `>holomush_` wordmark stays in the top bar, which is
-platform chrome and exactly what INV-6 permits.
+> ⚠ **Correction (2026-08-02).** This paragraph originally continued: *"and the
+> client renders no game name anywhere today — the only `HoloMUSH` strings under
+> `web/src/` are SPDX copyright headers."* **That was false**, and it propagated
+> into the packaged findings skill before anyone re-ran the search. Three real
+> render sites exist:
+>
+> - `web/src/lib/components/TopBar.svelte:66` — `<span class="logo-text">HoloMUSH</span>`
+>   inside `class="logo brand-chip"`. **Fine** — platform wordmark in platform
+>   chrome, exactly what INV-6 permits.
+> - `web/src/routes/+page.svelte:34` — `heroTitle = hero?.metadata?.title ?? 'HoloMUSH'`.
+>   **Latent INV-6 violation** — the platform brand is the *fallback* for game
+>   identity.
+> - `web/src/routes/(authed)/terminal/+page.svelte:689` — `<h1>HoloMUSH</h1>` on
+>   the disconnected screen, with no content path behind it at all.
+>
+> It also missed that a **competing** game-identity path already ships:
+> `ContentService.ListContent`, consumed at `web/src/routes/+page.ts` via
+> `listContent('landing.')`. So the **required** manifest field is unreachable
+> while an **optional**, landing-page-scoped content key is what actually renders.
+> Filed as [#4905](https://github.com/holomush/holomush/issues/4905).
+>
+> The claim was an **exhaustiveness** claim (*"the only X is Y"*) reported without
+> reading the hits — the same defect family this sketch's own `☣ inject leak`
+> control exists to catch.
 
-**Carried forward as a gap:** *the game's display name is server-side-only.* Any
-phase that wants player-facing game identity — a title tag, an OG card, a welcome
-line, this button — needs it exposed first. Worth an issue in its own right; it
-is not specific to this page.
+**Resolution: the copy is `Home`.** Unchanged by the correction — viewer-agnostic,
+no new surface, and it conflates nothing. The `>holomush_` wordmark stays in the
+top bar, which is platform chrome and exactly what INV-6 permits.
+
+**Carried forward as a gap → now [#4905](https://github.com/holomush/holomush/issues/4905):**
+*the game's display name is server-side-only.* Any phase that wants player-facing
+game identity — a title tag, an OG card, a welcome line, this button — needs it
+exposed first. Not specific to this page.
 
 ## What to Look For
 

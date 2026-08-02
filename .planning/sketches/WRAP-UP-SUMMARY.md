@@ -132,7 +132,7 @@ reversible**, and the name stays **reserved**.
 | **A3** | `AdminSearchCharacters` extended to player usernames | Unsanctioned SPEC amendment |
 | **D1** | §10.3 vs §10.4 — distinguishable denial codes form a registry-enumeration oracle; no invariant pins it though `INV-PRIVACY-9` does the same job for profiles | SPEC defect — [#4904](https://github.com/holomush/holomush/issues/4904), route to `abac-reviewer` |
 | — | No `+error.svelte` under `web/src/routes/` — **three** surfaces now depend on it (003, 007, and the rejected 006-C) | [#4903](https://github.com/holomush/holomush/issues/4903); Phase 6 must also assert **exactly one** |
-| — | **Game display name is server-side-only.** `SettingConfig.DisplayName` (`internal/plugin/manifest.go:211`) reaches no web surface | Gap — blocks any player-facing game identity; worth its own issue |
+| — | **Game display name is server-side-only.** `SettingConfig.DisplayName` (`internal/plugin/manifest.go:211`) is **required** yet reaches no web surface; the *optional* `landing.hero.metadata.title` content key renders instead, falling back to the platform brand | **Filed** — [#4905](https://github.com/holomush/holomush/issues/4905) |
 | — | **Signed-out web chrome is unspecified** — 007 invented a `Sign in` / `Play as guest` bar; the app shell is `(authed)`-only | Open — Phase 5 |
 | — | **Profile URL key** — name-based URLs are the point, but names are not a key (no uniqueness until Phase 2, renameable after) | Open — settle before Phase 5 routes |
 | — | Admin rename: **player** rename ships (IDENT-03); §9.3's admin census still has no `AdminRenameCharacter` | Narrowed, still open — Phase 6 |

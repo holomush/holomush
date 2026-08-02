@@ -267,15 +267,31 @@ Wrong twice over:
    brand is *"the software/platform only — never the game world / default setting."* A
    player is in *a game that runs on* HoloMUSH.
 2. **The game's name is not the platform's to assume.** It exists as
-   `SettingConfig.DisplayName` (required on setting plugins, `internal/plugin/manifest.go:211`)
-   — **but it reaches no web surface.** No RPC carries it; the only `HoloMUSH` strings under
-   `web/src/` are SPDX headers.
+   `SettingConfig.DisplayName` (**required** on setting plugins,
+   `internal/plugin/manifest.go:211`, enforced at `:494`) — **but it reaches no web
+   surface.** No RPC carries it. Tracked as
+   [#4905](https://github.com/holomush/holomush/issues/4905).
 
 **Corrected to `Home`** — viewer-agnostic, no new surface, conflates nothing. The
 `>holomush_` wordmark stays in the top bar; that is platform chrome, which INV-6 permits.
 
 > **Rule:** never hardcode `HoloMUSH` in player-facing copy. If a surface needs the *game's*
 > identity, that is a plumbing gap to raise, not a string to invent.
+
+### ⚠ This entry demonstrated §1 while being written
+
+Sketch 010 asserted, and the first packaging of this skill repeated, that *"the only
+`HoloMUSH` strings under `web/src/` are SPDX copyright headers."* **False** — there are
+three real render sites (`TopBar.svelte:66`, which is fine; `routes/+page.svelte:34`, a
+fallback; `terminal/+page.svelte:689`, a bare `<h1>`). See `foundations.md` for the table.
+
+The claim was never run as a search that could have failed — it is §1 (fabricating a fact
+about the tree) and §3 (verification that cannot fail) at once, committed **inside the file
+that documents both**. It survived a sketch review, a wrap-up curation pass, and a commit.
+
+> **Rule:** a claim of the form *"the only X in the tree is Y"* is an **exhaustiveness**
+> claim. Run it, read every hit, and classify each one — do not report the shape of the
+> result you expected.
 
 ---
 

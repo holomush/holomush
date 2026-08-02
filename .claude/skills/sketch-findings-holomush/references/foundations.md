@@ -36,12 +36,39 @@ permits; a button reading `Back to HoloMUSH` is not.
 
 **The game's own name is not reachable from the web client.** It exists as
 `SettingConfig.DisplayName` — a **required** field on setting-type plugins
-(`internal/plugin/manifest.go:211`) — but **no RPC carries it**, no `Web*` response has the
-field, and the only `HoloMUSH` strings under `web/src/` are SPDX copyright headers.
+(`internal/plugin/manifest.go:211`, enforced at `:494`) — but **no RPC carries it** and no
+`Web*` response has the field. Tracked as
+[#4905](https://github.com/holomush/holomush/issues/4905).
+
+> ⚠ **Correction (2026-08-02).** Sketch 010's README and the first packaging of this skill
+> both claimed *"the only `HoloMUSH` strings under `web/src/` are SPDX copyright headers."*
+> **That is false.** Three real render sites exist:
+>
+> | Site | Renders | Assessment |
+> | --- | --- | --- |
+> | `lib/components/TopBar.svelte:66` | `<span class="logo-text">HoloMUSH</span>` in `class="logo brand-chip"` | **Fine** — platform wordmark in platform chrome, which INV-6 permits |
+> | `routes/+page.svelte:34` | `heroTitle = hero?.metadata?.title ?? 'HoloMUSH'` | **Latent violation** — the platform brand is the *fallback* for game identity |
+> | `routes/(authed)/terminal/+page.svelte:689` | `<h1>HoloMUSH</h1>` on the disconnected screen | **Questionable** — no content path behind it at all |
+>
+> The claim came from an unverified search and propagated into committed docs. It is
+> `anti-patterns.md` §1 (fabricating a fact about the tree) committed by this skill itself.
+
+**There are already two competing sources of game identity, and the wrong one is
+load-bearing:**
+
+| Source | Required? | Reaches the client? | Scope |
+| --- | --- | --- | --- |
+| `SettingConfig.DisplayName` | **Yes** | **No** | the game, globally |
+| Content key `landing.hero` → `metadata.title` | No (falls back to `'HoloMUSH'`) | **Yes**, via `ContentService.ListContent` (`routes/+page.ts`, `listContent('landing.')`) | landing page only |
+
+So an operator who sets `display_name: My World` and authors no `landing.hero` content item
+gets **`HoloMUSH`** on their own landing page.
 
 > **Carried-forward gap:** any player-facing game identity — a title tag, an OG card, a
-> welcome line, a "back" target — needs `SettingConfig.DisplayName` **exposed to the web
-> client first**. Until then, viewer-agnostic copy (`Home`) is the correct answer.
+> welcome line, a "back" target — needs this settled first (#4905). Until then,
+> viewer-agnostic copy (`Home`) is the correct answer. **Do not reach for
+> `landing.hero.metadata.title` as a general game-name source** — it is optional,
+> landing-scoped, and its fallback is the thing INV-6 forbids.
 
 | Token | Value | Role |
 | --- | --- | --- |
