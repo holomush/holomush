@@ -177,7 +177,7 @@ Plans:
 4. A Go migration registered between two SQL migrations runs in version order, demonstrated by an **integration test with a fixture chain** (a small SQL→Go→SQL chain in a testcontainer, with the Go step observing the prior SQL step's effect) — so the capability Phase 2 depends on is proven before Phase 2 relies on it, without adding anything permanent to the real 44-migration chain.
 5. `.claude/rules/database-migrations.md` and the migration meta-tests are updated to the new format in the same change.
 
-**Plans:** 5/7 plans executed
+**Plans:** 6/7 plans executed
 **UI hint**: no
 **Research flag**: resolved in discussion — goose ships no baseline / adopt-existing command, so adopt derives the 44 rows from the embedded migration FS (D-02/D-04). Seeding is the one unrecoverable step.
 
@@ -196,7 +196,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01.1-06-PLAN.md — Go/SQL interleave proof and the D-08 package seam with its registration guard (criterion 4)
+- [x] 01.1-06-PLAN.md — Go/SQL interleave proof and the D-08 package seam with its registration guard (criterion 4)
 - [ ] 01.1-07-PLAN.md — rules, contributor guide, `new-migration` skill, operator docs, and the D-16 rehearsal / D-18 expiring rollback (criterion 5)
 
 ### Phase 2: ABAC & Schema Vocabulary
