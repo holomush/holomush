@@ -5,13 +5,34 @@ title: "Restoring a Postgres Backup"
 Restore a Kopia snapshot produced by the `backups` compose profile (or a
 pre-deploy safety snapshot) into a running HoloMUSH instance.
 
+## Reaching the droplet
+
+`game.holomush.dev` is Cloudflare-proxied, so port 22 is unreachable through it.
+Every `ssh` command below uses the droplet's public IPv4, the same way the deploy
+workflow does. Resolve it once per shell:
+
+```bash
+export DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
+  --format PublicIPv4 --no-header)
+```
+
+:::danger[The Kopia snapshot does NOT contain the KEK keyfile]
+`backup.sh` streams `pg_dump` into Kopia — the **database only**. The certs
+volume holding `master.key.enc` is never captured. Once any `crypto_keys` row
+exists, restoring a snapshot onto a droplet without the original keyfile leaves
+the service unable to start: the core mints a fresh KEK, then refuses with
+`KEK_PROVIDER_CANNOT_UNWRAP_EXISTING_DEKS` because it cannot unwrap the restored
+DEKs. Back up `${CONFIG_DIR:-/opt/holomush/config}/certs/master.key.enc` and its
+passphrase **alongside** every database snapshot, and restore both together.
+:::
+
 ## Find the snapshot
 
 Snapshots are identified by Kopia snapshot IDs, not filesystem paths. List
 the 10 most recent snapshots:
 
 ```bash
-ssh holomush@game.holomush.dev \
+ssh "holomush@${DROPLET_IP}" \
   'docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
      exec -T backup kopia snapshot list --all --max-results=10'
 ```
@@ -19,7 +40,7 @@ ssh holomush@game.holomush.dev \
 List only the pinned pre-deploy snapshots (one per release):
 
 ```bash
-ssh holomush@game.holomush.dev \
+ssh "holomush@${DROPLET_IP}" \
   'docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
      exec -T backup kopia snapshot list --all --tags=pre-deploy:'
 ```
@@ -74,14 +95,7 @@ at v53; only real sandbox data reveals actual drift.
 
 **1. Take a fresh `pre-deploy:` snapshot immediately before the cutover deploy.**
 
-`game.holomush.dev` is Cloudflare-proxied, so port 22 is unreachable through it —
-SSH to the droplet's public IPv4 instead, the same way the deploy workflow does
-(`.github/workflows/deploy.yaml`):
-
 ```bash
-DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
-  --format PublicIPv4 --no-header)
-
 ssh "holomush@${DROPLET_IP}" \
   'docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
      exec -T backup /usr/local/bin/backup.sh --tag=pre-deploy:goose-cutover' </dev/null
@@ -119,10 +133,23 @@ SELECT table_name FROM information_schema.tables
 SQL
 ```
 
-Expected: (a) `migrations = 44`, `total_rows = 45`, `lowest = 0`; (b) `archived`
-non-null and `legacy` **null**; (c) the table list matches the schema the release
-was built against — no table missing and none left over from a migration the
-ledger claims was applied.
+Expected: (a) `migrations` equals the number of embedded migrations at or below
+the version the old ledger recorded, `total_rows` is that plus one for goose's
+version-0 bootstrap row, and `lowest = 0`; (b) `archived` non-null and `legacy`
+**null**; (c) the table list matches the schema the release was built against —
+no table missing and none left over from a migration the ledger claims was
+applied.
+
+:::caution[Derive (a) from the database, do not copy a number]
+The adopt seeds only the versions **at or below** what `schema_migrations`
+recorded (`derivedSeedVersions`, `internal/store/migrate_adopt.go:355`) — not the
+whole corpus. A database several releases behind therefore yields *fewer* rows
+than the corpus contains, and that is correct, not a failure. Read
+`SELECT version FROM schema_migrations` before the adopt and count the embedded
+migrations at or below it; compare against that. A box fully caught up to the
+current corpus gives 44 and 45, but treating those as fixed constants will
+report a healthy adopt as broken on any box that is behind.
+:::
 
 If any of the three disagrees, do not deploy. A mismatch in (a) or (b) means the
 adopt did not complete; a mismatch in (c) is the schema drift the adopt gate
@@ -134,7 +161,7 @@ cannot see.
 manual backup first.
 
 ```bash
-ssh holomush@game.holomush.dev
+ssh "holomush@${DROPLET_IP}"
 cd /opt/holomush
 
 # 1. Fresh pinned backup of current state
@@ -176,7 +203,7 @@ taken at the start of the deploy workflow:
 
 ```bash
 # Find the pre-deploy snapshot for the broken release
-ssh holomush@game.holomush.dev \
+ssh "holomush@${DROPLET_IP}" \
   'docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
      exec -T backup kopia snapshot list --tags=pre-deploy:v0.3.0'
 
@@ -198,7 +225,7 @@ application schema is provably unchanged across the deploy. Only the bookkeeping
 moved, and only the bookkeeping has to move back.
 
 ```bash
-ssh holomush@game.holomush.dev
+ssh "holomush@${DROPLET_IP}"
 cd /opt/holomush
 
 # 1. Stop the services that would re-run the adopt on boot

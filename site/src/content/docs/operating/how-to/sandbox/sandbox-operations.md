@@ -243,7 +243,7 @@ BEFORE pulling images and restarting. Without the sync, compose/profile
 changes or backup-image updates in the release never reach the host:
 
 ```bash
-ssh holomush@game.holomush.dev
+ssh "holomush@${DROPLET_IP}"
 VERSION=v0.2.0
 sudo apt-get install -y git  # if not already present
 
@@ -309,7 +309,7 @@ repository's `compose.prod.yaml` to `/opt/holomush/compose.yaml`, so the
 file being named `compose.prod.yaml`.
 
 ```bash
-ssh holomush@game.holomush.dev
+ssh "holomush@${DROPLET_IP}"
 docker compose -f /opt/holomush/compose.yaml logs -f core gateway cloudflared
 ```
 
@@ -333,7 +333,7 @@ If the tunnel token is compromised:
 ### Take a manual backup
 
 ```bash
-ssh holomush@game.holomush.dev
+ssh "holomush@${DROPLET_IP}"
 docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
   exec backup /usr/local/bin/backup.sh
 ```
