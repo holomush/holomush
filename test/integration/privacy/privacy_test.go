@@ -332,7 +332,7 @@ var _ = Describe("INV-PRIVACY-3: ReattachCAS preserves durable; Subscribe replay
 // emitted during the detach window MUST remain queryable.
 //
 // Schema model: one game session per character (idx_sessions_active_character
-// at internal/store/migrations/000001_baseline.up.sql:221-222); multiple
+// at internal/store/migrations/000001_baseline.sql); multiple
 // transports attach via session_connections. The spec §2 worked example uses
 // "session A and session B" loosely to mean "transport connection A and B" —
 // the schema-faithful reading is one session, two transports.

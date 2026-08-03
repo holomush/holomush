@@ -302,7 +302,7 @@ func connectionIDs(ctx context.Context, ts *integrationtest.Server, sessionID st
 // across EVERY status.
 //
 // Across every status deliberately. The partial unique index
-// idx_sessions_active_character (internal/store/migrations/000001_baseline.up.sql:221)
+// idx_sessions_active_character (internal/store/migrations/000001_baseline.sql)
 // already forbids two rows for one character while either is active or
 // detached, so a count restricted to those statuses could not rise above one
 // and the assertion would be decorative. Counting all statuses leaves the

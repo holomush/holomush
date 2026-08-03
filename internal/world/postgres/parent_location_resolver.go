@@ -94,7 +94,7 @@ func (r *ParentLocationResolver) ResolveParentLocation(
 		//
 		// COALESCE(direct, held) is correct, not biased: the schema
 		// constraint chk_exactly_one_containment (migration
-		// 000001_baseline.up.sql:146) guarantees each row has EXACTLY
+		// 000001_baseline.sql) guarantees each row has EXACTLY
 		// ONE of {location_id, held_by_character_id, contained_in_object_id}
 		// non-NULL. The chain recurses only via contained_in_object_id, so
 		// intermediate rows have NULL location AND NULL held — only the

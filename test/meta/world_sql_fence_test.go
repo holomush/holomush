@@ -142,7 +142,7 @@ func isWriterBoundaryPath(rel string) bool {
 
 // isRegisteredExceptionMigration reports whether a migration file is on the small,
 // explicit registered-exception allowlist — the pre-Phase-5 bootstrap seed
-// 000001_baseline (player/location/character INSERTs at :385-395).
+// 000001_baseline (its player/location/character bootstrap INSERTs).
 func isRegisteredExceptionMigration(base string) bool {
 	return strings.HasPrefix(base, "000001_baseline")
 }
@@ -349,8 +349,14 @@ CREATE INDEX idx_char ON characters (name);
 func TestWorldSQLFenceAllowsMarkedAndBaselineMigrations(t *testing.T) {
 	re := worldWriteSQLRegexp()
 
-	assert.True(t, isRegisteredExceptionMigration("000001_baseline.up.sql"))
-	assert.True(t, isRegisteredExceptionMigration("000001_baseline.down.sql"))
+	// The name the corpus actually carries. goose migrations are single files
+	// holding both directions, so the golang-migrate-era .up.sql/.down.sql pair
+	// this used to assert on has no referent — and the fence's own glob is *.sql,
+	// so it never sees those names either.
+	assert.True(t, isRegisteredExceptionMigration("000001_baseline.sql"))
+	assert.False(t, isRegisteredExceptionMigration("000002_player_is_guest.sql"),
+		"the allowlist is deliberately one file wide; a predicate that admitted "+
+			"every migration would satisfy the assertion above just as well")
 
 	sameLine := `UPDATE characters SET version = 1; -- world-sql-fence:allow epoch reset`
 	assert.Empty(t, scanMigrationForWorldDML(sameLine, re), "same-line marker exempts the DML")
