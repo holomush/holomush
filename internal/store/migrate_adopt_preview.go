@@ -105,7 +105,10 @@ func previewAdoptOn(ctx context.Context, conn *sql.Conn) (AdoptPreview, error) {
 		}
 	}
 
-	recorded, dirty, err := readLegacyVersion(ctx, conn)
+	// The raw version is not surfaced: the preview reports what the cutover will
+	// SEED FROM, and that is the clamped value. The sentinel only matters to the
+	// dirty refusal's wording, which the operator reads from the error itself.
+	recorded, _, dirty, err := readLegacyVersion(ctx, conn)
 	if err != nil {
 		return AdoptPreview{}, err
 	}

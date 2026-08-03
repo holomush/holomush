@@ -173,7 +173,7 @@ func (m *Migrator) adoptLocked(ctx context.Context, conn *sql.Conn) error {
 		}
 	}
 
-	recorded, dirty, err := readLegacyVersion(ctx, conn)
+	recorded, rawVersion, dirty, err := readLegacyVersion(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -182,8 +182,11 @@ func (m *Migrator) adoptLocked(ctx context.Context, conn *sql.Conn) error {
 	// fully applied. Seeding from it would record partially-applied migrations as
 	// applied, and goose has no way to detect that afterward. Refuse and abort boot
 	// (D-05) — this matches the repo's default-deny posture.
+	//
+	// rawVersion travels alongside recorded because recorded is CLAMPED: the
+	// message must name what the ledger holds, not what the clamp produced.
 	if dirty {
-		return errAdoptRefusedDirty(recorded)
+		return errAdoptRefusedDirty(recorded, rawVersion)
 	}
 
 	all, err := allMigrationVersions()
@@ -198,25 +201,37 @@ func (m *Migrator) adoptLocked(ctx context.Context, conn *sql.Conn) error {
 // readLegacyVersion reads golang-migrate's single bookkeeping row, and refuses
 // rather than guessing when the ledger does not have the shape golang-migrate
 // maintains. See probeLegacyStateSQL for why the determinism matters.
-func readLegacyVersion(ctx context.Context, conn *sql.Conn) (recorded uint, dirty bool, err error) {
+// The returned recorded is CLAMPED at 0 because it feeds derivedSeedVersions,
+// which is unsigned. raw is the ledger's value verbatim, and exists so the dirty
+// refusal can name what the operator will actually find in the table:
+// golang-migrate's NilVersion is -1, and reporting it as "dirty at version 0"
+// sends them looking for a migration no corpus contains.
+func readLegacyVersion(ctx context.Context, conn *sql.Conn) (recorded uint, raw int64, dirty bool, err error) {
 	var version, rowCount int64
 	scanErr := conn.QueryRowContext(ctx, probeLegacyStateSQL).Scan(&version, &dirty, &rowCount)
 	if scanErr != nil {
-		// Zero rows arrive here as sql.ErrNoRows. That case is fail-closed and
-		// documented in the operator runbook under this code's `read legacy version`
-		// operation, so it deliberately keeps its existing shape.
-		return 0, false, oops.Code("MIGRATION_ADOPT_PROBE_FAILED").
+		// Zero rows arrive here as sql.ErrNoRows.
+		//
+		// This shares MIGRATION_ADOPT_PROBE_FAILED with the three connectivity /
+		// privilege probes, which is a deliberate and revisited choice, not an
+		// oversight: it is an operator-facing code, the runbook routes on the
+		// `operation` field and carries a dedicated section for this case, and the
+		// empty ledger is the only one of the four needing a schema-dependent manual
+		// decision. Minting a distinct code would change a documented contract for a
+		// taxonomy gain the `operation` field already delivers. Revisit if a fourth
+		// situation lands under this code, or if operators are observed misrouting.
+		return 0, 0, false, oops.Code("MIGRATION_ADOPT_PROBE_FAILED").
 			With("operation", "read legacy version").
 			With("legacy_table", legacyVersionTable).
 			Wrap(scanErr)
 	}
 	if rowCount != 1 {
-		return 0, false, errAdoptRefusedAmbiguousLedger(rowCount)
+		return 0, 0, false, errAdoptRefusedAmbiguousLedger(rowCount)
 	}
 	if version < 0 {
-		return 0, dirty, nil
+		return 0, version, dirty, nil
 	}
-	return uint(version), dirty, nil
+	return uint(version), version, dirty, nil
 }
 
 // seedAndArchive writes the derived bookkeeping and retires the legacy table in ONE
@@ -368,12 +383,32 @@ func errAdoptRefusedAmbiguousLedger(rowCount int64) error {
 		)
 }
 
-// errAdoptRefusedDirty builds D-05's refusal. The version travels in the oops
-// context under a named key, not only in the message, so it can be filtered on
+// errAdoptRefusedDirty builds D-05's refusal. Both versions travel in the oops
+// context under named keys, not only in the message, so they can be filtered on
 // downstream rather than parsed out of prose.
-func errAdoptRefusedDirty(version uint) error {
+//
+// raw is the ledger's verbatim value and version is the clamped one. They differ
+// only for golang-migrate's NilVersion sentinel (-1), which gets its own phrasing:
+// naming the clamped 0 there points the operator at a version that exists in no
+// corpus, and "resolve version 0 with the previous tooling" is not an instruction
+// anyone can follow.
+func errAdoptRefusedDirty(version uint, raw int64) error {
+	if raw < 0 {
+		return oops.Code("MIGRATION_ADOPT_REFUSED_DIRTY").
+			With("dirty_version", version).
+			With("raw_version", raw).
+			With("legacy_table", legacyVersionTable).
+			Errorf(
+				"refusing to adopt golang-migrate bookkeeping: %s is marked dirty but records no "+
+					"version (%d is golang-migrate's NilVersion sentinel), so a migration failed "+
+					"before any version was recorded and there is nothing to seed from; resolve it "+
+					"with the previous migration tooling before starting this binary",
+				legacyVersionTable, raw,
+			)
+	}
 	return oops.Code("MIGRATION_ADOPT_REFUSED_DIRTY").
 		With("dirty_version", version).
+		With("raw_version", raw).
 		With("legacy_table", legacyVersionTable).
 		Errorf(
 			"refusing to adopt golang-migrate bookkeeping: %s is marked dirty at version %d, "+

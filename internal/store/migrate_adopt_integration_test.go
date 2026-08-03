@@ -599,6 +599,54 @@ var _ = Describe("Migrator adopt", func() {
 		})
 	})
 
+	Describe("the dirty refusal against golang-migrate's NilVersion sentinel", func() {
+		// readLegacyVersion clamps a negative recorded version to 0 before the
+		// dirty check sees it, so a (version = -1, dirty = true) ledger aborted
+		// boot with "marked dirty at version 0" — pointing the operator at a
+		// version that exists in no corpus. The refusal itself was always correct;
+		// only the version it named was not.
+		It("names the sentinel rather than a version 0 that does not exist", func() {
+			ctx := context.Background()
+			connStr := newPreConversionDatabase(suiteT, ctx, -1, true)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			upErr := migrator.Up()
+			Expect(upErr).To(HaveOccurred())
+			errutil.AssertErrorCode(suiteT, upErr, "MIGRATION_ADOPT_REFUSED_DIRTY")
+			errutil.AssertErrorContext(suiteT, upErr, "raw_version", int64(-1))
+			Expect(upErr.Error()).NotTo(ContainSubstring("dirty at version 0"),
+				"version 0 is the clamp, not the ledger's value; naming it sends the "+
+					"operator looking for a migration that does not exist")
+			Expect(upErr.Error()).To(ContainSubstring("records no version"))
+
+			// The refusal must stay as complete as the ordinary dirty one.
+			legacy, archived, gooseLedger := bookkeepingTablePresence(suiteT, ctx, connStr)
+			Expect(gooseLedger).To(BeFalse())
+			Expect(legacy).To(BeTrue())
+			Expect(archived).To(BeFalse())
+		})
+
+		It("still names the recorded version for an ordinary dirty ledger", func() {
+			// The negative control: a refusal that always said "records no version"
+			// would satisfy the spec above.
+			ctx := context.Background()
+			connStr := newPreConversionDatabase(suiteT, ctx, latestMigrationVersion, true)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			upErr := migrator.Up()
+			Expect(upErr).To(HaveOccurred())
+			errutil.AssertErrorContext(suiteT, upErr, "raw_version", int64(latestMigrationVersion))
+			Expect(upErr.Error()).To(ContainSubstring(strconv.Itoa(latestMigrationVersion)))
+			Expect(upErr.Error()).NotTo(ContainSubstring("records no version"))
+		})
+	})
+
 	Describe("C2d rollback order after adopt", func() {
 		// Verifies: INV-STORE-10
 		It("rolls the adopted database all the way down in descending version order", func() {

@@ -131,10 +131,45 @@ func TestDerivedSeedVersionsDoesNotAliasItsInput(t *testing.T) {
 // and cannot be distinguished from an unrelated error that happens to mention a
 // number.
 func TestAdoptDirtyRefusalCarriesTheDirtyVersionInItsContext(t *testing.T) {
-	err := errAdoptRefusedDirty(42)
+	err := errAdoptRefusedDirty(42, 42)
 	require.Error(t, err)
 
 	errutil.AssertErrorCode(t, err, "MIGRATION_ADOPT_REFUSED_DIRTY")
 	errutil.AssertErrorContext(t, err, "dirty_version", uint(42))
+	errutil.AssertErrorContext(t, err, "raw_version", int64(42))
 	assert.Contains(t, err.Error(), "42", "the operator-facing message should name the version too")
+}
+
+// TestAdoptDirtyRefusalNamesTheNilVersionSentinelRatherThanTheClamp covers the
+// one input where the clamped and raw versions disagree.
+//
+// readLegacyVersion clamps a negative recorded version to 0 because the seed
+// derivation is unsigned, so a (version = -1, dirty = true) ledger used to abort
+// boot with "marked dirty at version 0" — a version that exists in no corpus, and
+// an instruction ("resolve version 0 with the previous tooling") nobody can act
+// on. golang-migrate's NilVersion is -1, and it is what the ledger holds when a
+// migration failed before any version was recorded.
+func TestAdoptDirtyRefusalNamesTheNilVersionSentinelRatherThanTheClamp(t *testing.T) {
+	err := errAdoptRefusedDirty(0, -1)
+	require.Error(t, err)
+
+	errutil.AssertErrorCode(t, err, "MIGRATION_ADOPT_REFUSED_DIRTY")
+	errutil.AssertErrorContext(t, err, "raw_version", int64(-1))
+	assert.Contains(t, err.Error(), "records no version")
+	assert.NotContains(t, err.Error(), "dirty at version 0",
+		"naming the clamp sends the operator looking for a migration that does not exist")
+}
+
+// TestAdoptAmbiguousLedgerRefusalCarriesTheRowCountInItsContext pins the
+// companion refusal's contract, for the same reason the dirty one has it: the
+// count has to be filterable, not merely printed.
+func TestAdoptAmbiguousLedgerRefusalCarriesTheRowCountInItsContext(t *testing.T) {
+	err := errAdoptRefusedAmbiguousLedger(3)
+	require.Error(t, err)
+
+	errutil.AssertErrorCode(t, err, "MIGRATION_ADOPT_REFUSED_AMBIGUOUS_LEDGER")
+	errutil.AssertErrorContext(t, err, "row_count", int64(3))
+	errutil.AssertErrorContext(t, err, "legacy_table", "schema_migrations")
+	assert.Contains(t, err.Error(), "exactly one",
+		"the message must say what the expected shape is, not only that this one is wrong")
 }
