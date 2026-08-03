@@ -1942,7 +1942,7 @@ invariants:
     # 000055 is the first file that makes the walk bite; flip to bound then.
     binding: pending
     refs:
-      - {file: "internal/store/migrations_register_test.go", token: "INV-STORE-11",}
+      - {file: "internal/store/migrations_register_test.go", token: "INV-STORE-11"}
 
   # -- INV-TELEMETRY -- migrated from INV-LOAD-N (family LOAD, load-perf harness) (holomush-hz0v4.14.8).
   # Origin: docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md.
