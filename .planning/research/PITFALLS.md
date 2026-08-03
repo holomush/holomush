@@ -224,7 +224,7 @@ the honest answer here is *"history is not retroactively private"*:
 - Any new `character_name` / `display_name` / profile field appearing in a proto **payload**
   message rather than a **response** message.
 - A profile field written into `preferences` JSONB (`characters.preferences`, migration
-  `000045_character_preferences.up.sql:5`) that is then copied anywhere.
+  `000045_character_preferences.sql:7`) that is then copied anywhere.
 - Product language like "make private" without a scope qualifier.
 
 **Phase to address:** Phase 1 SPEC (the scope decision + surface inventory). Profile phase
@@ -475,7 +475,7 @@ section has any content to review.
 
 **What goes wrong:**
 The admin character-edit RPC accepts a `Character` message and writes the fields it
-contains. Roles live in `character_roles` (`internal/store/migrations/000001_baseline.up.sql:83-88`),
+contains. Roles live in `character_roles` (`internal/store/migrations/000001_baseline.sql:87-91`),
 keyed by `character_id`. If the edit surface ever accepts a role list — or if a future
 "edit character" reuses a generic update path — an admin can grant `admin` to any character,
 and more subtly:
@@ -598,7 +598,7 @@ Grounded in the current code:
 
 and in `internal/auth/character_service.go:112-121`, a **check-then-insert**:
 `ExistsByName` → `if exists { return CHARACTER_NAME_TAKEN }` → create. Meanwhile
-`internal/store/migrations/000001_baseline.up.sql:68-76` defines
+`internal/store/migrations/000001_baseline.sql:72-79` defines
 `name TEXT NOT NULL` with **no unique constraint** and only `idx_characters_location` —
 there is no unique index and no index on `LOWER(name)` at all.
 
@@ -676,8 +676,8 @@ Grounded instances of name-capture found in this repo:
 
 Meanwhile `character_roles`, `player_character_bindings`, `sessions`, `locations.owner_id`,
 and `objects.*` all reference **`characters(id)`** and are unaffected — the FK list is
-`internal/store/migrations/000001_baseline.up.sql:80, 84, 99, 140, 143, 160` and
-`000015_create_player_character_bindings.up.sql:14`.
+`internal/store/migrations/000001_baseline.sql:84, 88, 103, 144, 147, 164` and
+`000015_create_player_character_bindings.sql:16`.
 
 **Why it happens:**
 Denormalizing a display name into an event is the *right* call for an append-only log (the
@@ -789,7 +789,7 @@ Two verifications that *can* fail:
 `Rename`, `SetDescription`, `Retire`, and the admin edit all write `characters` with a plain
 `UPDATE ... WHERE id = $1`. v0.12's MODEL-03 added
 `characters.version INTEGER NOT NULL DEFAULT 1`
-(`internal/store/migrations/000049_world_version_guard.up.sql:20`) precisely so world writes
+(`internal/store/migrations/000049_world_version_guard.sql:22`) precisely so world writes
 use version-predicated CAS (`... WHERE id = $1 AND version = $2`) with a typed
 `WORLD_CONCURRENT_EDIT` signal, closing last-write-wins (M12, #4798). New write paths that
 skip the predicate **silently reintroduce the bug the previous milestone spent a phase
@@ -1115,9 +1115,9 @@ PROJECT.md already names as opening the milestone.
 - `.planning/MILESTONES.md:24` — the "verification that cannot fail" theme; `:15` — outbox/version-guard outcomes
 - `.claude/rules/abac-providers.md` — omit-don't-sentinel; missing-attr-is-false semantics
 - `.claude/rules/gateway-boundary.md` — proxy-not-compute; typed RPCs for structural writes
-- `internal/store/migrations/000001_baseline.up.sql:68-88, 99, 140-160` — `characters` DDL (no unique index on name), `character_roles`, FK inventory with `ON DELETE` semantics
-- `internal/store/migrations/000049_world_version_guard.up.sql:20` — `characters.version`
-- `internal/store/migrations/000045_character_preferences.up.sql:5`, `000051_player_reaping.up.sql` — the only other `characters`/lifecycle-adjacent migrations
+- `internal/store/migrations/000001_baseline.sql:72-91, 103, 144-164` — `characters` DDL (no unique index on name), `character_roles`, FK inventory with `ON DELETE` semantics
+- `internal/store/migrations/000049_world_version_guard.sql:22` — `characters.version`
+- `internal/store/migrations/000045_character_preferences.sql:7`, `000051_player_reaping.sql` — the only other `characters`/lifecycle-adjacent migrations
 - `internal/bootstrap/setup/adapters.go:38-50` — `ExistsByName` SQL
 - `internal/auth/character_service.go:103-134` — check-then-insert creation pipeline
 - `internal/world/validation.go:114-126` — `NormalizeCharacterName`
