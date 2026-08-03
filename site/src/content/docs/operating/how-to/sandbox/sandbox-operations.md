@@ -8,6 +8,23 @@ maintained by the core team. Self-hosters should refer to
 
 ## One-time bootstrap
 
+:::danger[Fresh bootstrap is currently unsupported — see #4928]
+The bootstrap path does **not** provision `HOLOMUSH_KEK_PASSPHRASE`. Neither
+`scripts/cloud-init.sh` nor `.github/workflows/bootstrap-sandbox.yaml` writes it
+into the generated `.env`, and `compose.prod.yaml` requires it — so a freshly
+bootstrapped droplet fails `docker compose config`, and the core would refuse to
+start even if it got that far (`a KEK is required to start`).
+
+Do not treat the flow below as deployable until
+[#4928](https://github.com/holomush/holomush/issues/4928) lands. Its fix must
+generate the passphrase **once** and persist it to a secret, the way
+`KOPIA_SANDBOX_PASSWORD` is handled — **not** regenerate it per run the way
+`POSTGRES_PASSWORD` is. Regenerating a KEK strands every previously wrapped DEK.
+
+The rest of this section is accurate for the resources it provisions; only the
+KEK secret is missing.
+:::
+
 The bootstrap workflow automates all cloud resource provisioning from zero
 in a single run. It is idempotent — safe to re-run if it fails partway through.
 
