@@ -61,6 +61,66 @@ PGPASSWORD=verify psql -h localhost -p 5433 -U holomush -d holomush \
 docker rm -f pg-restore-test
 ```
 
+### Pre-deploy rehearsal: the goose migration cutover
+
+The first boot of a binary carrying the goose migration engine **adopts** an
+existing database: it seeds `goose_db_version` from the old `schema_migrations`
+ledger and renames that table to `schema_migrations_pre_goose`. The write is
+unattended, one-way, and performs **no schema verification** — it trusts the
+recorded version. This rehearsal against restored real data is the only place
+drift between the recorded version and the actual schema would surface, so it is
+not optional. The integration tests prove the mechanism on synthetic data seeded
+at v53; only real sandbox data reveals actual drift.
+
+**1. Take a fresh `pre-deploy:` snapshot immediately before the cutover deploy.**
+
+```bash
+ssh holomush@game.holomush.dev \
+  'docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
+     exec -T backup /usr/local/bin/backup.sh --tag=pre-deploy:goose-cutover'
+```
+
+Do **not** rehearse against the most recent existing snapshot. Everything that
+happened between that snapshot and the deploy is exactly what the rehearsal would
+not see, and it is the window in which drift accumulates.
+
+**2. Restore it into a throwaway Postgres** using Restore path A above, then run
+the new binary's migration against that container:
+
+```bash
+DATABASE_URL="postgres://holomush:verify@localhost:5433/holomush?sslmode=disable" \
+  ./holomush migrate up
+```
+
+**3. Verify three things by hand.** All three, not a spot-check:
+
+```bash
+PGPASSWORD=verify psql -h localhost -p 5433 -U holomush -d holomush <<'SQL'
+-- (a) the ledger: 44 migrations plus goose's version-0 bootstrap row = 45 total
+SELECT count(*) FILTER (WHERE version_id > 0) AS migrations,
+       count(*)                               AS total_rows,
+       min(version_id)                        AS lowest
+  FROM goose_db_version;
+
+-- (b) the rename: the archive exists and the old name is gone
+SELECT to_regclass('public.schema_migrations_pre_goose') AS archived,
+       to_regclass('public.schema_migrations')           AS legacy;
+
+-- (c) the application schema: spot the tables the release expects
+SELECT table_name FROM information_schema.tables
+ WHERE table_schema = 'public' ORDER BY table_name;
+SQL
+```
+
+Expected: (a) `migrations = 44`, `total_rows = 45`, `lowest = 0`; (b) `archived`
+non-null and `legacy` **null**; (c) the table list matches the schema the release
+was built against — no table missing and none left over from a migration the
+ledger claims was applied.
+
+If any of the three disagrees, do not deploy. A mismatch in (a) or (b) means the
+adopt did not complete; a mismatch in (c) is the schema drift the adopt gate
+cannot see.
+
 ## Restore path B: into the live sandbox (destructive)
 
 **WARNING:** This overwrites the running sandbox's database. Take a pinned
@@ -116,3 +176,44 @@ ssh holomush@game.holomush.dev \
 # Follow Restore path B with the resulting snapshot ID, then redeploy the
 # previous good tag via the deploy-sandbox workflow workflow_dispatch.
 ```
+
+### Rollback after a goose cutover deploy
+
+This procedure is valid for exactly one deploy window and then expires: it works
+only while the cutover release ships alone (no new migrations in it) and no later
+migration has been deployed. Once a release carrying a migration after `000053`
+lands on the sandbox, this path is wrong and the only correct rollback is a full
+snapshot restore via Restore path B. Deleting this section is tracked in
+[holomush/holomush#4907](https://github.com/holomush/holomush/issues/4907).
+
+Why it works at all: the cutover ships **alone** as a release constraint, so the
+application schema is provably unchanged across the deploy. Only the bookkeeping
+moved, and only the bookkeeping has to move back.
+
+```bash
+ssh holomush@game.holomush.dev
+cd /opt/holomush
+
+# 1. Stop the services that would re-run the adopt on boot
+docker compose stop core gateway
+
+# 2. Put the bookkeeping back the way the previous binary expects it
+docker compose exec -T postgres psql -U holomush -d holomush <<'SQL'
+BEGIN;
+ALTER TABLE schema_migrations_pre_goose RENAME TO schema_migrations;
+DROP TABLE goose_db_version;
+COMMIT;
+SQL
+
+# 3. Redeploy the previous good tag via the deploy-sandbox workflow
+#    workflow_dispatch, then verify
+docker compose exec -T gateway curl -sf http://localhost:8080/healthz
+```
+
+Step 2 is a single transaction on purpose: a half-reverted ledger — the old table
+back under its old name while `goose_db_version` still exists — is a database
+neither binary reads correctly.
+
+If `schema_migrations_pre_goose` is **absent**, the adopt never ran and there is
+nothing to revert; redeploy the previous tag directly. If both tables are absent,
+this is not a post-cutover database and this section does not apply.
