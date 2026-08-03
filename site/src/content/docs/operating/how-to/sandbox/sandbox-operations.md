@@ -221,14 +221,23 @@ real shape has drifted from the committed version.
 
 ## Ongoing operations
 
+Every `ssh` command in this section targets the droplet's public IPv4.
+`game.holomush.dev` is Cloudflare-proxied, so port 22 is unreachable through it.
+Export the address once per shell before running anything below:
+
+```bash
+export DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
+  --format PublicIPv4 --no-header)
+```
+
 ### Deploy a new version
 
 Deploying is a **separate human gate** from cutting a release (INV-4): cutting a
 release does NOT deploy it. Dispatch the `Deploy Sandbox` workflow
 (`.github/workflows/deploy.yaml`) manually with the release tag.
 
-Confirm all three prerequisites first — the workflow does not check them for you,
-and two of the three fail in ways that resemble success:
+Confirm all four prerequisites first — the workflow does not check them for you,
+and several fail in ways that resemble success:
 
 | Prerequisite | Why it matters |
 | --- | --- |
@@ -239,20 +248,27 @@ and two of the three fail in ways that resemble success:
 
 ```bash
 TAG=v0.12.0
+DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
+  --format PublicIPv4 --no-header)
 
-# Release exists AND is published, not a draft
-gh release view "$TAG" -R holomush/holomush --json isDraft,isPrerelease \
-  --jq '"draft=\(.isDraft) prerelease=\(.isPrerelease)"'   # draft MUST be false
+# 1. Release exists AND is published, not a draft
+gh release view "$TAG" -R holomush/holomush --json isDraft \
+  --jq 'if .isDraft then error("release is a DRAFT — publish it first") else "release published" end'
 
-# GHCR image exists for that version (tag without the leading v)
-gh api /orgs/holomush/packages/container/holomush/versions \
+# 2. GHCR image exists for that version (tag without the leading v).
+#    --paginate is load-bearing: the endpoint pages, and without it only the
+#    most recent page is searched, so an older-but-valid tag reports missing.
+gh api --paginate /orgs/holomush/packages/container/holomush/versions \
   --jq '.[].metadata.container.tags[]?' | grep -qx "${TAG#v}" \
-  && echo "image ${TAG#v} present"
+  && echo "image ${TAG#v} present" || echo "IMAGE MISSING — do not deploy"
 
-# Deploy is enabled
-gh variable list -R holomush/holomush | grep SANDBOX_DEPLOY_ENABLED
+# 3. Deploy is enabled. Assert the VALUE — the variable existing tells you
+#    nothing, and `false` is exactly the case that silently skips the job.
+test "$(gh variable list -R holomush/holomush --json name,value \
+  --jq '.[] | select(.name=="SANDBOX_DEPLOY_ENABLED") | .value')" = "true" \
+  && echo "deploy enabled" || echo "DEPLOY DISABLED — the job would skip"
 
-# Droplet is not behind
+# 4. Droplet is not behind
 ssh "holomush@${DROPLET_IP}" 'grep ^HOLOMUSH_VERSION= /opt/holomush/.env'
 ```
 
