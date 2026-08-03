@@ -80,6 +80,15 @@ letting the deployment environment change the SQL it executes makes the applied 
 whoever ran it, and turns the environment into a config-injection surface into DDL. This is a
 decision, not an oversight — anything a migration needs at runtime belongs in Go.
 
+Interpolation is enabled **per migration** by that in-file annotation; goose exposes no
+provider-level switch to decline it, and `NewMigrator` (`internal/store/migrate.go`) passes none. So
+this prohibition has no backstop other than the scan below.
+
+**Enforced by** the same `TestEveryDollarQuotedMigrationBodyIsWrappedInStatementBeginEnd`
+(`internal/store/migrations_format_test.go`), which rejects either annotation anywhere in an embedded
+migration — inside a statement block as well as outside, because goose reads its annotations the same
+way — in the untagged `task test` lane.
+
 ### Transactions
 
 goose wraps each migration in a transaction by default, so a migration body **MUST NOT** contain its

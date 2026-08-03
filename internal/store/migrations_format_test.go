@@ -24,12 +24,31 @@ import (
 // baseline's semicolons into one statement.
 var dollarQuoteTag = regexp.MustCompile(`\$([A-Za-z_][A-Za-z0-9_]*)?\$`)
 
+// The two annotations that switch goose's environment-variable interpolation on
+// and off, as gooseAnnotation reports them.
+//
+// These are re-declared here rather than imported because goose keeps its own
+// copies in an internal package (github.com/pressly/goose/v3/internal/sqlparser),
+// which is unimportable from outside that module. Matching them exactly is
+// nonetheless sufficient: goose compares the extracted annotation against its
+// constants by equality and hard-errors on anything else ("unknown annotation"),
+// so a differently-spelled variant is a migration that cannot apply at all.
+const (
+	envsubOn  = "ENVSUB ON"
+	envsubOff = "ENVSUB OFF"
+
+	// envsubAnnotationLabel names the offence without spelling the annotation
+	// token, so this violation message can be quoted into a migration comment or
+	// a doc without becoming an unparseable annotation in its own right.
+	envsubAnnotationLabel = "goose environment-interpolation annotation"
+)
+
 // statementBlockViolations reports every place in a goose migration body where a
 // dollar-quoted region is not enclosed by `-- +goose StatementBegin` /
-// `-- +goose StatementEnd`, plus any unbalanced marker. It returns one
-// human-readable string per problem — each naming the file and 1-based line
-// number, so a CI failure is actionable without re-deriving it — and nil when the
-// body is clean.
+// `-- +goose StatementEnd`, plus any unbalanced marker, plus any use of goose's
+// environment-interpolation annotation. It returns one human-readable string per
+// problem — each naming the file and 1-based line number, so a CI failure is
+// actionable without re-deriving it — and nil when the body is clean.
 //
 // It is pure (strings in, strings out) so the table-driven test above can drive
 // it with synthetic broken bodies. The alternative — proving the guard by
@@ -64,6 +83,20 @@ func statementBlockViolations(name, body string) []string {
 				continue
 			}
 			inBlock = false
+			continue
+		case envsubOn, envsubOff:
+			// Interpolation is enabled PER MIGRATION by this in-file annotation;
+			// goose exposes no provider-level switch to decline it, and NewMigrator
+			// passes none. So the rule's MUST NOT has no mechanical backstop other
+			// than this scan. It fires regardless of block state because goose reads
+			// its annotations the same way.
+			violations = append(violations, fmt.Sprintf(
+				"%s:%d: %s — goose interpolates environment variables into the SQL between "+
+					"these markers, which makes the applied schema a function of whoever ran "+
+					"the migration and turns the environment into a config-injection surface "+
+					"into DDL; anything a migration needs at runtime belongs in Go: %s",
+				name, lineNo, envsubAnnotationLabel, strings.TrimSpace(line),
+			))
 			continue
 		}
 
@@ -140,6 +173,26 @@ func TestStatementBlockViolationsFlagsDollarQuotesOutsideStatementBlocks(t *test
 			body:      "",
 			wantCount: 0,
 		},
+		{
+			name: "flags both ENVSUB annotations bracketing an interpolated body",
+			body: "-- +goose Up\n-- +goose ENVSUB ON\n" +
+				"CREATE TABLE t (x text DEFAULT '${HOLOMUSH_TENANT}');\n" +
+				"-- +goose ENVSUB OFF\n",
+			wantCount: 2,
+			wantIn:    "fixture.sql:2:",
+		},
+		{
+			name: "flags an ENVSUB annotation even inside a StatementBegin block",
+			body: "-- +goose Up\n-- +goose StatementBegin\n-- +goose ENVSUB ON\n" +
+				"DO $$\nBEGIN\nEND $$;\n-- +goose StatementEnd\n",
+			wantCount: 1,
+			wantIn:    "environment into a config-injection surface",
+		},
+		{
+			name:      "accepts the annotations goose recognises that HoloMUSH does allow",
+			body:      "-- +goose NO TRANSACTION\n-- +goose Up\nSELECT 1;\n-- +goose Down\nSELECT 1;\n",
+			wantCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -175,6 +228,7 @@ func TestEveryDollarQuotedMigrationBodyIsWrappedInStatementBeginEnd(t *testing.T
 	require.NotEmpty(t, entries, "embedded migrations directory should not be empty")
 
 	filesCarryingTags := 0
+	filesCarryingAnnotations := 0
 	for _, entry := range entries {
 		name := entry.Name()
 		content, readErr := migrationsFS.ReadFile("migrations/" + name)
@@ -183,10 +237,16 @@ func TestEveryDollarQuotedMigrationBodyIsWrappedInStatementBeginEnd(t *testing.T
 		body := string(content)
 		violations := statementBlockViolations(name, body)
 		// assert, not require: one mis-wrapped migration must not hide the rest.
-		assert.Emptyf(t, violations, "dollar-quote wrapping violations:\n%s", strings.Join(violations, "\n"))
+		assert.Emptyf(t, violations, "migration format violations:\n%s", strings.Join(violations, "\n"))
 
 		if dollarQuoteTag.MatchString(body) {
 			filesCarryingTags++
+		}
+		for _, line := range strings.Split(body, "\n") {
+			if gooseAnnotation(line) != "" {
+				filesCarryingAnnotations++
+				break
+			}
 		}
 	}
 
@@ -196,4 +256,16 @@ func TestEveryDollarQuotedMigrationBodyIsWrappedInStatementBeginEnd(t *testing.T
 	// migration must not turn this red.
 	assert.Positive(t, filesCarryingTags,
 		"no embedded migration carries a dollar-quote tag — the scan is vacuous, not clean")
+
+	// The ENVSUB arm cannot be proven non-vacuous by a corpus census the way the
+	// dollar-quote arm can: a clean corpus carries ZERO interpolation annotations
+	// by construction, so counting them would assert 0 > 0 forever. Its RED is
+	// demonstrated on synthetic bodies by the table-driven test above. What the
+	// corpus CAN still prove is that the recognizer hosting that arm is alive — if
+	// gooseAnnotation regressed to returning "" for every line, the ENVSUB case
+	// (and the block tracking beside it) would go silently dead while this scan
+	// kept reporting "clean".
+	assert.Positive(t, filesCarryingAnnotations,
+		"no embedded migration carries a recognised goose annotation — the annotation "+
+			"recognizer is dead, so every check keyed on it is vacuous")
 }

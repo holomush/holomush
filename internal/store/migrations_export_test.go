@@ -100,6 +100,13 @@ func migrationSection(src, direction string) (string, error) {
 		body = lines[upAt+1 : downAt]
 	}
 
+	// Only the block markers are stripped, and deliberately so. They are removed
+	// because Postgres would reject them as SQL; every other goose annotation is a
+	// plain `--` comment that Exec ignores. In particular the interpolation
+	// annotation is NOT stripped: statementBlockViolations rejects it across the
+	// whole embedded corpus in the untagged lane, so a section carrying one is
+	// already impossible — and stripping it here would hide it from any spec that
+	// executed the section rather than surfacing it.
 	kept := make([]string, 0, len(body))
 	for _, line := range body {
 		switch gooseAnnotation(line) {
