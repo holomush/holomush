@@ -43,6 +43,11 @@ func TestNewMigratorCleansUpConnectionWhenInitFails(t *testing.T) {
 }
 
 // mockMigrate implements provIface for testing.
+//
+// It records the calls it receives, not merely the errors it should return. The
+// difference is what makes "Down rolls back to version zero" an assertion rather
+// than a comment: DownTo ignores its target here, so without the recorded target
+// that test is byte-for-byte the same test as its neighbour.
 type mockMigrate struct {
 	upErr      error
 	downErr    error
@@ -52,25 +57,42 @@ type mockMigrate struct {
 	versionVal int64
 	versionErr error
 	closeErr   error
+
+	// upResults is what the provider reports having applied, so a test can
+	// distinguish "applied something" from "there was nothing pending" — both of
+	// which the wrapper must treat as success.
+	upResults []*goose.MigrationResult
+
+	// Recorded calls.
+	upCalls       int
+	upByOneCalls  int
+	downCalls     int
+	upToTargets   []int64
+	downToTargets []int64
 }
 
 func (m *mockMigrate) Up(_ context.Context) ([]*goose.MigrationResult, error) {
-	return nil, m.upErr
+	m.upCalls++
+	return m.upResults, m.upErr
 }
 
 func (m *mockMigrate) UpByOne(_ context.Context) (*goose.MigrationResult, error) {
+	m.upByOneCalls++
 	return nil, m.upByOneErr
 }
 
-func (m *mockMigrate) UpTo(_ context.Context, _ int64) ([]*goose.MigrationResult, error) {
+func (m *mockMigrate) UpTo(_ context.Context, version int64) ([]*goose.MigrationResult, error) {
+	m.upToTargets = append(m.upToTargets, version)
 	return nil, m.upToErr
 }
 
 func (m *mockMigrate) Down(_ context.Context) (*goose.MigrationResult, error) {
+	m.downCalls++
 	return nil, m.downErr
 }
 
-func (m *mockMigrate) DownTo(_ context.Context, _ int64) ([]*goose.MigrationResult, error) {
+func (m *mockMigrate) DownTo(_ context.Context, version int64) ([]*goose.MigrationResult, error) {
+	m.downToTargets = append(m.downToTargets, version)
 	return nil, m.downToErr
 }
 
@@ -85,17 +107,23 @@ func (m *mockMigrate) Status(_ context.Context) ([]*goose.MigrationStatus, error
 func (m *mockMigrate) Close() error { return m.closeErr }
 
 func TestMigratorUpAppliesPendingMigrations(t *testing.T) {
-	m := &Migrator{m: &mockMigrate{}}
+	provider := &mockMigrate{upResults: []*goose.MigrationResult{{}, {}}}
+	m := &Migrator{m: provider}
 	err := m.Up()
 	require.NoError(t, err)
+	assert.Equal(t, 1, provider.upCalls, "Up must reach the provider exactly once")
 }
 
 func TestMigratorUpTreatsNothingPendingAsSuccess(t *testing.T) {
 	// goose's Up returns (nil, nil) when there is nothing pending — there is no
-	// ErrNoChange sentinel to swallow, unlike golang-migrate.
-	m := &Migrator{m: &mockMigrate{}}
+	// ErrNoChange sentinel to swallow, unlike golang-migrate. The empty result
+	// slice is the point: it must not be mistaken for a failure.
+	provider := &mockMigrate{upResults: nil}
+	m := &Migrator{m: provider}
 	err := m.Up()
 	require.NoError(t, err, "nothing pending should be treated as success")
+	assert.Equal(t, 1, provider.upCalls,
+		"the provider must still be consulted; success here is its answer, not a shortcut")
 }
 
 func TestMigratorUpReturnsWrappedErrorOnFailure(t *testing.T) {
@@ -106,16 +134,24 @@ func TestMigratorUpReturnsWrappedErrorOnFailure(t *testing.T) {
 }
 
 func TestMigratorDownRollsBackMigrations(t *testing.T) {
-	m := &Migrator{m: &mockMigrate{}}
+	provider := &mockMigrate{}
+	m := &Migrator{m: provider}
 	err := m.Down()
 	require.NoError(t, err)
+	assert.Len(t, provider.downToTargets, 1, "Down must reach the provider exactly once")
 }
 
 func TestMigratorDownRollsBackToVersionZero(t *testing.T) {
-	// Down maps to DownTo(ctx, 0); nothing left to roll back is not an error.
-	m := &Migrator{m: &mockMigrate{}}
+	// Down maps to DownTo(ctx, 0). Asserting the TARGET is the whole content of
+	// this test: a Down that rolled back to any other version would satisfy a bare
+	// require.NoError just as well, which is what made this a duplicate of its
+	// neighbour rather than a second test.
+	provider := &mockMigrate{}
+	m := &Migrator{m: provider}
 	err := m.Down()
 	require.NoError(t, err)
+	assert.Equal(t, []int64{0}, provider.downToTargets,
+		"Down must ask the provider for version 0, not merely for some rollback")
 }
 
 func TestMigratorDownReturnsWrappedErrorOnFailure(t *testing.T) {
