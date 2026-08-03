@@ -230,24 +230,62 @@ release does NOT deploy it. Dispatch the `Deploy Sandbox` workflow
 Confirm all three prerequisites first — the workflow does not check them for you,
 and two of the three fail in ways that resemble success:
 
-| Prerequisite | Why it matters | Check |
-| --- | --- | --- |
-| `v*` tag, GHCR image, **and a published GitHub Release** all exist for the tag | The workflow contract requires all three, not just the tag | `gh release view v0.12.0 -R holomush/holomush` |
-| Repository variable `SANDBOX_DEPLOY_ENABLED` is `true` | The deploy job is guarded by `if: vars.SANDBOX_DEPLOY_ENABLED == 'true'`. When it is not `true` the dispatch still succeeds and the run still appears — the job is simply **skipped**, which looks indistinguishable from a completed deploy | `gh variable list -R holomush/holomush` |
-| The droplet is not several releases behind | See the caution below | `ssh "holomush@${DROPLET_IP}" 'grep ^HOLOMUSH_VERSION= /opt/holomush/.env'` |
+| Prerequisite | Why it matters |
+| --- | --- |
+| A **published** (non-draft) GitHub Release exists for the tag | The workflow contract requires the release, not just the tag. A draft satisfies `gh release view` but is not published |
+| The GHCR image exists for that version | The deploy pulls `ghcr.io/holomush/holomush:${HOLOMUSH_VERSION}`; a missing image fails mid-deploy, after traffic has already been stopped |
+| Repository variable `SANDBOX_DEPLOY_ENABLED` is `true` | The deploy job is guarded by `if: vars.SANDBOX_DEPLOY_ENABLED == 'true'`. When it is not `true` the dispatch still succeeds and a run still appears — the job is simply **skipped** |
+| The droplet is not several releases behind | See the caution below |
 
 ```bash
-gh workflow run deploy.yaml -R holomush/holomush -f tag=v0.12.0
+TAG=v0.12.0
+
+# Release exists AND is published, not a draft
+gh release view "$TAG" -R holomush/holomush --json isDraft,isPrerelease \
+  --jq '"draft=\(.isDraft) prerelease=\(.isPrerelease)"'   # draft MUST be false
+
+# GHCR image exists for that version (tag without the leading v)
+gh api /orgs/holomush/packages/container/holomush/versions \
+  --jq '.[].metadata.container.tags[]?' | grep -qx "${TAG#v}" \
+  && echo "image ${TAG#v} present"
+
+# Deploy is enabled
+gh variable list -R holomush/holomush | grep SANDBOX_DEPLOY_ENABLED
+
+# Droplet is not behind
+ssh "holomush@${DROPLET_IP}" 'grep ^HOLOMUSH_VERSION= /opt/holomush/.env'
+```
+
+Then dispatch, capturing the run so the check below cannot land on someone
+else's:
+
+```bash
+gh workflow run deploy.yaml -R holomush/holomush -f tag="$TAG"
+
+RUN_ID=$(gh run list -R holomush/holomush --workflow=deploy.yaml \
+  --event=workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+
+gh run watch "$RUN_ID" -R holomush/holomush --exit-status
 ```
 
 The deploy takes its own `pre-deploy:<tag>` snapshot as its first step, so the
-rollback point is created automatically. Confirm the deploy job actually **ran**
-rather than skipped before treating the release as live:
+rollback point is created automatically.
+
+:::caution[Assert the JOB conclusion, not the run's]
+A guarded job that skips does not fail, so checking the run tells you nothing
+about whether anything deployed. Require the **job** to be `success` — that is
+correct regardless of how the run itself reports:
 
 ```bash
-gh run list -R holomush/holomush --workflow=deploy.yaml --limit 1 \
-  --json databaseId,conclusion,status
+gh run view "$RUN_ID" -R holomush/holomush --json jobs \
+  --jq '.jobs[] | select(.name=="Deploy Sandbox") | .conclusion'
+# MUST print: success
+# "skipped" means SANDBOX_DEPLOY_ENABLED was not "true" — nothing was deployed
 ```
+
+Do **not** substitute `gh run list --limit 1` here: a concurrent dispatch can
+put a different run at the top.
+:::
 
 :::caution[Check the deployed version against the migration corpus first]
 The "ships alone" constraint below is phrased release-to-release, so it does
