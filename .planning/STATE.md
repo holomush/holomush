@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 01.1
 current_phase_name: migration-framework-adopt-goose-for-go-migrations
 status: executing
-stopped_at: Completed 01.1-02-PLAN.md
-last_updated: "2026-08-03T00:00:12.207Z"
+stopped_at: Completed 01.1-03-PLAN.md
+last_updated: "2026-08-03T00:23:42.808Z"
 last_activity: 2026-08-02
 last_activity_desc: Phase 01.1 execution started
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 13
-  completed_plans: 8
+  completed_plans: 9
   percent: 14
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 01.1 (migration-framework-adopt-goose-for-go-migrations) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
-Progress: [██████░░░░] 62% (1/6 phases)
+Progress: [███████░░░] 69% (1/6 phases)
 Last activity: 2026-08-02 — Phase 01.1 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -222,6 +222,7 @@ no action needed.
 | Phase 09 P19 | 70m | 3 tasks | 4 files |
 | Phase 01.1 P01 | 95m | 3 tasks | 16 files |
 | Phase 01.1 P02 | 40 min | 2 tasks | 7 files |
+| Phase 01.1 P03 | 35 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -403,6 +404,8 @@ the next milestone yet.
 - [Phase ?]: MigrationSectionForTest errors on a missing goose Up/Down annotation rather than falling back to the whole file — the fallback is the destructive bug
 - [Phase ?]: runMigrations' ctx made load-bearing via a pre-flight pool.Ping; store.Migrator's method set stays context-free by design
 - [Phase ?]: Plan 01.1-02's 'zero golang-migrate mentions in internal/store' criterion rejected: all 15 remaining sites are deliberate historical rationale; replaced by a no-live-import gate
+- [Phase ?]: 01.1-03: corpus census recorded as observation, never asserted — a legitimate new $$ migration must not turn the D-13 guard red
+- [Phase ?]: 01.1-03: lint glob pins are static Taskfile-text reads, not shell-outs — a shell-out passes the fail-open glob it guards
 
 ### Pending Todos
 
@@ -448,11 +451,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-03T00:00:12.196Z
+Last session: 2026-08-03T00:23:42.796Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 01.1-02-PLAN.md
+Stopped at: Completed 01.1-03-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
