@@ -30,11 +30,28 @@ const (
 const probeTablesSQL = `SELECT to_regclass('public.` + legacyVersionTable + `') IS NOT NULL,
 	                           to_regclass('public.` + gooseVersionTable + `') IS NOT NULL`
 
-// probeGooseSeededSQL reports whether goose bookkeeping already carries any row.
-// Any row at all counts: adopt writes the version-0 row and the whole derived set
-// inside one transaction, so a concurrent reader either sees no table or sees the
-// complete committed set. There is no partially-seeded state to misread.
-const probeGooseSeededSQL = `SELECT EXISTS (SELECT 1 FROM ` + gooseVersionTable + `)`
+// probeGooseSeededSQL reports whether goose bookkeeping records any APPLIED
+// migration. The `version_id > 0` filter is load-bearing and is not a matter of
+// taste.
+//
+// goose creates its version table — complete with a version-0 bootstrap row —
+// from ensureVersionTable, which runs on ANY versioned operation, including the
+// read-only ones. So `holomush migrate status` or `migrate version` against a
+// not-yet-adopted database leaves behind an empty-but-existing ledger holding
+// exactly that one row. Treating any row at all as "already adopted" would let
+// that harmless diagnostic permanently disable adopt: the next Up() would skip
+// the cutover, find an empty ledger, and try to re-run all 44 migrations against
+// a database that already has the schema. That failure was observed — version 1
+// aborting with `relation "holomush_system_info" already exists` — before this
+// filter existed.
+//
+// A row above version 0, by contrast, can only have been written by a real
+// migration or by a previous adopt, both of which mean the cutover is done.
+const probeGooseSeededSQL = `SELECT EXISTS (SELECT 1 FROM ` + gooseVersionTable + ` WHERE version_id > 0)`
+
+// probeBootstrapRowSQL reports whether goose's version-0 row is already present,
+// so adopt tops up an ensureVersionTable-created ledger instead of duplicating it.
+const probeBootstrapRowSQL = `SELECT EXISTS (SELECT 1 FROM ` + gooseVersionTable + ` WHERE version_id = 0)`
 
 // probeLegacyStateSQL reads the single row golang-migrate maintained.
 const probeLegacyStateSQL = `SELECT version, dirty FROM ` + legacyVersionTable
@@ -201,6 +218,11 @@ func (m *Migrator) seedAndArchive(
 		_ = tx.Rollback() //nolint:errcheck // best-effort cleanup; the operation error takes precedence
 	}()
 
+	// The ledger may already exist WITHOUT having been adopted: goose's
+	// ensureVersionTable creates it, bootstrap row and all, on any versioned
+	// operation including the read-only verbs. Create it only if it is genuinely
+	// absent, and top up the bootstrap row only if that read did not already write
+	// one — otherwise a prior `migrate status` leaves a duplicate version-0 row.
 	if !gooseExists {
 		if createErr := versionStore.CreateVersionTable(ctx, tx); createErr != nil {
 			return oops.Code("MIGRATION_ADOPT_SEED_FAILED").
@@ -211,8 +233,16 @@ func (m *Migrator) seedAndArchive(
 
 	// goose writes a version-0 row when it creates the table, and both Provider.up
 	// and Provider.down return errMissingZeroVersion against a table that lacks it.
-	if insertErr := versionStore.Insert(ctx, tx, database.InsertRequest{Version: 0}); insertErr != nil {
-		return oops.Code("MIGRATION_ADOPT_SEED_FAILED").With("operation", "insert bootstrap row").Wrap(insertErr)
+	var bootstrapPresent bool
+	if !gooseExists {
+		bootstrapPresent = false
+	} else if scanErr := tx.QueryRowContext(ctx, probeBootstrapRowSQL).Scan(&bootstrapPresent); scanErr != nil {
+		return oops.Code("MIGRATION_ADOPT_PROBE_FAILED").With("operation", "probe bootstrap row").Wrap(scanErr)
+	}
+	if !bootstrapPresent {
+		if insertErr := versionStore.Insert(ctx, tx, database.InsertRequest{Version: 0}); insertErr != nil {
+			return oops.Code("MIGRATION_ADOPT_SEED_FAILED").With("operation", "insert bootstrap row").Wrap(insertErr)
+		}
 	}
 
 	// ASCENDING, one row at a time, straight from the ascending slice.
