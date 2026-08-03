@@ -97,7 +97,7 @@
 
 **Build:**
 
-- `Taskfile.yaml` - canonical build/test/lint/dev entry point; `vars.MIGRATIONS_DIR: internal/store/migrations`
+- `Taskfile.yaml` - canonical build/test/lint/dev entry point
 - `.golangci.yaml` + `.custom-gcl.yml` - lint rule config and custom linter build
 - `buf.yaml` / `buf.gen*.yaml` - protobuf toolchain config
 - `.mockery.yaml` - mock generation config

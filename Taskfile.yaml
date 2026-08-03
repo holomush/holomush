@@ -7,7 +7,6 @@ version: "3"
 vars:
   BINARY_NAME: holomush
   MAIN_PKG: ./cmd/holomush
-  MIGRATIONS_DIR: internal/store/migrations
   # license-eye (Apache SkyWalking Eyes) pinned release — the single version
   # source. CI's Lint job no longer pins it separately: `task license:check`
   # self-installs license-eye at this version via its `command -v ... || go
@@ -1363,13 +1362,12 @@ tasks:
     cmds:
       - go run {{.MAIN_PKG}} migrate status
 
-  migrate:create:
-    desc: 'Create a new migration (usage: task migrate:create -- name)'
-    cmds:
-      - migrate create -ext sql -dir {{.MIGRATIONS_DIR}} -seq {{.CLI_ARGS}}
-    preconditions:
-      - sh: command -v migrate
-        msg: "migrate CLI not found. Install with: go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"
+  # There is deliberately no `migrate:create` target. It used to shell out to the
+  # golang-migrate CLI, which this project no longer depends on. goose's own
+  # `create -s` numbers sequential migrations with five digits (%05v), while this
+  # project's corpus is six (pinned by internal/store/migrate_embed_test.go), so
+  # the goose CLI cannot stand in for it either. New migrations are written by
+  # hand from the template in .claude/rules/database-migrations.md.
 
   migrate:plugin-actors-cutover:
     desc: One-time cutover for holomush-w9ml (TRUNCATE events_audit + JS PurgeStream)

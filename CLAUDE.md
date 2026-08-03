@@ -163,7 +163,7 @@ Use `oops` for structured errors (`oops.With(k,v).Wrap(err)`, `oops.Errorf(...)`
 
 ### Database Migrations
 
-`internal/store/migrations/`, embedded at compile time. Sequential numbering, paired `.up.sql` + `.down.sql`, idempotent (`IF NOT EXISTS`), no triggers/functions (all logic in Go). Full guide: [database-migrations.md](site/src/content/docs/contributing/how-to/database-migrations.md).
+`internal/store/migrations/`, embedded at compile time and applied by [goose](https://github.com/pressly/goose). Sequential 6-digit numbering, **one `NNNNNN_name.sql` per version** carrying both directions (`-- +goose Up` / `-- +goose Down`), idempotent (`IF NOT EXISTS`), no triggers/functions (all logic in Go). Every `$$`-delimited body MUST sit inside `-- +goose StatementBegin` / `-- +goose StatementEnd`. Full guide: [database-migrations.md](site/src/content/docs/contributing/how-to/database-migrations.md).
 
 ### License Headers
 
