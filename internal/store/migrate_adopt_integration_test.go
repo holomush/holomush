@@ -367,6 +367,81 @@ var _ = Describe("Migrator adopt", func() {
 		})
 	})
 
+	Describe("upward migration paths other than Up", func() {
+		// Up() is documented as the entry point that fires the cutover, and the
+		// settled decision that the read-only verbs must NOT fire it is about
+		// DIAGNOSTICS. Steps(n>0) and Migrate() are neither read-only nor
+		// diagnostic: they migrate upward. Against a pre-adopt database an
+		// ungated upward path reads goose's empty ledger as version 0 and starts
+		// re-applying migration 1 over a schema that is already fully present —
+		// the `relation "holomush_system_info" already exists` failure the
+		// version_id > 0 probe filter exists to prevent.
+		It("adopts before Steps applies anything upward", func() {
+			ctx := context.Background()
+			connStr := newPreConversionDatabase(suiteT, ctx, latestMigrationVersion, false)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			Expect(migrator.Steps(1)).To(Succeed(),
+				"a positive Steps against a pre-adopt database must adopt first, not "+
+					"re-apply migration 1 over the schema it already has")
+
+			recorded := gooseLedgerInInsertionOrder(suiteT, ctx, connStr)
+			Expect(recorded).To(HaveLen(expectedGooseLedgerRows),
+				"Steps must leave the same seeded ledger Up would have")
+			assertStrictlyAscending(recorded)
+
+			legacy, archived, _ := bookkeepingTablePresence(suiteT, ctx, connStr)
+			Expect(legacy).To(BeFalse())
+			Expect(archived).To(BeTrue())
+		})
+
+		It("adopts before Migrate decides its direction", func() {
+			ctx := context.Background()
+			connStr := newPreConversionDatabase(suiteT, ctx, latestMigrationVersion, false)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			Expect(migrator.Migrate(latestMigrationVersion)).To(Succeed())
+
+			recorded := gooseLedgerInInsertionOrder(suiteT, ctx, connStr)
+			Expect(recorded).To(HaveLen(expectedGooseLedgerRows))
+			assertStrictlyAscending(recorded)
+
+			version, _, err := migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(uint(latestMigrationVersion)),
+				"the adopted version must be visible to the caller afterwards")
+		})
+
+		It("adopts before Migrate rolls a pre-adopt database DOWN to a target", func() {
+			ctx := context.Background()
+			const target = 40
+			connStr := newPreConversionDatabase(suiteT, ctx, latestMigrationVersion, false)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			// THE reason adopt runs at the head of Migrate rather than inside its
+			// current < target branch: the direction itself is decided from the
+			// version read. Read pre-adopt, that version is 0, so a request to move
+			// DOWN to 40 is mistaken for a request to move UP to 40 and silently
+			// does nothing.
+			Expect(migrator.Migrate(target)).To(Succeed())
+
+			version, _, err := migrator.Version()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal(uint(target)),
+				"Migrate must reach the requested target, not stall at the pre-adopt "+
+					"reading of version 0")
+		})
+	})
+
 	Describe("C2d rollback order after adopt", func() {
 		// Verifies: INV-STORE-10
 		It("rolls the adopted database all the way down in descending version order", func() {

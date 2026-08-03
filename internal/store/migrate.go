@@ -134,9 +134,10 @@ func NewMigrator(databaseURL string) (*Migrator, error) {
 
 // Up applies all pending migrations.
 //
-// Up is the ONLY entry point that fires the one-shot cutover from golang-migrate
-// bookkeeping to goose bookkeeping. The read-only verbs deliberately do not: a
-// diagnostic run to decide whether to deploy must not itself perform the deploy's
+// Up fires the one-shot cutover from golang-migrate bookkeeping to goose
+// bookkeeping, as does every other entry point that migrates UPWARD (Steps with a
+// positive n, and Migrate). The read-only verbs deliberately do not: a diagnostic
+// run to decide whether to deploy must not itself perform the deploy's
 // irreversible step. See adoptFromGolangMigrate.
 func (m *Migrator) Up() error {
 	ctx := context.Background()
@@ -170,11 +171,27 @@ func (m *Migrator) Down() error {
 // golang-migrate's ErrNoChange, which this wrapper has always treated as success —
 // the CLI's `migrate down` relies on it to print "already at version N" rather than
 // failing when the database is already at zero.
+//
+// A POSITIVE n fires the adopt gate first, exactly as Up does: it is an upward
+// migration path, not a diagnostic, and against a pre-adopt database goose would
+// otherwise read its empty ledger as version 0 and start re-applying migration 1
+// over a schema that is already fully present. A NEGATIVE n does not: rolling a
+// pre-adopt database back is not a supported operation, and firing an irreversible
+// forward cutover from a rollback request would be a surprise. See
+// adoptFromGolangMigrate.
 func (m *Migrator) Steps(n int) error {
 	if n == 0 {
 		return nil
 	}
 	ctx := context.Background()
+
+	if n > 0 {
+		// Returned unwrapped, matching Up: the adopt errors carry their own
+		// MIGRATION_ADOPT_* codes and must not be masked by MIGRATION_STEPS_FAILED.
+		if err := m.adoptFromGolangMigrate(ctx); err != nil {
+			return err
+		}
+	}
 
 	count := n
 	if count < 0 {
@@ -201,8 +218,23 @@ func (m *Migrator) Steps(n int) error {
 // higher, it runs down migrations; if lower, up migrations. This is more
 // stable than Steps(-N) for targeting a specific schema state because it
 // does not depend on knowing how many migrations exist above the target.
+//
+// Migrate fires the adopt gate BEFORE reading the current version, and the
+// ordering is the point: the direction is decided from that read. Against a
+// pre-adopt database an ungated read returns 0, so a request to move DOWN to a
+// target is mistaken for a request to move UP to it — the up branch then either
+// silently does nothing or re-applies migration 1 over a schema that already
+// carries it. Unlike Steps, Migrate cannot know it is a rollback until it has
+// looked, so the gate cannot be scoped to the upward branch. See
+// adoptFromGolangMigrate.
 func (m *Migrator) Migrate(version uint) error {
 	ctx := context.Background()
+
+	// Returned unwrapped, matching Up: the adopt errors carry their own
+	// MIGRATION_ADOPT_* codes and must not be masked by MIGRATION_MIGRATE_FAILED.
+	if err := m.adoptFromGolangMigrate(ctx); err != nil {
+		return err
+	}
 
 	// uint is 64-bit on every platform this builds for, so a caller could in
 	// principle hand over a value with no int64 representation. Reject it rather
