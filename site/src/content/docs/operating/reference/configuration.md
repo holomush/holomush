@@ -17,7 +17,7 @@ the plugin's own `plugin.yaml`.
 | ------------------------ | ---------------------------------------------------------------- |
 | `holomush core`          | Start the core process                                           |
 | `holomush gateway`       | Start the gateway process                                        |
-| `holomush migrate <cmd>` | Database migration management (up, down, status, version, force) |
+| `holomush migrate <cmd>` | Database migration management (up, down, status, version)        |
 | `holomush status`        | Check health of core and gateway                                 |
 | `holomush --help`        | Show available commands                                          |
 
@@ -160,12 +160,14 @@ holomush migrate status
 
 # Show current version only
 holomush migrate version
-
-# Force set version (for dirty state recovery)
-holomush migrate force <version>
 ```
 
 All migrate commands require `DATABASE_URL` environment variable.
+
+There is no version-forcing command: goose writes a migration's body and its
+version row in the same transaction, so the half-applied state such a command
+would repair cannot arise. See
+[Database Management](/operating/how-to/database/).
 
 ## Environment Variables
 
