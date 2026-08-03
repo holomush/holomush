@@ -87,11 +87,18 @@ const archiveLegacyTableSQL = `ALTER TABLE ` + legacyVersionTable + ` RENAME TO 
 // INFO line before the commit is the entire audit trail, and why the dirty refusal
 // aborts boot rather than guessing.
 //
-// It is called from Migrator.Up only. The read-only verbs (migrate status, migrate
-// version) deliberately do NOT trigger it: an operator running a diagnostic to
-// decide whether to deploy must not thereby perform the deploy's irreversible step.
-// The cost of that choice is that status/version report goose's pre-adopt view
-// (version 0, everything pending) against a not-yet-adopted database.
+// It is called from the upward migration paths only — Migrator.Up, Migrator.Steps
+// with a positive n, and Migrator.Migrate. The read-only verbs (migrate status,
+// migrate version, migrate up --dry-run) deliberately do NOT trigger it: an
+// operator running a diagnostic to decide whether to deploy must not thereby
+// perform the deploy's irreversible step.
+//
+// The cost of that choice is that those verbs see goose's pre-adopt view (version
+// 0, everything pending) against a not-yet-adopted database. `status` and
+// `version` report it as-is. `up --dry-run` does NOT: a preview whose whole
+// purpose is to describe the next cutover cannot be allowed to describe its
+// opposite, so it consults AdoptPreview — a read-only mirror of the decision tree
+// below — and reports the cutover instead. See migrate_adopt_preview.go.
 //
 // Returns nil — having done nothing — for a database that has no legacy table
 // (fresh installs, CI, testcontainers) or whose goose bookkeeping is already

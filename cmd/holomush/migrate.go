@@ -26,12 +26,24 @@ type migrator interface {
 	Close() error
 	PendingMigrations() ([]uint, error)
 	AppliedMigrations() ([]uint, error)
+	AdoptPreview() (store.AdoptPreview, error)
 }
 
 // runMigrateUpDryRun shows what migrations would be applied without running them.
 //
 //nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
 func runMigrateUpDryRun(out io.Writer, migrator migrator) error {
+	// Ask about the cutover BEFORE reading anything out of goose. Version and
+	// PendingMigrations both report goose's ledger, which on a not-yet-adopted
+	// database is empty — so taken at face value they describe a database with no
+	// migration history at all, and the preview becomes the OPPOSITE of what
+	// `migrate up` does. A pre-adopt database is precisely the one an operator
+	// previews before an irreversible cutover.
+	preview, err := migrator.AdoptPreview()
+	if err != nil {
+		return oops.With("operation", "preview adopt").Wrap(err)
+	}
+
 	currentVersion, _, err := migrator.Version()
 	if err != nil {
 		return oops.With("operation", "get version").Wrap(err)
@@ -40,6 +52,34 @@ func runMigrateUpDryRun(out io.Writer, migrator migrator) error {
 	pending, err := migrator.PendingMigrations()
 	if err != nil {
 		return oops.With("operation", "list pending migrations").Wrap(err)
+	}
+
+	if preview.Pending {
+		fmt.Fprintln(out, "This database still uses golang-migrate bookkeeping (schema_migrations).")
+		fmt.Fprintf(out, "Recorded version: %d\n", preview.Recorded)
+
+		if preview.Dirty {
+			fmt.Fprintln(out, "That ledger is marked dirty, so `migrate up` will REFUSE and abort;")
+			fmt.Fprintln(out, "no migration would be applied and no bookkeeping would be written.")
+			fmt.Fprintln(out, "Resolve the dirty version with the previous migration tooling first.")
+			return nil
+		}
+
+		fmt.Fprintln(out, "`migrate up` will first adopt it into goose — a one-shot, irreversible")
+		fmt.Fprintln(out, "write — recording every migration up to that version as already applied.")
+		fmt.Fprintln(out)
+
+		// Re-base the figures on the recorded version. goose reports 0 and the whole
+		// corpus as pending here; what actually gets applied is only what sits above
+		// what the legacy ledger already accounts for.
+		currentVersion = preview.Recorded
+		var afterAdopt []uint
+		for _, v := range pending {
+			if v > preview.Recorded {
+				afterAdopt = append(afterAdopt, v)
+			}
+		}
+		pending = afterAdopt
 	}
 
 	if len(pending) == 0 {

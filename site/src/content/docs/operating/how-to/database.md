@@ -89,13 +89,21 @@ with the previous tooling before deploying the new binary.
 On a database that has not yet been adopted, `holomush migrate status` and
 `holomush migrate version` report **version 0 with 44 pending migrations** —
 every migration appearing unapplied. This is expected, not data loss: adopt runs
-only from `migrate up`, so goose's ledger is still empty when a read-only verb
-inspects it. The first `holomush migrate up` (or the startup auto-migration)
-corrects the reading.
+only from the upward migration paths, so goose's ledger is still empty when a
+read-only verb inspects it. The first `holomush migrate up` (or the startup
+auto-migration) corrects the reading.
 
 Running `status` first is **safe**. It creates an empty ledger as a side effect,
 and the adopt gate seeds that ledger rather than mistaking it for a completed
 cutover. A diagnostic never triggers the irreversible write.
+
+`holomush migrate up --dry-run` is the exception among the read-only verbs: it
+detects the pre-adopt state and reports the cutover rather than goose's empty
+ledger. Against a not-yet-adopted database it prints the version the old ledger
+records, states that `migrate up` will adopt it, and lists only the migrations
+that sit **above** that version — which for a fully-migrated database is none. If
+the old ledger is dirty it says so, and that the deploy will refuse. It is still a
+diagnostic: it writes nothing and adopts nothing.
 
 > The legacy `scripts/bootstrap-migrations.sql` is superseded and no longer
 > runnable. Do not look for a hand-run adopt path — the automatic gate above is

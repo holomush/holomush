@@ -471,6 +471,76 @@ var _ = Describe("Migrator adopt", func() {
 		})
 	})
 
+	Describe("AdoptPreview", func() {
+		It("reports the pending cutover and the recorded version without performing it", func() {
+			ctx := context.Background()
+			connStr := newPreConversionDatabase(suiteT, ctx, latestMigrationVersion, false)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			preview, err := migrator.AdoptPreview()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(preview.Pending).To(BeTrue())
+			Expect(preview.Recorded).To(Equal(uint(latestMigrationVersion)),
+				"the preview must report the version the LEGACY ledger records, not goose's 0")
+			Expect(preview.Dirty).To(BeFalse())
+
+			// The preview is a diagnostic and must be as inert as the read-only
+			// verbs: an operator previewing a cutover must not thereby perform it.
+			legacy, archived, _ := bookkeepingTablePresence(suiteT, ctx, connStr)
+			Expect(legacy).To(BeTrue(), "the preview must not archive the legacy table")
+			Expect(archived).To(BeFalse())
+			Expect(gooseLedgerInInsertionOrder(suiteT, ctx, connStr)).To(BeEmpty(),
+				"the preview must not seed, or create, goose bookkeeping")
+		})
+
+		It("reports a dirty legacy ledger so a preview warns the deploy will refuse", func() {
+			ctx := context.Background()
+			connStr := newPreConversionDatabase(suiteT, ctx, latestMigrationVersion, true)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			preview, err := migrator.AdoptPreview()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(preview.Pending).To(BeTrue())
+			Expect(preview.Dirty).To(BeTrue())
+		})
+
+		It("reports nothing pending once the cutover has happened", func() {
+			// The negative control. Without it a preview hard-wired to Pending=true
+			// would satisfy every assertion above.
+			ctx := context.Background()
+			connStr := newPreConversionDatabase(suiteT, ctx, latestMigrationVersion, false)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			Expect(migrator.Up()).To(Succeed())
+
+			preview, err := migrator.AdoptPreview()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(preview.Pending).To(BeFalse(),
+				"after the cutover goose's own ledger is the truthful one")
+		})
+
+		It("reports nothing pending on a database that never used the old tooling", func() {
+			connStr := testutil.RawDatabase(suiteT, sharedPG)
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			preview, err := migrator.AdoptPreview()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(preview.Pending).To(BeFalse())
+		})
+	})
+
 	Describe("C2f refusing an ambiguous pre-conversion ledger", func() {
 		// golang-migrate's postgres driver truncates and re-inserts inside one
 		// transaction, so a well-formed ledger holds exactly one row and this

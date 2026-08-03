@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -83,6 +84,16 @@ type migrateLogicMock struct {
 	appliedMigrations []uint
 	pendingErr        error
 	appliedErr        error
+	// pre-adopt state for the up dry-run
+	adoptPreview    store.AdoptPreview
+	adoptPreviewErr error
+}
+
+func (m *migrateLogicMock) AdoptPreview() (store.AdoptPreview, error) {
+	if m.adoptPreviewErr != nil {
+		return store.AdoptPreview{}, m.adoptPreviewErr
+	}
+	return m.adoptPreview, nil
 }
 
 func (m *migrateLogicMock) Up() error {
@@ -453,6 +464,88 @@ func TestMigrateUpDryRun_AlreadyAtLatest(t *testing.T) {
 	assert.Contains(t, output, "Already at latest version: 7")
 	assert.Contains(t, output, "No migrations would be applied")
 	assert.False(t, mock.upCalled)
+}
+
+// TestMigrateUpDryRunReportsTheCutoverRatherThanGoosesEmptyLedger covers the
+// pre-adopt database — which is exactly the database an operator previews before
+// an irreversible cutover, so a wrong answer here is a wrong answer at the worst
+// possible moment.
+//
+// Every number the dry run printed came from goose's ledger, and on a
+// not-yet-adopted database that ledger is empty. So it reported the whole corpus
+// as pending and named a target version, while `migrate up` would in fact adopt
+// the recorded bookkeeping and apply NONE of them. That is not stale output; it
+// is the opposite of what happens.
+func TestMigrateUpDryRunReportsTheCutoverRatherThanGoosesEmptyLedger(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		// goose's pre-adopt view: version 0, everything pending.
+		version:           0,
+		pendingMigrations: []uint{1, 2, 3},
+		// The truth: golang-migrate recorded the schema at version 3.
+		adoptPreview: store.AdoptPreview{Pending: true, Recorded: 3},
+	}
+
+	err := runMigrateUpDryRun(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "golang-migrate bookkeeping",
+		"the operator must be told the cutover is what happens next")
+	assert.Contains(t, output, "Recorded version: 3")
+	assert.Contains(t, output, "No migrations would be applied",
+		"applying nothing is the actual outcome; the preview must say so")
+	assert.NotContains(t, output, "000001_baseline",
+		"listing already-applied migrations as pending is the defect under test")
+	assert.NotContains(t, output, "Target version:",
+		"a target version derived from goose's empty ledger is meaningless here")
+}
+
+func TestMigrateUpDryRunListsOnlyTheMigrationsAboveTheRecordedVersion(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           0,
+		pendingMigrations: []uint{1, 2, 3},
+		adoptPreview:      store.AdoptPreview{Pending: true, Recorded: 1},
+	}
+
+	err := runMigrateUpDryRun(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Dry run - the following migrations would be applied:")
+	assert.NotContains(t, output, "000001_baseline",
+		"version 1 is at or below the recorded version, so the adopt records it as "+
+			"applied and it is not pending")
+	assert.Contains(t, output, "Current version: 1",
+		"the current version an operator cares about is the recorded one, not goose's 0")
+}
+
+func TestMigrateUpDryRunWarnsThatADirtyLedgerWillRefuse(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           0,
+		pendingMigrations: []uint{1, 2, 3},
+		adoptPreview:      store.AdoptPreview{Pending: true, Recorded: 3, Dirty: true},
+	}
+
+	err := runMigrateUpDryRun(&buf, mock)
+
+	require.NoError(t, err, "a preview must not fail merely because the deploy would")
+	output := buf.String()
+	assert.Contains(t, output, "dirty",
+		"the whole point of previewing is to learn the deploy will abort")
+	assert.NotContains(t, output, "Dry run - the following migrations would be applied:")
+}
+
+func TestMigrateUpDryRunReturnsTheAdoptProbeError(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{adoptPreviewErr: errors.New("probe failed")}
+
+	err := runMigrateUpDryRun(&buf, mock)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "probe failed")
 }
 
 func TestMigrateUpDryRun_VersionError(t *testing.T) {
