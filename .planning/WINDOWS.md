@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 7
+open_count: 9
 waived_count: 0
 fixed_count: 0
-total_count: 7
-last_updated: 2026-08-03T01:03:53.873Z
+total_count: 9
+last_updated: 2026-08-03T02:13:07.324Z
 ---
 
 # Broken Windows Ledger
@@ -22,6 +22,8 @@ last_updated: 2026-08-03T01:03:53.873Z
 | 5 | 01.1 | unrun-verify | internal/store/events_audit_partition_migration_integration_test.go |  | reads migrations/000052_events_audit_partition.up.sql by path; red until plan 02 | open |  | 2026-08-02T23:37:38.383Z |  |
 | 6 | 01.1 | unrun-verify | internal/store/migrations_sessions_location_index_integration_test.go |  | reads migrations/000053_sessions_location_index.up.sql by path; red until plan 02 | open |  | 2026-08-02T23:37:38.463Z |  |
 | 7 | 01.1 | deviation | internal/store/migrate_adopt.go |  | adopt seeded-probe filters version_id>0: a read-only verb creating goose's bootstrap row must not disable the cutover | open |  | 2026-08-03T01:03:53.873Z |  |
+| 8 | 01.1 | deviation | .claude/skills/new-migration/SKILL.md |  | new-migration skill taught TIMESTAMPTZ (contradicting INV-STORE-1); corrected to BIGINT epoch-ns as a Rule 2 deviation not named in the plan | open |  | 2026-08-03T02:13:07.263Z |  |
+| 9 | 01.1 | unrun-verify | site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md |  | D-16 pre-deploy rehearsal and D-18 surgical rollback are WRITTEN but never EXECUTED against restored sandbox data — a rehearsal nobody has run is a hypothesis, not a control | open |  | 2026-08-03T02:13:07.324Z |  |
 
 ````json
 [
@@ -107,6 +109,30 @@ last_updated: 2026-08-03T01:03:53.873Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-03T01:03:53.873Z",
+    "resolved_at": null
+  },
+  {
+    "id": 8,
+    "kind": "deviation",
+    "phase": "01.1",
+    "file": ".claude/skills/new-migration/SKILL.md",
+    "line": null,
+    "description": "new-migration skill taught TIMESTAMPTZ (contradicting INV-STORE-1); corrected to BIGINT epoch-ns as a Rule 2 deviation not named in the plan",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-03T02:13:07.263Z",
+    "resolved_at": null
+  },
+  {
+    "id": 9,
+    "kind": "unrun-verify",
+    "phase": "01.1",
+    "file": "site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md",
+    "line": null,
+    "description": "D-16 pre-deploy rehearsal and D-18 surgical rollback are WRITTEN but never EXECUTED against restored sandbox data — a rehearsal nobody has run is a hypothesis, not a control",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-03T02:13:07.324Z",
     "resolved_at": null
   }
 ]

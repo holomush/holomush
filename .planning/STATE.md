@@ -4,17 +4,17 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 01.1
 current_phase_name: migration-framework-adopt-goose-for-go-migrations
-status: executing
-stopped_at: Completed 01.1-06-PLAN.md
-last_updated: "2026-08-03T01:35:06.005Z"
+status: verifying
+stopped_at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
+last_updated: "2026-08-03T02:13:21.169Z"
 last_activity: 2026-08-02
 last_activity_desc: Phase 01.1 execution started
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 13
-  completed_plans: 12
-  percent: 14
+  completed_plans: 13
+  percent: 29
 ---
 
 # Project State
@@ -35,8 +35,8 @@ complete character identity surface (creation, management, public profiles with 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 01.1 (migration-framework-adopt-goose-for-go-migrations) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
-Progress: [█████████░] 92% (1/6 phases)
+Status: Phase complete — ready for verification
+Progress: [██████████] 100% (1/6 phases)
 Last activity: 2026-08-02 — Phase 01.1 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -226,6 +226,7 @@ no action needed.
 | Phase 01.1 P05 | ~25 min | 2 tasks | 1 files |
 | Phase 01.1 P04 | 75m | 3 tasks | 7 files |
 | Phase 01.1 P06 | ~70 min | 2 tasks | 6 files |
+| Phase 01.1 P07 | 85m | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -416,6 +417,9 @@ the next milestone yet.
 - [Phase ?]: 01.1-04: INV-STORE-10 (ascending adopt seed order) shipped binding: bound; meta-test proven to resolve Ginkgo blocks
 - [Phase ?]: INV-STORE-11 shipped binding: pending — registry meta-test accepted bound, declined on human review because the registration clause is vacuous over a zero-Go-migration corpus (holomush/holomush#4906)
 - [Phase ?]: internal/store/migrations is now a Go package (D-08); //go:embed migrations/*.sql verified by execution to still resolve against a package directory
+- [Phase ?]: task migrate:create deleted, not repointed at goose: goose's create -s numbers 5 digits (%05v), the corpus is 6 (migrate_embed_test.go)
+- [Phase ?]: scripts/bootstrap-migrations.sql retired as a comment-only banner, not deleted — an old runbook link lands on the explanation
+- [Phase ?]: D-16 rehearsal and D-18 rollback are WRITTEN, not EXECUTED — recorded as such in the SUMMARY and the WINDOWS ledger
 
 ### Pending Todos
 
@@ -461,11 +465,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-03T01:35:05.995Z
+Last session: 2026-08-03T02:13:21.159Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 01.1-06-PLAN.md
+Stopped at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
