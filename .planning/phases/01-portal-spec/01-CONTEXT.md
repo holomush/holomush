@@ -56,7 +56,7 @@ Phases 2–6. Also out of scope: the full `docs/superpowers/` retirement sweep (
 
 - **D-05:** Lifecycle is a **single `status TEXT NOT NULL DEFAULT 'active'` column with a `CHECK`
   constraint** on the `characters` table, matching the repo's four existing CHECK-enum precedents
-  (`policies.effect`, `policies.source`, `entity_properties.visibility`). **`purge` is not a
+  (`access_policies.effect`, `access_policies.source`, `entity_properties.visibility`). **`purge` is not a
   state** — it is `DeleteCharacter`, and the row is gone. Rejected: paired `retired_at` timestamp
   (two columns that can disagree) and timestamp-only derivation (no database backstop; every
   reader must derive identically). — **Reversibility:** one-way — changing the shape after Phase 2
@@ -106,8 +106,8 @@ Phases 2–6. Also out of scope: the full `docs/superpowers/` retirement sweep (
   EXT-03 forbids elsewhere in this milestone).
 
 - **D-11:** The floor lives as an **ABAC policy family extending `seed:property-*`**
-  (`internal/access/policy/seed.go:111-141`), overridden by `policies` rows with `source='admin'` —
-  a value the schema already models (`000001_baseline.up.sql:261`). The decision stays inside the
+  (`internal/access/policy/seed.go:111-141`), overridden by `access_policies` rows with
+  `source='admin'` — a value the schema already models (`000001_baseline.sql:264`). The decision stays inside the
   default-deny engine, consistent with the locked architectural decision and with ADMIN-01's "never
   a bare lookup". **Zero new storage.** Rejected: a settings-store config consumed by the
   projection, because it moves an authorization decision out of the ABAC engine into projection
@@ -251,13 +251,13 @@ Taken without further consultation:
 - `internal/world/service.go:1144-1171` — the fail-closed per-property filter loop
 - `.claude/rules/abac-providers.md` — omit-don't-sentinel; the same rule D-01's message shape
   expresses at the wire
-- `internal/store/migrations/000001_baseline.up.sql:350-373` — `entity_properties` per-row
+- `internal/store/migrations/000001_baseline.sql:354-375` — `entity_properties` per-row
   `visibility` / `visible_to` / `excluded_from` + `UNIQUE(parent_type,parent_id,name)`
-- `internal/store/migrations/000001_baseline.up.sql:259-261` — `policies.effect` and
-  `policies.source` CHECK vocabularies (`source='admin'` is D-11's override mechanism)
+- `internal/store/migrations/000001_baseline.sql:259-266` — `access_policies.effect` and
+  `access_policies.source` CHECK vocabularies (`source='admin'` is D-11's override mechanism)
 
 ### World model & lifecycle
-- `internal/store/migrations/000001_baseline.up.sql:67-76` — the `characters` table as it stands
+- `internal/store/migrations/000001_baseline.sql:72-79` — the `characters` table as it stands
   (no status column, no unique name index)
 - `internal/world/service.go:745-777` — `DeleteCharacter`; cascades `entity_properties`, emits a
   tombstone, **not reversible**, never wired to a player-facing button
@@ -305,7 +305,7 @@ Taken without further consultation:
   **reuse, not invention**: profile fields and media refs are rows, so "1 primary + 10 gallery
   without a later migration" is literally an `INSERT` and `UNIQUE(parent_type,parent_id,name)`
   enforces exactly-one-primary for free.
-- **`policies.source='admin'` already exists** in the CHECK vocabulary — D-11's "entirely
+- **`access_policies.source='admin'` already exists** in the CHECK vocabulary — D-11's "entirely
   configurable" needs no new storage and no new concept.
 - **`world.Service.UpdateCharacterDescription` and `DeleteCharacter` already exist and are already
   ABAC-gated.** Only **rename** and **soft-retire** are genuinely absent at the domain layer.

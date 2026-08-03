@@ -293,6 +293,19 @@
         color: var(--color-foreground);
       }
 
+      .rail-admin-group,
+      .rail-identity {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .rail-divider {
+        width: 20px;
+        height: 1px;
+        background: var(--color-border);
+        margin: 5px 0;
+      }
       @container vp (max-width: 1023px) {
         .adminnav {
           width: 0;
@@ -310,19 +323,6 @@
         .rail-btn.is-context::before {
           display: none;
         }
-      }
-      .rail-admin-group,
-      .rail-identity {
-        display: none;
-        flex-direction: column;
-        align-items: center;
-        gap: 4px;
-      }
-      .rail-divider {
-        width: 20px;
-        height: 1px;
-        background: var(--color-border);
-        margin: 5px 0;
       }
 
       #sketch-tools {
