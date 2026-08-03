@@ -192,14 +192,16 @@ scopes:
       - "internal/auth/guest_service_test.go"
 
   - name: INV-PRIVACY
-    description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics"
-    boundary: "Privacy-relevant gating on history reads. Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe
-      authorization (→ INV-EVENTBUS)."
+    description: "Stream history temporal floors, scope gating, guest-session bounds, reattach/Idle arrival-timestamp semantics,
+      web profile read-surface disclosure shape (existence non-disclosure, minimum-identity floor)"
+    boundary: "Privacy-relevant gating on reads. Does NOT include: ABAC policy evaluation (→ INV-ACCESS), subscribe authorization
+      (→ INV-EVENTBUS)."
     # Family I-PRIV-N (history-scope privacy). owned_paths = privacy-core files;
     # most I-PRIV sites ride on other-domain files (shared_files). See .14.9.
     status: migrated
     origin_specs:
       - "docs/superpowers/specs/2026-05-17-history-scope-privacy-design.md"
+      - ".planning/phases/01-portal-spec/01-SPEC.md"
     owned_paths:
       - "internal/grpc/query_stream_history.go"
       - "internal/grpc/query_stream_history_test.go"
@@ -581,6 +583,7 @@ scopes:
       - "docs/superpowers/specs/2026-05-26-harness-real-abac-design.md"
       - "docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md"
       - "docs/superpowers/specs/2026-05-07-event-payload-crypto-phase5-totp-substrate-design.md"
+      - ".planning/phases/01-portal-spec/01-SPEC.md"
     owned_paths:
       # The real-ABAC harness files (where INV-RA-1..6 live).
       - "internal/testsupport/integrationtest/real_abac.go"
@@ -634,6 +637,10 @@ scopes:
       - "internal/store/migrations/**"
       - "internal/store/migrate_inv_ts_integration_test.go"
       - "internal/store/migrate_clamp_integration_test.go"
+      - "internal/store/migrate_adopt.go"
+      - "internal/store/migrate_adopt_integration_test.go"
+      - "internal/store/migrations_register.go"
+      - "internal/store/migrations_register_test.go"
       - "internal/store/lint_meta_test.go"
       - "internal/store/spec_meta_test.go"
       - "internal/store/no_delete_grep_test.go"
@@ -784,6 +791,7 @@ scopes:
     origin_specs:
       - "docs/adr/holomush-i4784-world-state-model-decision.md"
       - "docs/reviews/arch-review/2026-07-11/verification/model-01-consensus-onepager.md"
+      - ".planning/phases/01-portal-spec/01-SPEC.md"
     owned_paths:
       - "internal/world/**"
       - "internal/world/outbox/**"
@@ -1787,11 +1795,11 @@ invariants:
       - {file: "internal/eventbus/history/cold_postgres_integration_test.go", token: "INV-TS-1"}
       - {file: "internal/pgnanos/doc.go", token: "INV-TS-1"}
       - {file: "internal/store/migrate_inv_ts_integration_test.go", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
-      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.sql", token: "INV-TS-1"}
+      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.sql", token: "INV-TS-1"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-1"}
       - {file: "internal/testsupport/holomushtest/server.go", token: "INV-TS-1"}
       - {file: "plugins/core-scenes/migrations/000007_timestamps_to_bigint.up.sql", token: "INV-TS-1"}
@@ -1840,7 +1848,7 @@ invariants:
     refs:
       - {file: "internal/eventbus/publisher.go", token: "INV-TS-4"}
       - {file: "internal/eventbus/publisher_test.go", token: "INV-TS-4"}
-      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-4"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.sql", token: "INV-TS-4"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-4"}
       - {file: "test/integration/privacy/privacy_test.go", token: "INV-TS-4"}
   - id: INV-STORE-5
@@ -1857,7 +1865,7 @@ invariants:
       - {file: "internal/eventbus/history/plugin_aad_reconstruction_test.go", token: "INV-TS-5"}
       - {file: "internal/eventbus/history/readback.go", token: "INV-TS-5"}
       - {file: "internal/eventbus/publisher.go", token: "INV-TS-5"}
-      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-5"}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.sql", token: "INV-TS-5"}
       - {file: "internal/store/spec_meta_test.go", token: "INV-TS-5"}
       - {file: "internal/testsupport/integrationtest/crypto.go", token: "INV-TS-5"}
       - {file: "plugins/core-scenes/migrations/000007_timestamps_to_bigint.up.sql", token: "INV-TS-5"}
@@ -1897,12 +1905,44 @@ invariants:
     binding: pending
     refs:
       - {file: "internal/store/migrate_clamp_integration_test.go", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.up.sql", token: "INV-TS-9"}
-      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-9",}
+      - {file: "internal/store/migrations/000038_eventbus_crypto_timestamps_to_bigint.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000041_auth_timestamps_to_bigint.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000042_world_timestamps_to_bigint.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000043_totp_misc_timestamps_to_bigint.sql", token: "INV-TS-9"}
+      - {file: "internal/store/migrations/000044_pregfo6_gap_timestamps_to_bigint.sql", token: "INV-TS-9"}
+      - {file: "internal/store/spec_meta_test.go", token: "INV-TS-9"}
+  - id: INV-STORE-10
+    scope: INV-STORE
+    origin_spec: ".planning/phases/01.1-migration-framework-adopt-goose-for-go-migrations/01.1-CONTEXT.md"
+    summary: "The golang-migrate adopt seed inserts goose_db_version rows in ASCENDING version order. goose_db_version.id
+      is GENERATED BY DEFAULT AS IDENTITY and goose's ListMigrations is ORDER BY id DESC, so insertion order — not version
+      order — determines the order a later rollback walks migrations. A descending seed satisfies every row-count, set-equality,
+      and min/max assertion while rolling back in the wrong order."
+    binding: bound
+    asserted_by:
+      - "internal/store/migrate_adopt_integration_test.go"
+    refs:
+      - {file: "internal/store/migrate_adopt_integration_test.go", token: "INV-STORE-10"}
+      - {file: "internal/store/migrate_adopt.go", token: "INV-STORE-10"}
+  - id: INV-STORE-11
+    scope: INV-STORE
+    origin_spec: ".planning/phases/01.1-migration-framework-adopt-goose-for-go-migrations/01.1-CONTEXT.md"
+    summary: "Every versioned .go file in internal/store/migrations/ registers itself with goose in init(), and package store
+      blank-imports that directory so those init() functions run. //go:embed migrations/*.sql never embeds .go, so goose's
+      own unregistered-Go guard cannot fire here — a migration that forgets its registration, or a dropped blank import, leaves
+      the Go step SILENTLY absent from the chain with correct version counts, a consistent schema, and a green suite."
+    # pending, deliberately, and NOT because no test exists. The guard
+    # (migrations_register_test.go) runs on every `task test`: its synthetic table
+    # proves the predicate classifies, and the blank-import clause was demonstrated
+    # RED. But the REGISTRATION clause is applied to a corpus that holds zero
+    # versioned .go files today, so that half cannot currently fail. That is the
+    # partial-binding case TestBoundInvariantsAreGenuinelyAsserted documents itself
+    # as unable to detect (it only rejects Skip-only placeholders) — it accepted
+    # binding: bound when tried. Declined on human review instead. Phase 2's
+    # 000055 is the first file that makes the walk bite; flip to bound then.
+    binding: pending
+    refs:
+      - {file: "internal/store/migrations_register_test.go", token: "INV-STORE-11",}
 
   # -- INV-TELEMETRY -- migrated from INV-LOAD-N (family LOAD, load-perf harness) (holomush-hz0v4.14.8).
   # Origin: docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md.
@@ -2109,6 +2149,25 @@ invariants:
       - {file: "internal/eventbus/subscriber_consumer_config_test.go", token: "I-PRIV-8"}
       - {file: "test/integration/privacy/privacy_test.go", token: "I-PRIV-8",}
 
+  # -- v0.13 web portal (milestone v0.13, Phase 1). Born canonical; no legacy tokens.
+  # The two DISCLOSURE guarantees of the profile visibility model land here; the two
+  # EVALUATION guarantees land in INV-ACCESS (this scope's boundary forwards ABAC
+  # policy evaluation there by name). binding: pending — asserting tests land in Phase 4.
+  - id: INV-PRIVACY-9
+    scope: INV-PRIVACY
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "A character profile below its configured reachability floor returns a not-found-equivalent whose wire shape
+      is identical to the response for a character id that does not exist — no distinct 'this profile is private' signal,
+      error code or status, which would disclose that the character exists."
+    binding: pending
+  - id: INV-PRIVACY-10
+    scope: INV-PRIVACY
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "If a viewer can reach a character profile at all, that profile carries name and pronouns. The game configuration
+      MAY set the profile's own reachability floor arbitrarily high but MUST NOT raise name or pronouns above that floor,
+      so every reachable profile is non-empty."
+    binding: pending
+
   # -- INV-ACCESS -- migrated from INV-RA-N (family RA, real-ABAC harness) (holomush-hz0v4.14.10).
   # Origin: docs/superpowers/specs/2026-05-26-harness-real-abac-design.md. binding: pending — backfill .11.
   # NOTE: all INV-RA sites live in internal/testsupport/integrationtest/ (the real-ABAC
@@ -2203,6 +2262,35 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/grpc/auth_handlers_test.go"
+
+  # -- v0.13 web portal (milestone v0.13, Phase 1). Born canonical; no legacy tokens.
+  # The two EVALUATION guarantees of the profile visibility model: the read-time
+  # authorization decision and the wire shape that decision enforces. The paired
+  # DISCLOSURE guarantees live in INV-PRIVACY-9/10.
+  # binding: pending — asserting tests land in Phase 4 (policy family seeded in Phase 2).
+  - id: INV-ACCESS-10
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "The viewer-tier floor governing a profile attribute is evaluated at READ TIME by the default-deny ABAC engine
+      against the attribute name and the viewer's tier (anonymous < guest < player), never stamped onto entity_properties.visibility
+      per row; and an infrastructure failure in that evaluation resolves DENY, never permit and never a silently sparse profile."
+    binding: pending
+  - id: INV-ACCESS-11
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "A profile attribute whose tier floor the viewer does not clear is ABSENT from the marshaled response, never
+      present-and-empty — asserted over marshaled bytes rather than the Go struct, since a present-empty field is indistinguishable
+      from a blank one and discloses that a withheld value exists."
+    binding: pending
+  - id: INV-ACCESS-12
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "The set of RPCs whose response transitively contains a character-shaped message equals the set enumerated in
+      the portal SPEC's read-surface inventory (§3) — no more and no fewer. Compared by SET EQUALITY on the fully-qualified
+      proto method name (package.Service.Method), order-independent, never a substring match and never a Go handler identifier:
+      set equality is what carries both halves, where a loop over a hand-written list carries neither. A character-returning
+      RPC added without an inventory row fails the census RED rather than shipping."
+    binding: pending
 
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
@@ -4974,3 +5062,34 @@ invariants:
       - "test/meta/world_sql_fence_test.go"
       - "test/meta/world_import_graph_test.go"
       - "test/integration/auth/guest_reaper_tombstone_test.go"
+  - id: INV-WORLD-5
+    scope: INV-WORLD
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "LIFECYCLE-EXHAUSTIVE: every read of characters.status is an exhaustive switch over the closed vocabulary ('active','retired','idle')
+      whose default arm DENIES, and a character in the third, otherwise-unreachable 'idle' state is excluded from character
+      selection. v0.13 ships the 'idle' value with no transition into it, so the binding test MUST construct a character directly
+      in 'idle' (bypassing the absent transition) and assert the exclusion — an unreachable enum value guarded by a non-exhaustive
+      check is the fail-open shape research CONFLICT 4 rejected."
+    binding: pending
+  - id: INV-WORLD-6
+    scope: INV-WORLD
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "RETIRE-PRESERVES-NAME: retiring a character leaves its row and its name reservation intact; the irreversible
+      character delete (world.Service.DeleteCharacter) is the ONLY path by which a character name becomes claimable again.
+      Retire MUST NOT release the name — a freed name claimed by a new character inherits the identity of every display name
+      already denormalized into immutable event payloads and published scene archives, which no later write can reach."
+    binding: pending
+  - id: INV-WORLD-7
+    scope: INV-WORLD
+    origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
+    summary: "GUARDED-CHARACTER-MUTATION: every v0.13 character mutation RPC THAT TARGETS AN EXISTING character row carries
+      expected_version as an int32 scalar on its own request message (matching characters.version, migration 000049), REJECTS
+      an absent or zero value instead of writing unguarded (the repo layer's Version==0 unversioned-write affordance MUST
+      NOT be reachable from a web mutation boundary), and rejects a stale value with the typed WORLD_CONCURRENT_EDIT signal
+      so exactly ONE of two concurrent mutations sharing a version succeeds and the other is refused without auto-retry. CreateCharacter
+      is EXCLUDED from the version guard because it creates the row the guard would protect: it carries no expected_version,
+      and concurrent creates are decided by the UNIQUE index on the stored normalized name (CHARACTER_NAME_TAKEN) instead.
+      The same-transaction obligation is NOT scoped that way -- EVERY v0.13 character mutation RPC, creation included, commits
+      its state change together with its one outbox envelope in the SAME transaction (INV-WORLD-1) so a committed character
+      mutation without its envelope is impossible."
+    binding: pending

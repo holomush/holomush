@@ -1,23 +1,20 @@
 ---
 gsd_state_version: 1.0
-milestone: null
-milestone_name: null
-current_phase: null
-current_phase_name: null
-status: milestone_complete
-stopped_at: v0.12 Foundation Hardening archived — no milestone active; next is /gsd-new-milestone
-last_updated: "2026-07-28T23:40:00Z"
-last_activity: 2026-07-28
-last_activity_desc: v0.12 archived as override_closeout (Phase 09 gaps_found by design); ROADMAP collapsed, REQUIREMENTS archived
-last_milestone: v0.12
-last_milestone_name: Foundation Hardening
-last_milestone_closeout: override_closeout
-last_milestone_shipped: 2026-07-28
+milestone: v0.13
+milestone_name: "Web Portal: Identity & Admin Foundations"
+current_phase: 01.1
+current_phase_name: migration-framework-adopt-goose-for-go-migrations
+status: verifying
+stopped_at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
+last_updated: "2026-08-03T02:13:21.169Z"
+last_activity: 2026-08-02
+last_activity_desc: Phase 01.1 execution started
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 7
+  completed_phases: 2
+  total_plans: 13
+  completed_plans: 13
+  percent: 29
 ---
 
 # Project State
@@ -29,18 +26,61 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** None — v0.12 shipped 2026-07-28; next milestone not yet defined.
+**Current focus:** Phase 01.1 — migration-framework-adopt-goose-for-go-migrations
+complete character identity surface (creation, management, public profiles with privacy) and stand up the
+`RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
 
 ## Current Position
 
-Milestone: **none active**. v0.12 Foundation Hardening shipped 2026-07-28 and is archived
-(`milestones/v0.12-ROADMAP.md`, `milestones/v0.12-REQUIREMENTS.md`, `milestones/v0.12-MILESTONE-AUDIT.md`;
-phase artifacts in `milestones/v0.12-phases/`).
+Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
+Phase: 01.1 (migration-framework-adopt-goose-for-go-migrations) — EXECUTING
+Plan: 7 of 7
+Status: Phase complete — ready for verification
+Progress: [██████████] 100% (1/6 phases)
+Last activity: 2026-08-02 — Phase 01.1 execution started
+`binding: pending`, 9 amendments applied, 3 verification gaps closed
 
-`REQUIREMENTS.md` has been removed — `/gsd-new-milestone` creates a fresh one for the next milestone.
+**Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
+(`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
+`task pr-prep`, push, and `/gsd-discuss-phase 2`.
 
-Last activity: 2026-07-31 — Completed quick task 260731-ea8: GH-4890 issue-first gate enforcement workflow (`Issue Gate`). Required-status-check step is deliberately NOT done — tracked in #4895, because a `pull_request_target` workflow is sourced from the default branch and so cannot run on its own PR.
-Next: `/gsd-new-milestone`, or `/gsd-review-backlog` to promote from the 999.x parking lot first.
+**Phase 1 opened four issues, all still open:** #4899 (per-player vs per-character admin authority —
+answered *per player* by SPEC §10.5), #4900 (`docs/superpowers/` retirement sweep), #4901 (published-scene
+`participants_snapshot` documented as names, stores ids), #4902 (`oops.AsOops(err).Code()` resolves the
+deepest chain code, not the top-level one — PORTAL-10 rule 5 was corrected to a wire-level assertion).
+
+**Milestone shape (phases 1–6):**
+
+> Phase numbers **restart at 1 per milestone as of v0.13**; v0.11 (Phases 1–3) and v0.12 (Phases 4–9)
+> used the retired continuous global numbering and are not renumbered. A bare "Phase N" below means v0.13.
+
+| Phase | Name | Reqs | Notes |
+|-------|------|------|-------|
+| 1 | Portal SPEC | 10 | Opens the milestone — discharges PROJECT.md's Out-of-Scope precondition; 8 of 14 catalogued pitfalls are SPEC-phase decisions |
+| 2 | ABAC & Schema Vocabulary | 6 | Lifecycle column + normalized-name unique index land here (load-bearing for two phases each); narrow data audit needed |
+| 3 | World Character Commands | 3 | `Rename`/soft `Retire`; `--research-phase` (writeCommands census bijection) |
+| 4 | Shared Facade Helpers & `CharacterAccessService` | 7 | Verbatim copy of the shipped `sceneaccess_service.go` path |
+| 5 | Character Identity UI & Public Profiles | 12 | UI phase — first user-visible slice; ships the media-schema proof with no uploader |
+| 6 | Admin Portal Shell & Character Administration | 12 | UI phase; net-new trust boundary (zero `RoleAdmin` refs in `internal/web/` today); `--research-phase` |
+
+**Binding across every phase (PORTAL-10):** census with set equality; paired positive control on every
+denial test; assertions against marshaled response bytes; gates demonstrated RED against the pre-fix state;
+wire-level assertion of every opacity and authorization contract (rule 5 was corrected in Phase 1 — `oops.AsOops(err).Code()`
+resolves the *deepest* chain code, not the top-level one, so the original prescription asserted the opposite
+of the property it guarded; see #4902 and `01-SPEC.md` §12.1); invariant-scope discipline (no ad-hoc `INV-PROFILE-*` /
+`INV-ADMIN-*` — allocate in `ACCESS`/`PRIVACY` or declare a boundary, and ship `binding: pending` rather
+than fabricating a `// Verifies:`).
+
+**Pre-existing hazards this milestone is the first to load** (all verified in-tree 2026-07-31, none new
+defects): `PlayerHasRole` is player-wide not character-wide (`internal/store/role_store.go:83-103`) —
+excluded from scope by PORTAL-08/ADMIN-04 and to be filed as a GitHub issue; character-name uniqueness has
+no DB constraint and `Rename` doubles the writers into that race (Phase 2); rename/retire cannot reach
+denormalized history (`actor_display_name`, `scene_log` via `WebGetPublicSceneArchive`); hard-delete is
+already broken (`locations.owner_id`/`objects.owner_id` have no `ON DELETE`); a public profile page is
+currently DENIED by `seed:player-character-colocation`; `internal/web/` has zero `RoleAdmin` references.
+
+**Carried in from v0.12:** 3 open Broken Windows block `/gsd-ship` until fixed or waived — #4861
+(`cmd/holomush` coverage floor), #4788 (movement pipeline untested), #4864 (yamlfmt block-scalar leak).
 
 ## Deferred Items
 
@@ -63,6 +103,9 @@ debug session. It is not one — it is the debug *knowledge base* of resolved se
 no action needed.
 
 ## Performance Metrics
+
+> Phase numbers in the tables below are **v0.11/v0.12** phases under the retired
+> continuous global scheme (v0.11 Phases 1–3, v0.12 Phases 4–9) — not v0.13's Phases 1–6.
 
 **Velocity:**
 
@@ -177,6 +220,13 @@ no action needed.
 | Phase 09 P18 | 150min | 3 tasks tasks | 71 files files |
 | Phase 09 P17 | 55m | 2 tasks | 1 files |
 | Phase 09 P19 | 70m | 3 tasks | 4 files |
+| Phase 01.1 P01 | 95m | 3 tasks | 16 files |
+| Phase 01.1 P02 | 40 min | 2 tasks | 7 files |
+| Phase 01.1 P03 | 35 min | 2 tasks | 2 files |
+| Phase 01.1 P05 | ~25 min | 2 tasks | 1 files |
+| Phase 01.1 P04 | 75m | 3 tasks | 7 files |
+| Phase 01.1 P06 | ~70 min | 2 tasks | 6 files |
+| Phase 01.1 P07 | 85m | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -351,6 +401,25 @@ the next milestone yet.
 - [Phase 09]: codecov project ratchet tightened to threshold: 0% (true no-drop); inert until #4875 resolves
 - [Phase 09]: D-04 deferred BOTH halves: codecov/project never posts (#4875); codecov/patch would deadlock docs-only PRs (#4876)
 - [Phase 09]: QUAL-02 stays Pending — cmd/holomush 70.09% and whole-repo 79.11% are measurably below their named floors
+- [Phase ?]: Task 1 checkpoint resolved option-a: two commits (engine, then corpus) as a non-independently-green unit
+- [Phase ?]: C1 upheld by execution: the third pg_dump exclusion (goose_db_version_id_seq) is a proven no-op; two -T flags used
+- [Phase ?]: PendingMigrations/AppliedMigrations kept version-derived, not Status-derived, to preserve a non-tautological 44-version census
+- [Phase ?]: INV-STORE-1 timestamp scan excludes goose_db_version by exact name, guarded by an existence assertion
+- [Phase ?]: MigrationSectionForTest errors on a missing goose Up/Down annotation rather than falling back to the whole file — the fallback is the destructive bug
+- [Phase ?]: runMigrations' ctx made load-bearing via a pre-flight pool.Ping; store.Migrator's method set stays context-free by design
+- [Phase ?]: Plan 01.1-02's 'zero golang-migrate mentions in internal/store' criterion rejected: all 15 remaining sites are deliberate historical rationale; replaced by a no-live-import gate
+- [Phase ?]: 01.1-03: corpus census recorded as observation, never asserted — a legitimate new $$ migration must not turn the D-13 guard red
+- [Phase ?]: 01.1-03: lint glob pins are static Taskfile-text reads, not shell-outs — a shell-out passes the fail-open glob it guards
+- [Phase ?]: Clean branch taken: all five docker/docker [[IgnoredVulns]] retired — go mod why -m reports the main module does not need it, go mod graph has 0 edges (positive control: docker/go-connections matches 8x)
+- [Phase ?]: Advisory ids deliberately NOT repeated in osv-scanner.toml's history comment, so a text search for them stays a usable is-it-suppressed check
+- [Phase ?]: #4817 left OPEN with full evidence rather than closed — fix is on an unmerged branch; repo precedent (#4878, #4892) closes post-merge. PR should carry Closes #4817
+- [Phase ?]: 01.1-04: adopt fires from Migrator.Up() only (option-a); read-only verbs stay read-only
+- [Phase ?]: 01.1-04: INV-STORE-10 (ascending adopt seed order) shipped binding: bound; meta-test proven to resolve Ginkgo blocks
+- [Phase ?]: INV-STORE-11 shipped binding: pending — registry meta-test accepted bound, declined on human review because the registration clause is vacuous over a zero-Go-migration corpus (holomush/holomush#4906)
+- [Phase ?]: internal/store/migrations is now a Go package (D-08); //go:embed migrations/*.sql verified by execution to still resolve against a package directory
+- [Phase ?]: task migrate:create deleted, not repointed at goose: goose's create -s numbers 5 digits (%05v), the corpus is 6 (migrate_embed_test.go)
+- [Phase ?]: scripts/bootstrap-migrations.sql retired as a comment-only banner, not deleted — an old runbook link lands on the explanation
+- [Phase ?]: D-16 rehearsal and D-18 rollback are WRITTEN, not EXECUTED — recorded as such in the SUMMARY and the WINDOWS ledger
 
 ### Pending Todos
 
@@ -376,6 +445,14 @@ None yet.
 | 260730-wh1 | GH-4892: replace the drifted dependency-only exempt path list with shape-based globs anchored in `vars.DEPENDENCY_ONLY_PATHS`; exclude the E2E compose files, define the lockfile subset, qualify the `scripts/**` claim at all five sites | 2026-07-30 | 9cb8d8f53 |  | [260730-wh1-…](./quick/260730-wh1-fix-gh-issue-4892-dependency-only-exempt/) |
 | 260731-ea8 | GH-4890: implement the issue-first gate enforcement workflow — `Issue Gate` applies `gate-violation`, comments, and fails a check when a PR's linked issue lacks a gate label; never closes a PR. Exemption decided by git `:(glob)` pathspec against the Taskfile vars, plus a new `REPO_CONFIG_ONLY_PATHS` | 2026-07-31 | ddb99158f | Needs Review | [260731-ea8-…](./quick/260731-ea8-implement-the-issue-first-gate-enforceme/) |
 
+### Roadmap Evolution
+
+- Phase 01.1 inserted after Phase 1: Migration framework: adopt goose for Go migrations — Phase 2 execution gated on it (URGENT)
+- Phase 01.1 edited: goal, requirements, gates, success criteria, UI hint, research flag
+- Phase 01.1 edited: edited fields: success_criteria (criterion 1: 49->44 pairs, 'byte-identical' restated as application-schema with bookkeeping objects excluded per D-15; criterion 4: 'real migration' restated as integration-test fixture chain per D-07), research_flag (49->44, baseline question marked resolved per D-02/D-04)
+- Phase 01.1 edited: criterion 1 row-count corrected post-research: 'goose_db_version with 44 rows' -> '44 rows at version_id > 0 plus goose's version-0 bootstrap row (45 total)'. goose inserts a version-0 row at table creation (RESEARCH.md:875-877, verified by execution against postgres:18-alpine), so the prior assertion failed against a correct database.
+- Phase 01.1 edited: criterion 3 amended post-research (maintainer decision): 'up/down/status/version/force parity' -> 'up/down/status/version parity, force REMOVED with docs+tests'. goose commits body and version row in one transaction (provider_run.go:213-219), so the dirty state force repairs cannot arise; force has no analogue and no purpose (RESEARCH.md:777).
+
 ## Deferred Items
 
 Items acknowledged and carried forward from the ingest, not part of this roadmap:
@@ -388,7 +465,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-07-27T16:45:13.288Z
+Last session: 2026-08-03T02:13:21.159Z
+100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
+v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
+Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
+Stopped at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
+
+Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
 The measurement-chain repair is proven — the e2e flag reports 32.27% where it reported 0.0, and
 project coverage rose 0.83 points to 79.11% against a 78.28% base (`497748c6d`). Two named floors
@@ -409,7 +492,9 @@ Resume file: None
   question. Both halves of decision D-04 are currently deferred (#4876) — `codecov/project` has
   never posted (codecov Team-plan limit, #4875) and requiring `codecov/patch` would deadlock
   docs-only PRs, which `paths-ignore` routes to `ci-docs-skip.yaml` with no coverage upload.
+
 - Two named coverage floors remain unmet and are tracked, not waived: whole-project 79.11% vs
   the 80% target, and `cmd/holomush` 70.09% vs 80% (#4861 — the remainder is `runCoreWithDeps`
   boot branches needing live Postgres/NATS/TLS).
+
 - QUAL-02, QUAL-03 and QUAL-05 stay Pending deliberately; QUAL-04 is Complete.

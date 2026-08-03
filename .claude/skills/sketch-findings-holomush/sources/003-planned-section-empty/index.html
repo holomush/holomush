@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sketch 003 — Planned Section Empty State</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      body {
+        padding-top: 42px;
+      }
+      #variant-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9998;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 12px;
+        background: #07080a;
+        border-bottom: 1px solid var(--color-border);
+      }
+      #variant-nav .lbl {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--color-status-text);
+        margin-right: 6px;
+      }
+      .variant-tab {
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 5px;
+        border: 1px solid var(--color-border);
+        background: transparent;
+        color: var(--color-muted-foreground);
+        font-family: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .variant-tab:hover {
+        background: var(--color-secondary);
+        color: var(--color-foreground);
+      }
+      .variant-tab.active {
+        background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+        color: var(--color-primary);
+      }
+      .pick {
+        height: 26px;
+        border-radius: 5px;
+        border: 1px solid var(--color-border);
+        background: #101418;
+        color: var(--color-muted-foreground);
+        font-family: inherit;
+        font-size: 11.5px;
+        padding: 0 6px;
+      }
+      .pick.danger {
+        border-color: color-mix(in srgb, var(--color-destructive) 50%, transparent);
+        color: var(--color-destructive);
+      }
+
+      .viewport-wrap {
+        margin: 0 auto;
+        container-type: inline-size;
+        container-name: vp;
+        border: 1px solid var(--color-border);
+        border-top: none;
+      }
+      .shell {
+        height: calc(100vh - 42px - var(--topbar-h));
+      }
+
+      /* frame (sketch 001 winner C2) */
+      .adminnav {
+        width: var(--adminnav-w);
+        flex-shrink: 0;
+        background: var(--color-sidebar-background);
+        border-right: 1px solid var(--color-border);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .adminnav-scroll {
+        flex: 1;
+        overflow: auto;
+        padding: 8px;
+      }
+      .whoami {
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--color-border);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 600;
+        background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+        color: var(--color-primary);
+        border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+      }
+      .avatar.plain {
+        background: var(--color-secondary);
+        color: var(--color-muted-foreground);
+        border-color: var(--color-border);
+      }
+      .navitem {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        height: 32px;
+        padding: 0 9px;
+        border-radius: 6px;
+        color: var(--color-muted-foreground);
+        text-decoration: none;
+        cursor: pointer;
+        position: relative;
+      }
+      .navitem:hover {
+        background: var(--color-secondary);
+        color: var(--color-foreground);
+      }
+      .navitem.is-active {
+        background: color-mix(in srgb, var(--color-primary) 13%, transparent);
+        color: var(--color-primary);
+      }
+      .navitem.is-active::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 7px;
+        bottom: 7px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--color-primary);
+      }
+      .navitem.is-planned {
+        color: var(--color-status-text);
+      }
+      .navitem .nav-label {
+        flex: 1;
+        font-size: 13px;
+      }
+
+      .content {
+        flex: 1;
+        min-width: 0;
+        overflow: auto;
+      }
+      .page {
+        padding: 18px 22px 40px;
+        max-width: 880px;
+      }
+      .crumb {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11.5px;
+        color: var(--color-status-text);
+        margin-bottom: 16px;
+      }
+      .crumb b {
+        color: var(--color-muted-foreground);
+        font-weight: 500;
+      }
+
+      /* ---- the state under exploration --------------------------------- */
+      .state {
+        text-align: center;
+        padding: 66px 26px;
+        border: 1px dashed var(--color-border);
+        border-radius: 10px;
+      }
+      .state .glyph {
+        width: 46px;
+        height: 46px;
+        margin: 0 auto 14px;
+        border-radius: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--color-border);
+        color: var(--color-status-text);
+        background: var(--color-card);
+      }
+      .state h2 {
+        margin: 0 0 6px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .state p {
+        margin: 0 auto;
+        max-width: 430px;
+        font-size: 13px;
+        line-height: 1.65;
+        color: var(--color-muted-foreground);
+      }
+      .state .sub {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--color-status-text);
+      }
+
+      .trace {
+        margin: 18px auto 0;
+        max-width: 460px;
+        text-align: left;
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--color-input-background);
+      }
+      .trace-head {
+        padding: 6px 11px;
+        border-bottom: 1px solid var(--color-border);
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--color-status-text);
+      }
+      .trace dl {
+        margin: 0;
+        padding: 9px 11px;
+        display: grid;
+        grid-template-columns: 74px 1fr;
+        gap: 5px 10px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+      .trace dt {
+        color: var(--color-status-text);
+      }
+      .trace dd {
+        margin: 0;
+        color: var(--color-foreground);
+        word-break: break-all;
+      }
+      .ok {
+        color: var(--color-status-online);
+      }
+      .no {
+        color: var(--color-destructive);
+      }
+
+      .scope {
+        margin: 18px auto 0;
+        max-width: 460px;
+        text-align: left;
+        border-left: 2px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+        padding: 11px 13px;
+        font-size: 12.5px;
+        line-height: 1.65;
+        color: var(--color-muted-foreground);
+      }
+      .scope b {
+        color: var(--color-foreground);
+        font-weight: 500;
+      }
+      .scope.none {
+        border-left-color: color-mix(in srgb, var(--color-destructive) 55%, transparent);
+        background: color-mix(in srgb, var(--color-destructive) 6%, transparent);
+      }
+
+      .note {
+        margin-top: 24px;
+        padding: 11px 13px;
+        border-left: 2px solid color-mix(in srgb, var(--color-destructive) 60%, transparent);
+        background: color-mix(in srgb, var(--color-destructive) 6%, transparent);
+        font-size: 11.5px;
+        line-height: 1.7;
+        color: var(--color-muted-foreground);
+      }
+      .note code {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--color-primary);
+      }
+      .note b {
+        color: var(--color-foreground);
+      }
+
+      .rail-admin-group,
+      .rail-identity {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .rail-divider {
+        width: 20px;
+        height: 1px;
+        background: var(--color-border);
+        margin: 5px 0;
+      }
+      @container vp (max-width: 1023px) {
+        .adminnav {
+          width: 0;
+          border-right-width: 0;
+          overflow: hidden;
+        }
+        .rail-admin-group,
+        .rail-identity {
+          display: flex;
+        }
+        .rail-btn.is-context {
+          opacity: 0.7;
+          cursor: default;
+        }
+        .rail-btn.is-context::before {
+          display: none;
+        }
+      }
+
+      #sketch-tools {
+        position: fixed;
+        bottom: 12px;
+        right: 12px;
+        z-index: 9999;
+        font-family: system-ui;
+        font-size: 12px;
+        background: rgba(0, 0, 0, 0.78);
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 8px;
+        opacity: 0.35;
+        transition: opacity 0.2s;
+        display: flex;
+        gap: 10px;
+      }
+      #sketch-tools button {
+        background: #1a1a1a;
+        color: #fff;
+        border: 1px solid #383838;
+        border-radius: 4px;
+        font-size: 11px;
+        padding: 3px 7px;
+        cursor: pointer;
+      }
+      #sketch-tools button.on {
+        background: #3dd6f7;
+        color: #04222e;
+        border-color: #3dd6f7;
+      }
+    </style>
+  </head>
+  <body>
+    <svg style="display: none" aria-hidden="true">
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M9 22V12h6v10" /></symbol>
+      <symbol id="i-clap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1 .3-2.1 1.3-2.4l13.2-4c1-.3 2.1.3 2.4 1.3Z" /><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82 2 2 0 1 1-2.83 2.83 1.65 1.65 0 0 0-2.82 1.18 2 2 0 1 1-4 0 1.65 1.65 0 0 0-2.82-1.18 2 2 0 1 1-2.83-2.83A1.65 1.65 0 0 0 4.6 15a2 2 0 1 1 0-4 1.65 1.65 0 0 0 1.18-2.82 2 2 0 1 1 2.83-2.83A1.65 1.65 0 0 0 11 4.6a2 2 0 1 1 4 0 1.65 1.65 0 0 0 2.82 1.18 2 2 0 1 1 2.83 2.83A1.65 1.65 0 0 0 19.4 11a2 2 0 1 1 0 4z" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 0 0-16 0" /></symbol>
+      <symbol id="i-shieldalert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /><path d="M12 8v4" /><path d="M12 16h.01" /></symbol>
+      <symbol id="i-scroll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5" /><path d="M15 8h-5" /><path d="M19 17V5a2 2 0 0 0-2-2H4" /><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" /></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4" /><line x1="10" x2="3" y1="4" y2="4" /><line x1="21" x2="12" y1="12" y2="12" /><line x1="8" x2="3" y1="12" y2="12" /><line x1="21" x2="16" y1="20" y2="20" /><line x1="12" x2="3" y1="20" y2="20" /><line x1="14" x2="14" y1="2" y2="6" /><line x1="8" x2="8" y1="10" y2="14" /><line x1="16" x2="16" y1="18" y2="22" /></symbol>
+      <symbol id="i-puzzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 2.1a2 2 0 0 0-2.8 1.8v1.4a1 1 0 0 1-1 1H8.2a2 2 0 0 0-2 2v2.3a1 1 0 0 1-1 1H3.9a2 2 0 0 0-1.8 2.8 2 2 0 0 0 1.8 1.2h1.3a1 1 0 0 1 1 1V20a2 2 0 0 0 2 2h2.3" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></symbol>
+      <symbol id="i-hex" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 21 7v10l-9 5-9-5V7z" /></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
+    </svg>
+
+    <div id="variant-nav">
+      <span class="lbl">SKETCH 003 · planned-section state</span>
+      <button class="variant-tab active" onclick="setVariant('a', this)">A: Minimal ★</button>
+      <button class="variant-tab" onclick="setVariant('b', this)">B: Gate provenance</button>
+      <button class="variant-tab" onclick="setVariant('c', this)">C: Scope preview</button>
+      <span style="flex: 1"></span>
+      <select class="pick" id="sectionpick" onchange="render()"></select>
+      <select class="pick danger" id="viewerpick" onchange="render()">
+        <option value="admin">viewer: admin (permitted)</option>
+        <option value="plain">viewer: non-admin (DENIED)</option>
+      </select>
+    </div>
+
+    <div class="viewport-wrap" id="vp">
+      <div class="topbar">
+        <span class="wordmark">&gt;holomush<span class="cursor">_</span></span>
+        <span class="muted" style="font-size: 12px">/ admin</span>
+      </div>
+      <div class="shell">
+        <nav class="rail">
+          <button class="rail-btn" title="Room"><svg width="18" height="18"><use href="#i-home" /></svg></button>
+          <button class="rail-btn" title="Scenes"><svg width="18" height="18"><use href="#i-clap" /></svg></button>
+          <button class="rail-btn is-active is-context" id="railadmin" title="Admin"><svg width="18" height="18"><use href="#i-shield" /></svg></button>
+          <div class="rail-admin-group" id="railgroup"></div>
+          <div class="rail-spacer"></div>
+          <button class="rail-btn" title="Settings"><svg width="18" height="18"><use href="#i-gear" /></svg></button>
+        </nav>
+        <div class="adminnav">
+          <div class="whoami" id="whoami"></div>
+          <div class="adminnav-scroll" id="navlist"></div>
+        </div>
+        <div class="content">
+          <div class="page">
+            <div class="crumb" id="crumb"></div>
+            <div id="statezone"></div>
+            <div class="note" id="findingnote"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="sketch-tools"
+      onmouseenter="this.style.opacity='1'"
+      onmouseleave="this.style.opacity='0.35'"
+    >
+      <button onclick="setVp(768, this)">768</button>
+      <button onclick="setVp(1280, this)">1280</button>
+      <button class="on" onclick="setVp(0, this)">Full</button>
+    </div>
+
+    <script>
+      // The registry, verbatim from SPEC §10.1. `scope` is what the SPEC
+      // documents will live there — only `config` has any. That absence is a
+      // finding, not an oversight in this sketch.
+      const SECTIONS = [
+        { id: 'characters', label: 'Characters', icon: 'i-users', status: 'available', scope: null },
+        { id: 'stats', label: 'Stats', icon: 'i-chart', status: 'planned', scope: null },
+        { id: 'players', label: 'Players', icon: 'i-user', status: 'planned', scope: null },
+        { id: 'moderation', label: 'Moderation', icon: 'i-shieldalert', status: 'planned', scope: null },
+        { id: 'audit', label: 'Audit', icon: 'i-scroll', status: 'planned', scope: null },
+        {
+          id: 'config',
+          label: 'Config',
+          icon: 'i-sliders',
+          status: 'planned',
+          scope:
+            'Its first tenant is the <b>visibility-floor editor</b> (§8.12). v0.13 ships the model and seeded defaults only, so wiring the editor is a <b>body replacement, not new wiring</b>.',
+        },
+        { id: 'plugins', label: 'Plugins', icon: 'i-puzzle', status: 'planned', scope: null },
+      ];
+      // Not in the registry. Used to demonstrate that a denial for an
+      // unregistered id MUST be indistinguishable from one for a real section.
+      const GHOST = { id: 'zzz-not-a-section', label: '(unregistered id)', icon: 'i-hex', status: 'ghost', scope: null };
+
+      let VARIANT = 'a';
+
+      const sel = () => {
+        const v = document.getElementById('sectionpick').value;
+        return v === GHOST.id ? GHOST : SECTIONS.find((s) => s.id === v);
+      };
+      const viewer = () => document.getElementById('viewerpick').value;
+
+      // ---- init pickers / nav ---------------------------------------------
+      document.getElementById('sectionpick').innerHTML =
+        SECTIONS.filter((s) => s.status === 'planned')
+          .map((s) => `<option value="${s.id}">section: ${s.label}</option>`)
+          .join('') +
+        `<option value="${GHOST.id}">section: ${GHOST.label}</option>` +
+        `<option value="characters">section: Characters (available)</option>`;
+      document.getElementById('sectionpick').value = 'moderation';
+
+      document.getElementById('railgroup').innerHTML =
+        '<div class="rail-divider"></div>' +
+        SECTIONS.map(
+          (s) =>
+            `<button class="rail-btn" title="${s.label}" style="opacity:${s.status === 'planned' ? 0.55 : 1}"><svg width="16" height="16"><use href="#${s.icon}"/></svg></button>`,
+        ).join('');
+
+      function renderNav() {
+        const cur = sel();
+        const isAdmin = viewer() === 'admin';
+        document.getElementById('whoami').innerHTML = isAdmin
+          ? `<div class="avatar">SB</div><div><div style="font-size:12.5px;font-weight:500">seanb</div><div style="font-size:10.5px" class="muted">administrator</div></div>`
+          : `<div class="avatar plain">KT</div><div><div style="font-size:12.5px;font-weight:500">ktrn</div><div style="font-size:10.5px" class="muted">player</div></div>`;
+
+        // Nav is filtered from the registry contract (ROADMAP Ph6 SC5). A
+        // non-admin is not offered admin sections at all — but drawing a link
+        // the viewer may not use would STILL deny at the RPC.
+        document.getElementById('navlist').innerHTML = isAdmin
+          ? SECTIONS.map(
+              (s) =>
+                `<a class="navitem ${s.id === cur.id ? 'is-active' : s.status === 'planned' ? 'is-planned' : ''}">
+                   <svg width="15" height="15"><use href="#${s.icon}"/></svg>
+                   <span class="nav-label">${s.label}</span>
+                   ${s.status === 'planned' ? '<span class="badge badge-planned">planned</span>' : ''}
+                 </a>`,
+            ).join('')
+          : `<div style="padding:14px 10px;font-size:12px;line-height:1.6" class="muted">
+               No sections available.
+             </div>`;
+      }
+
+      // ---- the state ------------------------------------------------------
+      function permittedHtml(s) {
+        const head = `
+          <div class="glyph"><svg width="20" height="20"><use href="#${s.icon}"/></svg></div>
+          <h2>${s.label}</h2>
+          <p>Registered and gated. No handler yet.</p>`;
+
+        if (VARIANT === 'a') return `<div class="state">${head}</div>`;
+
+        if (VARIANT === 'b')
+          return `<div class="state">${head}
+            <div class="trace">
+              <div class="trace-head">authorization trace</div>
+              <dl>
+                <dt>subject</dt><dd>character:01JQ7X…8F2 <span class="muted">(player seanb)</span></dd>
+                <dt>action</dt><dd>read</dd>
+                <dt>resource</dt><dd>admin_section:${s.id}</dd>
+                <dt>policy</dt><dd>seed:admin-section-access</dd>
+                <dt>decision</dt><dd class="ok">PERMIT</dd>
+                <dt>handler</dt><dd>NOT_IMPLEMENTED</dd>
+              </dl>
+            </div>
+            <div class="sub">The gate ran <b>first</b> and permitted you. The section simply has no handler yet.</div>
+          </div>`;
+
+        return `<div class="state">${head}
+          ${
+            s.scope
+              ? `<div class="scope"><b>When this is built:</b> ${s.scope}</div>`
+              : `<div class="scope none"><b>No documented scope.</b> The SPEC does not say what will live in <code>${s.id}</code> — so anything written here would be invented. Five of the six planned sections are in this position.</div>`
+          }
+        </div>`;
+      }
+
+      // DECISION (maintainer, 2026-08-01): /admin is not shown at all to a viewer
+      // without permission — no rail icon, no nav entry — and a deep link is
+      // bounced. So a non-admin never reaches an in-frame "denied" panel; they
+      // land back in the app. Aligns with ROADMAP Ph6 SC5 ("the roles exposed on
+      // WebCheckSessionResponse change only what is drawn").
+      //
+      // The redirect is UX ONLY. Per §10.4 a route guard is "bypassable by any
+      // caller who skips the route", so the server-side ABAC gate remains the
+      // boundary and every admin RPC still denies on its own.
+      function nonAdminHtml() {
+        return `<div class="state">
+            <div class="glyph"><svg width="20" height="20"><use href="#i-hex"/></svg></div>
+            <h2>Page not found</h2>
+            <p>The page you're looking for doesn't exist.</p>
+            <div class="sub"><a style="color:var(--color-primary);text-decoration:none">← Back to HoloMUSH</a></div>
+          </div>
+
+          <div class="trace" style="max-width:560px">
+            <div class="trace-head">what actually happens</div>
+            <dl style="grid-template-columns:112px 1fr">
+              <dt>nav</dt><dd>Admin is <b>not drawn</b> — filtered from the registry contract, not a template <code>{#if}</code></dd>
+              <dt>deep link</dt><dd><code>/admin/moderation</code> renders the <b>same not-found</b> as <code>/blahblah</code></dd>
+              <dt>HTTP status</dt><dd class="muted">200 + <code>index.html</code> for <b>every</b> route — <code>adapter-static</code> uses <code>fallback: 'index.html'</code>, so a real 404 status does not exist here. "404" is client-rendered.</dd>
+              <dt>why not a redirect</dt><dd>a bounce to <code>/terminal</code> is a <b>distinctive</b> response — it confirms <code>/admin/*</code> is a real route family. Not-found is indistinguishable from any unknown path.</dd>
+              <dt>route guard</dt><dd class="muted">still UX only — §10.4: "bypassable by any caller who skips the route"</dd>
+              <dt>the boundary</dt><dd class="no">the ABAC gate on <code>admin_section:*</code>, which still denies every RPC</dd>
+            </dl>
+          </div>`;
+      }
+
+      function render() {
+        renderNav();
+        const s = sel();
+        const isAdmin = viewer() === 'admin';
+
+        // The Admin rail entry itself disappears for a non-admin.
+        document.getElementById('railadmin').style.display = isAdmin ? '' : 'none';
+        document.getElementById('railgroup').style.display = isAdmin ? '' : 'none';
+
+        document.getElementById('crumb').innerHTML = isAdmin
+          ? `<span>Admin</span><svg width="12" height="12"><use href="#i-chev"/></svg><b>${s.label}</b>`
+          : `<span class="mono" style="opacity:.6">/admin/${s.id}</span><svg width="12" height="12"><use href="#i-chev"/></svg><b>not found</b>`;
+
+        document.getElementById('statezone').innerHTML =
+          !isAdmin ? nonAdminHtml() : s.status === 'available'
+            ? `<div class="state"><div class="glyph"><svg width="20" height="20"><use href="#i-users"/></svg></div>
+                 <h2>Characters</h2><p>This section is <b>available</b> — it has a handler. See sketch 002 for its contents.</p></div>`
+            : permittedHtml(s);
+
+        document.getElementById('findingnote').innerHTML = isAdmin
+          ? `<b>Try the viewer switch.</b> Set <code>viewer: non-admin</code> to see what someone without permission gets: no rail icon, no nav, and a deep link that renders the ordinary not-found page.`
+          : `<b>⚠ Hiding the UI does not fix the §10.3 / §10.4 defect — it concentrates it.</b>
+             §10.3 requires a refusal to reveal nothing about which sections exist, but §10.4 defines <b>two distinct denial codes</b>:
+             <code>DENY_ADMIN_SECTION</code> (ABAC denied) and <code>DENY_ADMIN_SECTION_UNREGISTERED</code> (id not in the registry).
+             A caller who can tell them apart enumerates the registry by probing an arbitrary id against <code>moderation</code>.
+             Now that the nav is hidden and deep links bounce, <b>the only callers still reaching that denial path are the ones deliberately bypassing the UI</b> — which is to say, exactly the population the codes leak to.
+             §13 declares eight invariants and <b>none pins this</b>, though <code>INV-PRIVACY-9</code> does exactly this job for profiles. See the README (D1).`;
+      }
+
+      function setVariant(v, btn) {
+        VARIANT = v;
+        document.querySelectorAll('.variant-tab').forEach((t) => t.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      }
+      function setVp(px, btn) {
+        document.getElementById('vp').style.maxWidth = px ? px + 'px' : 'none';
+        document.querySelectorAll('#sketch-tools button').forEach((b) => b.classList.remove('on'));
+        btn.classList.add('on');
+      }
+
+      render();
+    </script>
+  </body>
+</html>

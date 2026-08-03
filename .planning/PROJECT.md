@@ -22,7 +22,8 @@ trusted identically by the host.
 
 ## Current State: v0.12 Foundation Hardening shipped (2026-07-28)
 
-**No milestone is currently active.** Define the next with `/gsd-new-milestone`.
+**Active milestone: v0.13 Web Portal — Identity & Admin Foundations** (started 2026-07-31; see
+`## Current Milestone` below).
 
 v0.12 made the v0.11 foundation durable. The world-model gap is closed by decision and by code: ADR
 `holomush-i4784` chose CRUD-canonical world state with optimistic concurrency and a transactional outbox,
@@ -84,6 +85,74 @@ feature-shaped Highs F5 no-movement (#4788) and F6 PWA/offline (#4803).
 
 </details>
 
+## Current Milestone: v0.13 Web Portal — Identity & Admin Foundations
+
+**Goal:** Give web players a complete character identity surface — creation, management, and public
+profiles with privacy — and stand up the admin portal shell that gives character administration a home,
+with both designed to absorb the deferred portal surfaces without rework.
+
+**Target features:**
+
+- **Portal design/spec phase (opens the milestone)** — produces the SPEC that this document's Out-of-Scope
+  entry for non-scene web-portal surfaces demanded as its precondition: admin-portal information
+  architecture with named slots for the deferred sections, character data model, per-field privacy model,
+  media-ready profile schema, and the full new RPC surface.
+- **Character creation + management UI** (backlog 999.1 / `holomush-qve.15`, non-roster) — plus the
+  missing RPC surface. *Corrected by research 2026-07-31:* the service layer is further along than the
+  kickoff assumed — `world.Service.UpdateCharacterDescription` (`internal/world/service.go:799`) and
+  `DeleteCharacter` (`:745`) already exist and are already ABAC-gated. The real gap is the proto/BFF RPC
+  surface plus **rename** and **soft-retire**. Retire MUST be modelled distinctly from purge and MUST NOT
+  release the name back to the pool (that would foreclose rostering, 999.6).
+- **Public character profiles + sheets** (`holomush-qve.9`) — profile page, sheet display, owner edit, and
+  per-field visibility. *Corrected by research 2026-07-31:* per-field privacy is largely **reuse, not
+  invention** — `entity_properties` already carries per-row `visibility`/`visible_to`/`excluded_from`
+  (`migrations/000001_baseline.up.sql:350-373`), resolved by `PropertyProvider`
+  (`attribute/property.go:61-147`) and governed by six seed policies (`seed.go:110-145`). Profile and
+  sheet are distinct: ship the split with the sheet **empty** (mechanical stats need a system that does
+  not exist yet). Storage shape for the 1-primary + 10-gallery media model is an OPEN QUESTION for the
+  SPEC phase — the research pass produced two incompatible answers (a new `character_profiles` table with
+  `media JSONB`, vs. `entity_properties` rows needing zero DDL) and it must be adjudicated, not averaged.
+- **Admin portal shell + character administration** (`holomush-qve.10`, subset) — `/admin` route,
+  `RoleAdmin`-gated nav, and the character admin surface (list/search, edit, delete/disable). The nav and
+  IA carry declared, empty room for stats, player management, moderation, audit viewer, config, and
+  plugin management.
+
+**Extensibility is a requirement, not a note.** The admin IA must ship a working "home" *plus* named room
+for the deferred sections, and the profile schema must accept the 1-primary + 10-gallery media model
+without a later migration. Both carry their own REQ-IDs so they cannot be quietly dropped during
+planning — this is the milestone's defining constraint, chosen deliberately at kickoff.
+
+**Explicitly deferred, and recorded:** roster integration (backlog 999.6 / `holomush-gloh` — `qve.15`'s
+bead names it as a dependency); avatar/blob storage (999.16); the remainder of the admin portal (999.8,
+partially consumed — shell only); and the rest of 999.1 (`qve.7` offline/PWA, `qve.8` wiki, `qve.17` web DMs).
+
+**Carried in from v0.12:** 3 open Broken Windows (#4861 `cmd/holomush` coverage floor, #4788 movement
+pipeline untested, #4864 yamlfmt block-scalar leak) block `/gsd-ship` until fixed or waived.
+
+**Pre-existing hazards this milestone must decide on (surfaced by the 2026-07-31 research pass, all
+verified in-tree — none are new defects introduced by v0.13, but v0.13 is the first work to load them):**
+
+- **`PlayerHasRole` is player-wide, not character-wide.** `internal/store/role_store.go:83-103` returns
+  true iff *any* character of the player holds the role, so a role on a throwaway alt confers it
+  everywhere (incl. `internal/admin/auth/ingame.go:116`). Any admin surface exposing role mutation is an
+  escalation vector until this is decided.
+- **Character name uniqueness has no database constraint** — check-then-insert races across
+  `internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`, with no
+  unique index and no `LOWER(name)` index (`000001_baseline.up.sql:68-76`), and normalization that does
+  no NFKC or confusable folding (`internal/world/validation.go:114-126`). Adding `Rename` doubles the
+  writers into that race.
+- **Rename/retire cannot reach denormalized history** — display names are copied into immutable event
+  payloads (`actor_display_name`) and `scene_log`, the latter served publicly via
+  `WebGetPublicSceneArchive`.
+- **Hard-delete is already broken** — `locations.owner_id`/`objects.owner_id` reference `characters(id)`
+  with no `ON DELETE` (baseline:99, 143), while `character_roles` cascades and silently drops roles.
+- **A public profile page is currently DENIED by default-deny** — `seed:player-character-colocation`
+  requires co-location. One new seed policy plus an audit of already-public character properties.
+- **`internal/web/` contains zero `RoleAdmin` references** — `/admin` is a net-new trust boundary with no
+  existing precedent or test coverage.
+- New mutation RPCs MUST carry `expected_version` (migration `000049`) and emit through the transactional
+  outbox in-transaction, or they silently regress v0.12's MODEL-03/04.
+
 ## Requirements
 
 ### Validated
@@ -140,12 +209,15 @@ feature-shaped Highs F5 no-movement (#4788) and F6 PWA/offline (#4803).
 
 ### Active
 
-<!-- Current GSD roadmap scope — milestone v0.12 Foundation Hardening. Detailed REQ-IDs + phase mapping: REQUIREMENTS.md / ROADMAP.md. -->
+<!-- Current GSD roadmap scope — milestone v0.13 Web Portal: Identity & Admin Foundations. Detailed REQ-IDs + phase mapping: REQUIREMENTS.md / ROADMAP.md. -->
 
-- [ ] Event-model direction decided (ADR: event sourcing vs. CRUD-with-guards), false event-sourcing docs corrected, last-write-wins version guards added, and dual-write non-atomicity addressed (F1 #4784, #4798)
-- [ ] Top operational failure modes reduced — gateway survival (#4785), events_audit retention (#4786), audit DLQ hardening (#4787), NATS CVE (#4790), resilience investigation (#4791)
-- [ ] CoreServer + plugin/manager god objects decomposed (999.9; Phase 8 — bootstrap/event-model/gateway-boundary portions of this item shipped in Phase 7, see Validated above)
-- [ ] Test/coverage/code health raised — coverage backfill (#4804), weak/skeleton tests remediated, ACE naming, de-slop, session-lifecycle matrix (999.10)
+- [ ] Web-portal SPEC produced — admin IA with named slots for deferred sections, character data model, per-field privacy model, media-ready profile schema, and the new RPC surface (satisfies the Out-of-Scope precondition below)
+- [ ] Character creation + management usable from the web — creation flow, rename/description/retire, backed by new core/world mutation RPCs (999.1 / `holomush-qve.15`, non-roster scope)
+- [ ] Public character profiles + sheets with per-field privacy and a public/private toggle; schema accommodates 1 primary + 10 gallery images without later migration (`holomush-qve.9`)
+- [ ] Admin portal shell at `/admin`, `RoleAdmin`-gated, housing character administration and carrying declared empty room for stats / player management / moderation / audit / config / plugin sections (`holomush-qve.10` subset)
+
+<!-- v0.12 residuals are NOT active roadmap scope; they are issue-tracked: #4860, #4861, #4792, #4875, #4876, #4880, #4881, #4882, #4883. -->
+
 
 ### Out of Scope
 
@@ -153,10 +225,15 @@ feature-shaped Highs F5 no-movement (#4788) and F6 PWA/offline (#4803).
   was explicitly lifted out 2026-07-03 pending a Forums epic design. Revisit once `holomush-djj` has a spec.
 - **Discord/Slack bridging + OAuth linking** (Epic 12) — depends on Channels (Active, above) shipping first,
   plus an OAuth substrate that does not yet exist. Not phase-able until both prerequisites land.
-- **Non-scene web-portal surfaces** (world/building editing, admin UI) — `theme:web-portals`'s "web ⊇ telnet"
-  principle is directional strategy, not a bound invariant; most non-scene surfaces remain telnet/CLI-only.
-  Needs its own spec (`/gsd-spec-phase`) before it can be roadmapped — not fabricated here for lack of a
-  source SPEC.
+- **Non-scene web-portal surfaces** — *partially reversed 2026-07-31 for v0.13.* The original entry deferred
+  every non-scene surface because none had a source SPEC ("needs its own spec (`/gsd-spec-phase`) before it
+  can be roadmapped — not fabricated here"). v0.13 satisfies that precondition rather than waiving it: its
+  opening phase **produces** the portal SPEC, and only then builds character identity (creation/management,
+  profiles) and the admin shell + character administration. Still out of scope and still SPEC-less:
+  **world/building editing**, the remaining admin sections (stats, player management, moderation, audit
+  viewer, config editor, plugin management — 999.8), the wiki portal (`qve.8`), offline/PWA (`qve.7`), and
+  web DMs (`qve.17`). `theme:web-portals`'s "web ⊇ telnet" principle remains directional strategy, not a
+  bound invariant.
 - **Locations-table scene model** (`docs/specs/2026-01-22-world-model-design.md` scene section) — superseded
   by the plugin-owned `core-scenes` model (see Key Decisions). Historical only; do not resurrect.
 - **Command-path-only structural scene writes** (E9.5 decision D4, "no new write RPCs") — superseded by the
@@ -286,4 +363,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-07-28 — v0.12 Foundation Hardening shipped and archived (6 phases, 66 plans, 15/19 requirements; `override_closeout`). No milestone active. `.planning/ROADMAP.md` remains the source of truth for phase status; `milestones/v0.12-MILESTONE-AUDIT.md` records what shipped, what was deferred, and why.*
+*Last updated: 2026-07-31 — milestone v0.13 Web Portal: Identity & Admin Foundations started (promoted from backlog 999.1, identity + admin-shell subset; `/gsd-new-milestone`). v0.12 Foundation Hardening shipped and archived 2026-07-28 (6 phases, 66 plans, 15/19 requirements; `override_closeout`). `.planning/ROADMAP.md` remains the source of truth for phase status; `milestones/v0.12-MILESTONE-AUDIT.md` records what shipped, what was deferred, and why.*

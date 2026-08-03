@@ -4,23 +4,32 @@
 package store
 
 import (
+	"context"
+	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"math"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	// Register pgx/v5 database driver for golang-migrate.
-	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
+	// Register the pgx/v5 database/sql driver under the name "pgx".
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 	"github.com/samber/oops"
 )
 
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
+
+// pingTimeout bounds the connectivity check in NewMigrator so a bad DSN or an
+// unreachable host fails fast with MIGRATION_INIT_FAILED rather than hanging.
+const pingTimeout = 5 * time.Second
 
 // Cached migration versions - computed once since embedded FS is immutable.
 var (
@@ -36,59 +45,111 @@ var (
 	cachedNamesErr  error
 )
 
-// migrateIface abstracts golang-migrate for testing. The real golang-migrate
-// library requires a database connection, making unit tests slow and brittle.
-// This interface allows mocking migration operations without a database.
-type migrateIface interface {
-	Up() error
-	Down() error
-	Steps(n int) error
-	Migrate(version uint) error
-	Version() (version uint, dirty bool, err error)
-	Force(version int) error
-	Close() (source error, database error)
+// provIface abstracts the subset of the goose *Provider method set this package
+// uses, so unit tests can exercise Migrator without a database. It is the direct
+// successor to the golang-migrate-era migrateIface seam and exists for the same
+// reason: a real provider requires a live connection, which makes unit tests slow
+// and brittle.
+type provIface interface {
+	Up(ctx context.Context) ([]*goose.MigrationResult, error)
+	UpByOne(ctx context.Context) (*goose.MigrationResult, error)
+	UpTo(ctx context.Context, version int64) ([]*goose.MigrationResult, error)
+	Down(ctx context.Context) (*goose.MigrationResult, error)
+	DownTo(ctx context.Context, version int64) ([]*goose.MigrationResult, error)
+	GetDBVersion(ctx context.Context) (int64, error)
+	Status(ctx context.Context) ([]*goose.MigrationStatus, error)
+	Close() error
 }
 
-// Migrator wraps golang-migrate for database schema management.
+// Migrator wraps goose for database schema management.
 //
 // IMPORTANT: Migrator is NOT safe for concurrent use. Each instance
 // should be used from a single goroutine and must not be copied.
 // For concurrent scenarios, create separate Migrator instances.
 type Migrator struct {
-	m migrateIface
+	m provIface
+
+	// db is the same handle the goose provider was built on. It is held so the
+	// adopt gate can take a session advisory lock and run its transaction on a
+	// pinned connection. Unit tests construct a Migrator around a mock provider
+	// and leave this nil, in which case adopt has nothing to inspect and no-ops.
+	db *sql.DB
 }
 
 // NewMigrator creates a new Migrator instance.
-// The databaseURL should be a PostgreSQL connection string with either
-// postgres:// or pgx5:// scheme. The function automatically converts
-// postgres:// to pgx5:// for golang-migrate compatibility.
+//
+// The databaseURL is a PostgreSQL connection string; both postgres:// and
+// postgresql:// are accepted natively by the pgx/v5 driver. The golang-migrate-era
+// rewrite to a pgx5:// scheme is gone — goose talks to a plain *sql.DB.
+//
+// Cross-process serialization is provided by goose's PostgreSQL session-advisory-lock
+// locker, so two binaries starting at once cannot interleave migrations.
 func NewMigrator(databaseURL string) (*Migrator, error) {
-	source, err := iofs.New(migrationsFS, "migrations")
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
-		return nil, oops.Code("MIGRATION_SOURCE_FAILED").With("operation", "create migration source").Wrap(err)
+		return nil, oops.Code("MIGRATION_INIT_FAILED").With("operation", "open database").Wrap(err)
 	}
 
-	// Convert postgres:// or postgresql:// to pgx5:// for golang-migrate pgx/v5 driver.
-	// The pgx/v5 driver expects the pgx5:// scheme.
-	migrateURL := databaseURL
-	if rest, found := strings.CutPrefix(databaseURL, "postgres://"); found {
-		migrateURL = "pgx5://" + rest
-	} else if rest, found := strings.CutPrefix(databaseURL, "postgresql://"); found {
-		migrateURL = "pgx5://" + rest
+	// sql.Open is lazy: it validates nothing. Ping so an unusable DSN fails here,
+	// where callers already expect MIGRATION_INIT_FAILED, rather than at first use.
+	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
+	defer cancel()
+	if pingErr := db.PingContext(ctx); pingErr != nil {
+		_ = db.Close() //nolint:errcheck // cleanup on the init error path; init error takes precedence
+		return nil, oops.Code("MIGRATION_INIT_FAILED").With("operation", "connect to database").Wrap(pingErr)
 	}
 
-	m, err := migrate.NewWithSourceInstance("iofs", source, migrateURL)
+	// goose globs *.sql at the ROOT of the fsys it is handed and does not recurse,
+	// so the embedded FS must be re-rooted at migrations/. Handing it migrationsFS
+	// directly yields a silent ErrNoMigrations.
+	sub, err := fs.Sub(migrationsFS, "migrations")
 	if err != nil {
-		_ = source.Close() //nolint:errcheck // cleanup for embedded FS; init error takes precedence
+		_ = db.Close() //nolint:errcheck // cleanup on the init error path; init error takes precedence
+		return nil, oops.Code("MIGRATION_SOURCE_FAILED").With("operation", "sub migrations fs").Wrap(err)
+	}
+
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		_ = db.Close() //nolint:errcheck // cleanup on the init error path; init error takes precedence
+		return nil, oops.Code("MIGRATION_INIT_FAILED").With("operation", "create session locker").Wrap(err)
+	}
+
+	// WithVerbose(true) is required alongside WithSlog: Provider.logf returns
+	// immediately when verbose is false, so the logger would never be called.
+	provider, err := goose.NewProvider(
+		goose.DialectPostgres,
+		db,
+		sub,
+		goose.WithSessionLocker(locker),
+		goose.WithSlog(slog.Default()),
+		goose.WithVerbose(true),
+	)
+	if err != nil {
+		_ = db.Close() //nolint:errcheck // cleanup on the init error path; init error takes precedence
 		return nil, oops.Code("MIGRATION_INIT_FAILED").With("operation", "initialize migrator").Wrap(err)
 	}
 
-	return &Migrator{m: m}, nil
+	return &Migrator{m: provider, db: db}, nil
 }
 
 // Up applies all pending migrations.
+//
+// Up fires the one-shot cutover from golang-migrate bookkeeping to goose
+// bookkeeping, as does every other entry point that migrates UPWARD (Steps with a
+// positive n, and Migrate). The read-only verbs deliberately do not: a diagnostic
+// run to decide whether to deploy must not itself perform the deploy's
+// irreversible step. See adoptFromGolangMigrate.
 func (m *Migrator) Up() error {
-	if err := m.m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+	ctx := context.Background()
+
+	// Returned unwrapped on purpose. The adopt errors already carry their own
+	// MIGRATION_ADOPT_* codes, and re-wrapping in MIGRATION_UP_FAILED would replace
+	// the top-level code that callers and tests assert on with a generic one.
+	if err := m.adoptFromGolangMigrate(ctx); err != nil {
+		return err
+	}
+
+	if _, err := m.m.Up(ctx); err != nil {
 		return oops.Code("MIGRATION_UP_FAILED").Wrap(err)
 	}
 	return nil
@@ -97,16 +158,58 @@ func (m *Migrator) Up() error {
 // Down rolls back all migrations to version 0, effectively removing all schema objects.
 // WARNING: This is a destructive operation that drops all tables and data.
 func (m *Migrator) Down() error {
-	if err := m.m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+	if _, err := m.m.DownTo(context.Background(), 0); err != nil {
 		return oops.Code("MIGRATION_DOWN_FAILED").Wrap(err)
 	}
 	return nil
 }
 
 // Steps applies n migrations. Positive n migrates up, negative n migrates down.
+// Steps(0) is a no-op.
+//
+// goose's ErrNoNextVersion (nothing left to apply or roll back) is the analogue of
+// golang-migrate's ErrNoChange, which this wrapper has always treated as success —
+// the CLI's `migrate down` relies on it to print "already at version N" rather than
+// failing when the database is already at zero.
+//
+// A POSITIVE n fires the adopt gate first, exactly as Up does: it is an upward
+// migration path, not a diagnostic, and against a pre-adopt database goose would
+// otherwise read its empty ledger as version 0 and start re-applying migration 1
+// over a schema that is already fully present. A NEGATIVE n does not: rolling a
+// pre-adopt database back is not a supported operation, and firing an irreversible
+// forward cutover from a rollback request would be a surprise. See
+// adoptFromGolangMigrate.
 func (m *Migrator) Steps(n int) error {
-	if err := m.m.Steps(n); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return oops.Code("MIGRATION_STEPS_FAILED").With("steps", n).Wrap(err)
+	if n == 0 {
+		return nil
+	}
+	ctx := context.Background()
+
+	if n > 0 {
+		// Returned unwrapped, matching Up: the adopt errors carry their own
+		// MIGRATION_ADOPT_* codes and must not be masked by MIGRATION_STEPS_FAILED.
+		if err := m.adoptFromGolangMigrate(ctx); err != nil {
+			return err
+		}
+	}
+
+	count := n
+	if count < 0 {
+		count = -count
+	}
+	for range count {
+		var stepErr error
+		if n > 0 {
+			_, stepErr = m.m.UpByOne(ctx)
+		} else {
+			_, stepErr = m.m.Down(ctx)
+		}
+		if stepErr != nil {
+			if errors.Is(stepErr, goose.ErrNoNextVersion) {
+				return nil
+			}
+			return oops.Code("MIGRATION_STEPS_FAILED").With("steps", n).Wrap(stepErr)
+		}
 	}
 	return nil
 }
@@ -115,61 +218,78 @@ func (m *Migrator) Steps(n int) error {
 // higher, it runs down migrations; if lower, up migrations. This is more
 // stable than Steps(-N) for targeting a specific schema state because it
 // does not depend on knowing how many migrations exist above the target.
+//
+// Migrate fires the adopt gate BEFORE reading the current version, and the
+// ordering is the point: the direction is decided from that read. Against a
+// pre-adopt database an ungated read returns 0, so a request to move DOWN to a
+// target is mistaken for a request to move UP to it — the up branch then either
+// silently does nothing or re-applies migration 1 over a schema that already
+// carries it. Unlike Steps, Migrate cannot know it is a rollback until it has
+// looked, so the gate cannot be scoped to the upward branch. See
+// adoptFromGolangMigrate.
 func (m *Migrator) Migrate(version uint) error {
-	if err := m.m.Migrate(version); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+	ctx := context.Background()
+
+	// Returned unwrapped, matching Up: the adopt errors carry their own
+	// MIGRATION_ADOPT_* codes and must not be masked by MIGRATION_MIGRATE_FAILED.
+	if err := m.adoptFromGolangMigrate(ctx); err != nil {
+		return err
+	}
+
+	// uint is 64-bit on every platform this builds for, so a caller could in
+	// principle hand over a value with no int64 representation. Reject it rather
+	// than wrapping around into a negative target version, which DownTo would
+	// then reject with a far less obvious message.
+	if version > math.MaxInt64 {
+		return oops.Code("MIGRATION_MIGRATE_FAILED").
+			With("target_version", version).
+			Errorf("target version %d exceeds the maximum representable migration version", version)
+	}
+	target := int64(version)
+
+	current, err := m.m.GetDBVersion(ctx)
+	if err != nil {
 		return oops.Code("MIGRATION_MIGRATE_FAILED").With("target_version", version).Wrap(err)
+	}
+
+	switch {
+	case current < target:
+		if _, err := m.m.UpTo(ctx, target); err != nil {
+			return oops.Code("MIGRATION_MIGRATE_FAILED").With("target_version", version).Wrap(err)
+		}
+	case current > target:
+		if _, err := m.m.DownTo(ctx, target); err != nil {
+			return oops.Code("MIGRATION_MIGRATE_FAILED").With("target_version", version).Wrap(err)
+		}
 	}
 	return nil
 }
 
-// Version returns the current migration version and dirty state.
-// A dirty state indicates a migration failed partway through and requires manual intervention.
-// Returns version 0 with dirty=false if no migrations have been applied.
+// Version returns the current migration version.
+//
+// The second return value is always false: goose has no dirty state. It commits a
+// migration's body and its version row in one transaction, so the partially-applied
+// condition golang-migrate's dirty flag reported cannot arise. The value is retained
+// this release so the ~25 existing call sites and the CLI keep compiling; callers
+// should not branch on it.
+//
+// Returns version 0 when no migrations have been applied.
 func (m *Migrator) Version() (version uint, dirty bool, err error) {
-	version, dirty, err = m.m.Version()
-	if errors.Is(err, migrate.ErrNilVersion) {
-		return 0, false, nil
-	}
+	v, err := m.m.GetDBVersion(context.Background())
 	if err != nil {
 		return 0, false, oops.Code("MIGRATION_VERSION_FAILED").Wrap(err)
 	}
-	return version, dirty, nil
+	if v < 0 {
+		return 0, false, nil
+	}
+	return uint(v), false, nil
 }
 
-// Force sets the migration version without running migrations.
-// Use only for recovering from a dirty state after manually fixing the database.
-// Version must be non-negative; negative values are rejected with INVALID_VERSION error.
-// WARNING: Setting an incorrect version causes the migrator to skip migrations
-// (if too high) or re-run already-applied migrations (if too low), potentially
-// causing data loss or duplicate data.
-//
-// NOTE: The CLI also validates version (defense-in-depth). This store-layer check is
-// authoritative and ensures the invariant holds regardless of entry point.
-func (m *Migrator) Force(version int) error {
-	// Defense-in-depth: CLI also validates, but we enforce here as the authoritative layer.
-	if version < 0 {
-		return oops.Code("INVALID_VERSION").Errorf("version must be non-negative, got %d", version)
-	}
-	if err := m.m.Force(version); err != nil {
-		return oops.Code("MIGRATION_FORCE_FAILED").With("version", version).Wrap(err)
-	}
-	return nil
-}
-
-// Close releases resources.
+// Close releases the database connection held by the migrator.
+// It is safe to call more than once.
 func (m *Migrator) Close() error {
-	srcErr, dbErr := m.m.Close()
-	if srcErr != nil && dbErr != nil {
-		// Both failed - combine errors so neither is lost in logs
-		return oops.Code("MIGRATION_CLOSE_FAILED").
-			With("component", "both").
-			Errorf("source: %v; database: %v", srcErr, dbErr)
-	}
-	if srcErr != nil {
-		return oops.Code("MIGRATION_CLOSE_FAILED").With("component", "source").Wrap(srcErr)
-	}
-	if dbErr != nil {
-		return oops.Code("MIGRATION_CLOSE_FAILED").With("component", "database").Wrap(dbErr)
+	if err := m.m.Close(); err != nil {
+		return oops.Code("MIGRATION_CLOSE_FAILED").With("component", "database").Wrap(err)
 	}
 	return nil
 }
@@ -194,8 +314,8 @@ func allMigrationVersions() ([]uint, error) {
 // Design note: Malformed filenames are logged and skipped rather than causing failures.
 // This is intentional - we don't want to fail on unexpected files in the embedded FS
 // (e.g., .gitkeep, editor temp files that might slip through). The embedded migrations
-// are validated at compile time by TestMigrationsFS_EmbeddedFiles in migrate_embed_test.go,
-// which ensures all files follow the NNNNNN_name.(up|down).sql pattern.
+// are validated at compile time by the filename meta-test in migrate_embed_test.go,
+// which ensures all files follow the NNNNNN_name.sql pattern.
 func loadMigrationVersions() ([]uint, error) {
 	entries, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
@@ -205,8 +325,8 @@ func loadMigrationVersions() ([]uint, error) {
 	versionSet := make(map[uint]struct{})
 	for _, entry := range entries {
 		name := entry.Name()
-		// Parse version from filename (e.g., "000003_foo.up.sql" -> 3)
-		if !strings.HasSuffix(name, ".up.sql") {
+		// Parse version from filename (e.g., "000003_foo.sql" -> 3)
+		if !strings.HasSuffix(name, ".sql") {
 			continue
 		}
 		var version uint
@@ -218,7 +338,7 @@ func loadMigrationVersions() ([]uint, error) {
 			// 3. Adding logger DI would require threading it through multiple layers
 			slog.Warn("migration file name doesn't match expected format, skipping",
 				"filename", name,
-				"expected_format", "NNNNNN_name.up.sql",
+				"expected_format", "NNNNNN_name.sql",
 				"error", err)
 			continue
 		}
@@ -243,15 +363,15 @@ func loadMigrationNames() (map[uint]string, error) {
 	names := make(map[uint]string)
 	for _, entry := range entries {
 		name := entry.Name()
-		if !strings.HasSuffix(name, ".up.sql") {
+		if !strings.HasSuffix(name, ".sql") {
 			continue
 		}
 		var version uint
 		if _, err := fmt.Sscanf(name, "%06d", &version); err != nil {
 			continue // Skip malformed files (same behavior as loadMigrationVersions)
 		}
-		// Store name without .up.sql suffix
-		names[version] = strings.TrimSuffix(name, ".up.sql")
+		// Store name without the .sql suffix
+		names[version] = strings.TrimSuffix(name, ".sql")
 	}
 	return names, nil
 }

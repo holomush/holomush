@@ -13,9 +13,10 @@ setup, migrations, and maintenance.
 
 ## Database Migrations
 
-HoloMUSH uses [golang-migrate](https://github.com/golang-migrate/migrate) for
-schema management. Migrations are embedded in the binary and run automatically
-on startup, or can be managed manually.
+HoloMUSH uses [goose](https://github.com/pressly/goose) for schema management.
+Migrations are embedded in the binary and run automatically on startup, or can
+be managed manually. Applied versions are recorded in the `goose_db_version`
+table.
 
 ### Running Migrations
 
@@ -31,10 +32,12 @@ holomush migrate status
 
 # Rollback one migration
 holomush migrate down
-
-# Force version (for dirty state recovery)
-holomush migrate force 7
 ```
+
+There is no version-forcing command. goose applies a migration's body and writes
+its `goose_db_version` row inside the **same transaction**, so a migration either
+applies and is recorded or does neither. The half-applied, half-recorded state
+that a force command existed to repair cannot arise.
 
 ### Automatic Migrations
 
@@ -53,15 +56,58 @@ holomush migrate up
 
 For creating new migration files, see the [Contributing Guide](/contributing/reference/coding-standards/).
 
-### Bootstrapping Existing Databases
+### First boot after the goose cutover
 
-If migrating from an older HoloMUSH version with an existing schema:
+Databases whose bookkeeping was written by the previous migration tooling
+(golang-migrate, table `schema_migrations`) are adopted **automatically** the
+first time the new binary runs `holomush migrate up` — including the startup
+auto-migration. There is no script to run and no flag to set.
 
-```bash
-psql -d holomush -f scripts/bootstrap-migrations.sql
-```
+Inside a single transaction, guarded by a Postgres advisory lock, the adopt gate:
 
-This marks all migrations as applied without running them.
+1. Seeds `goose_db_version` with one row per migration the old ledger recorded as
+   applied, in ascending version order, **plus goose's own version-0 bootstrap
+   row** — so a fully-migrated database ends up with **45 rows** (44 migrations
+   at `version_id > 0`, and the version-0 row).
+2. Renames `schema_migrations` to `schema_migrations_pre_goose`, keeping the
+   forensic record of the version cut over from.
+
+This write is **unattended and one-way**. There is no undo command; the only
+rollback is the surgical procedure in
+[Restoring a Postgres Backup](/operating/how-to/sandbox/sandbox-restore/), and it
+is valid for one deploy window only. **Rehearse the cutover first** using the
+pre-deploy rehearsal in that same document — the adopt gate trusts the recorded
+version and performs no schema verification, so a rehearsal against restored real
+data is the only place schema drift would surface.
+
+If the old ledger is marked **dirty**, adopt refuses and aborts boot rather than
+recording a partially-applied migration as applied. Resolve the dirty version
+with the previous tooling before deploying the new binary.
+
+#### `migrate status` before the cutover reports version 0
+
+On a database that has not yet been adopted, `holomush migrate status` and
+`holomush migrate version` report **version 0 with 44 pending migrations** —
+every migration appearing unapplied. This is expected, not data loss: adopt runs
+only from the upward migration paths, so goose's ledger is still empty when a
+read-only verb inspects it. The first `holomush migrate up` (or the startup
+auto-migration) corrects the reading.
+
+Running `status` first is **safe**. It creates an empty ledger as a side effect,
+and the adopt gate seeds that ledger rather than mistaking it for a completed
+cutover. A diagnostic never triggers the irreversible write.
+
+`holomush migrate up --dry-run` is the exception among the read-only verbs: it
+detects the pre-adopt state and reports the cutover rather than goose's empty
+ledger. Against a not-yet-adopted database it prints the version the old ledger
+records, states that `migrate up` will adopt it, and lists only the migrations
+that sit **above** that version — which for a fully-migrated database is none. If
+the old ledger is dirty it says so, and that the deploy will refuse. It is still a
+diagnostic: it writes nothing and adopts nothing.
+
+> The legacy `scripts/bootstrap-migrations.sql` is superseded and no longer
+> runnable. Do not look for a hand-run adopt path — the automatic gate above is
+> the only one.
 
 ## Connection Configuration
 
@@ -105,16 +151,21 @@ pg_restore -d holomush_restored holomush_backup.dump
 
 ## Troubleshooting
 
-### Dirty Migration State
+### A Migration Failed Partway Through
 
-If a migration fails partway through, the database may be in a "dirty" state:
+It did not. goose runs each migration's statements and the write of its
+`goose_db_version` row in one transaction, so a failing migration rolls back
+whole and is not recorded. Fix the migration (or the database condition it
+tripped over) and re-run `holomush migrate up`; the failed version is still
+pending.
+
+The one exception is a migration explicitly marked `-- +goose NO TRANSACTION`,
+which some Postgres statements require (for example `CREATE INDEX CONCURRENTLY`).
+Those are not atomic by construction. Inspect the schema and re-run.
 
 ```bash
-# Check current state
+# See which versions are applied and which are pending
 holomush migrate status
-
-# If dirty, fix manually then force version
-holomush migrate force 6
 ```
 
 ### Connection Issues
@@ -137,16 +188,94 @@ Migration commands return structured error codes to help diagnose issues.
 
 ### Migration Errors
 
-| Code                       | Meaning                                      | Common Causes                                       | Remediation                                                          |
-| -------------------------- | -------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------- |
-| `MIGRATION_SOURCE_FAILED`  | Failed to read embedded migration files      | Corrupted binary, missing migrations                | Rebuild the binary                                                   |
-| `MIGRATION_INIT_FAILED`    | Failed to connect to database for migrations | Invalid DATABASE_URL, database offline              | Check connection string, verify PostgreSQL is running                |
-| `MIGRATION_UP_FAILED`      | Failed to apply pending migrations           | SQL syntax error, constraint violation, dirty state | Check migration SQL, resolve conflicts, use `migrate force` if dirty |
-| `MIGRATION_DOWN_FAILED`    | Failed to rollback migrations                | SQL error in down migration, missing table          | Check down migration SQL, verify schema state                        |
-| `MIGRATION_STEPS_FAILED`   | Failed to apply/rollback specific steps      | Same as UP/DOWN errors                              | Check specific migration file                                        |
-| `MIGRATION_VERSION_FAILED` | Failed to read current version               | Database connection lost, schema_migrations missing | Check connection, run bootstrap if needed                            |
-| `MIGRATION_FORCE_FAILED`   | Failed to force-set version                  | Database connection lost                            | Check connection                                                     |
-| `MIGRATION_CLOSE_FAILED`   | Failed to close migrator cleanly             | Connection already closed                           | Usually safe to ignore                                               |
+| Code                       | Meaning                                      | Common Causes                                  | Remediation                                                    |
+| -------------------------- | -------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------- |
+| `MIGRATION_SOURCE_FAILED`  | Failed to read embedded migration files      | Corrupted binary, missing migrations           | Rebuild the binary                                             |
+| `MIGRATION_INIT_FAILED`    | Failed to connect to database for migrations | Invalid DATABASE_URL, database offline         | Check connection string, verify PostgreSQL is running          |
+| `MIGRATION_UP_FAILED`      | Failed to apply pending migrations           | SQL syntax error, constraint violation         | Fix the migration SQL or the blocking condition and re-run `migrate up`; the failed version rolled back and is still pending |
+| `MIGRATION_DOWN_FAILED`    | Failed to rollback migrations                | SQL error in down migration, missing table     | Check down migration SQL, verify schema state                  |
+| `MIGRATION_STEPS_FAILED`   | Failed to apply/rollback specific steps      | Same as UP/DOWN errors                         | Check specific migration file                                  |
+| `MIGRATION_VERSION_FAILED` | Failed to read current version               | Database connection lost, `goose_db_version` unreadable | Check connection and that the migration user can read `goose_db_version` |
+| `MIGRATION_CLOSE_FAILED`   | Failed to close migrator cleanly             | Connection already closed                      | Usually safe to ignore                                         |
+
+### Cutover (Adopt) Errors
+
+These fire only during the one-shot adoption of a pre-goose database, from
+`holomush migrate up` (including the startup auto-migration). None of them can
+leave the bookkeeping half-written: the whole adopt runs in one transaction.
+
+| Code                            | Meaning                                                | Common Causes                                            | Remediation                                                                                                                                          |
+| ------------------------------- | ------------------------------------------------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MIGRATION_ADOPT_REFUSED_DIRTY` | The old ledger is marked dirty; adopt refused to seed  | A previous migration failed partway under the old tooling | The database was left dirty by the **old** tooling. Resolve that version with the old binary before deploying this one — the new binary deliberately refuses rather than recording a partially-applied migration as applied. The error names the version. |
+| `MIGRATION_ADOPT_REFUSED_AMBIGUOUS_LEDGER` | `schema_migrations` holds more than one row; adopt refused to pick one | A partial restore, a merged dump, or a manual repair of the old ledger | golang-migrate maintains exactly one row, so the recorded version is ambiguous and adopt will not guess. Nothing was written and nothing was archived. See [`schema_migrations` holding more than one row](#schema_migrations-holding-more-than-one-row). |
+| `MIGRATION_ADOPT_LOCK_FAILED`   | Could not acquire the advisory lock guarding the adopt | Connection lost, another replica holding the lock         | Retry. If it persists, check for a stuck session holding a Postgres advisory lock.                                                                   |
+| `MIGRATION_ADOPT_PROBE_FAILED`  | Could not read the existing bookkeeping tables         | Connection lost, insufficient privileges, or `schema_migrations` exists but holds no rows | Read the `operation` field in the error first — it names which probe failed. `probe bookkeeping tables` or `probe goose bookkeeping`: verify the migration user can read `schema_migrations` and `goose_db_version`. `read legacy version`: those reads worked and the legacy ledger came back empty — see [An empty `schema_migrations` aborts the adopt](#an-empty-schema_migrations-aborts-the-adopt). |
+| `MIGRATION_ADOPT_SEED_FAILED`   | Could not write the seeded `goose_db_version` rows     | Connection lost, insufficient privileges                  | Nothing was written — the transaction rolled back. Fix the cause and re-run `migrate up`.                                                             |
+| `MIGRATION_ADOPT_RENAME_FAILED` | Could not rename `schema_migrations`                   | A `schema_migrations_pre_goose` table already exists      | Nothing was written. Inspect both tables; a pre-existing `schema_migrations_pre_goose` means an adopt was already attempted.                          |
+
+#### An empty `schema_migrations` aborts the adopt
+
+A `schema_migrations` table that **exists with zero rows** aborts boot with
+`MIGRATION_ADOPT_PROBE_FAILED` and `operation: read legacy version`. The privilege
+and connectivity checks above will both pass, which is what makes this one
+confusing: nothing is wrong with the connection or the grants.
+
+The adopt reads golang-migrate's single bookkeeping row to learn which version to
+seed from. An empty table returns no row, so there is nothing to seed from and the
+cutover refuses. The refusal is fail-closed and complete — no `goose_db_version`
+rows were written, and `schema_migrations` was **not** renamed to
+`schema_migrations_pre_goose`. The database is exactly as it was found, so it is
+safe to inspect before acting.
+
+The state is reachable: golang-migrate creates its version table before applying
+anything, so a pre-cutover deploy that crashed or was aborted before its first
+migration leaves the table present and empty.
+
+Confirm the cause, then check whether the database actually carries pre-goose
+schema:
+
+```sql
+SELECT count(*) FROM schema_migrations;              -- expect 0
+SELECT to_regclass('public.players') IS NOT NULL;    -- any pre-goose table
+```
+
+| `players` (or another pre-goose table) | What it means                                                              | Action                                                                                                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| absent                                 | The aborted-deploy case: the ledger was created but no migration ever ran   | `DROP TABLE schema_migrations;` then re-run `migrate up`. With no legacy table the adopt takes its fresh-database path and goose applies every migration from scratch. |
+| present                                | The ledger was truncated or lost while the schema it described still exists | Do **not** drop the table — goose would replay migrations onto a populated schema. Restore the correct `version` / `dirty` row with the old tooling, then re-run `migrate up`. |
+
+#### `schema_migrations` holding more than one row
+
+A `schema_migrations` table holding two or more rows aborts boot with
+`MIGRATION_ADOPT_REFUSED_AMBIGUOUS_LEDGER`. golang-migrate truncates and
+re-inserts its bookkeeping inside one transaction, so it maintains exactly one
+row; more than one means the table was assembled by something else — a partial
+restore, a dump merged into a live database, or a hand repair.
+
+Adopt refuses instead of choosing because the recorded version is the **only**
+input to the cutover and the cutover performs no schema verification. Picking the
+wrong row would record migrations as applied that never ran, archive the evidence
+by renaming the table, and leave a divergence goose has no way to detect
+afterwards.
+
+The refusal is complete: no `goose_db_version` rows were written and
+`schema_migrations` was **not** renamed, so the table is exactly as it was found.
+
+```sql
+SELECT version, dirty FROM schema_migrations ORDER BY version DESC;
+```
+
+Decide which row describes the schema this database actually carries — spot-check
+a table or column introduced by a migration between the two versions — then leave
+that row alone:
+
+```sql
+DELETE FROM schema_migrations WHERE version <> <the correct version>;
+```
+
+Re-run `migrate up` afterwards. If you cannot tell which row is correct, restore
+from a backup rather than guessing; the same reasoning that makes adopt refuse
+applies to the operator.
 
 ### CLI Errors
 
@@ -154,7 +283,6 @@ Migration commands return structured error codes to help diagnose issues.
 | -------------------------------- | ------------------------------------------ | -------------------------------------------- | ---------------------------------------------- |
 | `MIGRATION_VERSION_CHECK_FAILED` | Migration applied but version check failed | Database connection dropped during operation | Run `migrate status` to verify actual state    |
 | `CONFIG_INVALID`                 | Missing required configuration             | DATABASE_URL not set                         | Set DATABASE_URL environment variable          |
-| `INVALID_VERSION`                | Invalid version number for force command   | Non-integer input, negative number           | Use positive integer (e.g., `migrate force 6`) |
 
 ### Reading Error Output
 

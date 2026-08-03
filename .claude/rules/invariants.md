@@ -13,6 +13,7 @@ paths:
   - "internal/invregistry/**"
   - "docs/specs/**/*.md"
   - "docs/superpowers/specs/**/*.md"
+  - ".planning/phases/**/*-SPEC.md"
 ---
 
 # Invariant Registry
@@ -86,5 +87,9 @@ An invariant is only *proven* when a test asserts it. The mechanism:
 
 The orphan check walks only `docs/superpowers/specs/`; invariants introduced
 in `docs/specs/` or code MUST be registered by hand.
+
+A GSD milestone SPEC under `.planning/phases/**/*-SPEC.md` is likewise outside
+that walk root, so its `INV-<SCOPE>-N` ids are **not** auto-caught and MUST be
+hand-registered in `docs/architecture/invariants.yaml`.
 
 Deep reference: `.claude/rules/references/invariants-detail.md` (read on demand).

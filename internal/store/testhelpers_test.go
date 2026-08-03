@@ -57,10 +57,20 @@ func newPoolFromConnStr(t *testing.T, connStr string) *pgxpool.Pool {
 }
 
 // runMigrations applies migrations up/down to targetVersion against the pool's
-// database via store.NewMigrator (golang-migrate). The ctx parameter is accepted
-// for call-site symmetry; golang-migrate's Migrate does not take a context.
+// database via store.NewMigrator (goose).
+//
+// ctx is load-bearing rather than decorative: it bounds the pre-flight
+// reachability check, so a caller whose deadline has already expired fails here
+// with its own context error instead of blocking on a migration run it can no
+// longer use. It does NOT bound the migration itself — store.Migrator's method
+// set is deliberately context-free (see internal/store/migrate.go), and giving
+// it one is a production-surface change, not a test-helper change.
+//
+// The signature is fixed by ~12 call sites; do not reorder or rename it.
 func runMigrations(ctx context.Context, pool *pgxpool.Pool, targetVersion uint) error {
-	_ = ctx
+	if err := pool.Ping(ctx); err != nil {
+		return err
+	}
 	connStr := pool.Config().ConnConfig.ConnString()
 	migrator, err := store.NewMigrator(connStr)
 	if err != nil {

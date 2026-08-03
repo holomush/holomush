@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sketch 010 — The Ordinary Not-Found</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      body { padding-top: 68px; }
+
+      #variant-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 12px;
+        background: #07080a; border-bottom: 1px solid var(--color-border);
+      }
+      #variant-nav .lbl { font-family: var(--font-mono); font-size: 10.5px; color: var(--color-status-text); margin-right: 6px; }
+      .variant-tab {
+        height: 26px; padding: 0 10px; border-radius: 5px; border: 1px solid var(--color-border);
+        background: transparent; color: var(--color-muted-foreground); font-family: inherit; font-size: 12px; cursor: pointer;
+      }
+      .variant-tab:hover { background: var(--color-secondary); color: var(--color-foreground); }
+      .variant-tab.active {
+        background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent); color: var(--color-primary);
+      }
+      .statepick {
+        height: 26px; border-radius: 5px; border: 1px solid var(--color-border); background: #101418;
+        color: var(--color-muted-foreground); font-family: inherit; font-size: 11.5px; padding: 0 6px; max-width: 330px;
+      }
+      .cmp {
+        display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 5px;
+        border: 1px solid var(--color-border); font-size: 11.5px; color: var(--color-muted-foreground);
+        cursor: pointer; user-select: none;
+      }
+      .cmp.on { color: var(--color-primary); border-color: color-mix(in srgb, var(--color-primary) 45%, transparent); background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
+
+      .stage { display: flex; gap: 12px; padding: 14px; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+      .frame {
+        flex: 1 1 330px; max-width: 520px; min-width: 300px; display: flex; flex-direction: column;
+        border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; background: var(--color-background);
+      }
+      .frame.match { border-color: color-mix(in srgb, #7fd98f 45%, transparent); }
+      .framehead {
+        display: flex; align-items: center; gap: 7px; padding: 7px 11px; font-size: 10.5px;
+        background: #07080a; border-bottom: 1px solid var(--color-border);
+        color: var(--color-status-text); font-family: var(--font-mono); white-space: nowrap; overflow: hidden;
+      }
+      .framehead .path { color: var(--color-muted-foreground); overflow: hidden; text-overflow: ellipsis; }
+      .hash { margin-left: auto; font-size: 9.5px; opacity: .8; }
+      .hash.same { color: #7fd98f; }
+
+      .pubbar {
+        display: flex; align-items: center; gap: 10px; padding: 0 13px; height: var(--topbar-h); flex-shrink: 0;
+        border-bottom: 1px solid var(--color-border); background: var(--color-surface);
+      }
+      .pubbar .right { margin-left: auto; display: flex; gap: 6px; }
+      .shellrow { display: flex; flex: 1; min-height: 0; }
+      .rail {
+        width: var(--rail-w); flex-shrink: 0; background: var(--color-sidebar-background);
+        border-right: 1px solid var(--color-border); display: flex; flex-direction: column;
+        align-items: center; padding: 7px 0; gap: 4px;
+      }
+      .rail-btn {
+        width: 32px; height: 32px; border-radius: 7px; border: none; background: transparent;
+        color: var(--color-muted-foreground); display: flex; align-items: center; justify-content: center;
+      }
+      .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+      .nf { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 9px; padding: 52px 20px; }
+      .nf .glyph {
+        width: 46px; height: 46px; border-radius: 11px; display: flex; align-items: center; justify-content: center;
+        background: var(--color-secondary); color: var(--color-status-text); border: 1px solid var(--color-border);
+      }
+      .nf h2 { margin: 0; font-size: 16px; font-weight: 600; }
+      .nf p { margin: 0; font-size: 12.5px; color: var(--color-status-text); max-width: 34ch; line-height: 1.6; }
+      .btn {
+        height: 30px; padding: 0 13px; border-radius: 6px; border: 1px solid var(--color-border);
+        background: var(--color-surface); color: var(--color-muted-foreground);
+        font-size: 12.5px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px;
+      }
+      .btn-primary {
+        background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 50%, transparent); color: var(--color-primary);
+      }
+      .golist { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; width: 100%; max-width: 260px; }
+      .golink {
+        display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: 7px;
+        border: 1px solid var(--color-border); background: var(--color-card);
+        color: var(--color-muted-foreground); font-size: 12.5px; cursor: pointer; text-align: left;
+      }
+      .golink:hover { border-color: var(--color-primary); color: var(--color-foreground); }
+
+      /* the PERMITTED case — 003 winner A, for contrast only */
+      .state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 9px; padding: 52px 20px; }
+      .state h2 { margin: 0; font-size: 15px; font-weight: 600; }
+      .state p { margin: 0; font-size: 12.5px; color: var(--color-status-text); }
+
+      .note {
+        margin: 0 14px 10px; padding: 9px 12px; border-radius: 7px; font-size: 11.5px; line-height: 1.65;
+        border: 1px dashed color-mix(in srgb, var(--color-primary) 35%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 6%, transparent); color: var(--color-muted-foreground);
+      }
+      .note.good { border-color: color-mix(in srgb, #7fd98f 45%, transparent); background: color-mix(in srgb, #7fd98f 8%, transparent); }
+      .note code { font-family: var(--font-mono); font-size: 11px; }
+      .muted { color: var(--color-status-text); }
+    </style>
+  </head>
+  <body>
+    <svg style="display: none">
+      <symbol id="i-ghost" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 10h.01" /><path d="M15 10h.01" /><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 3 2.5-3 2.5 3 2.5-3 3 3V10a8 8 0 0 0-8-8z" /></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></symbol>
+      <symbol id="i-clap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 14 6-6 8 8-6 6z" /><path d="m14 4 6 6" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /></symbol>
+      <symbol id="i-shieldalert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /><path d="M12 8v4" /><path d="M12 16h.01" /></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></symbol>
+    </svg>
+
+    <div id="variant-nav">
+      <span class="lbl">SKETCH 010 · the ordinary not-found</span>
+      <button class="variant-tab active" onclick="showVariant('a', this)">A: Minimal</button>
+      <button class="variant-tab" onclick="showVariant('b', this)">B: + where you can go ★</button>
+      <button class="variant-tab" onclick="showVariant('c', this)">C: In-shell</button>
+      <span style="flex: 1 0 12px"></span>
+      <select class="statepick" id="viewerpick" onchange="render()">
+        <option value="anonymous">viewer: anonymous</option>
+        <option value="guest">viewer: guest</option>
+        <option value="player">viewer: player</option>
+        <option value="admin">viewer: player + admin</option>
+      </select>
+      <select class="statepick" id="pathpick" onchange="render()"></select>
+      <span class="cmp on" id="cmpbtn" onclick="toggleCmp()">⇄ compare all paths</span>
+      <span class="cmp" id="leakbtn" onclick="toggleLeak()" title="Make /admin/moderation render a bespoke refusal, so the check demonstrably goes RED">☣ inject leak</span>
+    </div>
+
+    <div class="note" id="topnote"></div>
+    <div class="stage" id="stage"></div>
+
+    <script>
+      // Four paths that MUST be indistinguishable to a viewer who clears none of
+      // them. The fifth is the contrast case: an admin hitting a real planned
+      // section gets 003's empty state, proving the GATE works — not the page.
+      const PATHS = [
+        { id: 'unknown', p: '/blahblah', label: 'unknown path', needs: null },
+        { id: 'admin', p: '/admin/moderation', label: 'gated admin section', needs: 'admin' },
+        { id: 'profile', p: '/characters/hollow', label: 'profile below its reachability floor', needs: 'player' },
+        { id: 'ghostid', p: '/characters/01JQ7XKV8F2', label: 'character id that does not exist', needs: null },
+      ];
+      const RANK = { anonymous: 0, guest: 1, player: 2, admin: 3 };
+
+      let VARIANT = 'a';
+      let COMPARE = true;
+      // LEAK is the negative control. With it on, the admin path renders a bespoke
+      // "you don't have access" page — the single most natural thing to build, and
+      // the exact mistake §10.3/§8.7 forbid. The fingerprint check MUST go red.
+      let LEAK = false;
+
+      const sel = document.getElementById('pathpick');
+      sel.innerHTML = PATHS.map((x) => '<option value="' + x.id + '">path: ' + x.p + '</option>').join('');
+
+      // A viewer "resolves" a path only if they clear what it needs.
+      function resolves(viewer, path) {
+        if (!path.needs) return false; // genuinely nonexistent — nobody resolves it
+        if (path.needs === 'admin') return viewer === 'admin';
+        if (path.needs === 'player') return RANK[viewer] >= RANK.player;
+        return false;
+      }
+
+      function railFor(viewer) {
+        const items = [['i-home', 'Room', true], ['i-clap', 'Scenes', RANK[viewer] >= RANK.player]];
+        if (viewer === 'admin') items.push(['i-shieldalert', 'Admin', true]);
+        return (
+          '<nav class="rail">' +
+          items.filter((i) => i[2]).map((i) => '<button class="rail-btn" title="' + i[1] + '"><svg width="17" height="17"><use href="#' + i[0] + '"/></svg></button>').join('') +
+          '</nav>'
+        );
+      }
+
+      // Destinations are the viewer's OWN sections — nav/sections.ts already
+      // carries `requiresPlayer`, and this is that same gate.
+      //
+      // NOTE ON COPY: nothing here says "HoloMUSH". That is the platform brand
+      // (branding.md INV-6: the brand is the software, never the game world), and
+      // a player is in *a game*, not in HoloMUSH. The game's own name exists —
+      // `SettingConfig.DisplayName`, required on setting-type plugins
+      // (internal/plugin/manifest.go:211) — but it is NOT exposed to the web
+      // client by any RPC today, so v0.13 cannot render it. "Home" is the
+      // viewer-agnostic, plumbing-free answer.
+      function backTarget(viewer) {
+        if (viewer === 'anonymous') return [['Home', 'i-home']];
+        const go = [['Home', 'i-home'], ['Room', 'i-home']];
+        if (RANK[viewer] >= RANK.player) go.push(['Scenes', 'i-clap'], ['Your characters', 'i-users']);
+        if (viewer === 'admin') go.push(['Admin', 'i-shieldalert']);
+        return go;
+      }
+
+      function nfBody(viewer) {
+        const targets = backTarget(viewer);
+        const head =
+          '<div class="glyph"><svg width="21" height="21"><use href="#i-ghost"/></svg></div>' +
+          '<h2>Not found</h2><p>We couldn’t find that page.</p>';
+
+        if (VARIANT === 'b') {
+          return (
+            '<div class="nf">' + head +
+            '<div class="golist">' +
+            targets.map(([label, icon]) =>
+              '<button class="golink">' + (icon ? '<svg width="15" height="15"><use href="#' + icon + '"/></svg>' : '') + label + '</button>',
+            ).join('') +
+            '</div></div>'
+          );
+        }
+        return (
+          '<div class="nf">' + head +
+          '<button class="btn" style="margin-top:6px"><svg width="13" height="13"><use href="#i-back"/></svg> ' +
+          'Home</button></div>'
+        );
+      }
+
+      function pubbar(viewer) {
+        return (
+          '<div class="pubbar"><span style="font-family:var(--font-mono);font-weight:600;font-size:13px">&gt;holomush<span style="color:var(--color-cursor)">_</span></span>' +
+          '<span class="right">' +
+          (RANK[viewer] >= RANK.player
+            ? '<button class="btn" style="height:26px">Your characters</button>'
+            : '<button class="btn" style="height:26px">Sign in</button>') +
+          '</span></div>'
+        );
+      }
+
+      // A crude structural fingerprint: strip the framehead, hash what remains.
+      // Two panels with the same fingerprint render the same page.
+      function fingerprint(html) {
+        let h = 0;
+        const s = html.replace(/<div class="framehead">[\s\S]*?<\/div>/, '');
+        for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+        return ('00000000' + (h >>> 0).toString(16)).slice(-8);
+      }
+
+      function panelInner(viewer, path) {
+        if (resolves(viewer, path)) {
+          // the contrast case — the gate PERMITTED, so you get the real screen
+          const body =
+            path.needs === 'admin'
+              ? '<div class="state"><div class="glyph" style="width:42px;height:42px"><svg width="19" height="19"><use href="#i-shieldalert"/></svg></div>' +
+                '<h2>Moderation</h2><p>Registered and gated. No handler yet.</p></div>'
+              : '<div class="state"><div class="glyph" style="width:42px;height:42px"><svg width="19" height="19"><use href="#i-users"/></svg></div>' +
+                '<h2>Hollow</h2><p>she/her — a retired character’s profile still resolves.</p></div>';
+          return pubbar(viewer) + '<div class="shellrow">' + railFor(viewer) + '<div class="content">' + body + '</div></div>';
+        }
+
+        // NEGATIVE CONTROL: the bespoke refusal a well-meaning implementer writes.
+        const body =
+          LEAK && path.id === 'admin'
+            ? '<div class="nf"><div class="glyph"><svg width="21" height="21"><use href="#i-shieldalert"/></svg></div>' +
+              '<h2>Access denied</h2><p>You don’t have permission to view this area.</p>' +
+              '<button class="btn" style="margin-top:6px">Home</button></div>'
+            : nfBody(viewer);
+
+        if (VARIANT === 'c' && viewer !== 'anonymous') {
+          return pubbar(viewer) + '<div class="shellrow">' + railFor(viewer) + '<div class="content">' + body + '</div></div>';
+        }
+        return pubbar(viewer) + '<div class="content" style="flex:1;display:flex">' + body + '</div>';
+      }
+
+      function panel(viewer, path, fps) {
+        const inner = panelInner(viewer, path);
+        const fp = fingerprint(inner);
+        fps.push({ id: path.id, fp, resolved: resolves(viewer, path) });
+        return { html: '<div class="frame" data-fp="' + fp + '"><div class="framehead"><span class="path">' + path.p + '</span>' +
+          '<span class="hash">' + fp + '</span></div>' + inner + '</div>', fp };
+      }
+
+      function render() {
+        const viewer = document.getElementById('viewerpick').value;
+        const one = PATHS.find((x) => x.id === sel.value);
+        const fps = [];
+
+        const list = COMPARE ? PATHS : [one];
+        let html = list.map((p) => panel(viewer, p, fps).html).join('');
+        document.getElementById('stage').innerHTML = html;
+
+        // mark every panel that matches the majority fingerprint
+        const denied = fps.filter((f) => !f.resolved);
+        const allSame = denied.length > 1 && denied.every((f) => f.fp === denied[0].fp);
+        if (allSame) {
+          document.querySelectorAll('.frame').forEach((el) => {
+            if (el.dataset.fp === denied[0].fp) {
+              el.classList.add('match');
+              el.querySelector('.hash').classList.add('same');
+            }
+          });
+        }
+
+        const resolvedCount = fps.filter((f) => f.resolved).length;
+        let note;
+        if (!COMPARE) {
+          note = 'Single-path view. Turn <b>compare all paths</b> back on — the whole property this page exists for is only visible side by side.';
+        } else if (allSame && resolvedCount === 0) {
+          note =
+            '<b>All four paths render the identical page, and the fingerprints agree (' + denied[0].fp + ').</b> ' +
+            'That is the requirement, not a coincidence: an unknown path, a gated admin section, a profile below its ' +
+            'reachability floor and a character id that never existed must be <b>indistinguishable to this viewer</b>. ' +
+            '<span class="muted">The fingerprint hashes the rendered panel with its path label removed.</span>';
+        } else if (allSame && resolvedCount > 0) {
+          note =
+            '<b>' + resolvedCount + ' path(s) resolved for this viewer</b> — those panels show the real screen, which is correct: ' +
+            'the gate <i>permitted</i> them. The remaining denied paths still fingerprint identically (' + denied[0].fp + '). ' +
+            '<b>Indistinguishability is per-viewer</b>: it never required that an admin and a stranger see the same thing, only that ' +
+            'one viewer cannot tell <i>which kind</i> of nothing they hit.';
+        } else {
+          const odd = denied.find((f) => f.fp !== denied[0].fp) || denied[0];
+          note =
+            '<b style="color:var(--color-destructive)">☣ LEAK — the fingerprints diverge.</b> ' +
+            '<code>/admin/moderation</code> now renders a bespoke “Access denied” page, so a prober can tell it apart from ' +
+            '<code>/blahblah</code> and has learned that <code>/admin/*</code> is a real route family they are merely excluded from. ' +
+            'This is the single most natural page for an implementer to build, and it is exactly what §10.3 and §8.7 forbid. ' +
+            '<span class="muted">This state exists so the check above is demonstrably able to fail — a gate never seen red is ' +
+            'indistinguishable from one that cannot go red.</span>';
+        }
+        document.getElementById('topnote').className = 'note' + (allSame ? ' good' : '');
+        document.getElementById('topnote').innerHTML = note;
+        document.getElementById('cmpbtn').className = 'cmp' + (COMPARE ? ' on' : '');
+        document.getElementById('leakbtn').className = 'cmp' + (LEAK ? ' on' : '');
+      }
+
+      function toggleCmp() { COMPARE = !COMPARE; render(); }
+      function toggleLeak() { LEAK = !LEAK; render(); }
+      function showVariant(v, btn) {
+        VARIANT = v;
+        document.querySelectorAll('.variant-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      }
+      render();
+    </script>
+  </body>
+</html>

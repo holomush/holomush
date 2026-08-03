@@ -1026,7 +1026,7 @@ func (s *Server) Bus() *eventbustest.Embedded {
 // wire (denial_reason=session_not_found is slog-only).
 //
 // FK side-effect: cascades to session_connections (ON DELETE CASCADE
-// per migration 000001_baseline.up.sql). Any future FK added to
+// per migration 000001_baseline.sql). Any future FK added to
 // sessions without ON DELETE CASCADE would need explicit pre-cleanup.
 func (s *Server) DeleteSession(ctx context.Context, sessionID string) {
 	s.t.Helper()
@@ -1127,7 +1127,7 @@ func (s *Server) DeleteCharacter(ctx context.Context, charID ulid.ULID) {
 	// gone before the character can be deleted; the test contract is that
 	// Logout has already removed them, but DELETE is idempotent so we cover
 	// that case too. objects.owner_id REFERENCES characters(id) defaults to
-	// ON DELETE RESTRICT (per migrations/000001_baseline.up.sql), so any
+	// ON DELETE RESTRICT (per migrations/000001_baseline.sql), so any
 	// character-owned objects would block the character DELETE without an
 	// explicit pre-clean.
 	for _, child := range []struct{ table, col string }{

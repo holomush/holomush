@@ -209,6 +209,16 @@ real shape has drifted from the committed version.
 Pushing a `v*` tag to `main` triggers the `deploy-sandbox` workflow. No
 manual steps needed.
 
+> **Release constraint — the goose migration cutover ships alone.** The release
+> that first carries the goose migration engine MUST NOT also carry new
+> migrations; the next release carries those. The cutover's first boot rewrites
+> the bookkeeping one-way and unattended, and shipping it alone is what keeps the
+> application schema provably unchanged across that deploy — which is the only
+> reason the surgical rollback in
+> [Restoring a Postgres Backup](/operating/how-to/sandbox/sandbox-restore/) exists. Ship them together
+> and any rollback becomes a full snapshot restore with data loss. Rehearse the
+> cutover first using the pre-deploy rehearsal in that same document.
+
 To deploy manually, mirror what the `deploy-sandbox` job does — sync the
 tag's compose file, `docker/` tree, and `deploy/` tree onto the droplet
 BEFORE pulling images and restarting. Without the sync, compose/profile

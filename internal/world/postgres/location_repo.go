@@ -134,7 +134,7 @@ func (r *LocationRepository) Update(ctx context.Context, loc *world.Location) (*
 // the lock (and is caught by the preselect below) or blocks and then fails once
 // the parent row is gone. THEN it preselects, under lock, every exit whose
 // from_location_id OR to_location_id equals the deleted location (the exits FK
-// cascades on BOTH, 000001_baseline.up.sql:115-116) and records each as a
+// cascades on BOTH, 000001_baseline.sql) and records each as a
 // tombstone AffectedAggregate, so the outbox manifest reflects every row the DB
 // cascade removes (INV-WORLD-2 delta-parity, finding 4). THEN it deletes the
 // parent.
@@ -191,7 +191,7 @@ func (r *LocationRepository) Delete(ctx context.Context, id ulid.ULID, expectedV
 
 // preselectCascadedExits reads, under FOR UPDATE lock, every exit the location
 // FK cascade will remove (exits reference locations on BOTH from_location_id and
-// to_location_id with ON DELETE CASCADE, 000001_baseline.up.sql:115-116) and
+// to_location_id with ON DELETE CASCADE, 000001_baseline.sql) and
 // returns them as tombstone AffectedAggregates carrying id + current version, so
 // the location DELETE's MutationDelta accounts for the DB-cascaded children
 // (INV-WORLD-2 delta-parity, finding 4).

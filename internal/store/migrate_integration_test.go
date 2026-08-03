@@ -8,6 +8,8 @@ package store_test
 import (
 	"context"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -27,6 +29,22 @@ import (
 // the FullCycle spec below asserts Up() lands exactly here, so a new migration
 // fails this spec until the constant follows it.
 const latestMigrationVersion = 53
+
+// Bookkeeping shape of goose's ledger after a fresh-database Up().
+//
+// goose writes ONE row per applied migration, PLUS a version-0 bootstrap row it
+// inserts when it first creates goose_db_version. golang-migrate kept a single
+// mutable row, so this is a genuine change of shape rather than a rename — and
+// it is why a bare `count(*) == 44` is WRONG against a correct database.
+//
+// The migration corpus has gaps (versions 21–29 are unused), so the highest
+// version is 53 while only 44 migrations exist. Bump these together with
+// latestMigrationVersion when a migration is added.
+const (
+	expectedAppliedMigrationRows = 44
+	gooseBootstrapRows           = 1
+	expectedGooseLedgerRows      = expectedAppliedMigrationRows + gooseBootstrapRows
+)
 
 // expectedTables lists every table present after all migrations have been applied.
 // NOTE: The `events` table was dropped by migration 000010 (F6 schema cutover);
@@ -88,7 +106,7 @@ func queryTableNames(t *testing.T, ctx context.Context, connStr string) []string
 		 WHERE n.nspname = 'public'
 		   AND c.relkind IN ('r', 'p')
 		   AND c.relispartition = false
-		   AND c.relname != 'schema_migrations'
+		   AND c.relname NOT IN ('schema_migrations', 'goose_db_version')
 		 ORDER BY c.relname`)
 	require.NoError(t, err)
 	defer rows.Close()
@@ -192,61 +210,106 @@ var _ = Describe("Migrator", func() {
 		})
 	})
 
-	Describe("DirtyStateRecovery", func() {
-		It("detects dirty state and recovers via Force()", func() {
+	// GooseBookkeeping pins the ledger end-state of the golang-migrate → goose
+	// swap. The FullCycle spec above asserts the resulting SCHEMA; nothing
+	// asserted the BOOKKEEPING, so a regression that reverted the ledger table
+	// or double-recorded versions would have been invisible to the suite.
+	//
+	// The version-set equality is the load-bearing half. A row count alone
+	// cannot distinguish the real corpus from 44 phantom rows filling the
+	// unused 21–29 gap, and it is exactly the kind of correct-looking number
+	// that survives a broken migration source.
+	Describe("GooseBookkeeping", func() {
+		It("records one goose_db_version row per embedded migration plus the version-0 bootstrap row, and no schema_migrations table", func() {
 			ctx := context.Background()
 
 			connStr := testutil.RawDatabase(suiteT, sharedPG)
 
-			// Create migrator and apply migrations
 			migrator, err := store.NewMigrator(connStr)
 			Expect(err).NotTo(HaveOccurred())
 			defer migrator.Close()
 
+			// Read the EMBEDDED version set before applying anything: on a blank
+			// database every embedded version is pending, so this is the corpus
+			// as the filesystem describes it, derived independently of the ledger
+			// the assertions below read back.
+			embedded, err := migrator.PendingMigrations()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(embedded).To(HaveLen(expectedAppliedMigrationRows),
+				"precondition: the embedded corpus MUST hold %d migrations, or the set "+
+					"equality below would compare the ledger against an empty expectation",
+				expectedAppliedMigrationRows)
+
 			Expect(migrator.Up()).To(Succeed())
 
-			// Capture current version before simulating dirty state
-			currentVersion, dirty, err := migrator.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(dirty).To(BeFalse(), "database should start clean")
-			Expect(currentVersion).To(BeNumerically(">", uint(0)), "should have at least one migration applied")
-
-			// Simulate dirty state using raw SQL
 			conn, err := pgx.Connect(ctx, connStr)
 			Expect(err).NotTo(HaveOccurred())
 			defer conn.Close(ctx)
 
-			_, err = conn.Exec(ctx, "UPDATE schema_migrations SET dirty = true")
+			// Three separate expectations rather than one compound check, so a
+			// failure names which property broke.
+			var appliedRows int
+			Expect(conn.QueryRow(ctx,
+				`SELECT count(*) FROM goose_db_version WHERE version_id > 0`).Scan(&appliedRows)).To(Succeed())
+			Expect(appliedRows).To(Equal(expectedAppliedMigrationRows),
+				"goose records one row per applied migration")
+
+			var totalRows int
+			Expect(conn.QueryRow(ctx,
+				`SELECT count(*) FROM goose_db_version`).Scan(&totalRows)).To(Succeed())
+			Expect(totalRows).To(Equal(expectedGooseLedgerRows),
+				"the ledger also carries goose's version-0 bootstrap row; asserting a bare "+
+					"%d total would fail against a CORRECT database",
+				expectedAppliedMigrationRows)
+
+			var minVersion int64
+			Expect(conn.QueryRow(ctx,
+				`SELECT min(version_id) FROM goose_db_version`).Scan(&minVersion)).To(Succeed())
+			Expect(minVersion).To(Equal(int64(0)),
+				"the extra row MUST be goose's version-0 bootstrap row, not a duplicate "+
+					"or an out-of-corpus version")
+
+			// golang-migrate's ledger table must not have been created. Asserted
+			// on the catalog rather than by catching a query error, so a
+			// connection-level failure cannot masquerade as absence. The paired
+			// goose_db_version probe is the positive control: without it a typo
+			// in the table name would make the absence assertion vacuously true.
+			var schemaMigrationsAbsent, gooseLedgerPresent bool
+			Expect(conn.QueryRow(ctx, `
+				SELECT to_regclass('public.schema_migrations') IS NULL,
+				       to_regclass('public.goose_db_version') IS NOT NULL
+			`).Scan(&schemaMigrationsAbsent, &gooseLedgerPresent)).To(Succeed())
+			Expect(gooseLedgerPresent).To(BeTrue(),
+				"positive control: to_regclass MUST resolve a table that does exist here")
+			Expect(schemaMigrationsAbsent).To(BeTrue(),
+				"schema_migrations is golang-migrate's ledger and MUST NOT exist after the swap")
+
+			// Set equality, not a count: the recorded versions must be exactly
+			// the embedded ones.
+			rows, err := conn.Query(ctx,
+				`SELECT version_id FROM goose_db_version WHERE version_id > 0 ORDER BY version_id`)
 			Expect(err).NotTo(HaveOccurred())
+			defer rows.Close()
 
-			// Verify dirty state is reflected
-			version, dirty, err := migrator.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(currentVersion))
-			Expect(dirty).To(BeTrue(), "database should be dirty after manual update")
+			var recorded []string
+			for rows.Next() {
+				var v int64
+				Expect(rows.Scan(&v)).To(Succeed())
+				recorded = append(recorded, strconv.FormatInt(v, 10))
+			}
+			Expect(rows.Err()).NotTo(HaveOccurred())
 
-			// Verify Up() fails when database is dirty
-			// golang-migrate returns ErrDirty when trying to run migrations on a dirty database
-			err = migrator.Up()
-			Expect(err).To(HaveOccurred(), "Up() should fail when database is dirty")
-			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
+			want := make([]string, 0, len(embedded))
+			for _, v := range embedded {
+				want = append(want, strconv.FormatUint(uint64(v), 10))
+			}
+			sort.Strings(want)
+			sort.Strings(recorded)
 
-			// Verify Steps() also fails when dirty
-			err = migrator.Steps(1)
-			Expect(err).To(HaveOccurred(), "Steps() should fail when database is dirty")
-			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
-
-			// Use Force() to recover from dirty state
-			Expect(migrator.Force(int(currentVersion))).To(Succeed(), "Force() should succeed and clear dirty flag")
-
-			// Verify dirty flag is cleared
-			version, dirty, err = migrator.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(currentVersion), "version should remain unchanged after Force()")
-			Expect(dirty).To(BeFalse(), "dirty flag should be cleared after Force()")
-
-			// Verify migrations can continue - Up() should succeed (or return no change)
-			Expect(migrator.Up()).To(Succeed(), "Up() should succeed after Force() clears dirty state")
+			Expect(strings.Join(recorded, ",")).To(Equal(strings.Join(want, ",")),
+				"the recorded version set MUST equal the embedded version set — a matching "+
+					"count with different members (e.g. phantom rows filling the unused "+
+					"21–29 gap) is exactly what this comparison exists to catch")
 		})
 	})
 
@@ -313,194 +376,6 @@ var _ = Describe("Migrator", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(v2).To(Equal(version), "migrator2 should report same version")
 			Expect(dirty2).To(BeFalse())
-		})
-	})
-
-	// Force_VersionExceedsAvailable documents the behavior when Force() is called
-	// with a version higher than available migrations.
-	//
-	// While Force() accepts any version value, the consequences are:
-	//   - Version() returns the forced version (999)
-	//   - Up() returns an error (migration file not found)
-	//   - PendingMigrations() returns empty (thinks we're past all migrations)
-	//
-	// This is dangerous because PendingMigrations() indicates nothing is pending,
-	// but Up() will actually fail. The only recovery is to Force() back to a valid version.
-	//
-	// Force() should only be used for recovery from dirty state, never to
-	// artificially advance the version.
-	Describe("Force_VersionExceedsAvailable", func() {
-		It("documents dangerous behavior: PendingMigrations() returns empty but Up() fails", func() {
-			connStr := testutil.RawDatabase(suiteT, sharedPG)
-
-			// Create migrator
-			migrator, err := store.NewMigrator(connStr)
-			Expect(err).NotTo(HaveOccurred())
-			defer migrator.Close()
-
-			// Apply all available migrations first
-			Expect(migrator.Up()).To(Succeed())
-
-			// Verify we're at the latest version
-			latestVersion, dirty, err := migrator.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(dirty).To(BeFalse())
-			Expect(latestVersion).To(BeNumerically(">", uint(0)), "should have at least one migration")
-
-			// DANGEROUS: Force version to a value higher than any available migration
-			// This should NOT be done in production - only for documenting behavior
-			Expect(migrator.Force(999)).To(Succeed(), "Force() accepts any version, even non-existent ones")
-
-			// Verify version is now 999
-			version, dirty, err := migrator.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(999)), "Force() sets version to arbitrary value")
-			Expect(dirty).To(BeFalse(), "Force() clears dirty flag")
-
-			// Up() returns an error because there's no migration file for version 999
-			// golang-migrate tries to read the current version's down migration and fails
-			err = migrator.Up()
-			Expect(err).To(HaveOccurred(), "Up() should fail when forced to non-existent version")
-			Expect(err.Error()).To(ContainSubstring("999"),
-				"error message should reference the invalid version")
-
-			// PendingMigrations() returns empty because version 999 > all migrations
-			// This is misleading since Up() will actually fail
-			pending, err := migrator.PendingMigrations()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(pending).To(BeEmpty(), "PendingMigrations() returns empty when version exceeds all migrations")
-
-			// Version remains 999
-			version, _, err = migrator.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(999)), "version unchanged after failed Up()")
-		})
-	})
-
-	// ConcurrentMigrationDirtyStateHandling verifies that dirty state
-	// detection works correctly when multiple migrators access the same database
-	// and one experiences a partial failure (simulated via dirty flag).
-	//
-	// This test simulates the scenario where:
-	// 1. Two migrators point to the same database
-	// 2. A migration fails partway through (leaving dirty state)
-	// 3. Both migrators detect the dirty state
-	// 4. Force() can recover the database to a clean state
-	Describe("ConcurrentMigrationDirtyStateHandling", func() {
-		It("both migrators detect dirty state and recover via Force()", func() {
-			ctx := context.Background()
-
-			connStr := testutil.RawDatabase(suiteT, sharedPG)
-
-			// Apply migrations first to establish baseline
-			migrator1, err := store.NewMigrator(connStr)
-			Expect(err).NotTo(HaveOccurred())
-			defer migrator1.Close()
-
-			Expect(migrator1.Up()).To(Succeed())
-
-			baseVersion, dirty, err := migrator1.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(dirty).To(BeFalse(), "database should start clean")
-			Expect(baseVersion).To(BeNumerically(">", uint(0)), "should have at least one migration applied")
-
-			// Roll back to version 0 so we can simulate concurrent migration attempts
-			Expect(migrator1.Down()).To(Succeed())
-
-			version, dirty, err := migrator1.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(Equal(uint(0)), "should be at version 0 after Down()")
-			Expect(dirty).To(BeFalse())
-
-			// Now simulate a concurrent scenario where one migrator sets dirty state
-			// mid-execution (as would happen if a migration fails partway through).
-			// We'll:
-			// 1. Start migrator2
-			// 2. Manually set dirty state (simulating mid-migration crash)
-			// 3. Verify both migrators detect the dirty state
-			// 4. Verify Force() recovery works
-
-			migrator2, err := store.NewMigrator(connStr)
-			Expect(err).NotTo(HaveOccurred())
-			defer migrator2.Close()
-
-			// First, apply one migration step to create the schema_migrations table
-			// and establish a version for dirty state simulation
-			Expect(migrator1.Steps(1)).To(Succeed())
-
-			currentVersion, dirty, err := migrator1.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(dirty).To(BeFalse())
-			Expect(currentVersion).To(BeNumerically(">", uint(0)))
-
-			// Simulate a partial migration failure by setting dirty flag directly.
-			// This simulates what happens when a migration crashes mid-execution:
-			// the database is left in a dirty state at the current version.
-			conn, err := pgx.Connect(ctx, connStr)
-			Expect(err).NotTo(HaveOccurred())
-			defer conn.Close(ctx)
-
-			_, err = conn.Exec(ctx, "UPDATE schema_migrations SET dirty = true")
-			Expect(err).NotTo(HaveOccurred())
-
-			// Test: Both migrators detect the dirty state
-			v1, dirty1, err := migrator1.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(v1).To(Equal(currentVersion), "migrator1 should report correct version")
-			Expect(dirty1).To(BeTrue(), "migrator1 should detect dirty state")
-
-			v2, dirty2, err := migrator2.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(v2).To(Equal(currentVersion), "migrator2 should report correct version")
-			Expect(dirty2).To(BeTrue(), "migrator2 should detect dirty state")
-
-			// Test: Up() fails for both migrators due to dirty state
-			err = migrator1.Up()
-			Expect(err).To(HaveOccurred(), "migrator1.Up() should fail when database is dirty")
-			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
-
-			err = migrator2.Up()
-			Expect(err).To(HaveOccurred(), "migrator2.Up() should fail when database is dirty")
-			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
-
-			// Test: Steps() fails for both migrators due to dirty state
-			err = migrator1.Steps(1)
-			Expect(err).To(HaveOccurred(), "migrator1.Steps() should fail when database is dirty")
-			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
-
-			err = migrator2.Steps(1)
-			Expect(err).To(HaveOccurred(), "migrator2.Steps() should fail when database is dirty")
-			Expect(err.Error()).To(ContainSubstring("Dirty"), "error should indicate dirty state")
-
-			// Test: Force() can recover from dirty state
-			// Using migrator1 to force the version clears dirty flag
-			Expect(migrator1.Force(int(currentVersion))).To(Succeed(), "migrator1.Force() should succeed")
-
-			// Test: Both migrators now see clean state
-			v1, dirty1, err = migrator1.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(v1).To(Equal(currentVersion))
-			Expect(dirty1).To(BeFalse(), "migrator1 should see dirty flag cleared after Force()")
-
-			v2, dirty2, err = migrator2.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(v2).To(Equal(currentVersion))
-			Expect(dirty2).To(BeFalse(), "migrator2 should see dirty flag cleared after Force()")
-
-			// Test: Migrations can continue after Force() recovery
-			Expect(migrator1.Up()).To(Succeed(), "migrator1.Up() should succeed after Force() recovery")
-
-			// Verify final state
-			finalVersion, dirty, err := migrator1.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(finalVersion).To(Equal(baseVersion), "should reach final version after recovery")
-			Expect(dirty).To(BeFalse(), "database should be clean after recovery and Up()")
-
-			// migrator2 should also see the consistent final state
-			v2Final, dirty2Final, err := migrator2.Version()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(v2Final).To(Equal(finalVersion), "migrator2 should see same final version")
-			Expect(dirty2Final).To(BeFalse(), "migrator2 should see clean state")
 		})
 	})
 

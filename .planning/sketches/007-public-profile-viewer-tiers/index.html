@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sketch 007 — Public Profile, Viewer Tiers</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      body { padding-top: 68px; }
+
+      #variant-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 12px;
+        background: #07080a; border-bottom: 1px solid var(--color-border);
+      }
+      #variant-nav .lbl { font-family: var(--font-mono); font-size: 10.5px; color: var(--color-status-text); margin-right: 6px; }
+      .variant-tab {
+        height: 26px; padding: 0 10px; border-radius: 5px; border: 1px solid var(--color-border);
+        background: transparent; color: var(--color-muted-foreground); font-family: inherit; font-size: 12px; cursor: pointer;
+      }
+      .variant-tab:hover { background: var(--color-secondary); color: var(--color-foreground); }
+      .variant-tab.active {
+        background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent); color: var(--color-primary);
+      }
+      .statepick {
+        height: 26px; border-radius: 5px; border: 1px solid var(--color-border);
+        background: #101418; color: var(--color-muted-foreground); font-family: inherit; font-size: 11.5px; padding: 0 6px;
+      }
+      .cmp {
+        display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px;
+        border-radius: 5px; border: 1px solid var(--color-border); font-size: 11.5px;
+        color: var(--color-muted-foreground); cursor: pointer; user-select: none;
+      }
+      .cmp.on { color: var(--color-primary); border-color: color-mix(in srgb, var(--color-primary) 45%, transparent); background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
+      #sketch-tools {
+        position: fixed; right: 10px; bottom: 10px; z-index: 9999; opacity: .35; transition: opacity 120ms;
+        display: flex; align-items: center; gap: 4px; padding: 5px 7px; border-radius: 7px;
+        background: #07080a; border: 1px solid var(--color-border);
+      }
+      #sketch-tools button {
+        height: 22px; padding: 0 7px; border-radius: 4px; font-size: 11px; border: 1px solid var(--color-border);
+        background: transparent; color: var(--color-muted-foreground); cursor: pointer;
+      }
+      #sketch-tools button.on { color: var(--color-primary); border-color: var(--color-primary); }
+      #sketch-tools .sep { width: 1px; height: 16px; background: var(--color-border); }
+      #sketch-tools select { height: 22px; border-radius: 4px; border: 1px solid var(--color-border); background: #101418; color: var(--color-muted-foreground); font-size: 11px; }
+
+      .stage { display: flex; gap: 14px; padding: 14px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+      .frame {
+        flex: 1 1 420px; max-width: 620px; min-width: 320px;
+        border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden;
+        background: var(--color-background); container-type: inline-size; container-name: vp;
+      }
+      .framehead {
+        display: flex; align-items: center; gap: 8px; padding: 7px 11px; font-size: 11px;
+        background: #07080a; border-bottom: 1px solid var(--color-border); color: var(--color-status-text);
+        font-family: var(--font-mono);
+      }
+      .tierdot { width: 7px; height: 7px; border-radius: 999px; background: var(--color-status-text); }
+      .tierdot.anonymous { background: #8b98a4; }
+      .tierdot.guest { background: #ffb300; opacity: .55; }
+      .tierdot.player { background: #7fd98f; }
+
+      /* ---- public chrome (logged-out web, not the app shell) ------------- */
+      .pubbar {
+        display: flex; align-items: center; gap: 10px; padding: 0 14px; height: var(--topbar-h);
+        border-bottom: 1px solid var(--color-border); background: var(--color-surface);
+      }
+      .pubbar .right { margin-left: auto; display: flex; gap: 7px; }
+      .btn {
+        height: 27px; padding: 0 11px; border-radius: 6px; border: 1px solid var(--color-border);
+        background: var(--color-surface); color: var(--color-muted-foreground);
+        font-size: 12px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px;
+      }
+      .btn-primary {
+        background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 50%, transparent); color: var(--color-primary);
+      }
+
+      .prof { padding: 20px 22px 40px; }
+      @container vp (max-width: 520px) { .prof { padding: 16px 14px 36px; } }
+
+      /* identity block — the §8.8 hard floor: always present if reachable */
+      .idblock { display: flex; gap: 15px; align-items: flex-start; margin-bottom: 6px; }
+      .portrait {
+        width: 78px; height: 78px; border-radius: 12px; flex-shrink: 0; display: flex;
+        align-items: center; justify-content: center; font-size: 32px; font-weight: 700;
+        background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+        color: var(--color-primary); border: 1px solid color-mix(in srgb, var(--color-primary) 32%, transparent);
+      }
+      .idtext { min-width: 0; padding-top: 3px; }
+      .cname { font-size: 22px; font-weight: 700; margin: 0 0 3px; letter-spacing: -0.01em; }
+      .pron { font-size: 12.5px; color: var(--color-primary); }
+      .concept { font-size: 13px; color: var(--color-muted-foreground); margin-top: 5px; font-style: italic; }
+
+      .desc { margin: 16px 0 0; font-size: 13.5px; line-height: 1.7; color: var(--color-foreground); }
+
+      .facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+      .fact {
+        display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 9px; border-radius: 999px;
+        border: 1px solid var(--color-border); background: var(--color-card); font-size: 11.5px;
+      }
+      .fact b { color: var(--color-status-text); font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+
+      .sec { margin-top: 22px; }
+      .sec h3 {
+        font-size: 11px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600;
+        color: var(--color-status-text); margin: 0 0 7px; padding-bottom: 5px;
+        border-bottom: 1px solid var(--color-border);
+      }
+      .sec p { margin: 0 0 9px; font-size: 13px; line-height: 1.7; color: var(--color-muted-foreground); }
+      .sec p:last-child { margin-bottom: 0; }
+      .ooc { border-left: 2px solid color-mix(in srgb, var(--color-primary) 45%, transparent); padding-left: 11px; }
+      .ooctag {
+        display: inline-block; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+        color: var(--color-primary); border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+        border-radius: 4px; padding: 1px 5px; margin-left: 7px; vertical-align: 2px;
+      }
+      .currently {
+        margin-top: 14px; padding: 9px 12px; border-radius: 8px; font-size: 12.5px;
+        background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+      }
+      .currently b { color: var(--color-status-text); font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; display: block; margin-bottom: 2px; }
+
+      .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 7px; margin-top: 9px; }
+      .gslot {
+        aspect-ratio: 1; border-radius: 7px; border: 1px dashed var(--color-border);
+        display: flex; align-items: center; justify-content: center;
+        color: var(--color-status-text); font-size: 10px; background: var(--color-card);
+      }
+
+      /* B only: the unconditional invitation */
+      .invite {
+        display: none; margin-top: 20px; padding: 11px 13px; border-radius: 8px; font-size: 12px;
+        line-height: 1.6; color: var(--color-muted-foreground);
+        border: 1px solid var(--color-border); background: var(--color-card);
+      }
+      .v-b .invite.show { display: block; }
+      .invite b { color: var(--color-foreground); font-weight: 600; }
+
+      /* C only: card shape */
+      .v-c .prof { padding: 0; }
+      .v-c .card {
+        margin: 18px; border: 1px solid var(--color-border); border-radius: 12px;
+        background: var(--color-card); padding: 18px;
+      }
+      .v-c .sec { margin: 18px 18px 0; }
+      .v-c .desc { margin-top: 13px; }
+
+      /* not-found (§8.7) — must be the ORDINARY one */
+      .nf { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 9px; padding: 70px 20px; }
+      .nf .glyph {
+        width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center;
+        background: var(--color-secondary); color: var(--color-status-text); border: 1px solid var(--color-border);
+      }
+      .nf h2 { margin: 0; font-size: 16px; }
+      .nf p { margin: 0; font-size: 12.5px; color: var(--color-status-text); }
+
+      .note {
+        margin: 0 14px 12px; padding: 9px 12px; border-radius: 7px; font-size: 11.5px; line-height: 1.65;
+        border: 1px dashed color-mix(in srgb, var(--color-primary) 35%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 6%, transparent); color: var(--color-muted-foreground);
+      }
+      .note code { font-family: var(--font-mono); font-size: 11px; }
+      .note.warn {
+        border-color: color-mix(in srgb, var(--color-destructive) 40%, transparent);
+        background: color-mix(in srgb, var(--color-destructive) 7%, transparent);
+      }
+      .muted { color: var(--color-status-text); }
+      .mono { font-family: var(--font-mono); }
+    </style>
+  </head>
+  <body>
+    <svg style="display: none">
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+      <symbol id="i-ghost" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 10h.01" /><path d="M15 10h.01" /><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 3 2.5-3 2.5 3 2.5-3 3 3V10a8 8 0 0 0-8-8z" /></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-4.6-4.6a2 2 0 0 0-2.8 0L3 21" /></symbol>
+    </svg>
+
+    <div id="variant-nav">
+      <span class="lbl">SKETCH 007 · public profile · viewer tiers</span>
+      <button class="variant-tab active" onclick="showVariant('a', this)">A: Blocks vanish</button>
+      <button class="variant-tab" onclick="showVariant('b', this)">B: + unconditional invite</button>
+      <button class="variant-tab" onclick="showVariant('c', this)">C: Identity card ★</button>
+      <span style="flex: 1 0 12px"></span>
+      <select class="statepick" id="viewerpick" onchange="render()">
+        <option value="anonymous">viewer: anonymous</option>
+        <option value="guest">viewer: guest</option>
+        <option value="player">viewer: player</option>
+      </select>
+      <select class="statepick" id="posturepick" onchange="render()">
+        <option value="seeded">posture: seeded v0.13</option>
+        <option value="scrape">posture: scrape-friendly</option>
+        <option value="playersonly">posture: players-only</option>
+      </select>
+      <select class="statepick" id="datapick" onchange="render()">
+        <option value="full">data: full profile</option>
+        <option value="empty">data: zero profile rows</option>
+      </select>
+      <span class="cmp" id="cmpbtn" onclick="toggleCmp()">⇄ compare tiers</span>
+    </div>
+
+    <div class="note" id="topnote"></div>
+    <div class="stage" id="stage"></div>
+
+    <div id="sketch-tools" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.35'">
+      <select onchange="document.querySelector('link[href*=themes]').href = '../themes/' + this.value + '.css'">
+        <option value="default">Default</option>
+      </select>
+      <span class="sep"></span>
+      <button onclick="setVp(375, this)">375</button>
+      <button onclick="setVp(768, this)">768</button>
+      <button class="on" onclick="setVp(0, this)">Full</button>
+    </div>
+
+    <script>
+      // ---- the character -------------------------------------------------
+      // `name` and `description` are `characters` COLUMNS. Everything prefixed
+      // `profile.` is an `entity_properties` ROW. That distinction is why the two
+      // column rows carry a tier floor but no row-keyed peer decision (SPEC §8.6).
+      const CHAR = {
+        name: 'Ashwood, Mirén',
+        description:
+          'A tall woman in a slate archivist’s coat, sleeves pinned back to the elbow. She carries more folios than any one person reasonably should, and sets them down in precarious towers wherever she stops.',
+        profile: {
+          'profile.pronouns': 'she/her',
+          'profile.concept': 'Ex-legate turned archivist',
+          'profile.species': 'Human',
+          'profile.age': 'Early forties',
+          'profile.faction': 'The Vellum Court',
+          'profile.appearance':
+            'Grey has taken the temples first, which she refuses to be irritated about. Ink under the nails, always. A legate’s seal-ring worn on a cord rather than a finger — she will not say why, and the omission is louder than an answer.',
+          'profile.personality':
+            'Precise without being cold. She asks the second question, not the first, and remembers what you said three conversations ago. Impatient only with people who waste an archive’s time.',
+          'profile.biography':
+            'Fifteen years in the Court’s legation, then a resignation nobody has satisfactorily explained. She took the west stacks post the same season — a demotion by any reading, which she accepted without visible complaint.',
+          'profile.rumors':
+            'That she resigned rather than sign something. That the seal-ring is not hers. That the west stacks were not a demotion but a request, and that she asked for them by name.',
+          'profile.currently': 'Cataloguing the west stacks — approachable, and glad of the interruption',
+          'profile.rp_preferences':
+            'Walk-ups very welcome — no need to page first. I like slow investigative plots and long conversations over big set-pieces. Happy to fade or skip anything; just say so plainly, no explanation needed. Content limits: nothing graphic involving children.',
+          'profile.timezone': 'UTC+1 (CET) — evenings, most weekdays',
+        },
+        media: { primary: true, gallery: 4 },
+      };
+
+      // ---- §8.6, verbatim: the whole configuration surface ---------------
+      // NOTE: in the seeded v0.13 column, NOT ONE ROW is `player`.
+      const FLOORS = {
+        seeded: {
+          _reach: 'anonymous',
+          name: 'anonymous',
+          'profile.pronouns': 'anonymous',
+          description: 'anonymous',
+          _rest: 'guest',
+        },
+        scrape: { _reach: 'anonymous', name: 'anonymous', 'profile.pronouns': 'anonymous', description: 'anonymous', _rest: 'anonymous' },
+        playersonly: { _reach: 'player', name: 'player', 'profile.pronouns': 'player', description: 'player', _rest: 'player' },
+      };
+      const RANK = { anonymous: 0, guest: 1, player: 2 };
+
+      // Clearing a floor is SET MEMBERSHIP over the tier token, never an ordinal
+      // string compare (§8.2.1). RANK here is a sketch convenience for rendering
+      // only — the real policy MUST enumerate the clearing set per floor.
+      function clears(viewer, floor) {
+        return RANK[viewer] >= RANK[floor];
+      }
+      function floorFor(posture, attr) {
+        const f = FLOORS[posture];
+        return f[attr] !== undefined ? f[attr] : f._rest;
+      }
+
+      let VARIANT = 'a';
+      let COMPARE = false;
+
+      function panel(viewer, posture, data) {
+        const reach = floorFor(posture, '_reach');
+        if (!clears(viewer, reach)) return notFoundPanel(viewer);
+
+        const has = (attr) => {
+          if (!clears(viewer, floorFor(posture, attr))) return false; // withheld
+          if (attr === 'name' || attr === 'description') return true; // columns
+          if (data === 'empty') return false; // blank — MUST be indistinguishable
+          // media names are `entity_properties` rows too, but they live on
+          // CHAR.media rather than CHAR.profile in this fixture.
+          if (attr.startsWith('profile.image.')) return CHAR.media.primary;
+          return !!CHAR.profile[attr];
+        };
+        const val = (attr) => CHAR.profile[attr];
+
+        const shortFacts = ['profile.species', 'profile.age', 'profile.faction', 'profile.timezone']
+          .filter(has)
+          .map((a) => '<span class="fact"><b>' + a.replace('profile.', '') + '</b>' + val(a) + '</span>')
+          .join('');
+
+        const longSec = (label, attrs, cls) => {
+          const body = attrs.filter(has).map((a) => '<p>' + val(a) + '</p>').join('');
+          if (!body) return '';
+          return '<div class="sec ' + (cls || '') + '"><h3>' + label + '</h3>' + body + '</div>';
+        };
+
+        const idblock =
+          '<div class="idblock">' +
+          '<div class="portrait">' + CHAR.name.charAt(0) + '</div>' +
+          '<div class="idtext"><h1 class="cname">' + CHAR.name + '</h1>' +
+          (has('profile.pronouns') ? '<div class="pron">' + val('profile.pronouns') + '</div>' : '') +
+          (has('profile.concept') ? '<div class="concept">' + val('profile.concept') + '</div>' : '') +
+          '</div></div>';
+
+        const desc = has('description') ? '<p class="desc">' + CHAR.description + '</p>' : '';
+        const facts = shortFacts ? '<div class="facts">' + shortFacts + '</div>' : '';
+        const currently = has('profile.currently')
+          ? '<div class="currently"><b>Currently</b>' + val('profile.currently') + '</div>'
+          : '';
+
+        const gallery =
+          has('profile.image.primary')
+            ? '<div class="sec"><h3>Gallery</h3><div class="gallery">' +
+              Array.from({ length: CHAR.media.gallery }, () =>
+                '<div class="gslot"><svg width="15" height="15"><use href="#i-image"/></svg></div>',
+              ).join('') +
+              '</div><p class="muted" style="font-size:11px;margin-top:7px">v0.13 ships the media <i>model</i> only — no uploader, no storage, no serving (§7.3). These slots can never contain an image in this release.</p></div>'
+            : '';
+
+        const invite =
+          viewer !== 'player'
+            ? '<div class="invite show"><b>Signed-in players see more on some profiles.</b> ' +
+              'What a profile publishes to logged-out visitors is set by the game, not by the character’s player. ' +
+              '<span class="muted">This notice is shown to every signed-out visitor on every profile — it is not a statement about this character.</span></div>'
+            : '';
+
+        const body =
+          VARIANT === 'c'
+            ? '<div class="card">' + idblock + desc + facts + currently + '</div>' +
+              longSec('Appearance', ['profile.appearance']) +
+              longSec('Personality', ['profile.personality']) +
+              longSec('Background', ['profile.biography']) +
+              longSec('Rumors', ['profile.rumors']) +
+              longSec('Player preferences <span class="ooctag">OOC</span>', ['profile.rp_preferences'], 'ooc') +
+              gallery +
+              '<div style="margin:18px">' + invite + '</div>'
+            : idblock + desc + facts + currently +
+              longSec('Appearance', ['profile.appearance']) +
+              longSec('Personality', ['profile.personality']) +
+              longSec('Background', ['profile.biography']) +
+              longSec('Rumors', ['profile.rumors']) +
+              longSec('Player preferences <span class="ooctag">OOC</span>', ['profile.rp_preferences'], 'ooc') +
+              gallery + invite;
+
+        return frame(viewer, posture, data, pubbar(viewer) + '<div class="prof">' + body + '</div>');
+      }
+
+      function notFoundPanel(viewer) {
+        return frame(
+          viewer,
+          '',
+          '',
+          pubbar(viewer) +
+            '<div class="nf"><div class="glyph"><svg width="20" height="20"><use href="#i-ghost"/></svg></div>' +
+            '<h2>Not found</h2><p>We couldn’t find that page.</p>' +
+            '<button class="btn" style="margin-top:6px">← Back to HoloMUSH</button></div>',
+        );
+      }
+
+      function pubbar(viewer) {
+        return (
+          '<div class="pubbar"><span style="font-family:var(--font-mono);font-weight:600">&gt;holomush<span style="color:var(--color-cursor)">_</span></span>' +
+          '<span class="muted" style="font-size:12px">/ characters</span><span class="right">' +
+          (viewer === 'player'
+            ? '<button class="btn">Your characters</button>'
+            : '<button class="btn">Sign in</button><button class="btn btn-primary">Play as guest</button>') +
+          '</span></div>'
+        );
+      }
+
+      function frame(viewer, posture, data, inner) {
+        const label =
+          '<span class="tierdot ' + viewer + '"></span>' + viewer +
+          (posture ? ' · ' + posture : '') + (data ? ' · ' + data : '');
+        return '<div class="frame v-' + VARIANT + '"><div class="framehead">' + label + '</div>' + inner + '</div>';
+      }
+
+      const NOTES = {
+        seeded:
+          '<b>Seeded v0.13 posture.</b> Anonymous clears exactly three things — <code>name</code>, ' +
+          '<code>profile.pronouns</code> and the in-world <code>description</code>. Everything else sits at <code>guest</code>. ' +
+          '<b>Not one row in §8.6’s seeded column is <code>player</code></b>, so <b>guest and player render identically</b> — ' +
+          'turn on <i>compare tiers</i> and check the right two panels are the same page.',
+        scrape:
+          '<b>Scrape-friendly posture.</b> Every floor at <code>anonymous</code>. All three tiers render identically — ' +
+          'the profile is fully public. One column of §8.6’s table, no code change.',
+        playersonly:
+          '<b>Players-only posture.</b> Reachability itself is at <code>player</code>, so anonymous and guest get a ' +
+          '<b>not-found</b> — indistinguishable from a character that does not exist (§8.7). Not a "this profile is private" page: ' +
+          'that would disclose the character exists, which is the fact the floor was set to withhold.',
+      };
+
+      function render() {
+        const viewer = document.getElementById('viewerpick').value;
+        const posture = document.getElementById('posturepick').value;
+        const data = document.getElementById('datapick').value;
+
+        let note = NOTES[posture];
+        if (data === 'empty') {
+          note +=
+            '<br><br><b class="mono">data: zero profile rows.</b> §7.5 — a character with no <code>profile.*</code> rows still resolves; ' +
+            'it does <b>not</b> 404. And §7.5 + §8.9 together are the sharp constraint on this whole screen: ' +
+            '<b>a field left blank and a field the viewer may not see MUST look identical.</b> ' +
+            'Compare <i>guest · zero rows</i> against <i>anonymous · full profile</i> — the renderer cannot tell them apart, and neither may the page.';
+        }
+        document.getElementById('topnote').innerHTML = note;
+
+        document.getElementById('cmpbtn').className = 'cmp' + (COMPARE ? ' on' : '');
+        document.getElementById('stage').innerHTML = COMPARE
+          ? panel('anonymous', posture, data) + panel('guest', posture, data) + panel('player', posture, data)
+          : panel(viewer, posture, data);
+
+        // frames are rebuilt every render, so re-apply the pinned viewport width
+        if (window._vp) {
+          document.querySelectorAll('.frame').forEach((f) => (f.style.maxWidth = window._vp + 'px'));
+        }
+      }
+
+      function toggleCmp() { COMPARE = !COMPARE; render(); }
+      function showVariant(v, btn) {
+        VARIANT = v;
+        document.querySelectorAll('.variant-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      }
+      function setVp(px, btn) {
+        document.querySelectorAll('#sketch-tools button').forEach((b) => b.classList.remove('on'));
+        btn.classList.add('on');
+        document.querySelectorAll('.frame').forEach((f) => (f.style.maxWidth = px ? px + 'px' : ''));
+        window._vp = px;
+      }
+      render();
+    </script>
+  </body>
+</html>

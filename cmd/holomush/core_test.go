@@ -135,8 +135,10 @@ func TestCoreCommand_InvalidDatabaseURL(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err, "Expected error with invalid DATABASE_URL")
-	// Error from golang-migrate during auto-migration - "unknown driver" when scheme is invalid
-	assert.Contains(t, err.Error(), "unknown driver", "Error should mention unknown driver, got: %v", err)
+	// Assert our own contract (the oops code), not a third-party message. pgx's
+	// wording for an unparseable DSN is not our API and has already changed once
+	// with the engine swap; the code is what callers and operators key on.
+	errutil.AssertErrorCode(t, err, "MIGRATION_INIT_FAILED")
 }
 
 func TestCoreCommand_FlagParsing(t *testing.T) {

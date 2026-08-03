@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestRootCommand_HasExpectedSubcommands(t *testing.T) {
@@ -134,8 +136,11 @@ func TestMigrateCommand_NoDatabaseURL(t *testing.T) {
 }
 
 func TestMigrateCommand_InvalidDatabaseURL(t *testing.T) {
-	// Set an invalid DATABASE_URL
-	t.Setenv("DATABASE_URL", "invalid://not-a-real-db")
+	// Deliberately NOT the literal "invalid://..." this test used to carry: the old
+	// assertion was Contains(err, "invalid"), which passed only because the driver
+	// echoes the URL back. A scheme with no substring in common with the assertion
+	// makes the check real.
+	t.Setenv("DATABASE_URL", "badscheme://not-a-real-db")
 
 	cmd := NewRootCmd()
 	buf := new(bytes.Buffer)
@@ -147,8 +152,8 @@ func TestMigrateCommand_InvalidDatabaseURL(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err, "Expected error with invalid DATABASE_URL")
 
-	// Error from golang-migrate parsing
-	assert.Contains(t, err.Error(), "invalid", "Error should mention invalid URL")
+	// Assert our own contract (the oops code) rather than the driver's wording.
+	errutil.AssertErrorCode(t, err, "MIGRATION_INIT_FAILED")
 }
 
 // Status command tests are now in status_test.go

@@ -19,7 +19,7 @@ HoloMUSH is a modern MUSH platform: Go core with event-oriented architecture, du
 
 ## Documentation Structure
 
-`site/src/content/docs/` is the public Astro-Starlight website, by audience: `guide/` (players/designers), `operating/` (server operators), `extending/` (plugin devs), `contributing/` (codebase contributors), `reference/` (auto-generated API/event refs). Internal contributor docs: `.planning/ROADMAP.md` (GSD-owned strategic backlog + phases), `docs/plans/` + `docs/superpowers/plans/` (plans), `docs/specs/` + `docs/superpowers/specs/` (specs); the `docs/superpowers/` subdirs are AI-tooling-generated and equally valid.
+`site/src/content/docs/` is the public Astro-Starlight website, by audience: `guide/` (players/designers), `operating/` (server operators), `extending/` (plugin devs), `contributing/` (codebase contributors), `reference/` (auto-generated API/event refs). Internal contributor docs: `.planning/ROADMAP.md` (GSD-owned strategic backlog + phases), `.planning/phases/<phase>/<NN>-SPEC.md` (**GSD milestone specs — where new specs go**), `docs/plans/` + `docs/superpowers/plans/` (plans), `docs/specs/` + `docs/superpowers/specs/` (**historical** specs — still authoritative for what they describe, but not where new work lands).
 
 **Branding:** software brand (logo, favicon, palette) defined in `.claude/rules/branding.md` + `site/CLAUDE.md` — cyan tile + `>holomush_` wordmark, amber cursor only.
 
@@ -49,7 +49,7 @@ Tests MUST be written before implementation and MUST pass before a task is compl
 
 ### Spec-Driven Development
 
-Work MUST NOT start without a spec/design/plan. Specs live in `docs/specs/` or `docs/superpowers/specs/`; plans in `docs/plans/` or `docs/superpowers/plans/` (the `docs/superpowers/` subdirs are AI-tooling and equally valid). All specs and plans MUST use RFC2119 keywords. When a spec introduces or changes a **system-level invariant**, capture it in the registry (`docs/architecture/invariants.yaml`), consulting existing entries first (`.claude/rules/invariants.md`) — do NOT mint ad-hoc invariant families.
+Work MUST NOT start without a spec/design/plan. **GSD milestone specs live at `.planning/phases/<phase>/<NN>-SPEC.md`** — that is where a new spec goes. `docs/specs/` and `docs/superpowers/specs/` are **historical**: the specs already there remain authoritative for what they describe and are not being rewritten, but new spec work does not land in them. Plans live in `docs/plans/` or `docs/superpowers/plans/` (the `docs/superpowers/` subdirs are AI-tooling-generated and equally valid). All specs and plans MUST use RFC2119 keywords. When a spec introduces or changes a **system-level invariant**, capture it in the registry (`docs/architecture/invariants.yaml`), consulting existing entries first (`.claude/rules/invariants.md`) — do NOT mint ad-hoc invariant families.
 
 ### RFC2119 Keywords
 
@@ -163,7 +163,7 @@ Use `oops` for structured errors (`oops.With(k,v).Wrap(err)`, `oops.Errorf(...)`
 
 ### Database Migrations
 
-`internal/store/migrations/`, embedded at compile time. Sequential numbering, paired `.up.sql` + `.down.sql`, idempotent (`IF NOT EXISTS`), no triggers/functions (all logic in Go). Full guide: [database-migrations.md](site/src/content/docs/contributing/how-to/database-migrations.md).
+`internal/store/migrations/`, embedded at compile time and applied by [goose](https://github.com/pressly/goose). Sequential 6-digit numbering, **one `NNNNNN_name.sql` per version** carrying both directions (`-- +goose Up` / `-- +goose Down`), idempotent (`IF NOT EXISTS`), no triggers/functions (all logic in Go). Every `$$`-delimited body MUST sit inside `-- +goose StatementBegin` / `-- +goose StatementEnd`. Full guide: [database-migrations.md](site/src/content/docs/contributing/how-to/database-migrations.md).
 
 ### License Headers
 
@@ -265,6 +265,7 @@ VCS is **native git** (no jj): use `git` directly — no VCS skill is required.
 
 - **Directory structure**: `tree -L 2` / `ls`; contributor layout in `site/src/content/docs/contributing/`.
 - **Auto-loading `.claude/rules/`** (load on their paths): `event-interfaces.md` (`EventBus`/`ServiceRegistry`/`ServiceProvider`, eventbus/plugin code); `gateway-boundary.md` (gateway); `terminology.md` (`*.md` + domain code); `invariants.md` (invariant registry, its tooling, specs).
+- **Sketch findings for holomush** (validated design decisions, CSS patterns, visual direction — admin-portal shell/nav, dense tables, gated sections, field-masked forms, the mutation loop and phone band; plus player-facing profiles under viewer tiers, the character roster, creation/name-collision, and the ordinary not-found page) → `Skill("sketch-findings-holomush")`
 
 ## Core Systems
 

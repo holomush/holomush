@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sketch 005 — Admin Mutation in Shell</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      body { padding-top: 42px; }
+
+      /* ---- sketch chrome (same shape as 001/002/003/004) ---------------- */
+      #variant-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9998; height: 42px;
+        display: flex; align-items: center; gap: 6px; padding: 0 12px;
+        background: #07080a; border-bottom: 1px solid var(--color-border);
+      }
+      #variant-nav .lbl {
+        font-family: var(--font-mono); font-size: 10.5px;
+        color: var(--color-status-text); margin-right: 6px;
+      }
+      .variant-tab {
+        height: 26px; padding: 0 10px; border-radius: 5px;
+        border: 1px solid var(--color-border); background: transparent;
+        color: var(--color-muted-foreground); font-family: inherit;
+        font-size: 12px; cursor: pointer;
+      }
+      .variant-tab:hover { background: var(--color-secondary); color: var(--color-foreground); }
+      .variant-tab.active {
+        background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+        color: var(--color-primary);
+      }
+      .statepick {
+        height: 26px; border-radius: 5px; border: 1px solid var(--color-border);
+        background: #101418; color: var(--color-muted-foreground);
+        font-family: inherit; font-size: 11.5px; padding: 0 6px;
+      }
+      #sketch-tools {
+        position: fixed; right: 10px; bottom: 10px; z-index: 9999; opacity: 0.35;
+        transition: opacity 120ms; display: flex; align-items: center; gap: 4px;
+        padding: 5px 7px; border-radius: 7px; background: #07080a;
+        border: 1px solid var(--color-border);
+      }
+      #sketch-tools button {
+        height: 22px; padding: 0 7px; border-radius: 4px; font-size: 11px;
+        border: 1px solid var(--color-border); background: transparent;
+        color: var(--color-muted-foreground); cursor: pointer;
+      }
+      #sketch-tools button.on { color: var(--color-primary); border-color: var(--color-primary); }
+      #sketch-tools .sep { width: 1px; height: 16px; background: var(--color-border); }
+      #sketch-tools select {
+        height: 22px; border-radius: 4px; border: 1px solid var(--color-border);
+        background: #101418; color: var(--color-muted-foreground); font-size: 11px;
+      }
+
+      .viewport-wrap {
+        margin: 0 auto; transition: max-width 180ms ease;
+        container-type: inline-size; container-name: vp;
+        border: 1px solid var(--color-border); border-top: none;
+      }
+      .shell { height: calc(100vh - 42px - var(--topbar-h)); display: flex; min-height: 0; }
+
+      /* ---- frame, inherited verbatim from 001 winner C2 ------------------ */
+      .rail {
+        width: var(--rail-w); flex-shrink: 0; background: var(--color-sidebar-background);
+        border-right: 1px solid var(--color-border); display: flex; flex-direction: column;
+        align-items: center; padding: 7px 0; gap: 4px;
+      }
+      .rail-btn {
+        width: 34px; height: 34px; border-radius: 7px; border: none; background: transparent;
+        color: var(--color-muted-foreground); display: flex; align-items: center;
+        justify-content: center; cursor: pointer; position: relative;
+      }
+      .rail-btn:hover { background: var(--color-secondary); color: var(--color-foreground); }
+      .rail-btn.is-active { color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
+      .rail-btn.is-active::before {
+        content: ''; position: absolute; left: -7px; top: 8px; bottom: 8px;
+        width: 2px; border-radius: 2px; background: var(--color-primary);
+      }
+      .rail-admin-group, .rail-identity { display: none; flex-direction: column; align-items: center; gap: 4px; }
+      .rail-divider { width: 20px; height: 1px; background: var(--color-border); margin: 5px 0; }
+      .rail-avatar {
+        width: 26px; height: 26px; border-radius: 999px; display: flex; align-items: center;
+        justify-content: center; font-size: 10px; font-weight: 600;
+        background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+        color: var(--color-primary); border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+      }
+
+      .adminnav {
+        width: var(--adminnav-w); flex-shrink: 0; background: var(--color-sidebar-background);
+        border-right: 1px solid var(--color-border); display: flex; flex-direction: column; min-height: 0;
+      }
+      .adminnav-scroll { flex: 1; overflow: auto; padding: 8px; }
+      .whoami { padding: 11px 12px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 9px; }
+      .avatar {
+        width: 28px; height: 28px; border-radius: 999px; flex-shrink: 0; display: flex;
+        align-items: center; justify-content: center; font-size: 11px; font-weight: 600;
+        background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+        color: var(--color-primary); border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+      }
+      .navitem {
+        display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 9px;
+        border-radius: 6px; color: var(--color-muted-foreground); text-decoration: none;
+        cursor: pointer; position: relative; font-size: 13px;
+      }
+      .navitem:hover { background: var(--color-secondary); color: var(--color-foreground); }
+      .navitem.is-active { background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); }
+      .navitem.is-planned { opacity: 0.55; }
+      .nav-label { flex: 1; }
+
+      .mobilebar {
+        display: none; align-items: center; gap: 9px; padding: 8px 12px;
+        border-bottom: 1px solid var(--color-border); background: var(--color-surface);
+      }
+      .hamburger {
+        width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+        border: 1px solid var(--color-border); border-radius: 6px; background: transparent;
+        color: var(--color-foreground); cursor: pointer;
+      }
+
+      .main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+      .page { flex: 1; overflow: auto; padding: 16px 18px 40px; min-width: 0; }
+      .page h1 { font-size: 17px; font-weight: 600; margin: 0 0 2px; }
+      .crumb { font-size: 11.5px; color: var(--color-status-text); margin-bottom: 12px; }
+
+      /* ---- table -------------------------------------------------------- */
+      table.chars { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      table.chars th {
+        text-align: left; font-weight: 500; font-size: 11px; letter-spacing: 0.03em;
+        text-transform: uppercase; color: var(--color-status-text);
+        border-bottom: 1px solid var(--color-border); padding: 7px 9px; white-space: nowrap;
+      }
+      table.chars td { border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent); padding: 7px 9px; }
+      table.chars tbody tr { position: relative; }
+      table.chars tbody tr:hover { background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
+      table.chars tbody tr.is-target { background: color-mix(in srgb, var(--color-primary) 9%, transparent); }
+      table.chars tbody tr.just-changed { animation: flash 1400ms ease-out; }
+      @keyframes flash {
+        from { background: color-mix(in srgb, var(--color-primary) 26%, transparent); }
+        to { background: transparent; }
+      }
+      .cname { font-weight: 600; color: var(--color-foreground); }
+      .pill {
+        display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px;
+        border-radius: 999px; font-size: 10.5px; border: 1px solid var(--color-border);
+        color: var(--color-muted-foreground);
+      }
+      .pill.active { color: #7fd98f; border-color: color-mix(in srgb, #7fd98f 40%, transparent); }
+      .pill.retired { color: var(--color-status-text); }
+      .pill.idle { color: var(--color-status-text); opacity: 0.6; }
+      .mono { font-family: var(--font-mono, ui-monospace, monospace); }
+      .muted { color: var(--color-status-text); }
+
+      .rowactions { display: flex; gap: 4px; justify-content: flex-end; opacity: 0; transition: opacity 90ms; }
+      tr:hover .rowactions, tr.is-target .rowactions { opacity: 1; }
+      .rowactions.forced { opacity: 1; }
+      .btn-xs {
+        height: 22px; padding: 0 8px; border-radius: 5px; border: 1px solid var(--color-border);
+        background: var(--color-surface); color: var(--color-muted-foreground);
+        font-size: 11px; cursor: pointer; font-family: inherit;
+      }
+      .btn-xs:hover { color: var(--color-foreground); border-color: var(--color-muted-foreground); }
+
+      /* ---- THE VARIABLE: how the Sheet sits in the shell ----------------- */
+      .scrim {
+        position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45);
+        opacity: 0; pointer-events: none; transition: opacity 140ms; z-index: 20;
+      }
+      .scrim.show { opacity: 1; pointer-events: auto; }
+
+      .sheet {
+        position: absolute; z-index: 30; display: flex; flex-direction: column;
+        background: var(--color-surface); border-left: 1px solid var(--color-border);
+        transition: transform 180ms ease, opacity 140ms;
+        top: 0; right: 0; bottom: 0; width: 380px;
+        transform: translateX(102%);
+      }
+      .sheet.open { transform: none; }
+      .sheet-head {
+        padding: 12px 14px; border-bottom: 1px solid var(--color-border);
+        display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+      }
+      .sheet-body { flex: 1; overflow: auto; padding: 12px 14px; }
+      .sheet-foot {
+        padding: 10px 14px; border-top: 1px solid var(--color-border);
+        display: flex; align-items: center; gap: 8px; background: var(--color-card);
+      }
+
+      /* A: overlay — floats over the table, scrim behind. shadcn default. */
+      .v-a .sheet { box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45); }
+
+      /* B: inset — no scrim; the sheet is a sibling column and the table narrows. */
+      .v-b .sheet { position: relative; transform: none; opacity: 0; width: 0; border-left: none; overflow: hidden; }
+      .v-b .sheet.open { opacity: 1; width: 380px; border-left: 1px solid var(--color-border); }
+      .v-b .scrim { display: none; }
+      .v-b .main { flex-direction: row; }
+      .v-b .main > .maincol { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+      /* C: adaptive — A at >=1024, takeover at 768-1023, bottom-sheet at <768. */
+
+      /* ---- form bits (from 004 winner C) --------------------------------- */
+      .grouphead {
+        font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--color-status-text); margin: 10px 0 6px; display: flex;
+        align-items: center; gap: 6px;
+      }
+      .grouphead.clickable { cursor: pointer; }
+      .lockedsummary {
+        display: flex; align-items: center; gap: 7px; padding: 7px 9px; font-size: 11.5px;
+        border: 1px solid var(--color-border); border-radius: 6px;
+        background: var(--color-card); cursor: pointer; color: var(--color-muted-foreground);
+      }
+      .fieldrow { margin-bottom: 9px; }
+      .fieldrow label { display: block; font-size: 11px; color: var(--color-status-text); margin-bottom: 3px; }
+      .fieldrow input, .fieldrow textarea {
+        width: 100%; background: var(--color-input-background); color: var(--color-input-text);
+        border: 1px solid var(--color-input); border-radius: 6px; padding: 6px 8px;
+        font-size: 12.5px; font-family: inherit;
+      }
+      .fieldrow.dirty input, .fieldrow.dirty textarea { border-color: var(--color-primary); }
+      .fieldrow.dirty label::after {
+        content: ' • changed'; color: var(--color-primary); font-size: 10px;
+      }
+      .btn {
+        height: 28px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--color-border);
+        background: var(--color-surface); color: var(--color-muted-foreground);
+        font-size: 12px; cursor: pointer; font-family: inherit;
+      }
+      .btn-primary {
+        background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+        color: var(--color-primary);
+      }
+      .btn-primary[disabled] { opacity: 0.4; cursor: not-allowed; }
+      .btn-danger { color: var(--color-destructive); border-color: color-mix(in srgb, var(--color-destructive) 40%, transparent); }
+
+      .confirm {
+        position: absolute; z-index: 40; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: min(420px, calc(100% - 32px)); background: var(--color-card);
+        border: 1px solid var(--color-border); border-radius: 10px; padding: 16px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+      }
+      .confirm h3 { margin: 0 0 6px; font-size: 14px; }
+      .confirm p { margin: 0 0 10px; font-size: 12px; line-height: 1.6; color: var(--color-muted-foreground); }
+
+      /* ---- THE MISSING PIECE: the toast (sonner) ------------------------- */
+      .toastwrap {
+        position: absolute; z-index: 60; right: 14px; bottom: 14px;
+        display: flex; flex-direction: column; gap: 7px; pointer-events: none;
+      }
+      .toast {
+        min-width: 260px; max-width: 340px; display: flex; align-items: flex-start; gap: 9px;
+        padding: 10px 12px; border-radius: 8px; background: var(--color-card);
+        border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); font-size: 12px;
+        animation: toast-in 180ms ease-out;
+      }
+      @keyframes toast-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+      .toast .tmsg { line-height: 1.5; }
+      .toast .trpc { display: block; margin-top: 3px; font-size: 10.5px; color: var(--color-status-text); }
+      .toast .tundo {
+        margin-left: auto; flex-shrink: 0; color: var(--color-primary);
+        background: none; border: none; font-size: 11.5px; cursor: pointer; font-family: inherit;
+      }
+
+      .seqnote {
+        margin: 0 18px 12px; padding: 8px 11px; border-radius: 7px; font-size: 11.5px;
+        line-height: 1.6; border: 1px dashed color-mix(in srgb, var(--color-primary) 35%, transparent);
+        background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+        color: var(--color-muted-foreground);
+      }
+
+      /* ---- TABLET: the merge (001 C2) ----------------------------------- */
+      @container vp (max-width: 1023px) {
+        .adminnav { width: 0; border-right-width: 0; overflow: hidden; }
+        .rail-admin-group, .rail-identity { display: flex; }
+        .rail-btn.is-context { opacity: 0.7; cursor: default; }
+        .rail-btn.is-context::before { display: none; }
+
+        /* C only: the sheet stops being a side panel and takes the column over */
+        .v-c .sheet { width: 100%; border-left: none; }
+        .v-c .scrim { display: none; }
+        /* B at tablet: an inset 380px panel would leave ~330px of table. Collapse to takeover. */
+        .v-b .sheet.open { width: 100%; }
+      }
+
+      /* ---- PHONE -------------------------------------------------------- */
+      @container vp (max-width: 767px) {
+        .shell > .rail { width: 0; border-right-width: 0; overflow: hidden; }
+        .mobilebar { display: flex; }
+        .page { padding: 12px 12px 40px; }
+        table.chars th:nth-child(4), table.chars td:nth-child(4),
+        table.chars th:nth-child(5), table.chars td:nth-child(5) { display: none; }
+
+        /* C only: bottom-sheet. A stays a right drawer (deliberately wrong-looking). */
+        .v-c .sheet {
+          top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 82%;
+          border-left: none; border-top: 1px solid var(--color-border);
+          border-radius: 12px 12px 0 0; transform: translateY(102%);
+        }
+        .v-c .sheet.open { transform: none; }
+        .v-c .scrim { display: block; }
+        .toastwrap { left: 12px; right: 12px; bottom: 12px; }
+        .toast { max-width: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <svg style="display: none">
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></symbol>
+      <symbol id="i-clap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 14 6-6 8 8-6 6z" /><path d="m14 4 6 6" /></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 0 0-16 0" /></symbol>
+      <symbol id="i-shieldalert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /><path d="M12 8v4" /><path d="M12 16h.01" /></symbol>
+      <symbol id="i-scroll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5" /><path d="M15 8h-5" /><path d="M19 17V5a2 2 0 0 0-2-2H4" /></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4" /><line x1="10" x2="3" y1="4" y2="4" /><line x1="21" x2="12" y1="12" y2="12" /><line x1="8" x2="3" y1="12" y2="12" /></symbol>
+      <symbol id="i-puzzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 2.1a2 2 0 0 0-2.8 1.8v1.4a1 1 0 0 1-1 1H8.2a2 2 0 0 0-2 2v2.3a1 1 0 0 1-1 1H3.9a2 2 0 0 0-1.8 2.8" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 6.2 17.8 2.8a2 2 0 0 0-2.8 0L3 14.8V21h6.2L21.2 9a2 2 0 0 0 0-2.8z" /></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></symbol>
+      <symbol id="i-dots" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12" /></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.6" /></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></symbol>
+    </svg>
+
+    <div id="variant-nav">
+      <span class="lbl">SKETCH 005 · admin mutation in shell</span>
+      <button class="variant-tab active" onclick="showVariant('a', this)">A: Overlay ★</button>
+      <button class="variant-tab" onclick="showVariant('b', this)">B: Inset split</button>
+      <button class="variant-tab" onclick="showVariant('c', this)">C: Adaptive</button>
+      <span style="flex: 1"></span>
+      <select class="statepick" id="seqpick" onchange="render()">
+        <optgroup label="edit path">
+          <option value="0">1 · idle</option>
+          <option value="1">2 · row hover — actions revealed</option>
+          <option value="2">3 · sheet open, clean</option>
+          <option value="3">4 · dirty — update_mask: 2 paths</option>
+          <option value="4">5 · saving</option>
+          <option value="5">6 · saved — toast</option>
+          <option value="6">7 · row updated in place</option>
+        </optgroup>
+        <optgroup label="retire path">
+          <option value="7">8 · retire confirm</option>
+          <option value="8">9 · retired — toast + undo</option>
+          <option value="9">10 · row reads retired</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="viewport-wrap" id="vp">
+      <div class="topbar" style="height: var(--topbar-h); display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--color-border); background: var(--color-surface)">
+        <span class="wordmark" style="font-family: var(--font-mono, monospace); font-weight: 600">&gt;holomush<span style="color: var(--color-cursor)">_</span></span>
+        <span class="muted" style="font-size: 12px">/ admin</span>
+      </div>
+
+      <div class="shell v-a" id="shell">
+        <nav class="rail">
+          <button class="rail-btn" title="Room"><svg width="18" height="18"><use href="#i-home" /></svg></button>
+          <button class="rail-btn" title="Scenes"><svg width="18" height="18"><use href="#i-clap" /></svg></button>
+          <button class="rail-btn is-active is-context" title="Admin"><svg width="18" height="18"><use href="#i-shield" /></svg></button>
+          <div class="rail-admin-group">
+            <div class="rail-divider"></div>
+            <button class="rail-btn is-active" title="Characters"><svg width="16" height="16"><use href="#i-users" /></svg></button>
+            <button class="rail-btn" title="Stats (planned)" style="opacity: 0.5"><svg width="16" height="16"><use href="#i-chart" /></svg></button>
+            <button class="rail-btn" title="Players (planned)" style="opacity: 0.5"><svg width="16" height="16"><use href="#i-user" /></svg></button>
+            <button class="rail-btn" title="Moderation (planned)" style="opacity: 0.5"><svg width="16" height="16"><use href="#i-shieldalert" /></svg></button>
+            <button class="rail-btn" title="Audit (planned)" style="opacity: 0.5"><svg width="16" height="16"><use href="#i-scroll" /></svg></button>
+            <button class="rail-btn" title="Config (planned)" style="opacity: 0.5"><svg width="16" height="16"><use href="#i-sliders" /></svg></button>
+            <button class="rail-btn" title="Plugins (planned)" style="opacity: 0.5"><svg width="16" height="16"><use href="#i-puzzle" /></svg></button>
+          </div>
+          <span style="flex: 1"></span>
+          <div class="rail-identity"><div class="rail-avatar">SB</div></div>
+        </nav>
+
+        <aside class="adminnav">
+          <div class="whoami">
+            <div class="avatar">SB</div>
+            <div style="min-width: 0">
+              <div style="font-size: 12.5px; font-weight: 600">seanb</div>
+              <div style="font-size: 10.5px" class="muted">administrator</div>
+            </div>
+          </div>
+          <div class="adminnav-scroll">
+            <a class="navitem is-active"><svg width="15" height="15"><use href="#i-users" /></svg><span class="nav-label">Characters</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-chart" /></svg><span class="nav-label">Stats</span><span class="pill">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-user" /></svg><span class="nav-label">Players</span><span class="pill">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-shieldalert" /></svg><span class="nav-label">Moderation</span><span class="pill">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-scroll" /></svg><span class="nav-label">Audit</span><span class="pill">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-sliders" /></svg><span class="nav-label">Config</span><span class="pill">planned</span></a>
+            <a class="navitem is-planned"><svg width="15" height="15"><use href="#i-puzzle" /></svg><span class="nav-label">Plugins</span><span class="pill">planned</span></a>
+          </div>
+        </aside>
+
+        <div class="main" id="main">
+          <div class="maincol">
+            <div class="mobilebar">
+              <button class="hamburger"><svg width="16" height="16"><use href="#i-menu" /></svg></button>
+              <span style="font-size: 12.5px">Admin <span class="muted">›</span> Characters</span>
+            </div>
+            <div class="page">
+              <h1>Characters</h1>
+              <div class="crumb">412 characters · showing 6</div>
+              <div class="seqnote" id="seqnote"></div>
+              <table class="chars">
+                <thead>
+                  <tr>
+                    <th>Name</th><th>Player</th><th>Status</th><th>Created</th><th>Ver</th><th></th>
+                  </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="scrim" id="scrim"></div>
+          <div class="sheet" id="sheet"></div>
+          <div id="confirmhost"></div>
+          <div class="toastwrap" id="toasts"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="sketch-tools" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.35'">
+      <select onchange="document.querySelector('link[href*=themes]').href = '../themes/' + this.value + '.css'">
+        <option value="default">Default</option>
+      </select>
+      <span class="sep"></span>
+      <button onclick="setVp(375, this)">375</button>
+      <button onclick="setVp(768, this)">768</button>
+      <button onclick="setVp(1280, this)">1280</button>
+      <button class="on" onclick="setVp(0, this)">Full</button>
+    </div>
+
+    <script>
+      // Columns are exactly what `characters` has today (id, player_id, name,
+      // description, location_id, created_at, version, preferences) plus Phase 2's
+      // `status`. There is deliberately NO `last seen` column — it does not exist
+      // in the schema (sketch 002 finding 1).
+      const ROWS = [
+        { n: 'Ashwood, Miren', p: 'seanb', s: 'active', c: '2026-03-02', v: 7, t: true },
+        { n: 'Cael Vantrys', p: 'rowan', s: 'active', c: '2026-02-18', v: 3 },
+        { n: 'Dr. Ines Okafor', p: 'jules', s: 'active', c: '2026-01-30', v: 12 },
+        { n: 'Hollow', p: 'rowan', s: 'retired', c: '2025-11-04', v: 5 },
+        { n: 'Sable Quint', p: 'mika', s: 'idle', c: '2025-09-22', v: 2 },
+        { n: 'Teodor Ash', p: 'jules', s: 'active', c: '2026-04-11', v: 1 },
+      ];
+
+      let VARIANT = 'a';
+      let STEP = 0;
+
+      const NOTES = [
+        'Baseline. Row actions are hidden until hover — 002 winner A.',
+        'Hover reveals <b>Edit / Retire / ⋯</b> at the row end. No layout shift: the cell is always there, only its opacity changes.',
+        'Sheet open, nothing changed yet. <b>Save is inert</b> — an empty mask is a no-op (§9.5 rule 4). Note where the sheet sits relative to the table <i>at this viewport</i>: that is the whole question.',
+        'Two fields edited. Footer reads <code>update_mask: 2 paths</code> and each changed field is marked. Save is now live.',
+        'In flight. The RPC carries <code>expected_version: 7</code> (§9.4).',
+        'Saved. <b>This toast is the piece no prior sketch drew</b> — it is on two component lists and in zero mockups. It names the RPC, because an admin acting on someone else’s character should see what was actually sent.',
+        'The row updates <b>in place</b> with a brief flash — no full-table refetch, no scroll jump. Ver 7 → 8.',
+        'Retire confirmation. Leads with reversibility and states the name stays reserved (§4.4, §4.5). This is the destructive action — <b>there is no delete</b>.',
+        'Retired. The toast offers <b>Undo</b>, which sends <code>AdminUnretireCharacter</code> — never a status value (§10.6).',
+        'The row now reads <span class="pill retired">retired</span>. It stays in the list; retire is not a deletion.',
+      ];
+
+      function statusPill(s) {
+        if (s === 'active') return '<span class="pill active">active</span>';
+        if (s === 'retired') return '<span class="pill retired">retired</span>';
+        return '<span class="pill idle">idle</span>';
+      }
+
+      function render() {
+        STEP = parseInt(document.getElementById('seqpick').value, 10);
+        const shell = document.getElementById('shell');
+        shell.className = 'shell v-' + VARIANT;
+
+        document.getElementById('seqnote').innerHTML = '<b>Step ' + (STEP + 1) + '.</b> ' + NOTES[STEP];
+
+        // --- table ---
+        const targetRetired = STEP >= 9;
+        const targetVer = STEP >= 6 ? 8 : 7;
+        document.getElementById('tbody').innerHTML = ROWS.map((r, i) => {
+          const isT = !!r.t;
+          const s = isT && targetRetired ? 'retired' : r.s;
+          const v = isT ? targetVer : r.v;
+          const cls = [
+            isT && STEP >= 1 && STEP !== 0 ? 'is-target' : '',
+            isT && (STEP === 6 || STEP === 9) ? 'just-changed' : '',
+          ].join(' ');
+          const forced = isT && STEP >= 1 ? 'forced' : '';
+          return (
+            '<tr class="' + cls + '">' +
+            '<td><span class="cname">' + (isT && STEP >= 6 && STEP < 7 ? r.n.replace('Miren', 'Mirén') : r.n) + '</span></td>' +
+            '<td>' + r.p + '</td>' +
+            '<td>' + statusPill(s) + '</td>' +
+            '<td class="muted">' + r.c + '</td>' +
+            '<td class="mono muted">' + v + '</td>' +
+            '<td><div class="rowactions ' + forced + '">' +
+            '<button class="btn-xs"><svg width="11" height="11" style="vertical-align:-1px"><use href="#i-pencil"/></svg> Edit</button>' +
+            '<button class="btn-xs">' + (s === 'retired' ? 'Un-retire' : 'Retire') + '</button>' +
+            '<button class="btn-xs" style="width:24px;padding:0"><svg width="12" height="12"><use href="#i-dots"/></svg></button>' +
+            '</div></td></tr>'
+          );
+        }).join('');
+
+        // --- sheet ---
+        const sheetOpen = STEP >= 2 && STEP <= 5;
+        const dirty = STEP >= 3 && STEP <= 5;
+        const sheet = document.getElementById('sheet');
+        sheet.className = 'sheet' + (sheetOpen ? ' open' : '');
+        sheet.innerHTML = sheetOpen ? sheetHtml(dirty, STEP === 4) : '';
+        document.getElementById('scrim').className = 'scrim' + (sheetOpen || STEP === 7 ? ' show' : '');
+
+        // --- confirm ---
+        document.getElementById('confirmhost').innerHTML = STEP === 7 ? confirmHtml() : '';
+
+        // --- toasts ---
+        let t = '';
+        if (STEP === 5 || STEP === 6) {
+          t =
+            '<div class="toast"><svg width="14" height="14" style="color:var(--color-primary);flex-shrink:0;margin-top:1px"><use href="#i-check"/></svg>' +
+            '<div class="tmsg">Saved <b>Ashwood, Mirén</b>.<span class="trpc">AdminUpdateCharacter · update_mask: 2 paths · v7 → v8</span></div></div>';
+        }
+        if (STEP === 8 || STEP === 9) {
+          t =
+            '<div class="toast"><svg width="14" height="14" style="color:var(--color-primary);flex-shrink:0;margin-top:1px"><use href="#i-archive"/></svg>' +
+            '<div class="tmsg"><b>Ashwood, Mirén</b> retired. The name stays reserved.<span class="trpc">AdminRetireCharacter · reversible</span></div>' +
+            '<button class="tundo">Undo</button></div>';
+        }
+        document.getElementById('toasts').innerHTML = t;
+      }
+
+      function sheetHtml(dirty, saving) {
+        return (
+          '<div class="sheet-head"><div>' +
+          '<div style="font-size:15px;font-weight:600">Edit character</div>' +
+          '<div class="mono muted" style="font-size:11.5px;margin-top:2px">01JQ7X…8F2 · ' +
+          '<span title="Concurrency guard — carried as expected_version (§9.4). Never editable, never actionable, so it is metadata here rather than a row.">v7</span></div>' +
+          '</div><button class="btn-xs" style="width:26px;padding:0"><svg width="13" height="13"><use href="#i-x"/></svg></button></div>' +
+          '<div class="sheet-body">' +
+          '<div class="grouphead clickable">Managed elsewhere <svg width="10" height="10"><use href="#i-chev"/></svg></div>' +
+          '<div class="lockedsummary"><span><b>Name</b> Ashwood, Miren</span><span style="opacity:.5">·</span>' +
+          '<span><b>Status</b> active</span><span style="flex:1"></span>' +
+          '<span style="font-size:10.5px">managed by their own operations</span></div>' +
+          '<div class="grouphead">Editable here</div>' +
+          '<div class="fieldrow' + (dirty ? ' dirty' : '') + '"><label>profile.concept</label>' +
+          '<input value="' + (dirty ? 'Ex-legate turned archivist' : 'Ex-legate') + '" /></div>' +
+          '<div class="fieldrow"><label>profile.species</label><input value="Human" /></div>' +
+          '<div class="fieldrow' + (dirty ? ' dirty' : '') + '"><label>profile.currently</label>' +
+          '<input value="' + (dirty ? 'Cataloguing the west stacks' : 'Away') + '" /></div>' +
+          '<div class="fieldrow"><label>profile.appearance</label><textarea rows="3">Tall, grey at the temples, always carrying too many folios.</textarea></div>' +
+          '</div>' +
+          '<div class="sheet-foot"><span style="font-size:11px" class="muted">' +
+          (dirty ? 'update_mask: 2 paths' : 'update_mask: empty — no-op') +
+          '</span><span style="flex:1"></span>' +
+          '<button class="btn">Cancel</button>' +
+          '<button class="btn btn-primary" ' + (dirty ? '' : 'disabled') + '>' +
+          (saving ? '<svg width="11" height="11" style="vertical-align:-1px"><use href="#i-spin"/></svg> Saving…' : 'Save') +
+          '</button></div>'
+        );
+      }
+
+      function confirmHtml() {
+        return (
+          '<div class="confirm"><h3>Retire Ashwood, Miren?</h3>' +
+          '<p>Retiring is <b>reversible</b> — you can un-retire this character at any time, and <b>the name stays reserved</b> so nobody else can take it.</p>' +
+          '<p class="muted" style="font-size:11.5px">Sends <b style="color:var(--color-primary)">AdminRetireCharacter</b> — never a status value. Recorded to the audit log with your player id.</p>' +
+          '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn">Cancel</button>' +
+          '<button class="btn btn-danger">Retire</button></div></div>'
+        );
+      }
+
+      function showVariant(v, btn) {
+        VARIANT = v;
+        document.querySelectorAll('.variant-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      }
+
+      function setVp(px, btn) {
+        document.querySelectorAll('#sketch-tools button').forEach((b) => b.classList.remove('on'));
+        btn.classList.add('on');
+        document.getElementById('vp').style.maxWidth = px ? px + 'px' : '';
+      }
+
+      render();
+    </script>
+  </body>
+</html>

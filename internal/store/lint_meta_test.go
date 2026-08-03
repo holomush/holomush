@@ -82,6 +82,92 @@ func TestLintNoMicrosecondTruncateScansAnExplicitPath(t *testing.T) {
 	}
 }
 
+// TestLintNoTimestamptzScansTheStoreMigrationsAsSingleFileSQL pins the glob the
+// INV-STORE-1 lint uses to walk the host migration corpus.
+//
+// Under goose a migration is ONE file per version, NNNNNN_name.sql; the
+// golang-migrate-era *.up.sql / *.down.sql pairs are gone. A lint loop still
+// globbing *.up.sql therefore matches nothing — and a `for` loop over zero files
+// runs zero iterations, counts zero violations, and exits 0. INV-STORE-1's
+// enforcement would retire silently, reported as clean.
+//
+// This is a STATIC assertion on the Taskfile text, not a shell-out, for the same
+// reason its sibling above gives and one more: running `task lint:no-timestamptz`
+// cannot distinguish "no violations" from "the glob matched no files", so a
+// shell-out passes the exact failure mode this test exists to catch. (The
+// unit-test CI job also has no `rg` on PATH, so a shell-out would no-op there
+// regardless.)
+func TestLintNoTimestamptzScansTheStoreMigrationsAsSingleFileSQL(t *testing.T) {
+	const want = "internal/store/migrations/*.sql"
+
+	got := soleTaskfileLoopGlob(t, "internal/store/migrations/")
+	if got != want {
+		t.Fatalf("INV-STORE-1 lint globs %q, want %q — goose migrations are single files "+
+			"(NNNNNN_name.sql); a *.up.sql glob matches nothing, iterates zero times, and "+
+			"exits 0, retiring the timestamp discipline silently", got, want)
+	}
+}
+
+// TestLintNoTimestamptzStillScansPluginUpMigrationsSeparately pins the OTHER glob
+// in the same lint — and it is a guard against a well-meaning sweep, not a
+// leftover from the goose conversion.
+//
+// plugins/*/migrations/ is a SEPARATE migration system. It is applied by
+// pkg/plugin/storage/storage.go, which reads *.up.sql files directly; goose never
+// sees that directory and the conversion did not touch it. Widening this glob to
+// *.sql to "match" the host corpus would make the lint scan .down.sql files the
+// plugin migrator also carries, and — worse — would signal that the two systems
+// converged when they have not. Narrowing or renaming it breaks the plugin
+// migrator's timestamp discipline outright.
+func TestLintNoTimestamptzStillScansPluginUpMigrationsSeparately(t *testing.T) {
+	const want = "plugins/*/migrations/*.up.sql"
+
+	got := soleTaskfileLoopGlob(t, "plugins/*/migrations/")
+	if got != want {
+		t.Fatalf("plugin migration lint globs %q, want %q — plugins/*/migrations/ is a "+
+			"separate migrator (pkg/plugin/storage/storage.go applies *.up.sql only) that "+
+			"goose never sees; it must NOT be swept along with the host corpus", got, want)
+	}
+}
+
+// soleTaskfileLoopGlob returns the glob of the one `for f in <prefix>...; do` loop
+// in Taskfile.yaml whose target begins with prefix.
+//
+// It fails when there is no such loop, and when there is more than one: either
+// case means the caller's exact-string comparison would be asserting against
+// something other than the loop it names, and a pin that is not observing its
+// subject is indistinguishable from one that cannot fail.
+func soleTaskfileLoopGlob(t *testing.T, prefix string) string {
+	t.Helper()
+
+	taskfile := filepath.Join(repoRoot(t), "Taskfile.yaml")
+	data, err := os.ReadFile(taskfile)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfile, err)
+	}
+
+	loopPattern := regexp.MustCompile(`for\s+\S+\s+in\s+(` + regexp.QuoteMeta(prefix) + `\S*)\s*;`)
+
+	var globs []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if m := loopPattern.FindStringSubmatch(line); m != nil {
+			globs = append(globs, m[1])
+		}
+	}
+
+	switch len(globs) {
+	case 1:
+		return globs[0]
+	case 0:
+		t.Fatalf("no `for ... in %s...; do` loop found in %s — the INV-STORE-1 lint no longer "+
+			"walks this corpus, so nothing enforces the timestamp discipline over it", prefix, taskfile)
+	default:
+		t.Fatalf("found %d `for ... in %s...; do` loops in %s (%v); this pin asserts against a "+
+			"single loop and cannot tell which one it is guarding", len(globs), prefix, taskfile, globs)
+	}
+	return "" // unreachable: every switch arm above either returns or calls t.Fatalf.
+}
+
 // repoRoot walks up from the test's working directory to the directory holding
 // the root Taskfile.yaml.
 func repoRoot(t *testing.T) string {

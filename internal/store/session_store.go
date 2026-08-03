@@ -971,7 +971,7 @@ func (s *PostgresSessionStore) UpdateFocusMemberships(ctx context.Context, sessi
 }
 
 // GetConnection reads one session_connections row by PK. O(1) PK lookup.
-// ULID columns are TEXT in the schema (migrations/000001_baseline.up.sql:227);
+// ULID columns are TEXT in the schema (migrations/000001_baseline.sql);
 // mirror parseSessionRow pattern at session_store.go:51-83 — scan TEXT into
 // string then ulid.Parse (pgx cannot scan TEXT directly into ulid.ULID).
 // player_session_id is omitted from the SELECT — session.Connection has no
