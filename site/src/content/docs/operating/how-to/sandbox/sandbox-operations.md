@@ -8,6 +8,23 @@ maintained by the core team. Self-hosters should refer to
 
 ## One-time bootstrap
 
+:::danger[Fresh bootstrap is currently unsupported — see #4928]
+The bootstrap path does **not** provision `HOLOMUSH_KEK_PASSPHRASE`. Neither
+`scripts/cloud-init.sh` nor `.github/workflows/bootstrap-sandbox.yaml` writes it
+into the generated `.env`, and `compose.prod.yaml` requires it — so a freshly
+bootstrapped droplet fails `docker compose config`, and the core would refuse to
+start even if it got that far (`a KEK is required to start`).
+
+Do not treat the flow below as deployable until
+[#4928](https://github.com/holomush/holomush/issues/4928) lands. Its fix must
+generate the passphrase **once** and persist it to a secret, the way
+`KOPIA_SANDBOX_PASSWORD` is handled — **not** regenerate it per run the way
+`POSTGRES_PASSWORD` is. Regenerating a KEK strands every previously wrapped DEK.
+
+The rest of this section is accurate for the resources it provisions; only the
+KEK secret is missing.
+:::
+
 The bootstrap workflow automates all cloud resource provisioning from zero
 in a single run. It is idempotent — safe to re-run if it fails partway through.
 
@@ -204,10 +221,120 @@ real shape has drifted from the committed version.
 
 ## Ongoing operations
 
+Every `ssh` command in this section targets the droplet's public IPv4.
+`game.holomush.dev` is Cloudflare-proxied, so port 22 is unreachable through it.
+Export the address once per shell before running anything below:
+
+```bash
+# Assign and export SEPARATELY: `export X=$(cmd)` always returns 0, so it
+# discards cmd's exit status and leaves DROPLET_IP empty on failure — every
+# later command then silently targets `holomush@`.
+DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
+  --format PublicIPv4 --no-header)
+export DROPLET_IP="${DROPLET_IP:?doctl returned no address — check auth (doctl account get) and the droplet name}"
+```
+
 ### Deploy a new version
 
-Pushing a `v*` tag to `main` triggers the `deploy-sandbox` workflow. No
-manual steps needed.
+Deploying is a **separate human gate** from cutting a release (INV-4): cutting a
+release does NOT deploy it. Dispatch the `Deploy Sandbox` workflow
+(`.github/workflows/deploy.yaml`) manually with the release tag.
+
+Confirm all four prerequisites first — the workflow does not check them for you,
+and several fail in ways that resemble success:
+
+| Prerequisite | Why it matters |
+| --- | --- |
+| A **published** (non-draft) GitHub Release exists for the tag | The workflow contract requires the release, not just the tag. A draft satisfies `gh release view` but is not published |
+| The GHCR image exists for that version | The deploy pulls `ghcr.io/holomush/holomush:${HOLOMUSH_VERSION}`; a missing image fails mid-deploy, after traffic has already been stopped |
+| Repository variable `SANDBOX_DEPLOY_ENABLED` is `true` | The deploy job is guarded by `if: vars.SANDBOX_DEPLOY_ENABLED == 'true'`. When it is not `true` the dispatch still succeeds and a run still appears — the job is simply **skipped** |
+| The droplet is not several releases behind | See the caution below |
+
+```bash
+TAG=v0.12.0
+DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
+  --format PublicIPv4 --no-header)
+: "${DROPLET_IP:?doctl returned no address — check auth and the droplet name}"
+
+# Runs in a subshell so a failed check aborts the preflight WITHOUT `set -e`
+# killing your interactive shell. Nothing here dispatches anything.
+(
+  set -euo pipefail
+
+  # 1. Release exists AND is published, not a draft
+  gh release view "$TAG" -R holomush/holomush --json isDraft \
+    --jq 'if .isDraft then error("release is a DRAFT — publish it first") else "release published" end'
+
+  # 2. GHCR image exists for that version (tag without the leading v).
+  #    --paginate is load-bearing: the endpoint pages, and without it only the
+  #    most recent page is searched, so an older-but-valid tag reports missing.
+  #    Collect first, match second: `gh … | grep -q` would have grep close the
+  #    pipe on its first match, killing gh with EPIPE, and `pipefail` then
+  #    reports the whole pipeline as failed even though the image WAS found.
+  tags=$(gh api --paginate /orgs/holomush/packages/container/holomush/versions \
+    --jq '.[].metadata.container.tags[]?')
+  grep -qxF -- "${TAG#v}" <<<"$tags" \
+    || { echo "IMAGE ${TAG#v} MISSING — do not deploy"; exit 1; }
+  echo "image ${TAG#v} present"
+
+  # 3. Deploy is enabled. Assert the VALUE — the variable existing tells you
+  #    nothing, and `false` is exactly the case that silently skips the job.
+  [ "$(gh variable list -R holomush/holomush --json name,value \
+      --jq '.[] | select(.name=="SANDBOX_DEPLOY_ENABLED") | .value')" = "true" ] \
+    || { echo "SANDBOX_DEPLOY_ENABLED is not true — the job would skip"; exit 1; }
+  echo "deploy enabled"
+
+  # 4. Droplet is not behind
+  ssh "holomush@${DROPLET_IP}" 'grep ^HOLOMUSH_VERSION= /opt/holomush/.env'
+)
+# Branch on the status SEPARATELY. Do not write `( … ) && echo ok || echo bad`:
+# bash disables `set -e` inside a compound command that is part of an && / ||
+# list, so the checks above would keep running after the first failure.
+preflight=$?
+[ "$preflight" -eq 0 ] \
+  && echo "✅ PREFLIGHT PASSED" \
+  || echo "❌ PREFLIGHT FAILED (status=$preflight) — do not dispatch"
+```
+
+Then dispatch, capturing the run so the check below cannot land on someone
+else's:
+
+```bash
+gh workflow run deploy.yaml -R holomush/holomush -f tag="$TAG"
+
+RUN_ID=$(gh run list -R holomush/holomush --workflow=deploy.yaml \
+  --event=workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+
+gh run watch "$RUN_ID" -R holomush/holomush --exit-status
+```
+
+The deploy takes its own `pre-deploy:<tag>` snapshot as its first step, so the
+rollback point is created automatically.
+
+:::caution[Assert the JOB conclusion, not the run's]
+A guarded job that skips does not fail, so checking the run tells you nothing
+about whether anything deployed. Require the **job** to be `success` — that is
+correct regardless of how the run itself reports:
+
+```bash
+gh run view "$RUN_ID" -R holomush/holomush --json jobs \
+  --jq '.jobs[] | select(.name=="Deploy Sandbox") | .conclusion'
+# MUST print: success
+# "skipped" means SANDBOX_DEPLOY_ENABLED was not "true" — nothing was deployed
+```
+
+Do **not** substitute `gh run list --limit 1` here: a concurrent dispatch can
+put a different run at the top.
+:::
+
+:::caution[Check the deployed version against the migration corpus first]
+The "ships alone" constraint below is phrased release-to-release, so it does
+NOT catch a sandbox that is several releases stale: a box left on an old tag
+can be many migrations behind, and deploying the cutover to it would run the
+irreversible adopt AND the pending migrations in one unattended boot. Compare
+`HOLOMUSH_VERSION` in `/opt/holomush/.env` and `schema_migrations.version`
+against the corpus, and stage an intermediate deploy first if there is a gap.
+:::
 
 > **Release constraint — the goose migration cutover ships alone.** The release
 > that first carries the goose migration engine MUST NOT also carry new
@@ -225,7 +352,7 @@ BEFORE pulling images and restarting. Without the sync, compose/profile
 changes or backup-image updates in the release never reach the host:
 
 ```bash
-ssh holomush@game.holomush.dev
+ssh "holomush@${DROPLET_IP}"
 VERSION=v0.2.0
 sudo apt-get install -y git  # if not already present
 
@@ -291,7 +418,7 @@ repository's `compose.prod.yaml` to `/opt/holomush/compose.yaml`, so the
 file being named `compose.prod.yaml`.
 
 ```bash
-ssh holomush@game.holomush.dev
+ssh "holomush@${DROPLET_IP}"
 docker compose -f /opt/holomush/compose.yaml logs -f core gateway cloudflared
 ```
 
@@ -315,7 +442,7 @@ If the tunnel token is compromised:
 ### Take a manual backup
 
 ```bash
-ssh holomush@game.holomush.dev
+ssh "holomush@${DROPLET_IP}"
 docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
   exec backup /usr/local/bin/backup.sh
 ```
