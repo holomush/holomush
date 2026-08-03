@@ -53,8 +53,20 @@ const probeGooseSeededSQL = `SELECT EXISTS (SELECT 1 FROM ` + gooseVersionTable 
 // so adopt tops up an ensureVersionTable-created ledger instead of duplicating it.
 const probeBootstrapRowSQL = `SELECT EXISTS (SELECT 1 FROM ` + gooseVersionTable + ` WHERE version_id = 0)`
 
-// probeLegacyStateSQL reads the single row golang-migrate maintained.
-const probeLegacyStateSQL = `SELECT version, dirty FROM ` + legacyVersionTable
+// probeLegacyStateSQL reads the single row golang-migrate maintained, plus the
+// number of rows actually present.
+//
+// The ORDER BY and the window count are both load-bearing, and neither is
+// defensive clutter. golang-migrate's postgres driver truncates and re-inserts
+// inside one transaction, so a well-formed ledger holds exactly one row — but an
+// unordered single-row read against a ledger that somehow holds two returns an
+// arbitrary one, and this value is the sole input to the phase's one irreversible
+// write. Picking the higher of two rows would record migrations as applied that
+// never ran, archive the evidence, and leave a divergence goose cannot detect.
+// The count lets readLegacyVersion refuse instead of guessing; the ORDER BY makes
+// the value it reports deterministic so the refusal message is reproducible.
+const probeLegacyStateSQL = `SELECT version, dirty, count(*) OVER () FROM ` +
+	legacyVersionTable + ` ORDER BY version DESC`
 
 // archiveLegacyTableSQL makes the old bookkeeping table inert while preserving it as
 // a forensic record (D-04). Renaming rather than dropping means a binary rolled back
@@ -176,15 +188,23 @@ func (m *Migrator) adoptLocked(ctx context.Context, conn *sql.Conn) error {
 	return m.seedAndArchive(ctx, conn, recorded, seed, gooseExists)
 }
 
-// readLegacyVersion reads golang-migrate's single bookkeeping row.
+// readLegacyVersion reads golang-migrate's single bookkeeping row, and refuses
+// rather than guessing when the ledger does not have the shape golang-migrate
+// maintains. See probeLegacyStateSQL for why the determinism matters.
 func readLegacyVersion(ctx context.Context, conn *sql.Conn) (recorded uint, dirty bool, err error) {
-	var version int64
-	scanErr := conn.QueryRowContext(ctx, probeLegacyStateSQL).Scan(&version, &dirty)
+	var version, rowCount int64
+	scanErr := conn.QueryRowContext(ctx, probeLegacyStateSQL).Scan(&version, &dirty, &rowCount)
 	if scanErr != nil {
+		// Zero rows arrive here as sql.ErrNoRows. That case is fail-closed and
+		// documented in the operator runbook under this code's `read legacy version`
+		// operation, so it deliberately keeps its existing shape.
 		return 0, false, oops.Code("MIGRATION_ADOPT_PROBE_FAILED").
 			With("operation", "read legacy version").
 			With("legacy_table", legacyVersionTable).
 			Wrap(scanErr)
+	}
+	if rowCount != 1 {
+		return 0, false, errAdoptRefusedAmbiguousLedger(rowCount)
 	}
 	if version < 0 {
 		return 0, dirty, nil
@@ -318,6 +338,27 @@ func derivedSeedVersions(recorded uint, all []uint) []uint {
 		}
 	}
 	return seed
+}
+
+// errAdoptRefusedAmbiguousLedger builds the refusal for a legacy table whose row
+// count is not the one golang-migrate maintains. The count travels in the oops
+// context under a named key, not only in the message, so it can be filtered on
+// downstream rather than parsed out of prose.
+//
+// This refuses rather than choosing, on the same reasoning as the dirty refusal:
+// the recorded version is the only input to an irreversible write that performs
+// no schema verification, so an ambiguous input has no safe interpretation.
+func errAdoptRefusedAmbiguousLedger(rowCount int64) error {
+	return oops.Code("MIGRATION_ADOPT_REFUSED_AMBIGUOUS_LEDGER").
+		With("row_count", rowCount).
+		With("legacy_table", legacyVersionTable).
+		Errorf(
+			"refusing to adopt golang-migrate bookkeeping: %s holds %d rows, but golang-migrate "+
+				"maintains exactly one, so the recorded version is ambiguous and adopt will not "+
+				"guess which row describes this database; inspect the table and leave the single "+
+				"correct row before starting this binary",
+			legacyVersionTable, rowCount,
+		)
 }
 
 // errAdoptRefusedDirty builds D-05's refusal. The version travels in the oops

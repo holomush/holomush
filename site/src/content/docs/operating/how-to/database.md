@@ -199,6 +199,7 @@ leave the bookkeeping half-written: the whole adopt runs in one transaction.
 | Code                            | Meaning                                                | Common Causes                                            | Remediation                                                                                                                                          |
 | ------------------------------- | ------------------------------------------------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MIGRATION_ADOPT_REFUSED_DIRTY` | The old ledger is marked dirty; adopt refused to seed  | A previous migration failed partway under the old tooling | The database was left dirty by the **old** tooling. Resolve that version with the old binary before deploying this one — the new binary deliberately refuses rather than recording a partially-applied migration as applied. The error names the version. |
+| `MIGRATION_ADOPT_REFUSED_AMBIGUOUS_LEDGER` | `schema_migrations` holds more than one row; adopt refused to pick one | A partial restore, a merged dump, or a manual repair of the old ledger | golang-migrate maintains exactly one row, so the recorded version is ambiguous and adopt will not guess. Nothing was written and nothing was archived. See [`schema_migrations` holding more than one row](#schema_migrations-holding-more-than-one-row). |
 | `MIGRATION_ADOPT_LOCK_FAILED`   | Could not acquire the advisory lock guarding the adopt | Connection lost, another replica holding the lock         | Retry. If it persists, check for a stuck session holding a Postgres advisory lock.                                                                   |
 | `MIGRATION_ADOPT_PROBE_FAILED`  | Could not read the existing bookkeeping tables         | Connection lost, insufficient privileges, or `schema_migrations` exists but holds no rows | Read the `operation` field in the error first — it names which probe failed. `probe bookkeeping tables` or `probe goose bookkeeping`: verify the migration user can read `schema_migrations` and `goose_db_version`. `read legacy version`: those reads worked and the legacy ledger came back empty — see [An empty `schema_migrations` aborts the adopt](#an-empty-schema_migrations-aborts-the-adopt). |
 | `MIGRATION_ADOPT_SEED_FAILED`   | Could not write the seeded `goose_db_version` rows     | Connection lost, insufficient privileges                  | Nothing was written — the transaction rolled back. Fix the cause and re-run `migrate up`.                                                             |
@@ -234,6 +235,39 @@ SELECT to_regclass('public.players') IS NOT NULL;    -- any pre-goose table
 | -------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | absent                                 | The aborted-deploy case: the ledger was created but no migration ever ran   | `DROP TABLE schema_migrations;` then re-run `migrate up`. With no legacy table the adopt takes its fresh-database path and goose applies every migration from scratch. |
 | present                                | The ledger was truncated or lost while the schema it described still exists | Do **not** drop the table — goose would replay migrations onto a populated schema. Restore the correct `version` / `dirty` row with the old tooling, then re-run `migrate up`. |
+
+#### `schema_migrations` holding more than one row
+
+A `schema_migrations` table holding two or more rows aborts boot with
+`MIGRATION_ADOPT_REFUSED_AMBIGUOUS_LEDGER`. golang-migrate truncates and
+re-inserts its bookkeeping inside one transaction, so it maintains exactly one
+row; more than one means the table was assembled by something else — a partial
+restore, a dump merged into a live database, or a hand repair.
+
+Adopt refuses instead of choosing because the recorded version is the **only**
+input to the cutover and the cutover performs no schema verification. Picking the
+wrong row would record migrations as applied that never ran, archive the evidence
+by renaming the table, and leave a divergence goose has no way to detect
+afterwards.
+
+The refusal is complete: no `goose_db_version` rows were written and
+`schema_migrations` was **not** renamed, so the table is exactly as it was found.
+
+```sql
+SELECT version, dirty FROM schema_migrations ORDER BY version DESC;
+```
+
+Decide which row describes the schema this database actually carries — spot-check
+a table or column introduced by a migration between the two versions — then leave
+that row alone:
+
+```sql
+DELETE FROM schema_migrations WHERE version <> <the correct version>;
+```
+
+Re-run `migrate up` afterwards. If you cannot tell which row is correct, restore
+from a backup rather than guessing; the same reasoning that makes adopt refuse
+applies to the operator.
 
 ### CLI Errors
 

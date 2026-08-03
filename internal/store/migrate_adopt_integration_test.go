@@ -68,6 +68,35 @@ func newPreConversionDatabase(t testing.TB, ctx context.Context, recorded int64,
 	return connStr
 }
 
+// insertLegacyRow adds a second row to the pre-conversion ledger, producing the
+// ambiguous shape golang-migrate never writes but a partial restore, a merged
+// dump, or a manual repair can leave behind.
+func insertLegacyRow(t testing.TB, ctx context.Context, connStr string, version int64, dirty bool) {
+	t.Helper()
+
+	conn, err := pgx.Connect(ctx, connStr)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }() //nolint:errcheck // best-effort cleanup
+
+	_, err = conn.Exec(ctx,
+		`INSERT INTO schema_migrations (version, dirty) VALUES ($1, $2)`, version, dirty)
+	require.NoError(t, err)
+}
+
+// legacyRowCount reports how many rows the pre-conversion ledger holds, so the
+// ambiguity spec can assert its own precondition rather than assuming it.
+func legacyRowCount(t testing.TB, ctx context.Context, connStr string) int64 {
+	t.Helper()
+
+	conn, err := pgx.Connect(ctx, connStr)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }() //nolint:errcheck // best-effort cleanup
+
+	var count int64
+	require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&count))
+	return count
+}
+
 // gooseLedgerInInsertionOrder returns version_id ordered by the ledger's identity
 // column — i.e. the order the rows were INSERTED, which is not necessarily the
 // order their versions sort in.
@@ -439,6 +468,64 @@ var _ = Describe("Migrator adopt", func() {
 			Expect(version).To(Equal(uint(target)),
 				"Migrate must reach the requested target, not stall at the pre-adopt "+
 					"reading of version 0")
+		})
+	})
+
+	Describe("C2f refusing an ambiguous pre-conversion ledger", func() {
+		// golang-migrate's postgres driver truncates and re-inserts inside one
+		// transaction, so a well-formed ledger holds exactly one row and this
+		// refusal never fires in normal operation. It is defence on the
+		// unrecoverable path: a partial restore, a merged dump, or manual repair by
+		// the very operator the dirty refusal points at the old tooling can leave
+		// two rows behind, and an unordered single-row read then picks one
+		// arbitrarily. If the arbitrary pick is the HIGHER version, adopt records
+		// migrations as applied that never ran, archives the evidence, and goose
+		// can never detect the divergence. Unlike the dirty case, nothing else
+		// refuses.
+		It("aborts boot and writes nothing when the legacy table holds more than one row", func() {
+			ctx := context.Background()
+			connStr := newPreConversionDatabase(suiteT, ctx, latestMigrationVersion, false)
+			insertLegacyRow(suiteT, ctx, connStr, latestMigrationVersion-10, false)
+
+			// Positive control: the fixture really did produce the ambiguous shape.
+			// Without it a refusal caused by something else would read as a pass.
+			Expect(legacyRowCount(suiteT, ctx, connStr)).To(Equal(int64(2)),
+				"precondition: the ledger must actually be ambiguous")
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			defer migrator.Close()
+
+			upErr := migrator.Up()
+			Expect(upErr).To(HaveOccurred())
+
+			// Error IDENTITY at the top level, so this also proves Up did not
+			// re-wrap the refusal in a generic MIGRATION_UP_FAILED on the way out.
+			errutil.AssertErrorCode(suiteT, upErr, "MIGRATION_ADOPT_REFUSED_AMBIGUOUS_LEDGER")
+			errutil.AssertErrorContext(suiteT, upErr, "row_count", int64(2))
+
+			legacy, archived, gooseLedger := bookkeepingTablePresence(suiteT, ctx, connStr)
+			Expect(gooseLedger).To(BeFalse(),
+				"a refused adopt must not create goose bookkeeping")
+			Expect(legacy).To(BeTrue(),
+				"a refused adopt must leave the legacy table under its original name so "+
+					"the operator can inspect and repair it")
+			Expect(archived).To(BeFalse(),
+				"a refused adopt must not archive anything")
+			Expect(legacyRowCount(suiteT, ctx, connStr)).To(Equal(int64(2)),
+				"a refused adopt must not have edited the ledger it refused")
+		})
+
+		It("still adopts the one-row ledger golang-migrate actually maintains", func() {
+			// The paired positive control for the refusal above: without it, a
+			// readLegacyVersion that refused EVERY ledger would satisfy the spec.
+			ctx := context.Background()
+			connStr := newPreConversionDatabase(suiteT, ctx, latestMigrationVersion, false)
+			Expect(legacyRowCount(suiteT, ctx, connStr)).To(Equal(int64(1)))
+
+			Expect(store.AdoptForTest(ctx, connStr)).To(Succeed())
+			Expect(gooseLedgerInInsertionOrder(suiteT, ctx, connStr)).
+				To(HaveLen(expectedGooseLedgerRows))
 		})
 	})
 
