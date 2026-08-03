@@ -200,9 +200,40 @@ leave the bookkeeping half-written: the whole adopt runs in one transaction.
 | ------------------------------- | ------------------------------------------------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MIGRATION_ADOPT_REFUSED_DIRTY` | The old ledger is marked dirty; adopt refused to seed  | A previous migration failed partway under the old tooling | The database was left dirty by the **old** tooling. Resolve that version with the old binary before deploying this one — the new binary deliberately refuses rather than recording a partially-applied migration as applied. The error names the version. |
 | `MIGRATION_ADOPT_LOCK_FAILED`   | Could not acquire the advisory lock guarding the adopt | Connection lost, another replica holding the lock         | Retry. If it persists, check for a stuck session holding a Postgres advisory lock.                                                                   |
-| `MIGRATION_ADOPT_PROBE_FAILED`  | Could not read the existing bookkeeping tables         | Connection lost, insufficient privileges                  | Verify the migration user can read `schema_migrations` and `goose_db_version`                                                                        |
+| `MIGRATION_ADOPT_PROBE_FAILED`  | Could not read the existing bookkeeping tables         | Connection lost, insufficient privileges, or `schema_migrations` exists but holds no rows | Read the `operation` field in the error first — it names which probe failed. `probe bookkeeping tables` or `probe goose bookkeeping`: verify the migration user can read `schema_migrations` and `goose_db_version`. `read legacy version`: those reads worked and the legacy ledger came back empty — see [An empty `schema_migrations` aborts the adopt](#an-empty-schema_migrations-aborts-the-adopt). |
 | `MIGRATION_ADOPT_SEED_FAILED`   | Could not write the seeded `goose_db_version` rows     | Connection lost, insufficient privileges                  | Nothing was written — the transaction rolled back. Fix the cause and re-run `migrate up`.                                                             |
 | `MIGRATION_ADOPT_RENAME_FAILED` | Could not rename `schema_migrations`                   | A `schema_migrations_pre_goose` table already exists      | Nothing was written. Inspect both tables; a pre-existing `schema_migrations_pre_goose` means an adopt was already attempted.                          |
+
+#### An empty `schema_migrations` aborts the adopt
+
+A `schema_migrations` table that **exists with zero rows** aborts boot with
+`MIGRATION_ADOPT_PROBE_FAILED` and `operation: read legacy version`. The privilege
+and connectivity checks above will both pass, which is what makes this one
+confusing: nothing is wrong with the connection or the grants.
+
+The adopt reads golang-migrate's single bookkeeping row to learn which version to
+seed from. An empty table returns no row, so there is nothing to seed from and the
+cutover refuses. The refusal is fail-closed and complete — no `goose_db_version`
+rows were written, and `schema_migrations` was **not** renamed to
+`schema_migrations_pre_goose`. The database is exactly as it was found, so it is
+safe to inspect before acting.
+
+The state is reachable: golang-migrate creates its version table before applying
+anything, so a pre-cutover deploy that crashed or was aborted before its first
+migration leaves the table present and empty.
+
+Confirm the cause, then check whether the database actually carries pre-goose
+schema:
+
+```sql
+SELECT count(*) FROM schema_migrations;              -- expect 0
+SELECT to_regclass('public.players') IS NOT NULL;    -- any pre-goose table
+```
+
+| `players` (or another pre-goose table) | What it means                                                              | Action                                                                                                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| absent                                 | The aborted-deploy case: the ledger was created but no migration ever ran   | `DROP TABLE schema_migrations;` then re-run `migrate up`. With no legacy table the adopt takes its fresh-database path and goose applies every migration from scratch. |
+| present                                | The ledger was truncated or lost while the schema it described still exists | Do **not** drop the table — goose would replay migrations onto a populated schema. Restore the correct `version` / `dirty` row with the old tooling, then re-run `migrate up`. |
 
 ### CLI Errors
 
