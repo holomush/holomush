@@ -639,6 +639,8 @@ scopes:
       - "internal/store/migrate_clamp_integration_test.go"
       - "internal/store/migrate_adopt.go"
       - "internal/store/migrate_adopt_integration_test.go"
+      - "internal/store/migrations_register.go"
+      - "internal/store/migrations_register_test.go"
       - "internal/store/lint_meta_test.go"
       - "internal/store/spec_meta_test.go"
       - "internal/store/no_delete_grep_test.go"
@@ -1921,7 +1923,26 @@ invariants:
       - "internal/store/migrate_adopt_integration_test.go"
     refs:
       - {file: "internal/store/migrate_adopt_integration_test.go", token: "INV-STORE-10"}
-      - {file: "internal/store/migrate_adopt.go", token: "INV-STORE-10",}
+      - {file: "internal/store/migrate_adopt.go", token: "INV-STORE-10"}
+  - id: INV-STORE-11
+    scope: INV-STORE
+    origin_spec: ".planning/phases/01.1-migration-framework-adopt-goose-for-go-migrations/01.1-CONTEXT.md"
+    summary: "Every versioned .go file in internal/store/migrations/ registers itself with goose in init(), and package store
+      blank-imports that directory so those init() functions run. //go:embed migrations/*.sql never embeds .go, so goose's
+      own unregistered-Go guard cannot fire here — a migration that forgets its registration, or a dropped blank import, leaves
+      the Go step SILENTLY absent from the chain with correct version counts, a consistent schema, and a green suite."
+    # pending, deliberately, and NOT because no test exists. The guard
+    # (migrations_register_test.go) runs on every `task test`: its synthetic table
+    # proves the predicate classifies, and the blank-import clause was demonstrated
+    # RED. But the REGISTRATION clause is applied to a corpus that holds zero
+    # versioned .go files today, so that half cannot currently fail. That is the
+    # partial-binding case TestBoundInvariantsAreGenuinelyAsserted documents itself
+    # as unable to detect (it only rejects Skip-only placeholders) — it accepted
+    # binding: bound when tried. Declined on human review instead. Phase 2's
+    # 000055 is the first file that makes the walk bite; flip to bound then.
+    binding: pending
+    refs:
+      - {file: "internal/store/migrations_register_test.go", token: "INV-STORE-11",}
 
   # -- INV-TELEMETRY -- migrated from INV-LOAD-N (family LOAD, load-perf harness) (holomush-hz0v4.14.8).
   # Origin: docs/superpowers/specs/2026-05-28-load-perf-testing-harness-design.md.
