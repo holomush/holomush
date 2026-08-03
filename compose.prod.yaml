@@ -59,8 +59,20 @@ services:
       - --grpc-addr=0.0.0.0:9000
       - --metrics-addr=0.0.0.0:9100
       - --log-format=json
+      # Mints the keyfile on FIRST boot only; once the file exists this is a
+      # no-op, so it is safe to leave in place across restarts and redeploys.
+      - --auto-gen-kek
     environment:
       DATABASE_URL: postgres://holomush:${POSTGRES_PASSWORD}@postgres:5432/holomush?sslmode=require
+      # A KEK is REQUIRED to boot — without it the core aborts with
+      # "subsystem crypto_chain_verifier failed to prepare: a KEK is required
+      # to start". The keyfile lives in the certs volume mounted below, so it
+      # survives restarts and redeploys. Losing the passphrase makes encrypted
+      # event payloads unrecoverable: keep it in a secrets manager, not only in
+      # .env. Use letters+digits only — compose interpolates `$` in .env values,
+      # so a passphrase containing one silently becomes a different secret.
+      HOLOMUSH_KEK_FILE: /home/holomush/.config/holomush/certs/master.key.enc
+      HOLOMUSH_KEK_PASSPHRASE: "${HOLOMUSH_KEK_PASSPHRASE:?Set HOLOMUSH_KEK_PASSPHRASE in .env}"
       # Empty by default: with no OTLP endpoint the telemetry SDK no-ops
       # (internal/telemetry/provider.go). A localhost:4317 default made the
       # service spam "telemetry SDK error: connection refused" on deployments

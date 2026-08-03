@@ -206,8 +206,26 @@ real shape has drifted from the committed version.
 
 ### Deploy a new version
 
-Pushing a `v*` tag to `main` triggers the `deploy-sandbox` workflow. No
-manual steps needed.
+Deploying is a **separate human gate** from cutting a release (INV-4): cutting a
+release does NOT deploy it. Dispatch the `Deploy Sandbox` workflow
+(`.github/workflows/deploy.yaml`) manually with the release tag, which must
+already exist as a `v*` tag with a published GHCR image:
+
+```bash
+gh workflow run deploy.yaml -R holomush/holomush -f tag=v0.12.0
+```
+
+The deploy takes its own `pre-deploy:<tag>` snapshot as its first step, so the
+rollback point is created automatically.
+
+:::caution[Check the deployed version against the migration corpus first]
+The "ships alone" constraint below is phrased release-to-release, so it does
+NOT catch a sandbox that is several releases stale: a box left on an old tag
+can be many migrations behind, and deploying the cutover to it would run the
+irreversible adopt AND the pending migrations in one unattended boot. Compare
+`HOLOMUSH_VERSION` in `/opt/holomush/.env` and `schema_migrations.version`
+against the corpus, and stage an intermediate deploy first if there is a gap.
+:::
 
 > **Release constraint — the goose migration cutover ships alone.** The release
 > that first carries the goose migration engine MUST NOT also carry new

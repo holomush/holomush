@@ -74,10 +74,17 @@ at v53; only real sandbox data reveals actual drift.
 
 **1. Take a fresh `pre-deploy:` snapshot immediately before the cutover deploy.**
 
+`game.holomush.dev` is Cloudflare-proxied, so port 22 is unreachable through it —
+SSH to the droplet's public IPv4 instead, the same way the deploy workflow does
+(`.github/workflows/deploy.yaml`):
+
 ```bash
-ssh holomush@game.holomush.dev \
+DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
+  --format PublicIPv4 --no-header)
+
+ssh "holomush@${DROPLET_IP}" \
   'docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
-     exec -T backup /usr/local/bin/backup.sh --tag=pre-deploy:goose-cutover'
+     exec -T backup /usr/local/bin/backup.sh --tag=pre-deploy:goose-cutover' </dev/null
 ```
 
 Do **not** rehearse against the most recent existing snapshot. Everything that
