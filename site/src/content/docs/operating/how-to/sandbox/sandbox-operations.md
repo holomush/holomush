@@ -225,15 +225,29 @@ real shape has drifted from the committed version.
 
 Deploying is a **separate human gate** from cutting a release (INV-4): cutting a
 release does NOT deploy it. Dispatch the `Deploy Sandbox` workflow
-(`.github/workflows/deploy.yaml`) manually with the release tag, which must
-already exist as a `v*` tag with a published GHCR image:
+(`.github/workflows/deploy.yaml`) manually with the release tag.
+
+Confirm all three prerequisites first — the workflow does not check them for you,
+and two of the three fail in ways that resemble success:
+
+| Prerequisite | Why it matters | Check |
+| --- | --- | --- |
+| `v*` tag, GHCR image, **and a published GitHub Release** all exist for the tag | The workflow contract requires all three, not just the tag | `gh release view v0.12.0 -R holomush/holomush` |
+| Repository variable `SANDBOX_DEPLOY_ENABLED` is `true` | The deploy job is guarded by `if: vars.SANDBOX_DEPLOY_ENABLED == 'true'`. When it is not `true` the dispatch still succeeds and the run still appears — the job is simply **skipped**, which looks indistinguishable from a completed deploy | `gh variable list -R holomush/holomush` |
+| The droplet is not several releases behind | See the caution below | `ssh "holomush@${DROPLET_IP}" 'grep ^HOLOMUSH_VERSION= /opt/holomush/.env'` |
 
 ```bash
 gh workflow run deploy.yaml -R holomush/holomush -f tag=v0.12.0
 ```
 
 The deploy takes its own `pre-deploy:<tag>` snapshot as its first step, so the
-rollback point is created automatically.
+rollback point is created automatically. Confirm the deploy job actually **ran**
+rather than skipped before treating the release as live:
+
+```bash
+gh run list -R holomush/holomush --workflow=deploy.yaml --limit 1 \
+  --json databaseId,conclusion,status
+```
 
 :::caution[Check the deployed version against the migration corpus first]
 The "ships alone" constraint below is phrased release-to-release, so it does
