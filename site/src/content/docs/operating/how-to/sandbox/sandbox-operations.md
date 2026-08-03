@@ -226,8 +226,12 @@ Every `ssh` command in this section targets the droplet's public IPv4.
 Export the address once per shell before running anything below:
 
 ```bash
-export DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
+# Assign and export SEPARATELY: `export X=$(cmd)` always returns 0, so it
+# discards cmd's exit status and leaves DROPLET_IP empty on failure — every
+# later command then silently targets `holomush@`.
+DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
   --format PublicIPv4 --no-header)
+export DROPLET_IP="${DROPLET_IP:?doctl returned no address — check auth (doctl account get) and the droplet name}"
 ```
 
 ### Deploy a new version
@@ -250,26 +254,46 @@ and several fail in ways that resemble success:
 TAG=v0.12.0
 DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
   --format PublicIPv4 --no-header)
+: "${DROPLET_IP:?doctl returned no address — check auth and the droplet name}"
 
-# 1. Release exists AND is published, not a draft
-gh release view "$TAG" -R holomush/holomush --json isDraft \
-  --jq 'if .isDraft then error("release is a DRAFT — publish it first") else "release published" end'
+# Runs in a subshell so a failed check aborts the preflight WITHOUT `set -e`
+# killing your interactive shell. Nothing here dispatches anything.
+(
+  set -euo pipefail
 
-# 2. GHCR image exists for that version (tag without the leading v).
-#    --paginate is load-bearing: the endpoint pages, and without it only the
-#    most recent page is searched, so an older-but-valid tag reports missing.
-gh api --paginate /orgs/holomush/packages/container/holomush/versions \
-  --jq '.[].metadata.container.tags[]?' | grep -qx "${TAG#v}" \
-  && echo "image ${TAG#v} present" || echo "IMAGE MISSING — do not deploy"
+  # 1. Release exists AND is published, not a draft
+  gh release view "$TAG" -R holomush/holomush --json isDraft \
+    --jq 'if .isDraft then error("release is a DRAFT — publish it first") else "release published" end'
 
-# 3. Deploy is enabled. Assert the VALUE — the variable existing tells you
-#    nothing, and `false` is exactly the case that silently skips the job.
-test "$(gh variable list -R holomush/holomush --json name,value \
-  --jq '.[] | select(.name=="SANDBOX_DEPLOY_ENABLED") | .value')" = "true" \
-  && echo "deploy enabled" || echo "DEPLOY DISABLED — the job would skip"
+  # 2. GHCR image exists for that version (tag without the leading v).
+  #    --paginate is load-bearing: the endpoint pages, and without it only the
+  #    most recent page is searched, so an older-but-valid tag reports missing.
+  #    Collect first, match second: `gh … | grep -q` would have grep close the
+  #    pipe on its first match, killing gh with EPIPE, and `pipefail` then
+  #    reports the whole pipeline as failed even though the image WAS found.
+  tags=$(gh api --paginate /orgs/holomush/packages/container/holomush/versions \
+    --jq '.[].metadata.container.tags[]?')
+  grep -qxF -- "${TAG#v}" <<<"$tags" \
+    || { echo "IMAGE ${TAG#v} MISSING — do not deploy"; exit 1; }
+  echo "image ${TAG#v} present"
 
-# 4. Droplet is not behind
-ssh "holomush@${DROPLET_IP}" 'grep ^HOLOMUSH_VERSION= /opt/holomush/.env'
+  # 3. Deploy is enabled. Assert the VALUE — the variable existing tells you
+  #    nothing, and `false` is exactly the case that silently skips the job.
+  [ "$(gh variable list -R holomush/holomush --json name,value \
+      --jq '.[] | select(.name=="SANDBOX_DEPLOY_ENABLED") | .value')" = "true" ] \
+    || { echo "SANDBOX_DEPLOY_ENABLED is not true — the job would skip"; exit 1; }
+  echo "deploy enabled"
+
+  # 4. Droplet is not behind
+  ssh "holomush@${DROPLET_IP}" 'grep ^HOLOMUSH_VERSION= /opt/holomush/.env'
+)
+# Branch on the status SEPARATELY. Do not write `( … ) && echo ok || echo bad`:
+# bash disables `set -e` inside a compound command that is part of an && / ||
+# list, so the checks above would keep running after the first failure.
+preflight=$?
+[ "$preflight" -eq 0 ] \
+  && echo "✅ PREFLIGHT PASSED" \
+  || echo "❌ PREFLIGHT FAILED (status=$preflight) — do not dispatch"
 ```
 
 Then dispatch, capturing the run so the check below cannot land on someone

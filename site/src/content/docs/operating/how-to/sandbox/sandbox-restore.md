@@ -12,8 +12,12 @@ Every `ssh` command below uses the droplet's public IPv4, the same way the deplo
 workflow does. Resolve it once per shell:
 
 ```bash
-export DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
+# Assign and export SEPARATELY: `export X=$(cmd)` always returns 0, so it
+# discards cmd's exit status and leaves DROPLET_IP empty on failure — every
+# later command then silently targets `holomush@`.
+DROPLET_IP=$(doctl compute droplet get holomush-sandbox-game \
   --format PublicIPv4 --no-header)
+export DROPLET_IP="${DROPLET_IP:?doctl returned no address — check auth (doctl account get) and the droplet name}"
 ```
 
 :::danger[The Kopia snapshot does NOT contain the KEK keyfile]
@@ -109,15 +113,31 @@ not see, and it is the window in which drift accumulates.
 the new binary's migration against that container:
 
 ```bash
+# Capture the pre-adopt ledger version FIRST. The adopt renames
+# schema_migrations, so this value cannot be recovered afterward — and it is
+# the only thing that makes check (a) below meaningful.
+RECORDED=$(PGPASSWORD=verify psql -h localhost -p 5433 -U holomush \
+  -d holomush -tAc 'SELECT version FROM schema_migrations')
+echo "pre-adopt recorded version: ${RECORDED:?empty — is this really a pre-goose database?}"
+
 DATABASE_URL="postgres://holomush:verify@localhost:5433/holomush?sslmode=disable" \
   ./holomush migrate up
+```
+
+Count the embedded migrations at or below that version — this is the expected
+`migrations` value in (a), and it is what the adopt actually seeds:
+
+```bash
+ls internal/store/migrations/*.sql \
+  | sed -E 's#.*/([0-9]{6})_.*#\1#' | sort -u \
+  | awk -v r="$RECORDED" '$1+0 <= r+0' | wc -l
 ```
 
 **3. Verify three things by hand.** All three, not a spot-check:
 
 ```bash
 PGPASSWORD=verify psql -h localhost -p 5433 -U holomush -d holomush <<'SQL'
--- (a) the ledger: 44 migrations plus goose's version-0 bootstrap row = 45 total
+-- (a) the ledger: expect the count derived above, plus goose's version-0 row
 SELECT count(*) FILTER (WHERE version_id > 0) AS migrations,
        count(*)                               AS total_rows,
        min(version_id)                        AS lowest
@@ -161,8 +181,9 @@ cannot see.
 manual backup first.
 
 ```bash
-ssh "holomush@${DROPLET_IP}"
-cd /opt/holomush
+# Opens an interactive session ON the droplet, already in /opt/holomush.
+# Everything below runs at the remote prompt.
+ssh -t "holomush@${DROPLET_IP}" 'cd /opt/holomush && exec bash -l'
 
 # 1. Fresh pinned backup of current state
 docker compose --profile tunnel --profile backups \
@@ -225,8 +246,9 @@ application schema is provably unchanged across the deploy. Only the bookkeeping
 moved, and only the bookkeeping has to move back.
 
 ```bash
-ssh "holomush@${DROPLET_IP}"
-cd /opt/holomush
+# Opens an interactive session ON the droplet, already in /opt/holomush.
+# Everything below runs at the remote prompt.
+ssh -t "holomush@${DROPLET_IP}" 'cd /opt/holomush && exec bash -l'
 
 # 1. Stop the services that would re-run the adopt on boot
 docker compose stop core gateway
