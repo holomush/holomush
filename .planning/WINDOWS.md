@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 6
+open_count: 7
 waived_count: 0
 fixed_count: 0
-total_count: 6
-last_updated: 2026-08-02T23:37:38.463Z
+total_count: 7
+last_updated: 2026-08-03T01:03:53.873Z
 ---
 
 # Broken Windows Ledger
@@ -21,6 +21,7 @@ last_updated: 2026-08-02T23:37:38.463Z
 | 4 | 01.1 | deviation | internal/store/migrate_inv_ts_integration_test.go |  | INV-STORE-1 timestamp scan now excludes goose_db_version; narrows an invariant's effective scan — plan 03 meta-tests should reflect it | open |  | 2026-08-02T23:37:38.304Z |  |
 | 5 | 01.1 | unrun-verify | internal/store/events_audit_partition_migration_integration_test.go |  | reads migrations/000052_events_audit_partition.up.sql by path; red until plan 02 | open |  | 2026-08-02T23:37:38.383Z |  |
 | 6 | 01.1 | unrun-verify | internal/store/migrations_sessions_location_index_integration_test.go |  | reads migrations/000053_sessions_location_index.up.sql by path; red until plan 02 | open |  | 2026-08-02T23:37:38.463Z |  |
+| 7 | 01.1 | deviation | internal/store/migrate_adopt.go |  | adopt seeded-probe filters version_id>0: a read-only verb creating goose's bootstrap row must not disable the cutover | open |  | 2026-08-03T01:03:53.873Z |  |
 
 ````json
 [
@@ -94,6 +95,18 @@ last_updated: 2026-08-02T23:37:38.463Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-02T23:37:38.463Z",
+    "resolved_at": null
+  },
+  {
+    "id": 7,
+    "kind": "deviation",
+    "phase": "01.1",
+    "file": "internal/store/migrate_adopt.go",
+    "line": null,
+    "description": "adopt seeded-probe filters version_id>0: a read-only verb creating goose's bootstrap row must not disable the cutover",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-03T01:03:53.873Z",
     "resolved_at": null
   }
 ]

@@ -177,7 +177,7 @@ Plans:
 4. A Go migration registered between two SQL migrations runs in version order, demonstrated by an **integration test with a fixture chain** (a small SQL→Go→SQL chain in a testcontainer, with the Go step observing the prior SQL step's effect) — so the capability Phase 2 depends on is proven before Phase 2 relies on it, without adding anything permanent to the real 44-migration chain.
 5. `.claude/rules/database-migrations.md` and the migration meta-tests are updated to the new format in the same change.
 
-**Plans:** 4/7 plans executed
+**Plans:** 5/7 plans executed
 **UI hint**: no
 **Research flag**: resolved in discussion — goose ships no baseline / adopt-existing command, so adopt derives the 44 rows from the embedded migration FS (D-02/D-04). Seeding is the one unrecoverable step.
 
@@ -191,7 +191,7 @@ Plans:
 
 - [x] 01.1-02-PLAN.md — integration-tier rework: one-direction migration accessor, its three callers, and the bookkeeping end-state spec
 - [x] 01.1-03-PLAN.md — format enforcement: D-13 `$$`↔StatementBegin/End meta-test and the static `lint:no-timestamptz` glob pins (criterion 5)
-- [ ] 01.1-04-PLAN.md — the adopt gate (D-01..D-06) with both negative controls and the ascending-order rollback guard (criterion 2)
+- [x] 01.1-04-PLAN.md — the adopt gate (D-01..D-06) with both negative controls and the ascending-order rollback guard (criterion 2)
 - [x] 01.1-05-PLAN.md — supply-chain retirement: the five `osv-scanner.toml` docker/docker suppressions and issue #4817
 
 **Wave 3** *(blocked on Wave 2 completion)*

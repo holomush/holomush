@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 01.1
 current_phase_name: migration-framework-adopt-goose-for-go-migrations
 status: executing
-stopped_at: Completed 01.1-05-PLAN.md
-last_updated: "2026-08-03T00:32:53.924Z"
+stopped_at: Completed 01.1-04-PLAN.md
+last_updated: "2026-08-03T01:03:47.896Z"
 last_activity: 2026-08-02
 last_activity_desc: Phase 01.1 execution started
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 14
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 01.1 (migration-framework-adopt-goose-for-go-migrations) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
-Progress: [████████░░] 77% (1/6 phases)
+Progress: [█████████░] 85% (1/6 phases)
 Last activity: 2026-08-02 — Phase 01.1 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -224,6 +224,7 @@ no action needed.
 | Phase 01.1 P02 | 40 min | 2 tasks | 7 files |
 | Phase 01.1 P03 | 35 min | 2 tasks | 2 files |
 | Phase 01.1 P05 | ~25 min | 2 tasks | 1 files |
+| Phase 01.1 P04 | 75m | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -410,6 +411,8 @@ the next milestone yet.
 - [Phase ?]: Clean branch taken: all five docker/docker [[IgnoredVulns]] retired — go mod why -m reports the main module does not need it, go mod graph has 0 edges (positive control: docker/go-connections matches 8x)
 - [Phase ?]: Advisory ids deliberately NOT repeated in osv-scanner.toml's history comment, so a text search for them stays a usable is-it-suppressed check
 - [Phase ?]: #4817 left OPEN with full evidence rather than closed — fix is on an unmerged branch; repo precedent (#4878, #4892) closes post-merge. PR should carry Closes #4817
+- [Phase ?]: 01.1-04: adopt fires from Migrator.Up() only (option-a); read-only verbs stay read-only
+- [Phase ?]: 01.1-04: INV-STORE-10 (ascending adopt seed order) shipped binding: bound; meta-test proven to resolve Ginkgo blocks
 
 ### Pending Todos
 
@@ -455,11 +458,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-03T00:32:53.912Z
+Last session: 2026-08-03T01:03:47.885Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 01.1-05-PLAN.md
+Stopped at: Completed 01.1-04-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
