@@ -68,6 +68,12 @@ type provIface interface {
 // For concurrent scenarios, create separate Migrator instances.
 type Migrator struct {
 	m provIface
+
+	// db is the same handle the goose provider was built on. It is held so the
+	// adopt gate can take a session advisory lock and run its transaction on a
+	// pinned connection. Unit tests construct a Migrator around a mock provider
+	// and leave this nil, in which case adopt has nothing to inspect and no-ops.
+	db *sql.DB
 }
 
 // NewMigrator creates a new Migrator instance.
@@ -123,12 +129,26 @@ func NewMigrator(databaseURL string) (*Migrator, error) {
 		return nil, oops.Code("MIGRATION_INIT_FAILED").With("operation", "initialize migrator").Wrap(err)
 	}
 
-	return &Migrator{m: provider}, nil
+	return &Migrator{m: provider, db: db}, nil
 }
 
 // Up applies all pending migrations.
+//
+// Up is the ONLY entry point that fires the one-shot cutover from golang-migrate
+// bookkeeping to goose bookkeeping. The read-only verbs deliberately do not: a
+// diagnostic run to decide whether to deploy must not itself perform the deploy's
+// irreversible step. See adoptFromGolangMigrate.
 func (m *Migrator) Up() error {
-	if _, err := m.m.Up(context.Background()); err != nil {
+	ctx := context.Background()
+
+	// Returned unwrapped on purpose. The adopt errors already carry their own
+	// MIGRATION_ADOPT_* codes, and re-wrapping in MIGRATION_UP_FAILED would replace
+	// the top-level code that callers and tests assert on with a generic one.
+	if err := m.adoptFromGolangMigrate(ctx); err != nil {
+		return err
+	}
+
+	if _, err := m.m.Up(ctx); err != nil {
 		return oops.Code("MIGRATION_UP_FAILED").Wrap(err)
 	}
 	return nil
