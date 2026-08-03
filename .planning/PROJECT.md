@@ -106,7 +106,7 @@ with both designed to absorb the deferred portal surfaces without rework.
 - **Public character profiles + sheets** (`holomush-qve.9`) — profile page, sheet display, owner edit, and
   per-field visibility. *Corrected by research 2026-07-31:* per-field privacy is largely **reuse, not
   invention** — `entity_properties` already carries per-row `visibility`/`visible_to`/`excluded_from`
-  (`migrations/000001_baseline.up.sql:350-373`), resolved by `PropertyProvider`
+  (`migrations/000001_baseline.sql:354-375`), resolved by `PropertyProvider`
   (`attribute/property.go:61-147`) and governed by six seed policies (`seed.go:110-145`). Profile and
   sheet are distinct: ship the split with the sheet **empty** (mechanical stats need a system that does
   not exist yet). Storage shape for the 1-primary + 10-gallery media model is an OPEN QUESTION for the
@@ -138,7 +138,7 @@ verified in-tree — none are new defects introduced by v0.13, but v0.13 is the 
   escalation vector until this is decided.
 - **Character name uniqueness has no database constraint** — check-then-insert races across
   `internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`, with no
-  unique index and no `LOWER(name)` index (`000001_baseline.up.sql:68-76`), and normalization that does
+  unique index and no `LOWER(name)` index (`000001_baseline.sql:72-79`), and normalization that does
   no NFKC or confusable folding (`internal/world/validation.go:114-126`). Adding `Rename` doubles the
   writers into that race.
 - **Rename/retire cannot reach denormalized history** — display names are copied into immutable event
