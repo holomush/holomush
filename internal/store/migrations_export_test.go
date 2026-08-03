@@ -74,7 +74,13 @@ func migrationSection(src, direction string) (string, error) {
 	lines := strings.Split(src, "\n")
 	upAt, downAt := -1, -1
 	for i, line := range lines {
-		switch gooseAnnotation(line) {
+		annotation, annErr := gooseAnnotation(line)
+		if annErr != nil {
+			// goose would refuse the whole file. Sectioning it anyway would hand a
+			// caller SQL from a migration that cannot apply.
+			return "", fmt.Errorf("line %d: %w", i+1, annErr)
+		}
+		switch annotation {
 		case "Up":
 			if upAt < 0 {
 				upAt = i
@@ -109,7 +115,11 @@ func migrationSection(src, direction string) (string, error) {
 	// executed the section rather than surfacing it.
 	kept := make([]string, 0, len(body))
 	for _, line := range body {
-		switch gooseAnnotation(line) {
+		// The error is discarded deliberately: the loop above scanned every line in
+		// the file and already returned for any goose refuses, so nothing reaching
+		// here can carry one.
+		annotation, _ := gooseAnnotation(line)
+		switch annotation {
 		case "StatementBegin", "StatementEnd":
 			continue
 		}
@@ -118,18 +128,76 @@ func migrationSection(src, direction string) (string, error) {
 	return strings.Join(kept, "\n"), nil
 }
 
-// gooseAnnotation returns the directive carried by a "-- +goose <directive>"
-// comment line (e.g. "Up", "Down", "StatementBegin"), or "" when the line is
-// not a goose annotation. Leading whitespace and the spacing after "--" are
-// tolerated, matching goose's own lenient parse.
-func gooseAnnotation(line string) string {
-	trimmed := strings.TrimSpace(line)
-	if !strings.HasPrefix(trimmed, "--") {
-		return ""
+// gooseSupportedAnnotations is goose's own supportedAnnotations set, in goose's
+// own spelling (v3.27.3 internal/sqlparser/parser.go:291-310). It is re-declared
+// rather than imported because the package holding it is internal to that module
+// and therefore unimportable from here.
+//
+// The spellings here are the CANONICAL forms gooseAnnotation returns, so every
+// caller can keep switching on a plain string constant even though the engine —
+// and now this recognizer — accept any case variant of them.
+var gooseSupportedAnnotations = []string{
+	"Up",
+	"Down",
+	"StatementBegin",
+	"StatementEnd",
+	"NO TRANSACTION",
+	envsubOn,
+	envsubOff,
+}
+
+// gooseAnnotation reports the goose annotation carried by line, canonicalised to
+// goose's own spelling ("Up", "StatementBegin", "ENVSUB ON", ...). It returns ""
+// with a nil error when the line is not an annotation line at all.
+//
+// The error is non-nil when the line IS an annotation line — a `--` comment
+// mentioning "+goose", which is the exact gate goose applies at
+// v3.27.3 internal/sqlparser/parser.go:126 — but one that goose's
+// extractAnnotation (:319-350) REFUSES. goose aborts the entire migration in that
+// case, so callers must surface it rather than reading the line as ordinary SQL.
+//
+// This function exists to mirror extractAnnotation step for step, because the
+// guards built on it are only as faithful as their agreement with the engine they
+// guard. The two ways they previously disagreed both mattered:
+//
+//   - goose folds case (strings.EqualFold, :345) and TrimSpaces (:336) whatever
+//     separates "+goose" from the directive, so `-- +goose envsub on` and
+//     `-- +goose\tStatementEnd` are honoured. A recognizer requiring a literal
+//     "+goose " and exact case went blind on them — and a missed StatementEnd
+//     fails OPEN, because the scanner keeps believing it is inside a wrap that
+//     goose has already closed.
+//   - goose is STRICTER than a TrimSpace-first parse about leading whitespace
+//     (:320-322): it hard-errors, so ` -- +goose Up` is a migration that cannot
+//     apply at all.
+func gooseAnnotation(line string) (string, error) {
+	// goose's own gate: a "--" comment mentioning "+goose" anywhere.
+	if !strings.HasPrefix(strings.TrimSpace(line), "--") || !strings.Contains(line, "+goose") {
+		return "", nil
 	}
-	rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "--"))
-	if !strings.HasPrefix(rest, "+goose ") {
-		return ""
+
+	// Past this point the line IS an annotation to goose, so every rejection
+	// below aborts the whole migration rather than being ignored.
+	if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+		return "", fmt.Errorf("%q contains leading whitespace", line)
 	}
-	return strings.TrimSpace(strings.TrimPrefix(rest, "+goose "))
+
+	// Every "--", then the FIRST "+goose" only — a second one is an error, which
+	// is how goose refuses two annotations sharing a line.
+	cmd := strings.ReplaceAll(line, "--", "")
+	cmd = strings.Replace(cmd, "+goose", "", 1)
+	if strings.Contains(cmd, "+goose") {
+		return "", fmt.Errorf("%q contains multiple '+goose' annotations", cmd)
+	}
+
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return "", fmt.Errorf("%q carries an empty annotation", line)
+	}
+
+	for _, supported := range gooseSupportedAnnotations {
+		if strings.EqualFold(supported, cmd) {
+			return supported, nil
+		}
+	}
+	return "", fmt.Errorf("%q is not supported", cmd)
 }

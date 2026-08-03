@@ -80,3 +80,98 @@ func TestMigrationSectionForTest(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+// TestGooseAnnotationMirrorsGooseExtractAnnotation pins the recognizer against
+// goose v3.27.3's internal/sqlparser.extractAnnotation (:319-350) directly,
+// rather than only through the scanners built on it.
+//
+// The reason this test exists is the failure mode it was written after: a guard
+// whose recognizer silently disagreed with the engine it guards reports "clean"
+// on input the engine applies. So for every form goose ACCEPTS there is a row
+// here asserting this recognizer accepts it too, and for every form goose
+// REFUSES — refusals abort the whole migration — there is a row asserting a
+// non-nil error rather than a silent "not an annotation".
+func TestGooseAnnotationMirrorsGooseExtractAnnotation(t *testing.T) {
+	accepted := []struct {
+		name string
+		line string
+		want string
+	}{
+		{"canonical Up", "-- +goose Up", "Up"},
+		{"canonical Down", "-- +goose Down", "Down"},
+		{"canonical StatementBegin", "-- +goose StatementBegin", "StatementBegin"},
+		{"canonical StatementEnd", "-- +goose StatementEnd", "StatementEnd"},
+		{"canonical NO TRANSACTION", "-- +goose NO TRANSACTION", "NO TRANSACTION"},
+		{"canonical ENVSUB ON", "-- +goose ENVSUB ON", envsubOn},
+		{"canonical ENVSUB OFF", "-- +goose ENVSUB OFF", envsubOff},
+
+		// goose folds case with strings.EqualFold (:345).
+		{"lowercase up", "-- +goose up", "Up"},
+		{"lowercase statementend", "-- +goose statementend", "StatementEnd"},
+		{"lowercase statementbegin", "-- +goose statementbegin", "StatementBegin"},
+		{"lowercase envsub on", "-- +goose envsub on", envsubOn},
+		{"mixed-case EnvSub Off", "-- +goose EnvSub Off", envsubOff},
+		{"mixed-case no transaction", "-- +goose No Transaction", "NO TRANSACTION"},
+
+		// goose TrimSpaces the separator (:336), so any whitespace run works.
+		{"tab before the directive", "-- +goose\tStatementEnd", "StatementEnd"},
+		{"tab inside an ENVSUB annotation", "-- +goose\tENVSUB ON", envsubOn},
+		{"several spaces before the directive", "--   +goose   Down", "Down"},
+		{"trailing whitespace", "-- +goose Up\t ", "Up"},
+
+		// goose strips EVERY "--" (:325), not just the leading one.
+		{"a second comment marker", "-- +goose Up --", "Up"},
+	}
+	for _, tt := range accepted {
+		t.Run("accepts "+tt.name, func(t *testing.T) {
+			got, err := gooseAnnotation(tt.line)
+			require.NoError(t, err, "goose applies this line; the recognizer must not refuse it")
+			assert.Equal(t, tt.want, got,
+				"the recognizer must canonicalise to goose's own spelling so callers can "+
+					"switch on a constant")
+		})
+	}
+
+	refused := []struct {
+		name   string
+		line   string
+		wantIn string
+	}{
+		// goose is STRICTER than a TrimSpace-first parse here (:320-322).
+		{"leading space", " -- +goose Up", "leading whitespace"},
+		{"leading tab", "\t-- +goose StatementEnd", "leading whitespace"},
+		{"two annotations on one line", "-- +goose Up -- +goose Down", "multiple"},
+		{"no directive at all", "-- +goose", "empty annotation"},
+		{"an unknown directive", "-- +goose Sideways", "not supported"},
+		// goose treats ANY "--" comment mentioning "+goose" as an annotation
+		// (:126), so prose about the annotation is itself unappliable.
+		{"prose mentioning the marker", "-- see the +goose docs", "not supported"},
+	}
+	for _, tt := range refused {
+		t.Run("refuses "+tt.name, func(t *testing.T) {
+			got, err := gooseAnnotation(tt.line)
+			require.Error(t, err,
+				"goose aborts the whole migration on this line; reporting it as 'not an "+
+					"annotation' would hide an unappliable file")
+			assert.Empty(t, got)
+			assert.Contains(t, err.Error(), tt.wantIn)
+		})
+	}
+
+	notAnnotations := []struct {
+		name string
+		line string
+	}{
+		{"ordinary SQL", "CREATE TABLE t ();"},
+		{"an ordinary comment", "-- create the table"},
+		{"a non-comment line mentioning the marker", "INSERT INTO t VALUES ('+goose');"},
+		{"an empty line", ""},
+	}
+	for _, tt := range notAnnotations {
+		t.Run("ignores "+tt.name, func(t *testing.T) {
+			got, err := gooseAnnotation(tt.line)
+			require.NoError(t, err)
+			assert.Empty(t, got)
+		})
+	}
+}

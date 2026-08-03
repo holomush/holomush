@@ -25,14 +25,17 @@ import (
 var dollarQuoteTag = regexp.MustCompile(`\$([A-Za-z_][A-Za-z0-9_]*)?\$`)
 
 // The two annotations that switch goose's environment-variable interpolation on
-// and off, as gooseAnnotation reports them.
+// and off, in the CANONICAL spelling gooseAnnotation reports them under.
 //
 // These are re-declared here rather than imported because goose keeps its own
 // copies in an internal package (github.com/pressly/goose/v3/internal/sqlparser),
-// which is unimportable from outside that module. Matching them exactly is
-// nonetheless sufficient: goose compares the extracted annotation against its
-// constants by equality and hard-errors on anything else ("unknown annotation"),
-// so a differently-spelled variant is a migration that cannot apply at all.
+// which is unimportable from outside that module.
+//
+// Matching them exactly is sufficient ONLY because gooseAnnotation canonicalises
+// first. goose itself compares with strings.EqualFold (v3.27.3
+// internal/sqlparser/parser.go:345), so `-- +goose envsub on` enables
+// interpolation just as surely as the upper-case spelling does; a recognizer that
+// compared case-sensitively would leave this guard blind on exactly that input.
 const (
 	envsubOn  = "ENVSUB ON"
 	envsubOff = "ENVSUB OFF"
@@ -62,7 +65,21 @@ func statementBlockViolations(name, body string) []string {
 	for i, line := range strings.Split(body, "\n") {
 		lineNo := i + 1
 
-		switch gooseAnnotation(line) {
+		annotation, annErr := gooseAnnotation(line)
+		if annErr != nil {
+			// goose treats any "--" comment mentioning "+goose" as an annotation and
+			// aborts the ENTIRE migration when it cannot parse one. Such a file is
+			// unappliable, which is a defect worth surfacing in the fast lane rather
+			// than at deploy time — and reading the line as ordinary SQL instead
+			// would leave the block tracking below out of step with the engine.
+			violations = append(violations, fmt.Sprintf(
+				"%s:%d: goose refuses this annotation (%v) and aborts the whole migration: %s",
+				name, lineNo, annErr, strings.TrimSpace(line),
+			))
+			continue
+		}
+
+		switch annotation {
 		case "StatementBegin":
 			if inBlock {
 				violations = append(violations, fmt.Sprintf(
@@ -193,6 +210,91 @@ func TestStatementBlockViolationsFlagsDollarQuotesOutsideStatementBlocks(t *test
 			body:      "-- +goose NO TRANSACTION\n-- +goose Up\nSELECT 1;\n-- +goose Down\nSELECT 1;\n",
 			wantCount: 0,
 		},
+
+		// --- Spelling variants goose ACCEPTS. -------------------------------
+		//
+		// goose folds case (strings.EqualFold) and TrimSpaces whatever separates
+		// "+goose" from the directive, so each body below is applied by the engine
+		// exactly as its canonically-spelled twin above. A recognizer that misses
+		// them leaves the guard blind on input the engine honours.
+		{
+			name: "flags a lowercase ENVSUB pair because goose folds annotation case",
+			body: "-- +goose Up\n-- +goose envsub on\n" +
+				"CREATE TABLE t (x text DEFAULT '${HOLOMUSH_TENANT}');\n" +
+				"-- +goose envsub off\n",
+			wantCount: 2,
+			wantIn:    "fixture.sql:2:",
+		},
+		{
+			name:      "flags a mixed-case ENVSUB annotation",
+			body:      "-- +goose Up\n-- +goose EnvSub On\nSELECT 1;\n",
+			wantCount: 1,
+			wantIn:    "config-injection surface",
+		},
+		{
+			name:      "flags a tab-separated ENVSUB annotation",
+			body:      "-- +goose Up\n-- +goose\tENVSUB ON\nSELECT 1;\n",
+			wantCount: 1,
+			wantIn:    "config-injection surface",
+		},
+		{
+			// THE fail-open case, and the reason the StatementEnd direction has to
+			// be covered explicitly. goose CLOSES the block at the lowercase marker
+			// on line 4 and therefore tears the unwrapped body on lines 5-7 apart at
+			// its internal semicolons. A recognizer that misses the marker still
+			// believes it is inside the wrap, reads those lines as protected, and
+			// reports the file clean.
+			name: "flags the body a lowercase StatementEnd exposes, because goose closes the block there",
+			body: "-- +goose Up\n" +
+				"-- +goose StatementBegin\n" +
+				"DO $$ BEGIN END $$;\n" +
+				"-- +goose statementend\n" +
+				"DO $$\n" +
+				"BEGIN\n" +
+				"END $$;\n" +
+				"-- +goose StatementEnd\n",
+			wantCount: 3, // the two exposed `$$` lines, plus the now-unpaired closer
+			wantIn:    "fixture.sql:5:",
+		},
+		{
+			// The mirror direction fails SAFE (a missed opener raises a false
+			// violation rather than hiding a real one), which is exactly why testing
+			// only this direction would wrongly suggest the guard is sound.
+			name: "accepts a lowercase StatementBegin because goose opens the block there",
+			body: "-- +goose Up\n-- +goose statementbegin\n" +
+				"DO $$\nBEGIN\nEND $$;\n-- +goose StatementEnd\n",
+			wantCount: 0,
+		},
+		{
+			name: "accepts a tab-separated StatementBegin and StatementEnd pair",
+			body: "-- +goose Up\n-- +goose\tStatementBegin\n" +
+				"DO $$\nBEGIN\nEND $$;\n-- +goose\tStatementEnd\n",
+			wantCount: 0,
+		},
+
+		// --- Spelling variants goose REFUSES. -------------------------------
+		//
+		// goose aborts the WHOLE migration on each of these, so a corpus file
+		// carrying one cannot apply. Reporting them here surfaces that in the fast
+		// lane rather than at deploy time.
+		{
+			name:      "flags an annotation goose rejects for leading whitespace",
+			body:      "-- +goose Up\n  -- +goose StatementBegin\nSELECT 1;\n",
+			wantCount: 1,
+			wantIn:    "leading whitespace",
+		},
+		{
+			name:      "flags a line carrying two goose annotations",
+			body:      "-- +goose Up\n-- +goose StatementBegin -- +goose StatementEnd\nSELECT 1;\n",
+			wantCount: 1,
+			wantIn:    "multiple",
+		},
+		{
+			name:      "flags a directive goose does not support",
+			body:      "-- +goose Up\n-- +goose Sideways\nSELECT 1;\n",
+			wantCount: 1,
+			wantIn:    "not supported",
+		},
 	}
 
 	for _, tt := range tests {
@@ -243,7 +345,9 @@ func TestEveryDollarQuotedMigrationBodyIsWrappedInStatementBeginEnd(t *testing.T
 			filesCarryingTags++
 		}
 		for _, line := range strings.Split(body, "\n") {
-			if gooseAnnotation(line) != "" {
+			// A refusal is reported as a violation by the scan above, so only a
+			// cleanly-recognised annotation counts as evidence the recognizer is live.
+			if annotation, annErr := gooseAnnotation(line); annErr == nil && annotation != "" {
 				filesCarryingAnnotations++
 				break
 			}
