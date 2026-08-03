@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 9
+open_count: 7
 waived_count: 0
-fixed_count: 0
+fixed_count: 2
 total_count: 9
-last_updated: 2026-08-03T02:13:07.324Z
+last_updated: 2026-08-03T12:09:34.924Z
 ---
 
 # Broken Windows Ledger
@@ -19,8 +19,8 @@ last_updated: 2026-08-03T02:13:07.324Z
 | 2 | 09 | deviation | test/session-matrix.yaml |  | move-arrival.{web-char,telnet,multi-session} cover the privacy floor after a SIMULATED move; the production movement pipeline (MoveCharacter -> MovementHook -> UpdateLocationOnMove) is untested and unreachable — tracked by issue #4788 | open |  | 2026-07-27T02:09:06.208Z |  |
 | 3 | 09 | deviation | test/session-matrix.yaml |  | yamlfmt leaks #magic___^_^___line into YAML block scalars; cleaned here, root cause unfixed (issue 4864) | open |  | 2026-07-27T02:38:16.376Z |  |
 | 4 | 01.1 | deviation | internal/store/migrate_inv_ts_integration_test.go |  | INV-STORE-1 timestamp scan now excludes goose_db_version; narrows an invariant's effective scan — plan 03 meta-tests should reflect it | open |  | 2026-08-02T23:37:38.304Z |  |
-| 5 | 01.1 | unrun-verify | internal/store/events_audit_partition_migration_integration_test.go |  | reads migrations/000052_events_audit_partition.up.sql by path; red until plan 02 | open |  | 2026-08-02T23:37:38.383Z |  |
-| 6 | 01.1 | unrun-verify | internal/store/migrations_sessions_location_index_integration_test.go |  | reads migrations/000053_sessions_location_index.up.sql by path; red until plan 02 | open |  | 2026-08-02T23:37:38.463Z |  |
+| 5 | 01.1 | unrun-verify | internal/store/events_audit_partition_migration_integration_test.go |  | reads migrations/000052_events_audit_partition.up.sql by path; red until plan 02 | fixed |  | 2026-08-02T23:37:38.383Z | 2026-08-03T12:09:34.849Z |
+| 6 | 01.1 | unrun-verify | internal/store/migrations_sessions_location_index_integration_test.go |  | reads migrations/000053_sessions_location_index.up.sql by path; red until plan 02 | fixed |  | 2026-08-02T23:37:38.463Z | 2026-08-03T12:09:34.924Z |
 | 7 | 01.1 | deviation | internal/store/migrate_adopt.go |  | adopt seeded-probe filters version_id>0: a read-only verb creating goose's bootstrap row must not disable the cutover | open |  | 2026-08-03T01:03:53.873Z |  |
 | 8 | 01.1 | deviation | .claude/skills/new-migration/SKILL.md |  | new-migration skill taught TIMESTAMPTZ (contradicting INV-STORE-1); corrected to BIGINT epoch-ns as a Rule 2 deviation not named in the plan | open |  | 2026-08-03T02:13:07.263Z |  |
 | 9 | 01.1 | unrun-verify | site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md |  | D-16 pre-deploy rehearsal and D-18 surgical rollback are WRITTEN but never EXECUTED against restored sandbox data — a rehearsal nobody has run is a hypothesis, not a control | open |  | 2026-08-03T02:13:07.324Z |  |
@@ -82,10 +82,10 @@ last_updated: 2026-08-03T02:13:07.324Z
     "file": "internal/store/events_audit_partition_migration_integration_test.go",
     "line": null,
     "description": "reads migrations/000052_events_audit_partition.up.sql by path; red until plan 02",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-02T23:37:38.383Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-03T12:09:34.849Z"
   },
   {
     "id": 6,
@@ -94,10 +94,10 @@ last_updated: 2026-08-03T02:13:07.324Z
     "file": "internal/store/migrations_sessions_location_index_integration_test.go",
     "line": null,
     "description": "reads migrations/000053_sessions_location_index.up.sql by path; red until plan 02",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-02T23:37:38.463Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-03T12:09:34.924Z"
   },
   {
     "id": 7,
