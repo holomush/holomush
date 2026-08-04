@@ -121,7 +121,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [x] **IDENT-08**: Player usernames remain **ASCII-only** — a regression guard pinning the existing
       `^[a-zA-Z][a-zA-Z0-9_]*$` rule (`internal/auth/player.go:31`), not new validation.
 
-- [ ] **IDENT-09**: A **unique index on a stored normalized character name** lands **before or with**
+- [x] **IDENT-09**: A **unique index on a stored normalized character name** lands **before or with**
       `Rename`, closing the check-then-insert race that exists today across one shared existence
       query (`internal/bootstrap/setup/adapters.go:38-50`) and **two** writers —
       `internal/auth/character_service.go:112-121` and `internal/auth/guest_service.go:227`, the
