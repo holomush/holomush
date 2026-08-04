@@ -28,7 +28,7 @@ import (
 // internal/store/migrations. Bump it in the same change that adds a migration —
 // the FullCycle spec below asserts Up() lands exactly here, so a new migration
 // fails this spec until the constant follows it.
-const latestMigrationVersion = 53
+const latestMigrationVersion = 54
 
 // Bookkeeping shape of goose's ledger after a fresh-database Up().
 //
@@ -38,10 +38,10 @@ const latestMigrationVersion = 53
 // it is why a bare `count(*) == 44` is WRONG against a correct database.
 //
 // The migration corpus has gaps (versions 21–29 are unused), so the highest
-// version is 53 while only 44 migrations exist. Bump these together with
+// version is 54 while only 45 migrations exist. Bump these together with
 // latestMigrationVersion when a migration is added.
 const (
-	expectedAppliedMigrationRows = 44
+	expectedAppliedMigrationRows = 45
 	gooseBootstrapRows           = 1
 	expectedGooseLedgerRows      = expectedAppliedMigrationRows + gooseBootstrapRows
 )

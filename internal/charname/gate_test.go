@@ -1,0 +1,227 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package charname_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/charname"
+	"github.com/holomush/holomush/internal/charname/syntax"
+	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/pkg/errutil"
+)
+
+// fakeLookup is a SkeletonLookup double. It records the arguments it was
+// called with so the self-exclusion channel can be asserted structurally
+// rather than inferred from the verdict.
+type fakeLookup struct {
+	known        map[string]ulid.ULID // skeleton -> the id of the row holding it
+	unverifiable bool
+	err          error
+
+	gotSkeleton string
+	gotExcluded *ulid.ULID
+	calls       int
+}
+
+func (f *fakeLookup) SkeletonExists(_ context.Context, skeleton string, excluding *ulid.ULID) (bool, bool, error) {
+	f.calls++
+	f.gotSkeleton = skeleton
+	f.gotExcluded = excluding
+
+	if f.err != nil {
+		return false, false, f.err
+	}
+	if f.unverifiable {
+		return false, true, nil
+	}
+	owner, ok := f.known[skeleton]
+	if ok && excluding != nil && owner.Compare(*excluding) == 0 {
+		return false, false, nil // the only match is the caller's own row
+	}
+	return ok, false, nil
+}
+
+func newGate(f *fakeLookup) *charname.Gate { return &charname.Gate{Skeletons: f} }
+
+func TestGateCheckAdmitsAWellFormedNameWithNoSkeletonCollision(t *testing.T) {
+	g := newGate(&fakeLookup{known: map[string]ulid.ULID{}})
+
+	got, skel, err := g.Check(t.Context(), "Alaric")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Alaric", got.Display)
+	assert.Equal(t, "alaric", got.Key)
+	assert.NotEmpty(t, skel)
+}
+
+func TestGateCheckRefusesANameWhoseSkeletonMatchesAnExistingCharacter(t *testing.T) {
+	seededID := idgen.New()
+	seededName := "paypal"
+	lookup := &fakeLookup{known: map[string]ulid.ULID{
+		charname.Skeleton(mustKey(t, seededName)): seededID,
+	}}
+	g := newGate(lookup)
+
+	// Cyrillic а (U+0430) and р (U+0440) — a whole-script homoglyph.
+	_, _, err := g.Check(t.Context(), "\u0440\u0430ypal")
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "NAME_CONFUSABLE")
+
+	// Paired positive control on the SAME lookup: a non-confusable name is
+	// admitted, so the refusal above cannot be "the gate refuses everything".
+	_, _, ok := g.Check(t.Context(), "Brenna")
+	require.NoError(t, ok)
+}
+
+func TestGateCheckConfusableRefusalNamesNeitherTheCollidingCharacterNorItsID(t *testing.T) {
+	seededID := idgen.New()
+	seededName := "Alaric"
+	g := newGate(&fakeLookup{known: map[string]ulid.ULID{
+		charname.Skeleton(mustKey(t, seededName)): seededID,
+	}})
+
+	_, _, err := g.Check(t.Context(), "\u0410laric") // U+0410 CYRILLIC CAPITAL LETTER A
+
+	require.Error(t, err)
+	msg := err.Error()
+	assert.NotContains(t, msg, seededName, "the message must not name the colliding character")
+	assert.NotContains(t, msg, "alaric", "nor its case-folded form")
+	assert.NotContains(t, msg, seededID.String(), "the message must not carry the colliding id")
+}
+
+func TestGateCheckRefusesNamesTheSyntacticRulesReject(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{name: "a digit", input: "Alaric2"},
+		{name: "punctuation", input: "Al!aric"},
+		{name: "a single rune", input: "A"},
+		{name: "more runes than the maximum", input: strings.Repeat("a", syntax.MaxNameLength+1)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lookup := &fakeLookup{known: map[string]ulid.ULID{}}
+			g := newGate(lookup)
+
+			_, _, err := g.Check(t.Context(), tt.input)
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, "NAME_INVALID_SYNTAX")
+
+			var verr *syntax.ValidationError
+			assert.True(t, errors.As(err, &verr), "the underlying *syntax.ValidationError survives in the chain")
+			assert.Zero(t, lookup.calls, "the syntactic rule runs before the skeleton lookup")
+
+			// Paired positive control on the SAME gate: an in-bounds
+			// letters-and-spaces name is admitted.
+			_, _, ok := g.Check(t.Context(), "Alaric")
+			require.NoError(t, ok)
+		})
+	}
+}
+
+func TestGateCheckRunsTheSyntacticRuleOnThePostNormalizeDisplayForm(t *testing.T) {
+	// Leading, trailing and doubled spaces are all things syntax.ValidateName
+	// rejects on a RAW submission. They must be accepted here, because
+	// normalization has already collapsed them by the time the rule sees the
+	// string — proving the ordering rather than asserting it.
+	require.Error(t, syntax.ValidateName("  John   Smith  "), "the raw submission is syntactically invalid")
+
+	g := newGate(&fakeLookup{known: map[string]ulid.ULID{}})
+	got, _, err := g.Check(t.Context(), "  John   Smith  ")
+
+	require.NoError(t, err)
+	assert.Equal(t, "John Smith", got.Display)
+}
+
+func TestGateCheckRefusesASubmissionWhoseNormalFormIsEmpty(t *testing.T) {
+	lookup := &fakeLookup{known: map[string]ulid.ULID{}}
+	g := newGate(lookup)
+
+	_, _, err := g.Check(t.Context(), "\u200B\u200C\u200D")
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "NAME_EMPTY_NORMAL_FORM")
+	assert.Zero(t, lookup.calls, "an empty normal form never reaches the corpus")
+}
+
+func TestGateCheckExcludesTheCallersOwnCharacterFromTheSkeletonLookup(t *testing.T) {
+	// 01-SPEC.md §702-706: a request whose uniqueness key matches the current
+	// one but whose display form differs is a REAL rename, and it does not
+	// collide with itself. Both directions are asserted on ONE fixture, so the
+	// success cannot pass because the seeded row was never written.
+	seededID := idgen.New()
+	lookup := &fakeLookup{known: map[string]ulid.ULID{
+		charname.Skeleton(mustKey(t, "Alaric")): seededID,
+	}}
+	g := newGate(lookup)
+
+	_, _, err := g.Check(t.Context(), "ALARIC", charname.ExcludingCharacter(seededID))
+	require.NoError(t, err, "renaming a character to a case variant of its own name is not a collision")
+	require.NotNil(t, lookup.gotExcluded, "the excluded id reaches the lookup")
+	assert.Equal(t, seededID, *lookup.gotExcluded)
+
+	_, _, err = g.Check(t.Context(), "ALARIC")
+	require.Error(t, err, "the same submission with no exclusion collides")
+	errutil.AssertErrorCode(t, err, "NAME_CONFUSABLE")
+
+	_, _, err = g.Check(t.Context(), "ALARIC", charname.ExcludingCharacter(idgen.New()))
+	require.Error(t, err, "excluding a DIFFERENT character does not excuse the collision")
+	errutil.AssertErrorCode(t, err, "NAME_CONFUSABLE")
+}
+
+func TestGateCheckFailsClosedWhenTheSkeletonCorpusIsUnverifiable(t *testing.T) {
+	// D-30: a gate that adjudicates against a half-populated name_skeleton
+	// column admits a confusable of an existing row. Both directions asserted
+	// on one fixture.
+	lookup := &fakeLookup{known: map[string]ulid.ULID{}}
+	g := newGate(lookup)
+
+	lookup.unverifiable = false
+	_, _, err := g.Check(t.Context(), "Alaric")
+	require.NoError(t, err, "a verifiable corpus with no collision admits the name")
+
+	lookup.unverifiable = true
+	_, _, err = g.Check(t.Context(), "Alaric")
+	require.Error(t, err, "the same name is refused once the corpus is unverifiable")
+	errutil.AssertErrorCode(t, err, "NAME_SKELETON_UNVERIFIABLE")
+}
+
+func TestGateCheckSurfacesALookupFailureRatherThanTreatingItAsNoCollision(t *testing.T) {
+	g := newGate(&fakeLookup{err: errors.New("connection refused")})
+
+	_, _, err := g.Check(t.Context(), "Alaric")
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "NAME_SKELETON_LOOKUP_FAILED")
+}
+
+func TestGateCheckPassesTheSkeletonOfTheCaseFoldedKeyToTheLookup(t *testing.T) {
+	lookup := &fakeLookup{known: map[string]ulid.ULID{}}
+	g := newGate(lookup)
+
+	_, skel, err := g.Check(t.Context(), "Alaric")
+
+	require.NoError(t, err)
+	assert.Equal(t, charname.Skeleton("alaric"), lookup.gotSkeleton)
+	assert.Equal(t, lookup.gotSkeleton, skel, "the returned skeleton is the one that was adjudicated")
+	assert.Nil(t, lookup.gotExcluded, "no exclusion is passed when no option was given")
+}
+
+func mustKey(t *testing.T, name string) string {
+	t.Helper()
+	n, err := charname.Normalize(name)
+	require.NoError(t, err)
+	return n.Key
+}

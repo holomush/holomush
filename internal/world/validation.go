@@ -5,13 +5,15 @@ package world
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/oklog/ulid/v2"
+
+	"github.com/holomush/holomush/internal/charname/syntax"
 )
 
 // Validation limits for domain types.
@@ -23,9 +25,14 @@ const (
 	MaxVisibleToCount    = 100
 	MaxLockDataKeys      = 20
 
-	// Character name limits (stricter than general names)
-	MinCharacterNameLength = 2
-	MaxCharacterNameLength = 32
+	// Character name limits (stricter than general names).
+	//
+	// Aliases of the internal/charname/syntax leaf's bounds, so the two cannot
+	// drift: the leaf is the single implementation of the rules (D-28) and
+	// these names stay for the callers outside this package that already read
+	// them.
+	MinCharacterNameLength = syntax.MinNameLength
+	MaxCharacterNameLength = syntax.MaxNameLength
 )
 
 // ValidationError represents an input validation error.
@@ -56,9 +63,6 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// characterNameRegex matches names with only Unicode letters and single spaces between words.
-var characterNameRegex = regexp.MustCompile(`^[\p{L}]+( [\p{L}]+)*$`)
-
 // ValidateCharacterName checks that a character name is valid.
 // Character names have stricter rules than general names:
 // - Letters and spaces only (no numbers, no special characters)
@@ -66,42 +70,26 @@ var characterNameRegex = regexp.MustCompile(`^[\p{L}]+( [\p{L}]+)*$`)
 // - No leading/trailing spaces
 // - No consecutive spaces
 // - Supports Unicode letters (accented characters, Cyrillic, etc.)
+//
+// The rules themselves live in internal/charname/syntax — a dependency-free
+// leaf — so charname.Gate can enforce the SAME rules without importing
+// internal/world (D-28). This function is a thin wrapper that converts the
+// leaf's error into the *ValidationError shape this package's callers and
+// tests already assert against; its observable behaviour is unchanged.
 func ValidateCharacterName(name string) error {
-	if name == "" {
-		return &ValidationError{Field: "name", Message: "cannot be empty"}
+	err := syntax.ValidateName(name)
+	if err == nil {
+		return nil
 	}
 
-	// Validate UTF-8 before any other processing
-	if !utf8.ValidString(name) {
-		return &ValidationError{Field: "name", Message: "must be valid UTF-8"}
+	var verr *syntax.ValidationError
+	if errors.As(err, &verr) {
+		return &ValidationError{Field: verr.Field, Message: verr.Message}
 	}
-
-	// Check for leading/trailing whitespace
-	if name != strings.TrimSpace(name) {
-		return &ValidationError{Field: "name", Message: "cannot have leading or trailing spaces"}
-	}
-
-	// Check for consecutive spaces
-	if strings.Contains(name, "  ") {
-		return &ValidationError{Field: "name", Message: "cannot have consecutive spaces"}
-	}
-
-	// Use rune count for proper Unicode character counting
-	runeCount := utf8.RuneCountInString(name)
-	if runeCount < MinCharacterNameLength {
-		return &ValidationError{Field: "name", Message: fmt.Sprintf("must be at least %d characters", MinCharacterNameLength)}
-	}
-
-	if runeCount > MaxCharacterNameLength {
-		return &ValidationError{Field: "name", Message: fmt.Sprintf("must be at most %d characters", MaxCharacterNameLength)}
-	}
-
-	// Check that name contains only letters and single spaces
-	if !characterNameRegex.MatchString(name) {
-		return &ValidationError{Field: "name", Message: "must contain letters and spaces only"}
-	}
-
-	return nil
+	// Unreachable today — ValidateName returns only *syntax.ValidationError.
+	// Kept as a fail-safe so a future leaf-side error type cannot escape
+	// unlabelled.
+	return &ValidationError{Field: "name", Message: err.Error()}
 }
 
 // NormalizeCharacterName converts a character name to Initial Caps format.
@@ -111,6 +99,32 @@ func ValidateCharacterName(name string) error {
 // - Handles Unicode letters properly (accented characters, Cyrillic, etc.)
 //
 // Example: "alaric" -> "Alaric", "jOhN sMiTh" -> "John Smith", "josé" -> "José"
+//
+// Superseded — treat as Deprecated: use charname.Normalize instead. That
+// function implements the 01-SPEC.md §6.1.1 pipeline (NFKC, Cf stripping,
+// whitespace canonicalization, Unicode full case folding) and returns the
+// display form and the uniqueness key as SEPARATE values.
+//
+// This one conflates them: its per-word title-casing overwrites the
+// capitalization the player chose, and the single string it returns serves as
+// both the display name and the equality key. 01-SPEC.md §6.1.5 records that
+// Phase 2 replaces it.
+//
+// Two things are deliberate here, and both are the same decision:
+//
+//   - The body stays. Its only production caller is
+//     internal/auth/character_service.go, and migrating that caller — together
+//     with the assertions in internal/world/character_test.go and
+//     internal/auth/character_service_test.go that pin this behaviour — belongs
+//     to the plan that owns the writer boundary. Emptying it here would redden
+//     tests this plan does not own.
+//   - The notice is prose rather than a machine-readable "Deprecated:"
+//     paragraph. staticcheck's SA1019 fires at the call site, so the
+//     machine-readable form is only landable in the same change that migrates
+//     that caller. Landing it earlier would force either a lint suppression in
+//     a file this plan must not touch, or a red lint across every intervening
+//     wave. The plan that migrates the caller promotes this to a real
+//     "Deprecated:" paragraph in the same commit.
 func NormalizeCharacterName(name string) string {
 	// Trim and collapse whitespace
 	words := strings.Fields(name)

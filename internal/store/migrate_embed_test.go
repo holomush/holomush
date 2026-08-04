@@ -16,7 +16,7 @@ import (
 // directory listing: deriving it from the same source the test walks would make
 // the assertion tautological and blind to a migration file that went missing.
 // Bump it in the same change that adds a migration.
-const expectedMigrationCount = 44
+const expectedMigrationCount = 45
 
 // TestMigrationsFSContainsSingleFileGooseMigrationsWithBothAnnotations pins the
 // post-goose corpus shape. goose parses one file per version carrying both
