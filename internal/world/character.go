@@ -27,6 +27,15 @@ type Character struct {
 	// constructors MUST NOT hand-set it — it is populated only by read-path scans
 	// and post-write refresh (added in the repo plans).
 	Version int
+	// Status is the character's lifecycle state (characters.status, migration
+	// 000054), a closed three-value vocabulary. Populated by every FULL-ENTITY
+	// read; left zero by the deliberate id/name projections (GetNamesByIDs,
+	// ListAll), which MUST NOT be used to make a lifecycle decision.
+	Status Status
+	// LastActiveAt is characters.last_active_at as BIGINT epoch NANOSECONDS,
+	// NOT NULL, where NeverActive (0) means "has never been active". Phase 2
+	// ships no write seam for it (D-24); it is read-only here.
+	LastActiveAt int64
 }
 
 // NewCharacter creates a new Character with a generated ID.
@@ -43,6 +52,10 @@ func NewCharacterWithID(id, playerID ulid.ULID, name string) (*Character, error)
 		PlayerID:  playerID,
 		Name:      name,
 		CreatedAt: time.Now(),
+		// A new character starts active and never-active, matching the column
+		// defaults migration 000054 gives the row.
+		Status:       StatusActive,
+		LastActiveAt: NeverActive,
 	}
 	if err := c.Validate(); err != nil {
 		return nil, err
@@ -103,6 +116,9 @@ func (c *Character) Validate() error {
 		return &ValidationError{Field: "player_id", Message: "cannot be zero"}
 	}
 	if err := ValidateCharacterName(c.Name); err != nil {
+		return err
+	}
+	if _, err := ParseStatus(string(c.Status)); err != nil {
 		return err
 	}
 	return ValidateDescription(c.Description)

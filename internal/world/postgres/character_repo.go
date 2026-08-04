@@ -30,7 +30,7 @@ func NewCharacterRepository(pool *pgxpool.Pool) *CharacterRepository {
 // Get retrieves a character by ID.
 func (r *CharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world.Character, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, player_id, name, description, location_id, created_at, version
+		SELECT id, player_id, name, description, location_id, created_at, version, status, last_active_at
 		FROM characters WHERE id = $1
 	`, id.String())
 	char, err := scanCharacterRow(row)
@@ -159,7 +159,7 @@ func (r *CharacterRepository) GetByLocation(ctx context.Context, locationID ulid
 		limit = world.DefaultLimit
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, player_id, name, description, location_id, created_at, version
+		SELECT id, player_id, name, description, location_id, created_at, version, status, last_active_at
 		FROM characters WHERE location_id = $1
 		ORDER BY name
 		LIMIT $2 OFFSET $3
@@ -180,7 +180,7 @@ func (r *CharacterRepository) GetByLocation(ctx context.Context, locationID ulid
 // correct — the SQL fence only fences mutations.
 func (r *CharacterRepository) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, player_id, name, description, location_id, created_at, version
+		SELECT id, player_id, name, description, location_id, created_at, version, status, last_active_at
 		FROM characters WHERE player_id = $1 ORDER BY name
 	`, playerID.String())
 	if err != nil {
@@ -295,6 +295,11 @@ type characterScanFields struct {
 	playerIDStr   string
 	locationIDStr *string
 	createdAt     pgnanos.Time
+	// statusStr is the raw characters.status text. It is parsed through
+	// world.ParseStatus rather than cast, so a row carrying a value outside the
+	// closed vocabulary is a scan failure rather than a silently-untrusted
+	// lifecycle state (INV-WORLD-5).
+	statusStr string
 }
 
 // scanCharacterRow scans a single character from a row.
@@ -305,6 +310,7 @@ func scanCharacterRow(row pgx.Row) (*world.Character, error) {
 	err := row.Scan(
 		&f.idStr, &f.playerIDStr, &char.Name, &char.Description,
 		&f.locationIDStr, &f.createdAt, &char.Version,
+		&f.statusStr, &char.LastActiveAt,
 	)
 	if err != nil {
 		return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(err)
@@ -332,6 +338,10 @@ func parseCharacterFromFields(f *characterScanFields, char *world.Character) err
 	if err != nil {
 		return err
 	}
+	char.Status, err = world.ParseStatus(f.statusStr)
+	if err != nil {
+		return oops.Code("CHARACTER_PARSE_FAILED").With("field", "status").With("value", f.statusStr).Wrap(err)
+	}
 	char.CreatedAt = f.createdAt.Time()
 	return nil
 }
@@ -345,6 +355,7 @@ func scanCharacters(rows pgx.Rows) ([]*world.Character, error) {
 		if err := rows.Scan(
 			&f.idStr, &f.playerIDStr, &char.Name, &char.Description,
 			&f.locationIDStr, &f.createdAt, &char.Version,
+			&f.statusStr, &char.LastActiveAt,
 		); err != nil {
 			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(err)
 		}
@@ -365,6 +376,13 @@ func scanCharacters(rows pgx.Rows) ([]*world.Character, error) {
 
 // GetNamesByIDs returns a map[id]name for the given character IDs.
 // Missing IDs are absent from the result (not an error).
+//
+// DELIBERATE PARTIAL PROJECTION: it reads id and name ONLY and carries no
+// lifecycle fields at all — there is no Character to inspect, so there is no
+// status to consult. A selectability or lifecycle decision MUST NOT be made
+// from this result; route those through a full-entity read (Get, GetByLocation,
+// ListByPlayer) and world.Selectable. Widening this column list would silently
+// change the cost of an unrelated directory surface (INV-WORLD-5).
 func (r *CharacterRepository) GetNamesByIDs(ctx context.Context, ids []ulid.ULID) (map[ulid.ULID]string, error) {
 	if len(ids) == 0 {
 		return map[ulid.ULID]string{}, nil
@@ -400,6 +418,14 @@ func (r *CharacterRepository) GetNamesByIDs(ctx context.Context, ids []ulid.ULID
 
 // ListAll returns every character ordered by name ascending (id + name only —
 // directory surface; other columns are left zero). Fetch-all: no LIMIT/OFFSET.
+//
+// DELIBERATE PARTIAL PROJECTION: the returned Characters carry NO lifecycle
+// fields — Status is the zero value and LastActiveAt is zero because neither
+// column is read, not because the row says so. A selectability or lifecycle
+// decision MUST NOT be made from this result; route those through a full-entity
+// read (Get, GetByLocation, ListByPlayer) and world.Selectable. That distinction
+// is what keeps the exhaustive-read rule from being quietly satisfied by a
+// zero-valued Status (INV-WORLD-5).
 func (r *CharacterRepository) ListAll(ctx context.Context) ([]*world.Character, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id, name FROM characters ORDER BY name ASC`)
 	if err != nil {

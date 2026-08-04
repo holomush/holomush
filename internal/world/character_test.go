@@ -25,6 +25,7 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:   playerID,
 			Name:       "TestChar",
 			LocationID: &locID,
+			Status:     world.StatusActive,
 		}
 		require.NoError(t, char.Validate())
 	})
@@ -35,6 +36,7 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:   playerID,
 			Name:       "",
 			LocationID: &locID,
+			Status:     world.StatusActive,
 		}
 		err := char.Validate()
 		require.Error(t, err)
@@ -47,6 +49,7 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:   playerID,
 			Name:       "TestChar",
 			LocationID: nil,
+			Status:     world.StatusActive,
 		}
 		require.NoError(t, char.Validate())
 	})
@@ -62,6 +65,7 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:   playerID,
 			Name:       string(exactName),
 			LocationID: &locID,
+			Status:     world.StatusActive,
 		}
 		require.NoError(t, char.Validate())
 	})
@@ -77,6 +81,7 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:   playerID,
 			Name:       string(longName),
 			LocationID: &locID,
+			Status:     world.StatusActive,
 		}
 		err := char.Validate()
 		require.Error(t, err)
@@ -89,6 +94,7 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:   playerID,
 			Name:       "Test\x00Char",
 			LocationID: &locID,
+			Status:     world.StatusActive,
 		}
 		err := char.Validate()
 		require.Error(t, err)
@@ -102,6 +108,7 @@ func TestCharacter_Validate(t *testing.T) {
 			Name:        "TestChar",
 			Description: "A brave adventurer.",
 			LocationID:  &locID,
+			Status:      world.StatusActive,
 		}
 		require.NoError(t, char.Validate())
 	})
@@ -113,6 +120,7 @@ func TestCharacter_Validate(t *testing.T) {
 			Name:        "TestChar",
 			Description: "",
 			LocationID:  &locID,
+			Status:      world.StatusActive,
 		}
 		require.NoError(t, char.Validate())
 	})
@@ -128,6 +136,7 @@ func TestCharacter_Validate(t *testing.T) {
 			Name:        "TestChar",
 			Description: string(exactDesc),
 			LocationID:  &locID,
+			Status:      world.StatusActive,
 		}
 		require.NoError(t, char.Validate())
 	})
@@ -143,6 +152,7 @@ func TestCharacter_Validate(t *testing.T) {
 			Name:        "TestChar",
 			Description: string(longDesc),
 			LocationID:  &locID,
+			Status:      world.StatusActive,
 		}
 		err := char.Validate()
 		require.Error(t, err)
@@ -156,6 +166,7 @@ func TestCharacter_Validate(t *testing.T) {
 			Name:        "TestChar",
 			Description: "Has\x00null",
 			LocationID:  &locID,
+			Status:      world.StatusActive,
 		}
 		err := char.Validate()
 		require.Error(t, err)
@@ -167,6 +178,7 @@ func TestCharacter_Validate(t *testing.T) {
 			ID:         charID,
 			Name:       "TestChar",
 			LocationID: &locID,
+			Status:     world.StatusActive,
 			// PlayerID is zero value (not set)
 		}
 		err := char.Validate()
@@ -180,6 +192,7 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:   playerID,
 			Name:       "TestChar",
 			LocationID: &locID,
+			Status:     world.StatusActive,
 		}
 		require.NoError(t, char.Validate())
 	})
@@ -190,6 +203,7 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:   playerID,
 			Name:       "TestChar",
 			LocationID: &locID,
+			Status:     world.StatusActive,
 		}
 		err := char.Validate()
 		require.Error(t, err)
@@ -202,6 +216,7 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:   playerID,
 			Name:       "TestChar",
 			LocationID: &locID,
+			Status:     world.StatusActive,
 		}
 		require.NoError(t, char.Validate())
 	})
