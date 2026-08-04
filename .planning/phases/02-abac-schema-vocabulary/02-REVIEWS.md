@@ -1,8 +1,10 @@
 ---
 phase: 2
 reviewers: [codex]
-reviewed_at: 2026-08-04T03:03:23Z
-plans_reviewed: [02-01-PLAN.md, 02-02-PLAN.md, 02-03-PLAN.md, 02-04-PLAN.md, 02-05-PLAN.md, 02-06-PLAN.md, 02-07-PLAN.md, 02-08-PLAN.md, 02-09-PLAN.md, 02-10-PLAN.md, 02-11-PLAN.md, 02-12-PLAN.md]
+reviewed_at: 2026-08-04T04:28:29Z
+cycles: 2
+cycle_1_reviewed_at: 2026-08-04T03:03:23Z
+plans_reviewed: [02-01-PLAN.md, 02-02-PLAN.md, 02-03-PLAN.md, 02-04-PLAN.md, 02-05-PLAN.md, 02-06-PLAN.md, 02-07-PLAN.md, 02-08-PLAN.md, 02-09-PLAN.md, 02-10-PLAN.md, 02-11-PLAN.md, 02-12-PLAN.md, 02-13-PLAN.md]
 ---
 
 # Cross-AI Plan Review — Phase 2
@@ -794,3 +796,390 @@ snapshots, gate-before-lookup) are stronger than what they replace.
 7. Reconcile 02-11's validation scope and RED counts last.
 
 Feed this back with `/gsd-plan-phase 2 --reviews`.
+
+---
+---
+
+# Cycle 2 — re-review after the fix pass
+
+**Reviewed:** 2026-08-04T04:28:29Z · **Reviewer:** Codex (`gpt-5.6-sol`,
+`model_reasoning_effort=xhigh`, `--sandbox read-only`), two source-grounded passes
+· **Plans:** 13 (`02-01`…`02-13`) · **Tree:** `926dcf0e2`
+
+**Verdict: NOT READY — a further fix pass is required.**
+
+## How this cycle was run
+
+Cycle 1's lesson was that a `low`-effort pass over this plan set is impressionistic
+and worthless, and that splitting beats one skimmed pass. So this cycle ran Codex at
+`xhigh` in **two semantic clusters**, each ~275 KB of inlined plan text plus live
+repo read access:
+
+| Pass | Cluster | Plans |
+| ---- | ------- | ----- |
+| A | identity / charname / migration | 02-01, 02-02, 02-04, 02-05, 02-06, 02-12 |
+| B | ABAC / viewer / policy / closeout | 02-03, **02-13 (new)**, 02-07, 02-08, 02-09, 02-10, 02-11 |
+
+Each pass was told which cycle-1 findings landed in its cluster and was required to
+mark each INCORPORATED / PARTIAL / NOT INCORPORATED **with a citing plan line** —
+because `/gsd-execute-phase` reads `PLAN.md` and nothing else, so a fix living only
+in a planner's summary or a plan's narrative prose is not incorporated.
+
+The orchestrator ran an independent verification pass over every finding below
+before recording it. **Two reported findings were rejected as false positives and
+are NOT recorded:** a claim that `task test:int` ignores `--` package args
+(`Taskfile.yaml:289` does interpolate `{{.CLI_ARGS | default "./..."}}` — cycle 1
+was right), and a set of cross-plan artifact-promise hits that were regex artifacts
+of bare-filename-vs-full-path matching.
+
+## Cycle-1 disposition summary
+
+**The fix pass did substantial, genuine work.** The dependency graph is clean, and
+most cycle-1 HIGHs are properly closed with executable plan text rather than prose.
+
+| Cycle-1 finding | Disposition | Evidence |
+| --------------- | ----------- | -------- |
+| #1 tracer cannot persist identity columns | **INCORPORATED** | `02-01-PLAN.md:73-99` reduces the tracer and names the real writer; `02-06-PLAN.md:290-305` assigns persistence |
+| #2 import guard contradicts 02-01/02-06 | **INCORPORATED** | Narrowed to file scope at `02-02-PLAN.md:30-32,248-270`, with a synthetic control at `:272-277` proving it does NOT fire for other `internal/auth` files |
+| #3 role lookup not expressible via `ABACConfig` | **INCORPORATED** | `02-13` uses a `PlayerRoleLookup` **func field**, not an interface widening (`02-13-PLAN.md:30,47,143-177`), and owns the population site `internal/access/setup/subsystem.go` (`:17`) |
+| #4/#13 false `INV-WORLD-6` binding | **INCORPORATED** | Amend-before-bind is a task action at `02-04-PLAN.md:292-317`; ordering enforced by `:339` (`rg … 'ONLY'` → 0); spec side at `02-11-PLAN.md:147-157` |
+| #5 malformed block-list JSON → "absent" | **INCORPORATED** | Strict raw loader at `02-05-PLAN.md:274-299`; `StringSliceN` banned by `:365` |
+| #5b poller in a no-op subsystem | **INCORPORATED** | Dedicated `blocklist.Subsystem` with real `Activate`/`Stop` at `02-05-PLAN.md:331-355` |
+| #5c/#12 production composition roots | **PARTIAL** | All three roots named (`02-06-PLAN.md:490-507`) — but see HIGH C2-2/C2-3: nothing specifies how the cache *reaches* them |
+| #6/#9 existence cutover before backfill | **INCORPORATED** | Dual predicate at `02-06-PLAN.md:49,452-475`, retired atomically with the constraint at `02-12-PLAN.md:265-276,307` |
+| #10 viewer twins compare player id vs character-keyed data | **INCORPORATED** | `02-13` derives the three player-keyed peers (`:31-34,207-274`); `02-07-PLAN.md:314-316` transcribes the mapping; coverage test at `:386` |
+| #11 admin twin references unsupplied `roles` | **INCORPORATED** | `ViewerTierProvider` emits `roles`/`has_roles` incl. `Schema()` (`02-03-PLAN.md:26-27,287`); `02-13` supplies the lookup |
+| #14 audit accepts unavailable DB | **INCORPORATED** | Blocking checkpoint + escalate at `02-10-PLAN.md:192-201`, acceptance `:208-214` |
+| #15 description remedy impossible | **INCORPORATED** | Description-specific verdict vocabulary at `02-10-PLAN.md:29,177-188` |
+| #16 RED stages a schema the writer can't run | **INCORPORATED IN TEXT / MECHANICALLY BROKEN** | Staged at `000055` (`02-12-PLAN.md:49,415-434`) — but the staging recipe cannot produce it; see HIGH C2-6 |
+| #17 concurrent writers in backfill→constraint window | **PARTIAL** | Declared and failure-tested (`02-12-PLAN.md:50,254-263,441-450`); not enforced for the cluster posture |
+
+**Actionable findings:** 18 of 21 verified incorporated — including 02-04's
+"five"→**three** SELECT lists (correct against `character_repo.go:33,162,183`), the
+raw `go build ./...` removal, 02-09's startup wiring, 02-12's CLI into `root.go`,
+the D-03 deviation record, and the struct-based `Evaluate(ctx, types.AccessRequest)`
+call shape. 02-11's RED-count derivation is PARTIAL (executor discipline, not an
+automated command).
+
+### Deferral and rejections — judged on merit
+
+- **The `02-10` "still publishes `name`" deferral to Phase 4 is SOUND.** Verified:
+  no plan in the phase touches a `.proto`, so Phase 2 adds no RPC; `02-04`'s
+  `internal/grpc/auth_handlers.go` edit is `SelectCharacter` lifecycle gating, not a
+  profile projection. Critically, the deferral is **tracked** — `02-11-PLAN.md:303`
+  carries it as a Phase-4 row in the validation map *with its rationale*, as an
+  acceptance criterion. Not a dropped requirement. **Do not re-raise.**
+- **Both `task invariants:render` rejections are SOUND.** Verified:
+  `Taskfile.yaml:227-230` defines `invariants:render` whose only command is
+  literally `go run ./cmd/inv-render`, and `.claude/rules/invariants.md:28,76`
+  prescribes the raw form. Recorded in plan text at `02-04-PLAN.md:322-328` and
+  `02-09-PLAN.md:355-365`. **Do not re-raise.**
+
+## Structural checks — all clean
+
+Re-derived programmatically across all 13 plans after the wave shifts:
+
+- **Wave graph:** every `depends_on` target sits in a strictly lower wave. Zero
+  violations. The shifts (`02-07` 3→4; `02-08`/`02-09`/`02-10` 4→5) and the new
+  `02-13` (wave 3, depends on `02-03` wave 2) are graph-correct.
+- **Same-wave file-write collisions:** zero, across all 13 `files_modified` sets.
+- **Cross-wave multi-owner files:** 13 files have >1 owner; every one is strictly
+  sequential and deliberate (e.g. `02-06` w4 lands the transitional predicate,
+  `02-12` w5 retires it).
+- **Requirement coverage:** IDENT-06/07/08/09, PROFILE-11, EXT-07 each land on ≥2 plans.
+- **Invariant ids:** `INV-PRIVACY-11` is still the next free id in scope.
+
+> **Caveat carried from Pass A:** the collision audit is only as good as the
+> manifests, and several `files_modified` sets are now known-incomplete (C2-4,
+> C2-5, C2-13, plus the MEDIUMs). Re-run it after those are corrected.
+
+## Cycle-2 HIGH concerns (21) — all orchestrator-verified against source
+
+The fix pass closed cycle 1's findings but introduced a new crop. These cluster into
+six themes. Every one below was independently re-checked before recording.
+
+### Theme A — the admission token proves less than the code requires (2)
+
+**C2-1 — `charname.Admitted` does not prove the full character-name validity
+contract, and the CLI rename path bypasses the rest.** `Gate.Check` covers
+normalization, skeleton, mixed-script and block list (`02-01-PLAN.md:233-239`), and
+`02-01-PLAN.md:283-287` deliberately leaves `world.ValidateCharacterName` separate.
+That validator carries the real letters/length rules — verified at
+`internal/world/validation.go:59-104`: min length, max length, "must contain letters
+and spaces only", leading/trailing spaces, consecutive spaces. `02-12-PLAN.md:354-356`
+sends `Gate.Admit` straight into `Rename`. So digits, punctuation and overlong names
+receive an `Admitted` token and are written. This **falsifies `02-06`'s claim that
+the token structurally discharges rename admission** — the writer requires the wrong
+proof. Note this does *not* contradict cycle 1's "Admitted is the right shape"
+verdict: the token's single-constructor/zero-value design is still sound; what is
+wrong is the *completeness of what it attests*.
+
+**C2-2 — no specified transport carries the block-list cache into production
+composition.** Verified: `02-06` does **not** own `cmd/holomush/core.go`, where
+`02-05` constructs the block-list subsystem (`02-05-PLAN.md:346-355`).
+`02-06-PLAN.md:490-494` says to use "the block-list `*Cache` plan `02-05` exposes" —
+a reference, not an implementation instruction. Neither plan defines the
+provider/config seam that moves the `*Cache` from `core.go` into
+`internal/bootstrap/setup`'s config or `sub_grpc.go`'s config. This is why cycle-1
+#5c is PARTIAL rather than closed: naming the roots is not wiring them.
+
+### Theme B — lifecycle and composition ordering (3)
+
+**C2-3 — bootstrap can `Prepare` before the block list exists.** Verified against
+source: `BootstrapSubsystem.DependsOn()` (`internal/bootstrap/setup/subsystem.go:104-112`)
+returns Database, ABAC, World, Auth, Plugins, Sessions — no block-list entry. And
+`02-05-PLAN.md:355-356` explicitly gives the new subsystem `DependsOn` =
+`{SubsystemDatabase}` only ("the poller needs the pool and nothing else"). Bootstrap
+creates a `CharacterService` and may create the initial admin during `Prepare`, so
+the admission path can observe an unprepared cache. Nothing declares the edge.
+
+**C2-4 — `02-05` does not own the files carrying the real `productionSubsystems`
+assertions.** Verified: those assertions live in `cmd/holomush/core_subsystems_test.go`
+and `cmd/holomush/core_topo_order_test.go`. `02-05`'s `files_modified` lists only
+`cmd/holomush/core.go` and `cmd/holomush/core_test.go` — and `core_test.go` is not
+one of the files that references `productionSubsystems`. The plan instructs the
+executor to enumerate and update them (`02-05-PLAN.md:350-354`) but does not own them.
+
+**C2-5 — `02-06`'s shared-interface blast radius omits three real
+implementers/callers.** Verified by grep — none is in `02-06`'s `files_modified`:
+`internal/auth/character_genesis_test.go:30` (`fakeCharWriter.Create`, a manual
+implementation) and `:166` (a caller);
+`internal/access/policy/attribute/character_test.go:45`
+(`mockCharacterRepository.Create`, another manual implementation);
+`internal/auth/character_genesis_integration_test.go:103,126,143,163,185` (five
+callers). `02-06` changes exactly these signatures. Compounding it, the plan
+verifies with `task build` (main binary only — `Taskfile.yaml:476-485` says
+`task build:all` is the whole-tree gate) and its scoped test command omits
+`internal/access/...`, so the breakage would not be caught by its own verification.
+
+### Theme C — migration and CLI mechanics (3)
+
+**C2-6 — the corrected RED staging cannot actually produce migration `000055`.**
+This is the most consequential finding: HIGH #16's fix is textually right and
+mechanically broken. `02-12` stages the RED at `000055` and cites the in-tree
+technique as "temp dir plus `goose.WithDisableGlobalRegistry(true)`"
+(`02-12-PLAN.md:102,407,421,506`). But `000055` is a **registered Go migration** —
+disabling the global registry is exactly what removes it. Verified: the cited
+precedent uses **both** options together —
+`internal/store/migrate_gointerleave_integration_test.go:210` passes
+`goose.WithGoMigrations(backfill)` alongside `:214`'s
+`WithDisableGlobalRegistry(true)`, and the comment at `:121` says so explicitly.
+`02-12` never mentions `WithGoMigrations`. As written the RED run stages schema 54
+and cannot truthfully assert 55.
+
+**C2-7 — the duplicate-resolution integration test has no executable CLI seam.**
+`02-12-PLAN.md:452-459` places the test under `test/integration/charname` and has it
+resolve through `holomush character name set`. `cmd/holomush` is `package main` and
+is not importable, and `task test:int` does not build, install or invoke the binary.
+The plan supplies neither a subprocess strategy nor an importable
+command/service abstraction.
+
+**C2-8 — multi-replica writer exclusion is documented, not enforced.** (PARTIAL on
+cycle-1 #17.) The precondition block and the loud-failure test are real
+(`02-12-PLAN.md:254-263,441-450`), and the single-process posture is genuinely safe
+(migrations precede `orch.StartAll`). But `compose.cluster.yaml` runs a second
+writer, and goose only serializes *migrators* (`internal/store/migrate.go:85-86`). A
+header comment plus a test proving DDL fails loudly does not prevent a live old
+replica from writing during the window.
+
+### Theme D — self-defeating and self-contradictory gates (4)
+
+**C2-9 — four `<automated>` verification gates fail on their own success path, and
+one plan instructs the executor to propagate the broken form.** *(Newly introduced
+by this fix pass: verified `0` occurrences at `4b3a82028`, `8` at `926dcf0e2`.)* The
+plans correctly diagnosed that a bare `rg -c` exits 1 on the zero matches that mean
+success — then fixed it with `|| true`, which yields an **empty string**, not `"0"`.
+Empirically confirmed: `test "$(rg -c PAT f || true)" = "0"` is **false** when there
+are no matches. Affected gates:
+`02-10-PLAN.md:143` (the read-only-SQL safety gate on a script destined for a
+production database), `02-10-PLAN.md:204` (the "policy was narrowed" privacy gate),
+`02-11-PLAN.md:193`, `02-11-PLAN.md:296` (both phase-closeout gates). Worse,
+`02-10-PLAN.md:147` propagates it: "apply the same form to every expected-zero
+search in this plan". An executor who does the work correctly sees these fail
+permanently, and the cheapest apparent repair is to delete the gate. Correct form:
+`|| echo 0` (or, per `.claude/rules/grepping.md`, count with `-o | wc -l`).
+
+**C2-10 — `02-07` Task 1 simultaneously orders two and three tier-floor policies.**
+Verified verbatim: the action at `02-07-PLAN.md:149-156` says "**Three tier-floor
+policies, one per rung**", naming `seed:profile-tier-floor-player` explicitly. The
+acceptance at `:230-231` requires `rg -c 'seed:profile-tier-floor-'` to be **2** and
+`seed:profile-tier-floor-player` to return **no match**. An executor following the
+action fails the acceptance. The plan cannot be executed consistently. (The *intent*
+— two policies, D-03 deviation recorded — is correct and stated at `:23,191-210`;
+the Task 1 body was simply not updated to match.)
+
+**C2-11 — `02-08`'s fourth-rung suite requires the player-floor policy that
+`02-07` deliberately does not ship.** `02-08-PLAN.md:195-198` correctly says only
+two policies exist, then `:200-204` requires player-floor decisions, `:220-228`
+requires a RED observation of `spectator` clearing that floor, and `:238` commits a
+player-floor assertion. Against the shipped corpus there is no such policy to
+evaluate. (Fix: use the **guest** floor as the ordinal discriminator — `spectator >=
+"guest"` would wrongly permit while literal membership denies — which tests the same
+property against a policy that exists.)
+
+**C2-12 — `02-07` and `02-08` disagree about the `abactest.PropertyProvider`
+double.** `02-08-PLAN.md:273-282` requires the double to derive player peers from
+character-keyed fixtures via a character→player map. `02-07`, which owns
+`internal/testsupport/abactest/abactest.go`, promises only provider doubles and
+schema parity (`02-07-PLAN.md:433-448`). The consumer's contract does not exist in
+the producer.
+
+### Theme E — the new `02-13` and its seams (2)
+
+`02-13` got its first-ever review this cycle. **It is materially sound**: no
+fabricated symbols across 14 checked (`PropertyProvider`, `BuildABACStack`,
+`PlayerKindLookup`, `evalInExpr`, the `ParentLocationResolver` interface and the rest
+all exist as cited); it honours the omit-don't-sentinel rule with `has_X` witnesses
+on every path; and it handles the guest/orphan `player_id IS NULL` case explicitly
+rather than collapsing it into "ownerless". Two seam defects:
+
+**C2-13 — `02-13` changes `NewPropertyProvider` to three arguments but omits a live
+call site.** Verified: `test/integration/access/access_suite_test.go:182` calls
+`attribute.NewPropertyProvider(propRepo, parentLocResolver)`. That file is not
+mentioned anywhere in `02-13`, while `:238-242` orders every call site updated and
+`:296` demands every call have three arguments. Its scoped verification
+(`:285,354`) does not compile that suite, so the break surfaces later, in another
+plan's wave.
+
+**C2-14 — `02-13` promises a `BuildABACStack` production-stack proof with no owned
+test artifact.** Behavior and acceptance require resolving both
+`principal.viewer.tier` and `resource.property.owner_player_id` through
+`BuildABACStack` (`02-13-PLAN.md:319,362`), but Task 3 owns only `setup.go` and
+`subsystem.go` (`:304-305`), and no setup integration test file appears in
+frontmatter.
+
+### Theme F — gates that admit what they should refuse (6)
+
+**C2-15 — an invalid or zero admin-section `Status` fails open as available.**
+`02-09` defines string statuses (`:143-150`) but `validateEntries` checks only
+descriptor fields and resource drift (`:162-175,186-193`), and the gate rejects only
+`StatusPlanned` (`:251-255`). `Status("")` or `"typo"` therefore passes boot
+validation and is served as **available**. Verified the SPEC vocabulary is closed at
+exactly two values — `01-SPEC.md:2107-2117` lists seven ids, one `available` and six
+`planned`. Needs an exhaustive switch with a denying default.
+
+**C2-16 — `Descriptor.Action` is operationally inert.** The mandatory descriptor
+carries `{Action, Resource}` (`02-09-PLAN.md:143-146`), but request-time logic
+evaluates the *caller-supplied* action (`:224-235`) and checks only
+`Descriptor.Resource` (`:243-249`). Changing a descriptor's action changes no
+authorization outcome — while the registry rows carry `read` and §10.4 requires both
+read and write (`01-SPEC.md:2190-2200`).
+
+**C2-17 — `02-10`'s audit query cannot produce the per-description verdicts it
+mandates.** Result set 4 is aggregate counts and maximum length only
+(`02-10-PLAN.md:121-124`), yet `:177-188` and `:214` require one recorded verdict for
+**every** non-empty description. Individual descriptions cannot be identified from
+that output.
+
+**C2-18 — making the audit detailed enough would commit user content to the repo.**
+Task 2 requires all result sets pasted verbatim into a committed artifact
+(`02-10-PLAN.md:169-177`). Expanding the query to expose description text so a human
+can adjudicate it puts player-authored prose in git history; leaving it aggregate
+makes C2-17 impossible. The plan needs a split: an operator-only detailed report for
+review, and a committed sanitized ledger of stable ids/hashes, lengths and verdicts.
+
+**C2-19 — a "read-only" audit task directs live-data mutation with no structural
+checkpoint.** The human check at `02-10-PLAN.md:205` tells the executor to change
+each sensitive property row's visibility, while `:216` states the task only runs a
+read-only query and writes a record. `autonomous: false` is not an
+approval/backup/rollback protocol for production data.
+
+**C2-20 — `02-11` claims a `02-CONTEXT.md` D-03 amendment it neither owns nor
+edits.** This is the clearest instance of the failure mode this cycle was chartered
+to hunt. The must-have at `02-11-PLAN.md:27` states that "**CONTEXT D-03**" will
+record two tier-floor policies, "written down where D-03 is read, not left in a plan
+SUMMARY". Verified: `02-11`'s `files_modified` lists **only** `01-SPEC.md` and
+`02-VALIDATION.md`; Task 1 owns only the SPEC (`:88-89`); Amendment G edits only
+§8.6 (`:175-185`). And `02-CONTEXT.md:53-59` still reads "**three policies, one per
+floor rung**". The claimed fix has no executable path.
+
+**C2-21 — `02-03`'s tier-provenance must-have is not implementable by that plan.**
+The truth at `02-03-PLAN.md:29` asserts the viewer tier is derived from server-side
+session state and never from a request field. The only task action backing it is a
+doc comment (`:160-164`), and no gateway or session-construction root is in
+`files_modified`. `ViewerSubject(tier string, …)` can validate the token's shape but
+cannot distinguish a server-derived `"player"` from an attacker-supplied one. Either
+scope it as a Phase-4 call-site obligation or own a construction root and prove it.
+
+## Cycle-2 actionable MEDIUM / LOW concerns (31)
+
+Each is invisible to `/gsd-execute-phase` unless it lands in plan text.
+
+### Incomplete or contradictory `files_modified` / task ownership
+
+1. **02-01** — Task 3 modifies `internal/charname/version_test.go` (`:318-320`); it is absent from frontmatter (`:7-23`).
+2. **02-02** — Task 2 owns `internal/charname/pipeline.go` and `pipeline_test.go` (`:176-178,196-204`); neither is in frontmatter (`:7-14`).
+3. **02-12** — Task 1's `<files>` (`:175`) omits all five existence-check files its own action (`:266-276`) orders it to edit and its acceptance (`:307-308`) gates on. They are in frontmatter but in no task scope.
+4. **02-12** — contradictory `migrations_register.go` ownership: listed in Task 1 `<files>` (`:173-175`), while the action (`:231-235`) and acceptance (`:305`) require it untouched. Remove it from `<files>`.
+5. **02-07** — `:444-448,484` require an `abactest` schema-parity **package test**, but task files list only `abactest.go` (`:396`). A Go test cannot live in a non-`_test.go` file. Add `internal/testsupport/abactest/abactest_test.go`.
+6. **02-11** — Task 2 omits `02-13-SUMMARY.md` from `read_first` (`:217` stops at 02-10 plus 02-12) while requiring observed 02-13 results (`:220-278`).
+7. **02-11** — `depends_on` (`:6`) omits 02-01, 02-03 and 02-07, all of which carry rule-4 RED demonstrations this plan must tabulate. Harmless for ordering (wave 6), but the list no longer matches the plan's stated inputs.
+
+### Impossible, vacuous, or self-defeating criteria
+
+8. **02-04:129** — requires both partial methods to return a `Character` with zero `Status`. Verified: `GetNamesByIDs` returns `map[ulid.ULID]string` (`internal/world/postgres/character_repo.go:368`). Restrict the zero-`Status` assertion to `ListAll`.
+9. **02-04:240-258 vs :269-278,313-315** — offers relocating the INV-WORLD-6 proof to another harness suite while hard-coding `asserted_by` to `test/integration/world/character_lifecycle_test.go`. Option (b) cannot satisfy the plan. Choose one placement now.
+10. **02-05:298-299 vs :365** — the action requires `Load`'s doc comment to name `StringSliceN`; acceptance requires `rg -c 'StringSliceN' internal/charname/blocklist/` to return zero. Mutually exclusive. Strip comments or assert over the AST.
+11. **02-06:393** — requires `rg -c 'go build \./\.\.\.' 02-06-PLAN.md` to return 0, but the plan's own explanatory prose at `:366` contains that exact string. Verified: the file currently has 1 occurrence. The criterion necessarily fails.
+12. **02-13:184** — `rg -n 'PlayerRoles' role_store.go | rg -c 'RoleStore interface'` is vacuous: a line matching `PlayerRoles` can never also contain `RoleStore interface`, so it can never go RED. Mitigated only by the sibling method-set test.
+13. **~34 prose criteria across all 13 plans** spell expected-zero checks as "`rg -c '…' <file>` returns 0". `rg -c` prints **nothing** and exits 1 on zero matches. Per `.claude/rules/grepping.md`, count with `-o | wc -l`, not `-c`. (The four `<automated>` instances are HIGH C2-9; these are the ambiguous-but-survivable remainder.)
+
+### Factually wrong or stale plan text
+
+14. **02-06:452-454,477-481,538 and 02-12:265-276,307-308** — both describe "five sites with identical SQL bodies". Two of the five are **interfaces** (`internal/auth/character_service.go:15-24`, `internal/auth/guest_service.go:35-40`) and contain no SQL. Recast as five declarations / three concrete query implementations; compare only the three adapters.
+15. **02-07:42, :291, :399** — attribute registration, player roles and the property-`name` assertion to plan **02-03**; all three are now **02-13**'s (`02-13-PLAN.md:276-282`, `files_modified:13`).
+16. **02-03:74-76** — narrates that this plan touches `internal/store/role_store.go`; its frontmatter and tasks do not. That file is 02-13's.
+17. **02-08:113** — stale corpus count: says twelve entries and three floors; 02-07 ships eleven and two.
+18. **02-11:88, :99, :208** — task name, action opening and `<done>` say "four amendments"; the task specifies and accepts **seven** (`:147-203`).
+19. **02-13** — mis-cited line numbers: `seed.go:120,136,142` are actually `119,137,143`; `dsl/evaluator.go:216` is the closing brace of `compareBools` (the missing-attr-false sites are `evalHas:217` and `evalInExpr:343`).
+
+### Under-specified contracts
+
+20. **02-03:24 vs :124,154-158** — contradictory empty-identifier contract: the must-have says every `ViewerSubject` call panics on an empty identifier, the behavior requires `ViewerSubject(ViewerTierAnonymous, "")` to succeed. Restate as "guest/player viewers and all resource constructors reject empty identifiers; anonymous has no identifier".
+21. **02-08:128-130** — the engine interface is literally `<the access engine interface>`. The repo's `types.AccessPolicyEngine` also requires `CanPerformAction` (`internal/access/policy/types/types.go:473-484`) while the acceptance describes a double implementing only `Evaluate`. Declare a consumer-local minimal interface.
+22. **02-08:123-124** — the "not-found-equivalent signal" has no defined error, sentinel, result type or code.
+23. **02-09:290 vs :240-241** — the request-time descriptor-mismatch test needs a substitute registry entry, but `AssertSectionAccess` hardcodes package `Lookup`. No injection seam is defined.
+24. **02-09:143-150** — `All()` is not required to return a defensive copy; returning the backing slice lets callers mutate entries after boot validation, defeating the boot guarantee.
+25. **02-13:223** — `ResolveOwners` returns `[]string` for all three fields; the plan never says how the one-element owner result maps to the scalar `owner_player_id`.
+26. **02-10** — the recorded result has no privacy-safe stable row identity design: it needs enough identity to prove every row was adjudicated without committing values or identifying text.
+
+### Design decisions that should be recorded, not implied
+
+27. **02-13:33** — the player-union rule ("any character's membership applies to the whole player") is a **new authorization decision**, not an implementation detail. Existing policies are character-specific (`internal/access/policy/seed.go:117-143`), and `02-CONTEXT.md:33-41` says to preserve the same row semantics without deciding this cross-character widening. `excluded_from` is conservative, but `owner_player_id` and `visible_to_players` broaden access across a player's alternate characters. Record it as an explicit decision in CONTEXT and the SPEC amendment.
+28. **02-13:251** — owner resolution is one `ResolveOwners` call per field, i.e. **three extra queries per property row**. The per-context LRU (`internal/access/policy/attribute/cache.go:95`) is keyed per resource, so it dedupes repeat lookups of the same property, not distinct rows. No plan text budgets the N-row cost.
+29. **02-06** — verification uses `task build`, which `Taskfile.yaml:476-485` documents as the main-binary-only compile; `task build:all` is the whole-tree interface blast-radius gate. This plan changes central interfaces and should use it (plus full `task test` and `task test:int`).
+30. **02-12:237-263** — the rollout needs a real enforceable guard for the cluster posture (maintenance-mode writer rejection, a database advisory lock checked by write paths, or a drain-then-migrate command), not only a header comment.
+31. **02-11** — the RED-count derivation (`:30,240-247,302`) is executor discipline; the only `<automated>` on that task (`:296`) checks placeholder removal. Consider a command that derives the count from the plans.
+
+## Recommended revision order
+
+1. **Fix the two self-contradictions first** — `02-07`'s two-vs-three tier floors (C2-10) and `02-08`'s dependence on the policy it does not ship (C2-11). Everything in the profile-visibility chain reads from them.
+2. **Settle the admission contract** (C2-1): decide whether `Gate.Check` subsumes `world.ValidateCharacterName` or whether `Rename` requires both proofs, and make the CLI path consistent.
+3. **Close the block-list composition seam** (C2-2, C2-3): define a provider API on `blocklist.Subsystem`, thread it through both configs in `core.go`, and add the `Bootstrap → BlockList` dependency edge. Decide which plan owns `core.go` for that edit.
+4. **Repair the `000055` staging recipe** (C2-6) — add `goose.WithGoMigrations`, and assert the provider source list and DB version are 55 before the RED case runs.
+5. **Complete the ownership manifests** (C2-4, C2-5, C2-13, C2-14, MEDIUMs 1-7), then **re-run the same-wave collision audit**, which is only valid over complete manifests.
+6. **Fix the four `<automated>` gates and delete the propagation instruction** (C2-9) — a one-token change (`|| true` → `|| echo 0`) with outsized value, since these are closeout and safety gates.
+7. **Redesign the `02-10` audit output** (C2-17, C2-18, C2-19) into an operator-only detailed report plus a committed sanitized ledger, and make remediation a separate approved checkpoint.
+8. **Make `02-09` default-deny on unknown status and resolve the descriptor-action model** (C2-15, C2-16).
+9. **Give `02-11` ownership of `02-CONTEXT.md`** or drop the D-03 claim from its must-have (C2-20); scope or prove `02-03`'s tier provenance (C2-21).
+10. Sweep the stale attributions and counts (MEDIUMs 14-19) last.
+
+## What this does NOT mean
+
+The architecture is still not in question, and the fix pass was real work — every
+cycle-1 HIGH was engaged with, most are properly closed with executable plan text,
+the wave graph survived a non-trivial reshuffle intact, and the new `02-13` is a
+well-grounded plan with no fabricated symbols. The remaining defects are again
+plan-boundary, ownership and internal-consistency corrections rather than design
+failures. But the count went **up**, not down (17 → 21 HIGH), and the pattern is
+instructive: several cycle-1 fixes were applied to a plan's *must-have* and
+*narrative* without being propagated into the *task body*, the *`<files>` list*, or
+the *acceptance criteria* — which is precisely the surface `/gsd-execute-phase`
+actually reads. The next pass should treat "did this fix reach the task body and the
+file list?" as the primary checklist, not "is the fix described somewhere".
+
+## Environment note
+
+Codex ran `--sandbox read-only` in the `v013-milestone` worktree at `926dcf0e2`.
+Two passes: A completed in 17m (21 KB), B in 18m (22 KB), both exit 0. The worktree
+was verified clean before and after — the reviewer modified nothing.
