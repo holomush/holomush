@@ -259,6 +259,106 @@ func TestGateCheckPassesTheSkeletonOfTheCaseFoldedKeyToTheLookup(t *testing.T) {
 	assert.Nil(t, lookup.gotExcluded, "no exclusion is passed when no option was given")
 }
 
+// recordingBlockList is a charname.BlockList double. It records the string it
+// was handed so the "which form is evaluated?" question is asserted
+// structurally rather than inferred from a verdict — a list that happened to
+// match both the display form and the key would prove nothing.
+type recordingBlockList struct {
+	blockedIndex int    // -1 means "match nothing"
+	blocks       string // the exact input that is considered blocked
+
+	got   string
+	calls int
+}
+
+func (r *recordingBlockList) Match(normalized string) (bool, int) {
+	r.calls++
+	r.got = normalized
+	if r.blocks != "" && normalized == r.blocks {
+		return true, r.blockedIndex
+	}
+	return false, -1
+}
+
+func TestGateCheckEvaluatesTheBlockListAgainstTheCaseFoldedKey(t *testing.T) {
+	lookup := &fakeLookup{known: map[string]ulid.ULID{}}
+	list := &recordingBlockList{blockedIndex: -1}
+	g := &charname.Gate{Skeletons: lookup, BlockList: list}
+
+	_, _, err := g.Check(t.Context(), "Alaric")
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, list.calls, "the block list is consulted exactly once")
+	assert.Equal(t, mustKey(t, "Alaric"), list.got,
+		"the key, never the display form and never the raw submission")
+	assert.NotEqual(t, "Alaric", list.got, "the display form must NOT be what is evaluated")
+}
+
+func TestGateCheckRefusesABlockedNameWithoutEverReachingTheCorpus(t *testing.T) {
+	lookup := &fakeLookup{known: map[string]ulid.ULID{}}
+	list := &recordingBlockList{blockedIndex: 3, blocks: mustKey(t, "Admin")}
+	g := &charname.Gate{Skeletons: lookup, BlockList: list}
+
+	_, _, err := g.Check(t.Context(), "Admin")
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "NAME_BLOCKED")
+	assert.Zero(t, lookup.calls, "a blocked name costs no database round trip")
+}
+
+func TestGateCheckBlockedRefusalEchoesNeitherThePatternNorItsIndex(t *testing.T) {
+	lookup := &fakeLookup{known: map[string]ulid.ULID{}}
+	list := &recordingBlockList{blockedIndex: 7, blocks: mustKey(t, "Admin")}
+	g := &charname.Gate{Skeletons: lookup, BlockList: list}
+
+	_, _, err := g.Check(t.Context(), "Admin")
+
+	require.Error(t, err)
+	msg := err.Error()
+	assert.NotContains(t, msg, "7", "the matched pattern's index is operator configuration")
+	assert.NotContains(t, strings.ToLower(msg), "pattern")
+	assert.NotContains(t, strings.ToLower(msg), "block list")
+	// Non-vacuity: the message is not empty, so NotContains cannot pass by
+	// asserting over nothing.
+	assert.NotEmpty(t, msg)
+}
+
+func TestGateCheckAdmitsANameOnTheSameFixtureThatTheBlockListDoesNotMatch(t *testing.T) {
+	// Paired positive control (PORTAL-10 rule 2): without it, the refusal
+	// above cannot distinguish "blocked by the list" from "the gate rejects
+	// everything".
+	lookup := &fakeLookup{known: map[string]ulid.ULID{}}
+	list := &recordingBlockList{blockedIndex: 0, blocks: mustKey(t, "Admin")}
+	g := &charname.Gate{Skeletons: lookup, BlockList: list}
+
+	normalized, _, err := g.Check(t.Context(), "Alaric")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Alaric", normalized.Display)
+}
+
+func TestGateCheckTreatsANilBlockListAsNoListConfiguredRatherThanBlockEverything(t *testing.T) {
+	g := &charname.Gate{Skeletons: &fakeLookup{known: map[string]ulid.ULID{}}}
+
+	_, _, err := g.Check(t.Context(), "Alaric")
+
+	require.NoError(t, err)
+}
+
+func TestGateCheckEvaluatesTheBlockListAfterTheMixedScriptRule(t *testing.T) {
+	// A cross-script splice is decidable from the submission alone, so it is
+	// refused before the list is even consulted. Asserted on the double's call
+	// counter rather than on the returned code, which both orderings satisfy.
+	list := &recordingBlockList{blockedIndex: -1}
+	g := &charname.Gate{Skeletons: &fakeLookup{known: map[string]ulid.ULID{}}, BlockList: list}
+
+	_, _, err := g.Check(t.Context(), "раypal")
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "NAME_MIXED_SCRIPT")
+	assert.Zero(t, list.calls)
+}
+
 func mustKey(t *testing.T, name string) string {
 	t.Helper()
 	n, err := charname.Normalize(name)

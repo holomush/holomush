@@ -42,6 +42,30 @@ type SkeletonLookup interface {
 	SkeletonExists(ctx context.Context, skeleton string, excluding *ulid.ULID) (exists bool, unverifiable bool, err error)
 }
 
+// BlockList answers "does this normalized name match an operator-configured
+// block pattern?".
+//
+// It returns the matched entry's INDEX rather than its pattern text so a
+// rejection path physically cannot echo operator configuration back to a
+// submitter; -1 means no match.
+//
+// # What a Gate holds in production is the CACHE, not a snapshot
+//
+// The interface is deliberately narrow enough for two types to implement:
+// blocklist.Snapshot (an immutable compiled value) and blocklist.Cache (a live
+// matcher reading its current snapshot per call). Production wiring MUST hand
+// the Gate the CACHE.
+//
+// A Gate is constructed once at boot and lives for the process lifetime. A
+// Gate handed a *Snapshot captured at construction would freeze the list
+// forever: the poller would keep refreshing a cache nothing reads, the
+// operator's edits would never take effect, and there would be no failing test
+// and no log line to say so. That silent no-op is exactly why the dependency is
+// an interface over a live matcher rather than a snapshot value.
+type BlockList interface {
+	Match(normalized string) (bool, int)
+}
+
 // checkOptions carries the optional inputs to Gate.Check.
 type checkOptions struct {
 	excluding *ulid.ULID
@@ -69,6 +93,14 @@ func ExcludingCharacter(id ulid.ULID) CheckOption {
 type Gate struct {
 	// Skeletons resolves confusable collisions against the stored corpus.
 	Skeletons SkeletonLookup
+
+	// BlockList is the operator-configured disallow list (IDENT-07). A nil
+	// value means no list is configured and matches nothing — the absence of
+	// configuration is never read as "block everything".
+	//
+	// Production wiring supplies a *blocklist.Cache, never a *blocklist.Snapshot;
+	// see the BlockList interface doc for why that distinction is load-bearing.
+	BlockList BlockList
 }
 
 // Check runs the full character-name admission decision and returns the
@@ -79,14 +111,15 @@ type Gate struct {
 //  1. Normalize        — §6.1.1; a submission with no normal form stops here
 //  2. syntax.ValidateName on the DISPLAY form
 //  3. MixedScript      — §6.1.2 Mechanism A, on the DISPLAY form
-//  4. Skeleton(key) and the corpus lookup
+//  4. BlockList        — IDENT-07, on the case-folded KEY
+//  5. Skeleton(key) and the corpus lookup
 //
-// Step 3 sits before step 4 deliberately: a cross-script splice is decidable
-// from the submission alone, so refusing it here costs no database round trip
-// and hands an attacker no timing signal about the corpus. It sits AFTER step 2
-// because the syntactic rules already admit only Unicode letters, which keeps
-// the script set free of the punctuation and digit noise a raw submission
-// carries.
+// Steps 3 and 4 sit before step 5 deliberately: a cross-script splice and a
+// block-list hit are both decidable from the submission alone, so refusing
+// them here costs no database round trip and hands an attacker no timing
+// signal about the corpus. Step 3 sits AFTER step 2 because the syntactic rules
+// already admit only Unicode letters, which keeps the script set free of the
+// punctuation and digit noise a raw submission carries.
 //
 // # Check SUBSUMES the syntactic rules, deliberately
 //
@@ -124,6 +157,21 @@ func (g *Gate) Check(ctx context.Context, submitted string, opts ...CheckOption)
 
 	if mixedErr := MixedScript(normalized.Display); mixedErr != nil {
 		return Normalized{}, "", mixedErr
+	}
+
+	if g.BlockList != nil {
+		// The KEY, never the display form and never the raw submission: a
+		// pattern an operator wrote in lowercase must catch a mixed-case
+		// submission, and a compatibility-encoded variant must not walk past
+		// it. The matched index is deliberately discarded here — see below.
+		if blocked, _ := g.BlockList.Match(normalized.Key); blocked {
+			// The message names NEITHER the matched pattern NOR its index.
+			// Echoing either would disclose operator configuration and let an
+			// attacker enumerate the list one submission at a time.
+			return Normalized{}, "", oops.
+				Code("NAME_BLOCKED").
+				Errorf("that character name is not available")
+		}
 	}
 
 	skeleton := Skeleton(normalized.Key)
