@@ -23,7 +23,7 @@ func TestValidateName(t *testing.T) {
 		{"empty name", "", true, "cannot be empty"},
 		{"name too long", strings.Repeat("a", MaxNameLength+1), true, "exceeds maximum length"},
 		{"max length name", strings.Repeat("a", MaxNameLength), false, ""},
-		{"unicode name", "日本語の名前", false, ""},
+		{"unicode name", "\u65E5\u672C\u8A9E\u306E\u540D\u524D", false, ""},
 		{"invalid UTF-8 bytes", "\xff\xfe", true, "must be valid UTF-8"},
 		{"control char", "name\x00with null", true, "cannot contain control characters"},
 		{"newline not allowed", "name\nwith newline", true, "cannot contain control characters"},
@@ -44,6 +44,60 @@ func TestValidateName(t *testing.T) {
 	}
 }
 
+// TestValidateCharacterNameStillRejectsEverythingItRejectedBeforeThePipelineLanded
+// pins the pre-existing validator behaviour against this phase's replacement of
+// NormalizeCharacterName.
+//
+// 01-SPEC.md §6.1.5 is explicit that the letters-and-spaces shape rule stays as
+// it is: the §6.1.1 pipeline's Cf stripping is an INDEPENDENT guarantee, not a
+// substitute for the regex. These rows are the mechanical statement of "stays
+// as it is" — they fail if a later plan relaxes the shape rule while wiring the
+// pipeline in, which is exactly the moment the relaxation would be invisible.
+func TestValidateCharacterNameStillRejectsEverythingItRejectedBeforeThePipelineLanded(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+		errMsg  string
+	}{
+		// The paired positive controls (PORTAL-10 rule 2). Without them, every
+		// row below is satisfied by a validator that rejects all input — and a
+		// non-Latin control additionally proves the rule is not ASCII-only.
+		{name: "an ordinary Latin name", input: "Alaric"},
+		{name: "an ordinary Latin name of two words", input: "John Smith"},
+		{name: "a name written wholly in Cyrillic", input: "\u0418\u0432\u0430\u043D"},
+
+		{name: "the empty string", input: "", wantErr: true, errMsg: "cannot be empty"},
+		{
+			name:    "more runes than the maximum",
+			input:   strings.Repeat("a", MaxCharacterNameLength+1),
+			wantErr: true,
+			errMsg:  "at most",
+		},
+		{name: "a leading space", input: " Alaric", wantErr: true, errMsg: "leading or trailing spaces"},
+		{name: "a trailing space", input: "Alaric ", wantErr: true, errMsg: "leading or trailing spaces"},
+		{name: "consecutive spaces", input: "John  Smith", wantErr: true, errMsg: "consecutive spaces"},
+		{name: "a digit", input: "Alaric2", wantErr: true, errMsg: "letters and spaces only"},
+		{name: "an ASCII apostrophe", input: "O'Brien", wantErr: true, errMsg: "letters and spaces only"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateCharacterName(tt.input)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errMsg)
+
+			var ve *ValidationError
+			assert.ErrorAs(t, err, &ve, "the caller-facing error shape is unchanged")
+		})
+	}
+}
+
 func TestValidateDescription(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -55,7 +109,7 @@ func TestValidateDescription(t *testing.T) {
 		{"empty description", "", false, ""},
 		{"description too long", strings.Repeat("a", MaxDescriptionLength+1), true, "exceeds maximum length"},
 		{"max length description", strings.Repeat("a", MaxDescriptionLength), false, ""},
-		{"unicode description", "日本語の説明", false, ""},
+		{"unicode description", "\u65E5\u672C\u8A9E\u306E\u8AAC\u660E", false, ""},
 		{"newline allowed", "line1\nline2", false, ""},
 		{"tab allowed", "column1\tcolumn2", false, ""},
 		{"carriage return allowed", "line1\rline2", false, ""},

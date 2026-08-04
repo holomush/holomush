@@ -75,9 +75,26 @@ func Normalize(submitted string) (Normalized, error) {
 	// empties, so Join with a single space trims and collapses in one pass.
 	display := strings.Join(strings.Fields(folded), " ")
 	if display == "" {
+		// One code, two messages, and the split is not cosmetic.
+		//
+		// A submission of nothing but invisibles LOOKS to the player exactly
+		// like a blank box: they typed something, they can see nothing, and
+		// "please enter a name" tells them to do the thing they believe they
+		// already did. The 009 name-pipeline sketch finding names this as the
+		// case that needs its own wording. The code stays shared because the
+		// server-side fact is the same — the name has no normal form and is
+		// never stored — so callers matching on the code keep working.
+		if strings.TrimSpace(submitted) == "" {
+			return Normalized{}, oops.
+				Code("NAME_EMPTY_NORMAL_FORM").
+				With("reason", "blank submission").
+				Errorf("please enter a character name")
+		}
+
 		return Normalized{}, oops.
 			Code("NAME_EMPTY_NORMAL_FORM").
-			Errorf("name normalizes to the empty string")
+			With("reason", "no visible codepoints survived normalization").
+			Errorf("that name contains no visible characters; please use letters")
 	}
 
 	return Normalized{

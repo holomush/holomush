@@ -184,6 +184,16 @@ func TestGateCheckRefusesASubmissionWhoseNormalFormIsEmpty(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "NAME_EMPTY_NORMAL_FORM")
 	assert.Zero(t, lookup.calls, "an empty normal form never reaches the corpus")
+
+	// The invisible-only wording reaches the CALLER, not just Normalize: the
+	// gate returns the pipeline's error unwrapped, so a player who submitted
+	// three zero-width codepoints is not told to fill in the box they filled.
+	assert.Contains(t, err.Error(), "no visible characters")
+
+	_, _, blankErr := g.Check(t.Context(), "   ")
+	require.Error(t, blankErr)
+	assert.NotContains(t, blankErr.Error(), "no visible characters",
+		"a genuinely blank submission still reads as a blank submission")
 }
 
 func TestGateCheckExcludesTheCallersOwnCharacterFromTheSkeletonLookup(t *testing.T) {

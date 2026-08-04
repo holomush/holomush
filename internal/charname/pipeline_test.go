@@ -5,6 +5,7 @@ package charname_test
 
 import (
 	"testing"
+	"unicode"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,11 +61,48 @@ func TestNormalizeRejectsSubmissionsWhoseNormalFormIsEmpty(t *testing.T) {
 	}
 }
 
+func TestNormalizeTellsAnInvisibleOnlyNameApartFromAnEmptyBox(t *testing.T) {
+	// The 009 name-pipeline sketch finding: a name of only invisibles LOOKS
+	// like an empty box to the player, so "please enter a name" is the one
+	// message that cannot help them — they did enter something. The two cases
+	// share a code (both normalize to nothing) but must not share wording.
+	_, blankErr := charname.Normalize("   ")
+	require.Error(t, blankErr)
+	errutil.AssertErrorCode(t, blankErr, "NAME_EMPTY_NORMAL_FORM")
+
+	_, invisibleErr := charname.Normalize("\u200B\u200C\u200D")
+	require.Error(t, invisibleErr)
+	errutil.AssertErrorCode(t, invisibleErr, "NAME_EMPTY_NORMAL_FORM")
+
+	assert.NotEqual(t, blankErr.Error(), invisibleErr.Error(),
+		"a name of only invisibles and a blank box must not read identically")
+	assert.Contains(t, invisibleErr.Error(), "no visible characters",
+		"the invisible-only message says what is actually wrong")
+	assert.NotContains(t, blankErr.Error(), "no visible characters",
+		"the blank-box message keeps the wording that fits a blank box")
+}
+
+func TestNormalizeLeavesNoFormatCodepointInTheStoredDisplayForm(t *testing.T) {
+	// Step 2's guarantee stated as a property over the OUTPUT rather than as a
+	// spot check on one codepoint: whatever the submission padded the name
+	// with, nothing of general category Cf survives into the value that gets
+	// stored and rendered.
+	got, err := charname.Normalize("Al\u200Baric\u200D")
+	require.NoError(t, err)
+
+	for _, r := range got.Display {
+		assert.False(t, unicode.Is(unicode.Cf, r),
+			"U+%04X is a format codepoint and must not survive into the display form", r)
+	}
+	assert.Equal(t, "Alaric", got.Display)
+	assert.Equal(t, "alaric", got.Key)
+}
+
 func TestNormalizeUsesUnicodeFullCaseFoldingRatherThanASCIILowercasing(t *testing.T) {
 	// An ASCII-oriented lowercase leaves "straße" unchanged; Unicode FULL
 	// case folding expands U+00DF to "ss", which is what makes "Straße" and
 	// "STRASSE" one name rather than two.
-	got, err := charname.Normalize("straße")
+	got, err := charname.Normalize("stra\u00DFe")
 	require.NoError(t, err)
 
 	assert.Equal(t, "strasse", got.Key)
