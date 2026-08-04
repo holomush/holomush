@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: abac-schema-vocabulary
 status: executing
-stopped_at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
-last_updated: "2026-08-04T21:37:39.088Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-08-04T22:07:57.192Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 13
+  completed_plans: 14
   percent: 29
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 (abac-schema-vocabulary) — EXECUTING
-Plan: 1 of 13
-Status: Executing Phase 02
-Progress: [██████████] 100% (1/6 phases)
+Plan: 2 of 13
+Status: Ready to execute
+Progress: [█████░░░░░] 54% (1/6 phases)
 Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -227,6 +227,7 @@ no action needed.
 | Phase 01.1 P04 | 75m | 3 tasks | 7 files |
 | Phase 01.1 P06 | ~70 min | 2 tasks | 6 files |
 | Phase 01.1 P07 | 85m | 3 tasks | 11 files |
+| Phase 02 P01 | 75m | 3 tasks tasks | 21 files files |
 
 ## Accumulated Context
 
@@ -420,6 +421,12 @@ the next milestone yet.
 - [Phase ?]: task migrate:create deleted, not repointed at goose: goose's create -s numbers 5 digits (%05v), the corpus is 6 (migrate_embed_test.go)
 - [Phase ?]: scripts/bootstrap-migrations.sql retired as a comment-only banner, not deleted — an old runbook link lands on the explanation
 - [Phase ?]: D-16 rehearsal and D-18 rollback are WRITTEN, not EXECUTED — recorded as such in the SUMMARY and the WINDOWS ledger
+- [Phase ?]: 02-01: Task 1 checkpoint auto-selected generate-into-repo (auto_advance=true, gate=blocking not blocking-human); no new module — golang.org/x/text promoted indirect->direct
+- [Phase ?]: 02-01: Unicode 17.0.0 security data lives at /Public/17.0.0/security/, NOT /Public/security/17.0.0/ (the plan's URL 404s; /Public/security/ tops out at 16.0.0)
+- [Phase ?]: 02-01: migration 000001_baseline.sql:397 seeds a bootstrap character (TestChar), so EVERY stock database is D-30-unverifiable until the backfill — proven by its own integration spec, not argued
+- [Phase ?]: 02-01: adding a migration reddens THREE untagged-lane constants the plan did not enumerate (migrate_embed_test expectedMigrationCount, migrate_test census list + latest-version mock) on top of the integration-tagged pair B-5 flagged
+- [Phase ?]: 02-01: a machine-readable // Deprecated: on world.NormalizeCharacterName is unlandable before its caller migrates — staticcheck SA1019 fires at internal/auth/character_service.go:105, which this plan must not touch; prose notice used instead
+- [Phase ?]: 02-01: this repo has NO umbrella 'task generate' target, only generate:* subtasks; generate:confusables deliberately kept out of pr-prep's drift block because it fetches over the network
 
 ### Pending Todos
 
@@ -466,11 +473,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-03T02:13:21.159Z
+Last session: 2026-08-04T22:07:46.058Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
+Stopped at: Completed 02-01-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
