@@ -604,6 +604,20 @@ tasks:
     generates:
       - schemas/plugin.schema.json
 
+  generate:confusables:
+    desc: Generate the UTS #39 confusables table from the pinned Unicode data file
+    cmds:
+      - go generate ./internal/charname/
+    sources:
+      # main.go holds BOTH the generator logic and the pinned inputs — the
+      # Unicode version string, the version-addressed URL and the SHA-256 of
+      # the data file. Listing it as a source is therefore what makes a
+      # version bump force regeneration: edit the pin, and the drift check
+      # fails until the table is regenerated in the same change.
+      - cmd/internal/gen-confusables/main.go
+    generates:
+      - internal/charname/confusables_table_gen.go
+
   generate:luabridge:
     desc: Generate typed Lua host-capability bindings (bindings_gen.go)
     cmds:
