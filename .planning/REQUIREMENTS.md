@@ -118,7 +118,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [ ] **IDENT-07**: Character names are additionally checked against a **configurable block/disallow list
       of regular expressions**, evaluated server-side at both create and rename.
 
-- [ ] **IDENT-08**: Player usernames remain **ASCII-only** — a regression guard pinning the existing
+- [x] **IDENT-08**: Player usernames remain **ASCII-only** — a regression guard pinning the existing
       `^[a-zA-Z][a-zA-Z0-9_]*$` rule (`internal/auth/player.go:31`), not new validation.
 
 - [ ] **IDENT-09**: A **unique index on a stored normalized character name** lands **before or with**

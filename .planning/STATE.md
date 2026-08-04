@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: abac-schema-vocabulary
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-08-04T22:07:57.192Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-08-04T22:41:28.032Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 14
+  completed_plans: 15
   percent: 29
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 (abac-schema-vocabulary) — EXECUTING
-Plan: 2 of 13
+Plan: 3 of 13
 Status: Ready to execute
-Progress: [█████░░░░░] 54% (1/6 phases)
+Progress: [██████░░░░] 58% (1/6 phases)
 Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -228,6 +228,7 @@ no action needed.
 | Phase 01.1 P06 | ~70 min | 2 tasks | 6 files |
 | Phase 01.1 P07 | 85m | 3 tasks | 11 files |
 | Phase 02 P01 | 75m | 3 tasks tasks | 21 files files |
+| Phase 02 P02 | ~95min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -427,6 +428,9 @@ the next milestone yet.
 - [Phase ?]: 02-01: adding a migration reddens THREE untagged-lane constants the plan did not enumerate (migrate_embed_test expectedMigrationCount, migrate_test census list + latest-version mock) on top of the integration-tagged pair B-5 flagged
 - [Phase ?]: 02-01: a machine-readable // Deprecated: on world.NormalizeCharacterName is unlandable before its caller migrates — staticcheck SA1019 fires at internal/auth/character_service.go:105, which this plan must not touch; prose notice used instead
 - [Phase ?]: 02-01: this repo has NO umbrella 'task generate' target, only generate:* subtasks; generate:confusables deliberately kept out of pr-prep's drift block because it fetches over the network
+- [Phase ?]: Mixed-script CJK families matched by containment, not Latin-required — {Han,Hiragana} and {Han,Hangul} are ordinary non-Latin names
+- [Phase ?]: The charname/auth separation guard is directional and file-scoped; a package-wide ban would be RED by design when 02-06 lands Gate.Admit
+- [Phase ?]: gen-confusables now gofmts its output — task fmt:check was red at HEAD and the generator fought task fmt
 
 ### Pending Todos
 
@@ -473,11 +477,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-04T22:07:46.058Z
+Last session: 2026-08-04T22:41:28.022Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 02-02-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
