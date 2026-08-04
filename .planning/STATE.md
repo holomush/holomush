@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 01.1
-current_phase_name: migration-framework-adopt-goose-for-go-migrations
+current_phase: 02
+current_phase_name: abac-schema-vocabulary
 status: executing
 stopped_at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
-last_updated: "2026-08-04T21:26:15.307Z"
-last_activity: 2026-08-02
-last_activity_desc: Phase 01.1 execution started
+last_updated: "2026-08-04T21:37:39.088Z"
+last_activity: 2026-08-04
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 2
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 01.1 — migration-framework-adopt-goose-for-go-migrations
+**Current focus:** Phase 02 — abac-schema-vocabulary
 complete character identity surface (creation, management, public profiles with privacy) and stand up the
 `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 01.1 (migration-framework-adopt-goose-for-go-migrations) — EXECUTING
-Plan: 7 of 7
-Status: Ready to execute
+Phase: 02 (abac-schema-vocabulary) — EXECUTING
+Plan: 1 of 13
+Status: Executing Phase 02
 Progress: [██████████] 100% (1/6 phases)
-Last activity: 2026-08-02 — Phase 01.1 execution started
+Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
