@@ -212,7 +212,7 @@ Plans:
 4. An off-location viewer can read a character's public properties and in-world description where `seed:player-character-colocation` previously **denied** it — shipped only after an audit establishes exactly which existing `parent_type='character' AND visibility='public'` rows and which existing character descriptions the widened policy exposes.
 5. `seed:admin-section-access` permits an admin and denies a builder, a plain player, and a guest across **all seven section ids** — each denial paired with a positive control proving the subject would otherwise have been permitted, and the id list asserted by set equality — and an eighth section added later needs no new policy.
 
-**Plans**: 11 plans
+**Plans**: 12 plans
 **UI hint**: no
 **Research flag**: narrow slice only — the existing-public-character-property audit is a *data* question, not a design one, but it must be answered before `seed:profile-public-read` merges. Full `--research-phase` is not warranted.
 
@@ -225,11 +225,12 @@ Plans:
 - [ ] 02-03-PLAN.md — ABAC vocabulary: viewer/profile/admin_section prefixes, ViewerTierProvider, player-scoped roles
 - [ ] 02-04-PLAN.md — Character lifecycle: closed status vocabulary, exhaustive reads, INV-WORLD-5 and INV-WORLD-6
 - [ ] 02-05-PLAN.md — Configurable name block list: compiled snapshot, two-signal poller, boot validation
-- [ ] 02-06-PLAN.md — Duplicate detection, Go backfill, unique index, resolution CLI, and the write-site census
+- [ ] 02-06-PLAN.md — Gated name admission: the `charname.Admitted` token, the writer boundary, and the admission census
 - [ ] 02-07-PLAN.md — Seed policy family: tier floors, viewer twins, reachability, admin-section, public-read widening
 - [ ] 02-08-PLAN.md — Profile-visibility conjunction helper with the fourth-rung and additive-permit RED gates
 - [ ] 02-09-PLAN.md — Admin section registry, gate-then-distinguish, INV-PRIVACY-11
 - [ ] 02-10-PLAN.md — PROFILE-11 exposure audit artifact and the widening's paired proof
+- [ ] 02-12-PLAN.md — Duplicate detection, Go backfill, unique index, resolution CLI, RED-first uniqueness proof
 - [ ] 02-11-PLAN.md — SPEC amendments, validation map, abac-reviewer routing, phase gate
 
 ### Phase 3: World Character Commands
