@@ -50,13 +50,31 @@ or got wrong.
   provokes the forbidden repair. — **Reversibility:** one-way — this is a
   correction to a shipped normative section; reversing it reopens the §8.8
   violation.
-- **D-03:** The tier-floor configuration ships as **three policies, one per floor
-  rung** (`anonymous` / `guest` / `player`), each carrying an explicit literal
-  list of the §8.6 attribute names at that floor, ANDed with §8.2.1's
-  set-membership clearing test. Not one policy per attribute name, and not a
-  single name→floor map. The totality rule holds: names are matched as whole
-  strings, no glob or prefix, and a name in no list is denied rather than
-  defaulted.
+- **D-03:** The tier-floor configuration ships as **one policy per floor rung that
+  has at least one seeded §8.6 member**, each carrying an explicit literal list of
+  the §8.6 attribute names at that floor, ANDed with §8.2.1's set-membership
+  clearing test. Not one policy per attribute name, and not a single name→floor
+  map. The totality rule holds: names are matched as whole strings, no glob or
+  prefix, and a name in no list is denied rather than defaulted.
+  - **AMENDED 2026-08-04 — the v0.13 seed emits TWO policies, not three.** This
+    decision originally read "three policies, one per floor rung (`anonymous` /
+    `guest` / `player`)". Verified during planning: §8.6's seeded-default column
+    places every row at `anonymous` or `guest`, so the `player` rung has **no**
+    seeded member; and the DSL's list grammar is `'[' @@ (',' @@)* ']'`
+    (`internal/access/policy/dsl/ast.go:232-236`), which requires at least one
+    literal — an empty `in []` does not parse. A third policy therefore cannot be
+    written at all without inventing a member, which would be worse than omitting
+    it. So the v0.13 seed ships `seed:profile-tier-floor-anonymous` and
+    `seed:profile-tier-floor-guest` and no `player`-rung policy.
+  - **Re-entry condition:** the moment any §8.6 row is seeded at `player`, the
+    third policy becomes both writable and required. Plan `02-07` ships a
+    conditional guard test that is green while the antecedent is false and turns
+    RED at exactly that moment.
+  - This is a **recorded deviation from a locked decision, not a re-decision**: the
+    shape D-03 mandates (one policy per rung, literal name lists, set-membership
+    clearing) is unchanged; only the count follows from the seeded data. Plan
+    `02-11` carries the matching §8.6 amendment and asserts the count recorded
+    here equals the count actually in `internal/access/policy/seed.go`.
 - **D-04:** Phase 2 ships an **additive-permit regression test**: seed a
   `profile.*` row at `visibility='private'`, give the viewer a tier that clears
   that name's floor, and assert the attribute is **absent**. Under the
@@ -68,6 +86,39 @@ or got wrong.
   The finding is additionally **routed to `abac-reviewer`** before Phase 2 merges —
   `abac-reviewer` identified the §8.5.1.1 residual originally and has the context
   to confirm the rejection does not trade one hole for another.
+- **D-27 (added 2026-08-04):** The viewer twins keep **character-scoped**
+  semantics. The derived player-keyed property peers plan `02-13` supplies are
+  derived in the **direction that cannot widen their policy's effect**, never as a
+  plain union across a player's characters:
+  - **Permit-side peers — the ALL direction.** A player id appears in
+    `owner_player_id` or `visible_to_players` only when **every** character of that
+    player appears in the row's corresponding character-keyed field. A viewer
+    therefore never obtains a permit that one of that player's characters lacked.
+  - **Forbid-side peer — the ANY direction.** A player id appears in
+    `excluded_from_players` when **any** of that player's characters appears in
+    `excluded_from`, so an exclusion is never lost.
+  - **What was proposed and deliberately NOT taken.** The plan set originally
+    specified a plain union in both directions — "a player is a member iff ANY of
+    their characters is a member". Union is conservative for the `forbid` and is
+    kept there, but for `owner_player_id` and `visible_to_players` it **broadens
+    read access across a player's alternate characters**, which every shipped
+    `seed:property-*` policy is character-scoped against
+    (`internal/access/policy/seed.go:117-143`). That is an authorization widening,
+    it was never decided, and this phase is the one whose subject is privacy — so
+    the conservative direction is the Phase-2 default and the widening is a
+    Phase-4 decision.
+  - **Consequence, recorded rather than discovered.** A player holding two or more
+    characters does not receive an `owner`/`visible_to` permit through the web
+    viewer path unless the row names all of their characters, so the viewer path
+    can be **narrower** than the grid for identity-keyed rows. That is fail-closed
+    and deliberate.
+  - **Gated.** Plan `02-13` carries a blocking `checkpoint:decision` presenting the
+    union alternative with its widening spelled out, so the maintainer may choose
+    union semantics **before** execution rather than discovering the choice in the
+    code. Plan `02-11`'s Amendment F records the decision in `01-SPEC.md` §8.5
+    alongside the derived peers themselves. — **Reversibility:** costly — the
+    derivation direction is what the five viewer twins evaluate; changing it later
+    re-derives every profile-read fixture in Phase 4.
 
 ### Admin section registry and the D1 denial-code oracle
 
