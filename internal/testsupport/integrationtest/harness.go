@@ -1573,7 +1573,7 @@ func (a *authCharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.U
 func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
 	rows, err := a.pool.Query(
 		ctx,
-		`SELECT id, player_id, name, description, location_id, created_at
+		`SELECT id, player_id, name, description, location_id, created_at, status
 		 FROM characters WHERE player_id = $1 ORDER BY name`, playerID.String(),
 	)
 	if err != nil {
@@ -1587,10 +1587,20 @@ func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.UL
 		var idStr, pidStr string
 		var locStr *string
 		var createdAt pgnanos.Time
-		if scanErr := rows.Scan(&idStr, &pidStr, &c.Name, &c.Description, &locStr, &createdAt); scanErr != nil {
+		// status is read because this adapter feeds CoreServer.SelectCharacter,
+		// whose lifecycle gate (INV-WORLD-5) fails closed on a blank Status. A
+		// test adapter that omitted it would assert against a row shape
+		// production no longer produces.
+		var statusStr string
+		if scanErr := rows.Scan(&idStr, &pidStr, &c.Name, &c.Description, &locStr, &createdAt, &statusStr); scanErr != nil {
 			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(scanErr)
 		}
 		c.CreatedAt = createdAt.Time()
+		parsedStatus, statusErr := world.ParseStatus(statusStr)
+		if statusErr != nil {
+			return nil, oops.Code("CHARACTER_STATUS_DECODE_FAILED").With("status", statusStr).Wrap(statusErr)
+		}
+		c.Status = parsedStatus
 		var parseErr error
 		c.ID, parseErr = ulid.Parse(idStr)
 		if parseErr != nil {

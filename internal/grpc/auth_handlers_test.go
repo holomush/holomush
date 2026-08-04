@@ -446,6 +446,36 @@ func TestSelectCharacter(t *testing.T) {
 					"reattach MUST flip status back to Active")
 			},
 		},
+		// INV-WORLD-5's fast pin on the real handler: an idle or retired
+		// character is refused by CoreServer.SelectCharacter itself, never by
+		// re-invoking the predicate in the test. Both are paired with the
+		// lifecycle-active control below (and with the fresh-session case at the
+		// head of this table), so a green refusal cannot mean selection is
+		// simply broken for everyone.
+		{
+			name: "idle character returns success=false with not available for play message",
+			run: func(t *testing.T, ctx context.Context) {
+				resp := selectCharacterWithStatus(ctx, t, world.StatusIdle)
+				assert.False(t, resp.Success)
+				assert.Contains(t, resp.ErrorMessage, "not available for play")
+			},
+		},
+		{
+			name: "retired character returns success=false with not available for play message",
+			run: func(t *testing.T, ctx context.Context) {
+				resp := selectCharacterWithStatus(ctx, t, world.StatusRetired)
+				assert.False(t, resp.Success)
+				assert.Contains(t, resp.ErrorMessage, "not available for play")
+			},
+		},
+		{
+			name: "lifecycle-active character is still selected on the same fixture",
+			run: func(t *testing.T, ctx context.Context) {
+				resp := selectCharacterWithStatus(ctx, t, world.StatusActive)
+				assert.True(t, resp.Success)
+				assert.Equal(t, "Alice", resp.CharacterName)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -489,34 +519,6 @@ func selectCharacterWithStatus(ctx context.Context, t *testing.T, st world.Statu
 	})
 	require.NoError(t, err)
 	return resp
-}
-
-// TestSelectCharacterRefusesANonActiveCharacter is the fast, container-light pin
-// on the real handler for INV-WORLD-5's "excluded from character selection"
-// clause: the refusal is observed through CoreServer.SelectCharacter itself, not
-// by re-invoking world.Selectable in the test. Each denial is paired on the same
-// fixture with the active control, so a green refusal cannot mean selection is
-// simply broken for everyone.
-func TestSelectCharacterRefusesANonActiveCharacter(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("selects an active character", func(t *testing.T) {
-		resp := selectCharacterWithStatus(ctx, t, world.StatusActive)
-		assert.True(t, resp.Success)
-		assert.Equal(t, "Alice", resp.CharacterName)
-	})
-
-	t.Run("refuses a retired character", func(t *testing.T) {
-		resp := selectCharacterWithStatus(ctx, t, world.StatusRetired)
-		assert.False(t, resp.Success)
-		assert.Contains(t, resp.ErrorMessage, "not available for play")
-	})
-
-	t.Run("refuses an idle character", func(t *testing.T) {
-		resp := selectCharacterWithStatus(ctx, t, world.StatusIdle)
-		assert.False(t, resp.Success)
-		assert.Contains(t, resp.ErrorMessage, "not available for play")
-	})
 }
 
 // TestSelectCharacterRefusesAndLogsACharacterWithNoLifecycleStatus pins the

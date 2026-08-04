@@ -12,8 +12,11 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // cleanupCharacterLifecycle empties the tables these specs touch.
@@ -90,6 +93,147 @@ func insertCharacterWithStatus(ctx context.Context, playerID, locID ulid.ULID, n
 	Expect(err).NotTo(HaveOccurred())
 	return charID
 }
+
+// seedLifecycleSession creates a player session for playerID and returns the
+// RAW token SelectCharacter expects. The row is written through the production
+// player-session store so resolvePlayerSession's lookup path is the real one.
+func seedLifecycleSession(ctx context.Context, playerID ulid.ULID) string {
+	GinkgoHelper()
+	rawToken := "lifecycle-token-" + core.NewULID().String()
+	ps, err := auth.NewPlayerSession(playerID, auth.HashSessionToken(rawToken), "", "", auth.PlayerSessionTTL)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(env.playerSessionStore.Create(ctx, ps)).To(Succeed())
+	return rawToken
+}
+
+var _ = Describe("INV-WORLD-5: lifecycle-exhaustive character selection", func() {
+	var ctx context.Context
+	var locID, playerID ulid.ULID
+	var token string
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		cleanupCharacterLifecycle(ctx)
+		locID = seedLifecycleLocation(ctx)
+		playerID = seedLifecyclePlayer(ctx, false)
+		token = seedLifecycleSession(ctx, playerID)
+	})
+
+	// Verifies: INV-WORLD-5
+	//
+	// The assertion drives CoreServer.SelectCharacter — the ONLY character
+	// selection path in the tree — rather than re-invoking the selectability
+	// predicate in the spec. A spec that called the predicate itself would prove
+	// the predicate and pass with the handler wiring entirely absent, which is
+	// the false-green the registry's binding ratchet exists to catch. That is
+	// why this file names the predicate nowhere.
+	//
+	// The 'idle' fixture is INSERTed directly because v0.13 ships that value
+	// with no transition into it: a value no test can reach is a value no test
+	// covers. Each denial is paired on the same fixture with an 'active' control
+	// that IS selected, so a green exclusion cannot mean selection is simply
+	// broken for everyone.
+	It("excludes idle and retired characters from selection while selecting active ones", func() {
+		idleID := insertCharacterWithStatus(ctx, playerID, locID, "Idle Candidate", "idle")
+		retiredID := insertCharacterWithStatus(ctx, playerID, locID, "Retired Candidate", "retired")
+		activeID := insertCharacterWithStatus(ctx, playerID, locID, "Active Candidate", "active")
+
+		idleResp, err := env.coreServer.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+			PlayerSessionToken: token,
+			CharacterId:        idleID.String(),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(idleResp.GetSuccess()).To(BeFalse(),
+			"a character constructed directly in the otherwise-unreachable idle state MUST be excluded from selection")
+
+		retiredResp, err := env.coreServer.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+			PlayerSessionToken: token,
+			CharacterId:        retiredID.String(),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(retiredResp.GetSuccess()).To(BeFalse(),
+			"a retired character MUST be excluded by the SAME code path, with no second predicate")
+
+		activeResp, err := env.coreServer.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+			PlayerSessionToken: token,
+			CharacterId:        activeID.String(),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(activeResp.GetSuccess()).To(BeTrue(),
+			"the paired active control MUST still be selectable — otherwise the exclusions above prove nothing")
+		Expect(activeResp.GetCharacterName()).To(Equal("Active Candidate"))
+	})
+})
+
+var _ = Describe("INV-WORLD-6: retirement preserves the name reservation", func() {
+	var ctx context.Context
+	var locID, playerID ulid.ULID
+	var adminSubject string
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		cleanupCharacterLifecycle(ctx)
+		locID = seedLifecycleLocation(ctx)
+		*env.startLocationID = locID
+		playerID = seedLifecyclePlayer(ctx, false)
+
+		// The delete below is authorized by the REAL engine against the REAL
+		// seeded corpus: seed.go's admin permit
+		// (`permit(principal is character, action, resource) when { "admin" in
+		// principal.character.roles }`). The role source is the fixture; the
+		// evaluation is not.
+		adminPlayerID := seedLifecyclePlayer(ctx, false)
+		adminID := insertCharacterWithStatus(ctx, adminPlayerID, locID, "Lifecycle Admin", "active")
+		adminSubject = access.CharacterSubject(adminID.String())
+		env.roleResolver.Grant(adminSubject, "admin")
+	})
+
+	// nameIsTaken reports whether the real creation path refuses the name.
+	// The reclaim attempt goes through auth.CharacterService.Create so the
+	// assertion is about the system's behaviour, not a hand-written query.
+	reclaim := func(name string) error {
+		_, err := env.characters.Create(ctx, playerID, name)
+		return err
+	}
+
+	// Verifies: INV-WORLD-6
+	//
+	// The paired form 01-SPEC.md §13 requires: retire-then-reclaim FAILS, and
+	// BOTH sanctioned tombstone-emitting hard-delete paths release the name.
+	// Asserting only the retire half would pin one side of the boundary and
+	// leave "does anything ever release it?" unanswered; asserting only
+	// world.Service.DeleteCharacter would leave the registry entry claiming an
+	// enumeration of two while proving one.
+	It("keeps the name reserved through retirement and releases it on both sanctioned deletes", func() {
+		By("retiring a character leaves its row, its name and the reservation intact")
+		retiredID := insertCharacterWithStatus(ctx, playerID, locID, "Persistent Name", "active")
+		_, err := env.pool.Exec(ctx, `UPDATE characters SET status = 'retired' WHERE id = $1`, retiredID.String())
+		Expect(err).NotTo(HaveOccurred())
+
+		stillThere, err := env.Characters.Get(ctx, retiredID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(stillThere.Status).To(Equal(world.StatusRetired))
+		Expect(stillThere.Name).To(Equal("Persistent Name"))
+
+		Expect(reclaim("Persistent Name")).To(HaveOccurred(),
+			"retirement MUST NOT release the name — a freed name inherits every display name already denormalized into immutable payloads")
+
+		By("the irreversible world.Service.DeleteCharacter DOES release it")
+		Expect(env.worldService.DeleteCharacter(ctx, adminSubject, retiredID)).To(Succeed())
+		Expect(reclaim("Persistent Name")).NotTo(HaveOccurred(),
+			"the sanctioned hard delete MUST release the name — this is the paired half that pins the boundary")
+
+		By("guest reaping, the SECOND sanctioned deleter, releases it too")
+		guestPlayerID := seedLifecyclePlayer(ctx, true)
+		insertCharacterWithStatus(ctx, guestPlayerID, locID, "Reaped Name", "active")
+		Expect(reclaim("Reaped Name")).To(HaveOccurred(),
+			"control: the guest's name is reserved while its row exists")
+
+		Expect(env.reaping.DeleteGuestPlayer(ctx, guestPlayerID)).To(Succeed())
+		Expect(reclaim("Reaped Name")).NotTo(HaveOccurred(),
+			"auth.CharacterReapingService is the second name-releasing path INV-WORLD-6 enumerates")
+	})
+})
 
 var _ = Describe("Character lifecycle columns", func() {
 	var ctx context.Context
