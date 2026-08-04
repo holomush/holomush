@@ -52,6 +52,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"go/format"
 	"io"
 	"log"
 	"net/http"
@@ -151,8 +152,22 @@ func generate(cfg config) error {
 		return fmt.Errorf("confusables input parsed to an empty mapping table")
 	}
 
-	src := render(version, table)
-	if err := os.WriteFile(cfg.outputPath, []byte(src), 0o600); err != nil {
+	// Gofmt the rendered source before writing it.
+	//
+	// render emits one map entry per line with a single space after each colon,
+	// but gofmt aligns the values of a contiguous map literal to the widest key
+	// in the run — and this table mixes 4-digit and 5-digit keys, so nearly
+	// every line gains padding. Without this pass the generated file is
+	// permanently gofumpt-dirty: `task fmt` reformats it, `task fmt:check`
+	// (and therefore `task pr-prep`) fails on a clean tree, and re-running the
+	// generator silently reverts the formatting again. Formatting HERE makes
+	// "generated" and "formatted" the same bytes, so the drift gate compares
+	// what it claims to compare.
+	formatted, err := format.Source([]byte(render(version, table)))
+	if err != nil {
+		return fmt.Errorf("gofmt of the rendered confusables table: %w", err)
+	}
+	if err := os.WriteFile(cfg.outputPath, formatted, 0o600); err != nil {
 		return fmt.Errorf("writing %s: %w", cfg.outputPath, err)
 	}
 	return nil
