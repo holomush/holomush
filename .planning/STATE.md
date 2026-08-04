@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: abac-schema-vocabulary
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-08-04T22:41:28.032Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-08-04T22:52:25.622Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 15
+  completed_plans: 16
   percent: 29
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 (abac-schema-vocabulary) — EXECUTING
-Plan: 3 of 13
+Plan: 4 of 13
 Status: Ready to execute
-Progress: [██████░░░░] 58% (1/6 phases)
+Progress: [██████░░░░] 62% (1/6 phases)
 Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -229,6 +229,7 @@ no action needed.
 | Phase 01.1 P07 | 85m | 3 tasks | 11 files |
 | Phase 02 P01 | 75m | 3 tasks tasks | 21 files files |
 | Phase 02 P02 | ~95min | 3 tasks | 11 files |
+| Phase 02 P03 | 34min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -431,6 +432,9 @@ the next milestone yet.
 - [Phase ?]: Mixed-script CJK families matched by containment, not Latin-required — {Han,Hiragana} and {Han,Hangul} are ordinary non-Latin names
 - [Phase ?]: The charname/auth separation guard is directional and file-scoped; a package-wide ban would be RED by design when 02-06 lands Gate.Admit
 - [Phase ?]: gen-confusables now gofmts its output — task fmt:check was red at HEAD and the generator fought task fmt
+- [Phase ?]: 02-03: viewer.roles resolves PER PLAYER (union across the player's characters), matching 01-SPEC §10.5 and the shipped PlayerHasRole join — so web and operator socket cannot disagree about who is an admin
+- [Phase ?]: 02-03: the anonymous viewer rung is exempt from the empty-identifier panic (viewer:anonymous is a complete subject, not a bare prefix) and panics instead on a NON-empty identifier
+- [Phase ?]: 02-03: viewer namespace ships FIVE keys, not §8.4.1's three — roles/has_roles added so seed:viewer-property-admin-read is expressible at all (Amendment F for plan 02-11)
 
 ### Pending Todos
 
@@ -477,11 +481,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-04T22:41:28.022Z
+Last session: 2026-08-04T22:52:25.610Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02-02-PLAN.md
+Stopped at: Completed 02-03-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.

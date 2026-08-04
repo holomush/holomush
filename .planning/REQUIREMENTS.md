@@ -170,7 +170,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       either it gains a paired visibility property or it is always public on the profile. It MUST NOT
       default to visible by accident.
 
-- [ ] **PROFILE-11**: One new seed policy (`seed:profile-public-read`) permits off-location profile
+- [x] **PROFILE-11**: One new seed policy (`seed:profile-public-read`) permits off-location profile
       reads, which `seed:player-character-colocation` currently **denies**. Its scope covers **both**
       public `entity_properties` rows **and** the `characters.description` column (PROFILE-10a). It ships
       only after an audit of existing rows where `parent_type='character' AND visibility='public'`, and
@@ -238,7 +238,7 @@ cannot be dropped as "nice to have" during planning.
       content_warning}` + `primary_image` + `repeated gallery [max_items = 10]` — giving alt-text and
       content-warning somewhere to live before moderation exists.
 
-- [ ] **EXT-07**: `seed:admin-section-access` covers all seven sections **and every future section at
+- [x] **EXT-07**: `seed:admin-section-access` covers all seven sections **and every future section at
       zero additional policy cost**.
 
 - [ ] **EXT-08**: Deferred surfaces get a **named empty slot, not a dead affordance** — specifically, no
