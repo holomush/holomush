@@ -28,6 +28,7 @@ import (
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	"github.com/holomush/holomush/internal/bootstrap"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
@@ -438,7 +439,24 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		VerbRegistry:       verbRegistry,
 	})
 
+	// Character-name block list (IDENT-07, 02-05). ONE subsystem, therefore one
+	// cache and one poll loop, handed to BOTH composition roots below. A second
+	// construction would give the bootstrap root and the gRPC root
+	// independently-polled lists that can disagree about which names are
+	// blocked.
+	//
+	// Source resolves lazily: this is construction time, and the database
+	// subsystem has no pool until its own Prepare. The block-list subsystem
+	// declares DependsOn(Database), so the closure is only ever called after
+	// that pool exists.
+	blockListSub := blocklist.NewSubsystem(blocklist.SubsystemConfig{
+		Source:   func() blocklist.Source { return dbSub.EventStore() },
+		Key:      blocklist.DefaultKey,
+		Registry: registry,
+	})
+
 	bootstrapSub := bootstrapsetup.NewBootstrapSubsystem(bootstrapsetup.BootstrapSubsystemConfig{
+		BlockList:          blockListSub,
 		DB:                 dbSub,
 		ABAC:               abacSub,
 		World:              worldSub,
@@ -673,13 +691,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	})
 
 	grpcSub := newGRPCSubsystem(grpcSubsystemConfig{
-		DB:             dbSub,
-		ABAC:           abacSub,
-		Auth:           authSub,
-		World:          worldSub,
-		Plugins:        pluginSub,
-		Sessions:       sessionSub,
-		Bootstrap:      bootstrapSub,
+		DB:        dbSub,
+		ABAC:      abacSub,
+		Auth:      authSub,
+		World:     worldSub,
+		Plugins:   pluginSub,
+		Sessions:  sessionSub,
+		Bootstrap: bootstrapSub,
+		// The SAME blocklist.Subsystem the bootstrap config received above —
+		// one cache, one poll loop, both composition roots.
+		BlockList:      blockListSub,
 		EventBus:       eventBusSub,
 		GRPCAddr:       cfg.GRPCAddr,
 		TLSProvider:    tlsSub.TLSConfig,
@@ -850,6 +871,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		AdminSocket:          adminSub,
 		RekeyCheckpointSweep: rekeyCheckpointSweepSub,
 		OutboxRelay:          outboxRelaySub,
+		BlockList:            blockListSub,
 	}) {
 		orch.Register(sub)
 	}
@@ -1181,6 +1203,10 @@ type productionSubsystemSet struct {
 	AdminSocket          lifecycle.Subsystem
 	RekeyCheckpointSweep lifecycle.Subsystem
 	OutboxRelay          lifecycle.Subsystem
+	// BlockList owns the operator-configured character-name block list
+	// (IDENT-07, 02-05). Bootstrap declares a DependsOn edge on it, so it
+	// prepares before any character-name admission can run.
+	BlockList lifecycle.Subsystem
 }
 
 // productionSubsystems returns the ordered list of subsystems registered
@@ -1196,6 +1222,12 @@ func productionSubsystems(s productionSubsystemSet) []lifecycle.Subsystem {
 		// a hand-sequenced DB pre-start (07-09 Task 1).
 		s.TLS,
 		s.ABAC, s.Auth, s.World,
+		// BlockList declares DependsOn(Database) and Bootstrap declares
+		// DependsOn(BlockList), so the operator's list is loaded, validated and
+		// compiled before bootstrap's Prepare can create the initial admin
+		// character. This SLICE position is cosmetic; the asserted order lives
+		// in cmd/holomush/core_topo_order_test.go.
+		s.BlockList,
 		s.Sessions, s.Plugins, s.Bootstrap,
 		// The verifier's real start order is EventBus first, then
 		// CryptoChainVerifier — its handler set is built from

@@ -37,6 +37,16 @@ const (
 	// (MODEL-04, 05-07): the single leased publisher that drains outbox rows to
 	// JetStream in strict feed order. DependsOn Database + EventBus.
 	SubsystemOutboxRelay // outbox_relay
+	// SubsystemCharacterNameBlockList owns the operator-configured
+	// character-name block list (IDENT-07, 02-05): boot-time validation and
+	// compilation in Prepare, and the two-signal settings poller in Activate.
+	// DependsOn Database. Bootstrap depends on IT, because bootstrap's Prepare
+	// may create the initial admin character and that admission must not run
+	// against an uncompiled list.
+	//
+	// New ids go at the END of this block: the stringer is linecomment-driven,
+	// so an insertion mid-block silently renumbers every later id.
+	SubsystemCharacterNameBlockList // character_name_blocklist
 )
 
 // Subsystem is a top-level server component with lifecycle management

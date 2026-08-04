@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/bootstrap"
+	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/lifecycle"
@@ -76,6 +77,16 @@ type BootstrapSubsystemConfig struct {
 	ResetSetting       bool
 	SkipSeedMigrations bool
 	GuestStartLocation string // pre-parsed ULID string; empty = resolve from metadata
+	// BlockList is the character-name block-list subsystem (IDENT-07, 02-05).
+	// It is carried as a WHOLE SUBSYSTEM POINTER, matching how the other
+	// collaborators above are supplied, and it is the transport by which the
+	// live matcher reaches the character-name gate this subsystem builds.
+	//
+	// Populated in cmd/holomush/core.go from the single blocklist.Subsystem it
+	// constructs, so this root and the gRPC root cannot drift onto
+	// independently-polled lists. Consuming it — calling Matcher() when
+	// constructing the gate — belongs to plan 02-06.
+	BlockList *blocklist.Subsystem
 }
 
 // BootstrapSubsystem orchestrates the multi-step bootstrap sequence:
@@ -92,7 +103,9 @@ type BootstrapSubsystem struct {
 // The cfg parameter supplies lazy providers and bootstrap options: database pool,
 // ABAC policy store, world service and transactor, plugin manager, player
 // repository and password hasher providers, optional setting plugin name and
-// reset flag, SkipSeedMigrations, and an optional GuestStartLocation ULID string.
+// reset flag, SkipSeedMigrations, an optional GuestStartLocation ULID string,
+// and the character-name block-list subsystem whose live matcher the
+// character-name gate is built over.
 func NewBootstrapSubsystem(cfg BootstrapSubsystemConfig) *BootstrapSubsystem {
 	return &BootstrapSubsystem{cfg: cfg}
 }
@@ -101,6 +114,14 @@ func NewBootstrapSubsystem(cfg BootstrapSubsystemConfig) *BootstrapSubsystem {
 func (s *BootstrapSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemBootstrap }
 
 // DependsOn returns all subsystems that must start before bootstrap.
+//
+// The CharacterNameBlockList edge is not tidiness. Prepare below constructs a
+// CharacterService and may create the initial admin character; without the
+// edge the orchestrator is free to run that admission before the block-list
+// subsystem has loaded, validated and compiled anything. The cache would then
+// answer "matches nothing", the operator's list would silently not be in
+// force, and the one name it failed to block would be created by a boot nobody
+// is watching.
 func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{
 		lifecycle.SubsystemDatabase,
@@ -109,6 +130,7 @@ func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 		lifecycle.SubsystemAuth,
 		lifecycle.SubsystemPlugins,
 		lifecycle.SubsystemSessions,
+		lifecycle.SubsystemCharacterNameBlockList,
 	}
 }
 
@@ -234,6 +256,15 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 	slog.InfoContext(ctx, "bootstrap subsystem prepared")
 	return nil
 }
+
+// BlockList returns the character-name block-list subsystem this bootstrap
+// subsystem was configured with, or nil when none was supplied.
+//
+// It is the read end of the transport declared by 02-05. Plan 02-06 calls
+// BlockList().Matcher() when it constructs the charname.Gate this subsystem's
+// CharacterService admits names through; this plan declares the seam and
+// constructs no gate.
+func (s *BootstrapSubsystem) BlockList() *blocklist.Subsystem { return s.cfg.BlockList }
 
 // Activate is a no-op — bootstrap's work is a one-shot Prepare-time seed
 // (D-13.3 row 8).

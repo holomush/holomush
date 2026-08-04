@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/admin/socket"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
@@ -109,7 +110,7 @@ func (r *startRecorder) snapshot() []lifecycle.SubsystemID {
 	return out
 }
 
-// realProductionSubsystemGraph constructs every one of the 17 production
+// realProductionSubsystemGraph constructs every one of the 18 production
 // subsystem types with a minimal/zero-value config and reads each one's
 // real DependsOn() LIVE. None of these constructors allocate or touch live
 // resources (07-09 D-12 Wave A made every constructor allocate nothing
@@ -138,6 +139,7 @@ func realProductionSubsystemGraph(t *testing.T) map[lifecycle.SubsystemID][]life
 		abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{}),
 		authsetup.NewAuthSubsystem(authsetup.AuthSubsystemConfig{}),
 		worldsetup.NewWorldSubsystem(worldsetup.WorldSubsystemConfig{}),
+		blocklist.NewSubsystem(blocklist.SubsystemConfig{}),
 		sessionsetup.NewSessionSubsystem(sessionsetup.SessionSubsystemConfig{}),
 		pluginsetup.NewPluginSubsystem(pluginsetup.PluginSubsystemConfig{}),
 		bootstrapsetup.NewBootstrapSubsystem(bootstrapsetup.BootstrapSubsystemConfig{}),
@@ -156,8 +158,8 @@ func realProductionSubsystemGraph(t *testing.T) map[lifecycle.SubsystemID][]life
 	for _, s := range subs {
 		graph[s.ID()] = s.DependsOn()
 	}
-	require.Len(t, graph, 17,
-		"expected exactly the 17 production subsystems (productionSubsystemSet); "+
+	require.Len(t, graph, 18,
+		"expected exactly the 18 production subsystems (productionSubsystemSet); "+
 			"a subsystem was added or removed without updating this test's construction list")
 	return graph
 }
@@ -196,6 +198,7 @@ func TestProductionSubsystemsTopologicalStartOrderIsPinned(t *testing.T) {
 		lifecycle.SubsystemAuth,
 		lifecycle.SubsystemSessions,
 		lifecycle.SubsystemEventBus,
+		lifecycle.SubsystemCharacterNameBlockList,
 		lifecycle.SubsystemWorld,
 		lifecycle.SubsystemCluster,
 		lifecycle.SubsystemCryptoChainVerifier,
@@ -221,7 +224,7 @@ func TestProductionSubsystemsTopologicalStartOrderIsPinned(t *testing.T) {
 		"if this is an intentional DependsOn change, re-derive the new order from the live graph rather than editing this literal by hand")
 
 	// Named orderings, so a failure says WHICH invariant broke rather than
-	// dumping a 17-element diff.
+	// dumping an 18-element diff.
 	idx := func(id lifecycle.SubsystemID) int {
 		for i, v := range got {
 			if v == id {
@@ -237,7 +240,11 @@ func TestProductionSubsystemsTopologicalStartOrderIsPinned(t *testing.T) {
 	auditIdx := idx(lifecycle.SubsystemAuditProjection)
 	grpcIdx := idx(lifecycle.SubsystemGRPC)
 	adminIdx := idx(lifecycle.SubsystemAdminSocket)
+	blockListIdx := idx(lifecycle.SubsystemCharacterNameBlockList)
+	bootstrapIdx := idx(lifecycle.SubsystemBootstrap)
 
+	require.GreaterOrEqual(t, blockListIdx, 0)
+	require.GreaterOrEqual(t, bootstrapIdx, 0)
 	require.GreaterOrEqual(t, dbIdx, 0)
 	require.GreaterOrEqual(t, busIdx, 0)
 	require.GreaterOrEqual(t, verifierIdx, 0)
@@ -266,6 +273,16 @@ func TestProductionSubsystemsTopologicalStartOrderIsPinned(t *testing.T) {
 	// external domain surface binds).
 	assert.Less(t, verifierIdx, grpcIdx, "CryptoChainVerifier must start before GRPC — INV-CRYPTO-102 must be proven before gRPC binds its TCP listener")
 	assert.Less(t, verifierIdx, adminIdx, "CryptoChainVerifier must start before AdminSocket — INV-CRYPTO-102 must be proven before admin.sock binds")
+
+	// 7. blocklist-before-bootstrap (IDENT-07, 02-05). The edge doing WORK:
+	// bootstrap's Prepare constructs a CharacterService and may create the
+	// initial admin character. Without this ordering that admission runs
+	// against an uncompiled, empty block list — the operator's list silently
+	// not in force, for exactly the boot nobody watches.
+	assert.Less(t, blockListIdx, bootstrapIdx,
+		"CharacterNameBlockList must start before Bootstrap — bootstrap may admit a character name and the list must already be compiled")
+	assert.Less(t, dbIdx, blockListIdx,
+		"Database must start before CharacterNameBlockList — the poller needs the pool")
 }
 
 // TestProductionSubsystemGraphIsAcyclic proves the REAL production
