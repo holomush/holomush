@@ -6,13 +6,13 @@ current_phase: 01.1
 current_phase_name: migration-framework-adopt-goose-for-go-migrations
 status: verifying
 stopped_at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
-last_updated: "2026-08-03T02:13:21.169Z"
+last_updated: "2026-08-04T21:13:27.519Z"
 last_activity: 2026-08-02
 last_activity_desc: Phase 01.1 execution started
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 13
+  total_plans: 26
   completed_plans: 13
   percent: 29
 ---
@@ -452,6 +452,7 @@ None yet.
 - Phase 01.1 edited: edited fields: success_criteria (criterion 1: 49->44 pairs, 'byte-identical' restated as application-schema with bookkeeping objects excluded per D-15; criterion 4: 'real migration' restated as integration-test fixture chain per D-07), research_flag (49->44, baseline question marked resolved per D-02/D-04)
 - Phase 01.1 edited: criterion 1 row-count corrected post-research: 'goose_db_version with 44 rows' -> '44 rows at version_id > 0 plus goose's version-0 bootstrap row (45 total)'. goose inserts a version-0 row at table creation (RESEARCH.md:875-877, verified by execution against postgres:18-alpine), so the prior assertion failed against a correct database.
 - Phase 01.1 edited: criterion 3 amended post-research (maintainer decision): 'up/down/status/version/force parity' -> 'up/down/status/version parity, force REMOVED with docs+tests'. goose commits body and version row in one transaction (provider_run.go:213-219), so the dirty state force repairs cannot arise; force has no analogue and no purpose (RESEARCH.md:777).
+- Phase 2 edited: criterion 4 split: public-properties half stays Phase 2, in-world-description half deferred to Phase 4 as its criterion 6 (D-29)
 
 ## Deferred Items
 
