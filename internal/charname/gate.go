@@ -78,7 +78,15 @@ type Gate struct {
 //
 //  1. Normalize        — §6.1.1; a submission with no normal form stops here
 //  2. syntax.ValidateName on the DISPLAY form
-//  3. Skeleton(key) and the corpus lookup
+//  3. MixedScript      — §6.1.2 Mechanism A, on the DISPLAY form
+//  4. Skeleton(key) and the corpus lookup
+//
+// Step 3 sits before step 4 deliberately: a cross-script splice is decidable
+// from the submission alone, so refusing it here costs no database round trip
+// and hands an attacker no timing signal about the corpus. It sits AFTER step 2
+// because the syntactic rules already admit only Unicode letters, which keeps
+// the script set free of the punctuation and digit noise a raw submission
+// carries.
 //
 // # Check SUBSUMES the syntactic rules, deliberately
 //
@@ -112,6 +120,10 @@ func (g *Gate) Check(ctx context.Context, submitted string, opts ...CheckOption)
 		// chain so the create path's existing CHARACTER_INVALID_NAME mapping
 		// keeps working.
 		return Normalized{}, "", oops.Code("NAME_INVALID_SYNTAX").Wrap(syntaxErr)
+	}
+
+	if mixedErr := MixedScript(normalized.Display); mixedErr != nil {
+		return Normalized{}, "", mixedErr
 	}
 
 	skeleton := Skeleton(normalized.Key)

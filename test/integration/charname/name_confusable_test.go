@@ -126,7 +126,7 @@ var _ = Describe("Character-name confusable rejection against real Postgres", fu
 
 		gate = &charname.Gate{Skeletons: poolSkeletonLookup{pool: pool}}
 
-		seededName = "Alaric"
+		seededName = "Cocoa"
 		seededID = seedCharacter(seededName)
 	})
 
@@ -166,8 +166,12 @@ var _ = Describe("Character-name confusable rejection against real Postgres", fu
 		BeforeEach(func() { backfillSkeletons() })
 
 		It("rejects a Cyrillic homoglyph of the seeded Latin name with NAME_CONFUSABLE", func() {
-			// U+0410 CYRILLIC CAPITAL LETTER A in place of the Latin A.
-			_, _, err := gate.Check(ctx, "\u0410laric")
+			// EVERY letter is Cyrillic — U+0421, U+043E, U+0441, U+043E, U+0430 —
+			// so the name is single-script and §6.1.2 Mechanism A permits it.
+			// Catching it is Mechanism B's job, which is what this spec asserts.
+			// A Latin+Cyrillic splice would be refused by Mechanism A before any
+			// database round trip and would prove nothing about skeletons.
+			_, _, err := gate.Check(ctx, "\u0421\u043E\u0441\u043E\u0430")
 
 			Expect(err).To(HaveOccurred())
 			Expect(codeOf(err)).To(Equal("NAME_CONFUSABLE"))
@@ -189,7 +193,7 @@ var _ = Describe("Character-name confusable rejection against real Postgres", fu
 			// Wire-level opacity assertion (PORTAL-10 rule 5): asserted over the
 			// MESSAGE, not over an inner oops code. Naming the collider would
 			// turn this gate into a name-enumeration oracle.
-			_, _, err := gate.Check(ctx, "\u0410laric")
+			_, _, err := gate.Check(ctx, "\u0421\u043E\u0441\u043E\u0430")
 
 			Expect(err).To(HaveOccurred())
 			msg := err.Error()
@@ -205,16 +209,16 @@ var _ = Describe("Character-name confusable rejection against real Postgres", fu
 		It("admits the seeded character's own case variant when its id is excluded and refuses it otherwise", func() {
 			// Both directions on ONE fixture, so the success cannot pass because
 			// the seeded row was never written.
-			normalized, _, err := gate.Check(ctx, "ALARIC", charname.ExcludingCharacter(seededID))
+			normalized, _, err := gate.Check(ctx, "COCOA", charname.ExcludingCharacter(seededID))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(normalized.Display).To(Equal("ALARIC"), "the player's own capitalization survives")
-			Expect(normalized.Key).To(Equal("alaric"))
+			Expect(normalized.Display).To(Equal("COCOA"), "the player's own capitalization survives")
+			Expect(normalized.Key).To(Equal("cocoa"))
 
-			_, _, err = gate.Check(ctx, "ALARIC")
+			_, _, err = gate.Check(ctx, "COCOA")
 			Expect(err).To(HaveOccurred())
 			Expect(codeOf(err)).To(Equal("NAME_CONFUSABLE"))
 
-			_, _, err = gate.Check(ctx, "ALARIC", charname.ExcludingCharacter(idgen.New()))
+			_, _, err = gate.Check(ctx, "COCOA", charname.ExcludingCharacter(idgen.New()))
 			Expect(err).To(HaveOccurred(), "excluding a different character does not excuse the collision")
 			Expect(codeOf(err)).To(Equal("NAME_CONFUSABLE"))
 		})

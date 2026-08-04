@@ -65,14 +65,19 @@ func TestGateCheckAdmitsAWellFormedNameWithNoSkeletonCollision(t *testing.T) {
 
 func TestGateCheckRefusesANameWhoseSkeletonMatchesAnExistingCharacter(t *testing.T) {
 	seededID := idgen.New()
-	seededName := "paypal"
+	seededName := "cocoa"
 	lookup := &fakeLookup{known: map[string]ulid.ULID{
 		charname.Skeleton(mustKey(t, seededName)): seededID,
 	}}
 	g := newGate(lookup)
 
-	// Cyrillic а (U+0430) and р (U+0440) — a whole-script homoglyph.
-	_, _, err := g.Check(t.Context(), "\u0440\u0430ypal")
+	// A WHOLE-script homoglyph: every letter is Cyrillic — U+0441, U+043E and
+	// U+0430 — and the string skeletons to "cocoa". Mechanism A permits it
+	// because it is single-script, and Mechanism B is what catches it; that
+	// division of labour is exactly what §6.1.2 says the second mechanism
+	// exists for. A Latin+Cyrillic splice is now refused one step earlier and
+	// would leave this assertion proving nothing about skeletons.
+	_, _, err := g.Check(t.Context(), "\u0441\u043E\u0441\u043E\u0430")
 
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "NAME_CONFUSABLE")
@@ -85,17 +90,20 @@ func TestGateCheckRefusesANameWhoseSkeletonMatchesAnExistingCharacter(t *testing
 
 func TestGateCheckConfusableRefusalNamesNeitherTheCollidingCharacterNorItsID(t *testing.T) {
 	seededID := idgen.New()
-	seededName := "Alaric"
+	seededName := "Cocoa"
 	g := newGate(&fakeLookup{known: map[string]ulid.ULID{
 		charname.Skeleton(mustKey(t, seededName)): seededID,
 	}})
 
-	_, _, err := g.Check(t.Context(), "\u0410laric") // U+0410 CYRILLIC CAPITAL LETTER A
+	// Whole-script again, for the same reason: this test must exercise the
+	// CONFUSABLE refusal message, and a mixed-script fixture would silently
+	// retarget it at the mixed-script message instead.
+	_, _, err := g.Check(t.Context(), "\u0421\u043E\u0441\u043E\u0430")
 
 	require.Error(t, err)
 	msg := err.Error()
 	assert.NotContains(t, msg, seededName, "the message must not name the colliding character")
-	assert.NotContains(t, msg, "alaric", "nor its case-folded form")
+	assert.NotContains(t, msg, strings.ToLower(seededName), "nor its case-folded form")
 	assert.NotContains(t, msg, seededID.String(), "the message must not carry the colliding id")
 }
 
@@ -129,6 +137,28 @@ func TestGateCheckRefusesNamesTheSyntacticRulesReject(t *testing.T) {
 			require.NoError(t, ok)
 		})
 	}
+}
+
+func TestGateCheckRefusesAMixedScriptNameWithoutEverReachingTheCorpus(t *testing.T) {
+	lookup := &fakeLookup{known: map[string]ulid.ULID{}}
+	g := newGate(lookup)
+
+	// §6.1.2 Mechanism A. Cyrillic р (U+0440) and а (U+0430) spliced into an
+	// otherwise Latin word — the cross-script splice the skeleton check alone
+	// would only catch after a database round trip.
+	_, _, err := g.Check(t.Context(), "\u0440\u0430ypal")
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "NAME_MIXED_SCRIPT")
+	assert.Zero(t, lookup.calls, "a mixed-script name never reaches the corpus")
+
+	// Paired positive control on the SAME gate, and the prohibition's guard:
+	// a name written WHOLLY in Cyrillic is single-script, so Mechanism A must
+	// admit it — and it must reach the corpus, because Mechanism B is what
+	// covers a whole-script confusable.
+	_, _, ok := g.Check(t.Context(), "\u0418\u0432\u0430\u043D")
+	require.NoError(t, ok, "Mechanism A is not an English-only name policy")
+	assert.Equal(t, 1, lookup.calls, "the permitted name does reach the corpus")
 }
 
 func TestGateCheckRunsTheSyntacticRuleOnThePostNormalizeDisplayForm(t *testing.T) {
