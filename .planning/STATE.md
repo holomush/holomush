@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: abac-schema-vocabulary
 status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-08-05T01:47:32.841Z"
+stopped_at: Completed 02-07-PLAN.md
+last_updated: "2026-08-05T02:44:39.067Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 20
+  completed_plans: 21
   percent: 29
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 (abac-schema-vocabulary) — EXECUTING
-Plan: 8 of 13
+Plan: 9 of 13
 Status: Ready to execute
-Progress: [████████░░] 77% (1/6 phases)
+Progress: [████████░░] 81% (1/6 phases)
 Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -234,6 +234,7 @@ no action needed.
 | Phase 02 P05 | 110min | 3 tasks | 21 files |
 | Phase 02 P13 | 71min | 4 tasks | 15 files |
 | Phase 02 P06 | 155min | 3 tasks tasks | 36 files files |
+| Phase 02 P07 | 118min | 4 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -456,6 +457,10 @@ the next milestone yet.
 - [Phase ?]: 02-06: NAME_EMPTY_NORMAL_FORM is mapped to CHARACTER_INVALID_NAME alongside NAME_INVALID_SYNTAX; both were CHARACTER_INVALID_NAME before the gate existed
 - [Phase ?]: 02-06: a stock database is D-30-unverifiable (000001_baseline seeds a skeleton-less bootstrap character), so the integration harness and three suites repair the corpus at setup — every guest login exhausted its retries until they did
 - [Phase ?]: 02-06: block-list window #10 CLOSED — all three composition roots call setup.NewCharacterNameGate, which fails closed on a nil BlockList subsystem
+- [Phase ?]: 02-07: Task 2 checkpoint auto-resolved to author-now-gate-on-audit — D-11's posture is already LOCKED in 02-CONTEXT.md; the phase MUST NOT merge before 02-AUDIT-RESULT.md exists and is non-empty
+- [Phase ?]: 02-07: the plan's D-29 grep criterion (zero 'resource is character' in seed.go) is unsatisfiable — 3 pre-existing shipped seeds match. Replaced with a compiled-target gate pinning the character-typed seed set
+- [Phase ?]: 02-07: createSeedEngine cannot delegate to abactest (import cycle in an in-package test file). The B-6 closure is bought by an external test package in the same directory instead
+- [Phase ?]: 02-07: D-03 ships TWO tier-floor policies, not three — the player rung has no seeded §8.6 member and the DSL list grammar forbids an empty 'in []'. Guarded by a conditional re-entry test
 
 ### Pending Todos
 
@@ -470,6 +475,7 @@ None yet.
   part of their own definition of done
 
 - Operator action outstanding: ruleset 11923801 unchanged; no coverage context gates merges (#4875, #4876)
+- 02-07: PROFILE-11's characters.description half is NOT discharged in Phase 2 — D-29 defers seed:profile-public-read-character to Phase 4, to land with the characterToProto projection narrowing. EXT-07's admin section registry is still 02-09's.
 
 ### Quick Tasks Completed
 
@@ -502,11 +508,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-05T01:47:32.831Z
+Last session: 2026-08-05T02:44:26.481Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02-06-PLAN.md
+Stopped at: Completed 02-07-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
