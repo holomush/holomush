@@ -86,6 +86,19 @@ type ABACConfig struct {
 	// internal/access/setup/subsystem.go passes
 	// postgres.NewParentLocationResolver(pool). Per holomush-72ou.
 	ParentLocationResolver attribute.ParentLocationResolver
+	// CharacterOwnerResolver resolves the row's character-keyed owner /
+	// visible_to / excluded_from fields into their PLAYER-keyed peers
+	// (resource.property.owner_player_id, .visible_to_players,
+	// .excluded_from_players), which is what makes the 02-07 `viewer:` twins
+	// expressible at all — the DSL cannot intersect two attribute lists.
+	//
+	// LEAVING THIS NIL IS SILENT: PropertyProvider still registers, the three
+	// derived keys are simply absent, every condition referencing them
+	// evaluates false, and the viewer twins default-deny with no error and no
+	// failing test (RESEARCH P-7's failure mode). Production wiring at
+	// internal/access/setup/subsystem.go passes
+	// postgres.NewCharacterOwnerResolver(pool). Per plan 02-13.
+	CharacterOwnerResolver attribute.CharacterOwnerResolver
 	RoleStore              store.RoleStore
 	AuditMode              audit.Mode
 	// CryptoOperators is the list of player IDs (ULIDs) holding the
@@ -219,7 +232,7 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	// either is missing so any future caller that drops the dependency
 	// gets a recurrence signal. Per holomush-72ou.
 	if cfg.PropertyRepo != nil && cfg.ParentLocationResolver != nil {
-		propProvider := attribute.NewPropertyProvider(cfg.PropertyRepo, cfg.ParentLocationResolver)
+		propProvider := attribute.NewPropertyProvider(cfg.PropertyRepo, cfg.ParentLocationResolver, cfg.CharacterOwnerResolver)
 		if err := resolver.RegisterProvider(propProvider); err != nil {
 			return nil, eb.Wrapf(err, "register property provider")
 		}

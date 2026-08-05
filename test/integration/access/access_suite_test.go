@@ -179,7 +179,12 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 	// real attributes via the REAL ABAC engine. Mirrors the k3ud/g776 pattern.
 	propRepo := worldpg.NewPropertyRepository(pool)
 	parentLocResolver := worldpg.NewParentLocationResolver(pool)
-	propProvider := attribute.NewPropertyProvider(propRepo, parentLocResolver)
+	// Plan 02-13: the third argument resolves the row's character-keyed owner /
+	// visible_to / excluded_from into their player-keyed peers. A REAL
+	// CharacterOwnerResolver is constructible here (the suite holds the pool), so
+	// this suite exercises the derivation rather than the nil-resolver omit path.
+	charOwnerResolver := worldpg.NewCharacterOwnerResolver(pool)
+	propProvider := attribute.NewPropertyProvider(propRepo, parentLocResolver, charOwnerResolver)
 	if err := resolver.RegisterProvider(propProvider); err != nil {
 		pool.Close()
 		return nil, err
