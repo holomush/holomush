@@ -212,7 +212,7 @@ Plans:
 4. An off-location viewer can read a character's **public properties** where `seed:player-character-colocation` previously **denied** it — shipped only after an audit establishes exactly which existing `parent_type='character' AND visibility='public'` rows the widened policy exposes. The **in-world-description half is deferred to Phase 4** by D-29 (`02-CONTEXT.md`): the `resource is character` permit that would carry `characters.description` also gates `world.Service.GetCharacter`, whose `characterToProto` projection returns `PlayerId` and `LocationId` and whose `principal is character` test admits every ephemeral guest — so it lands with Phase 4's projection narrowing rather than ahead of it. The description audit moves with it.
 5. `seed:admin-section-access` permits an admin and denies a builder, a plain player, and a guest across **all seven section ids** — each denial paired with a positive control proving the subject would otherwise have been permitted, and the id list asserted by set equality — and an eighth section added later needs no new policy.
 
-**Plans**: 12/13 plans executed
+**Plans**: 13/13 plans executed
 **UI hint**: no
 **Research flag**: narrow slice only — the existing-public-character-property audit is a *data* question, not a design one, but it must be answered before `seed:profile-public-read` merges. Full `--research-phase` is not warranted.
 
@@ -232,7 +232,7 @@ Plans:
 - [x] 02-10-PLAN.md — PROFILE-11 exposure audit artifact and the widening's paired proof
 - [x] 02-12-PLAN.md — Duplicate detection, Go backfill, unique index, resolution CLI, RED-first uniqueness proof
 - [x] 02-13-PLAN.md — Row-identity resolution: player-scoped roles, PropertyProvider player-keyed peers, provider registration
-- [ ] 02-11-PLAN.md — SPEC amendments, validation map, abac-reviewer routing, phase gate
+- [x] 02-11-PLAN.md — SPEC amendments, validation map, abac-reviewer routing, phase gate
 
 ### Phase 3: World Character Commands
 
@@ -334,7 +334,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Channels Subsystem | v0.11 | 6/6 | In Progress|  |
-| 2. Scenes Lineage Completion | v0.11 | 12/13 | In Progress|  |
+| 2. Scenes Lineage Completion | v0.11 | 13/13 | In Progress|  |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |

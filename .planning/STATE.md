@@ -4,17 +4,17 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: abac-schema-vocabulary
-status: executing
-stopped_at: Completed 02-10-PLAN.md
-last_updated: "2026-08-05T19:39:22.769Z"
+status: verifying
+stopped_at: Completed 02-11-PLAN.md — phase 02 closeout; abac-reviewer gate OUTSTANDING
+last_updated: "2026-08-05T20:16:23.589Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 26
-  completed_plans: 25
-  percent: 29
+  completed_plans: 26
+  percent: 43
 ---
 
 # Project State
@@ -35,8 +35,8 @@ complete character identity surface (creation, management, public profiles with 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 (abac-schema-vocabulary) — EXECUTING
 Plan: 13 of 13
-Status: Ready to execute
-Progress: [██████████] 96% (1/6 phases)
+Status: Phase complete — ready for verification
+Progress: [██████████] 100% (1/6 phases)
 Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -239,6 +239,7 @@ no action needed.
 | Phase 02 P09 | 95min | 3 tasks | 9 files |
 | Phase 02 P12 | ~200min | 3 tasks | 45 files |
 | Phase 02 P10 | 63min | 6 tasks | 5 files |
+| Phase 02 P11 | 105m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -478,6 +479,11 @@ the next milestone yet.
 - [Phase ?]: 02-12: INV-WORLD-4's 'exactly TWO sanctioned out-of-world writers' is now false (the operator rename CLI is a third); the registry text amendment is owned by plan 02-11
 - [Phase ?]: 02-10 Task 2 (checkpoint:decision, gate=blocking) — evidence-recording scheme for the PROFILE-11 exposure audit: SANITIZED-LEDGER. Maintainer-selected, not auto-selected. 02-AUDIT-RESULT.md carries one ledger line per adjudicated row (stable row id, md5 content digest, character length, verdict) plus the five aggregate result sets; the detailed text is read from an operator-only report generated outside the repository and deleted. Explicitly confirmed: NO player-authored text is to be committed to this repository — no entity_properties value, no characters.description text, no character or player name, and no truncated or representative excerpt. Hashes and lengths only. Rejected: private-detailed-record (splits the phase's evidence across two homes, one outside the review the phase is gated on).
 - [Phase ?]: 02-10 Task 4 (checkpoint:decision, gate=blocking) — remediation of the PROFILE-11 exposure audit: NO-REMEDIATION-REQUIRED. Maintainer-selected, not auto-selected. Rows in scope: none — the property ledger and the description ledger are both 0 rows and entity_properties is empty in its entirety. Enumerated remediate row ids: none. Prior-value capture and rollback: not applicable, because no row is written. Basis: the ledger actually produced by kopia snapshot 7e48a9b592c2e0d302a5da3cf0171835, not an assumption about it — which is the one condition the option's own text attaches. Task 4b therefore performs no write, creates no 02-REMEDIATION.sql, and touches no database.
+- [Phase ?]: abac-reviewer gate is OUTSTANDING and blocking: it is a repo-owned sub-agent and the 02-11 executor had no agent-dispatch tool; no verdict was fabricated
+- [Phase ?]: INV-WORLD-4 amended TWO -> THREE out-of-world writers (02-12's rename CLI), an edit to an existing entry rather than a renumber
+- [Phase ?]: D-03's tier-floor count verified against seed.go (2 == 2) and 02-CONTEXT.md deliberately NOT edited — a check that self-heals is not a check
+- [Phase ?]: 01-SPEC §8.5.1.1 option 2 recorded REJECTED; D-01's five viewer twins are the settled shape
+- [Phase ?]: 02-RESEARCH.md's stale schema section deliberately NOT rewritten — a dated research record is annotated, never rewritten
 
 ### Pending Todos
 
@@ -493,6 +499,8 @@ None yet.
 
 - Operator action outstanding: ruleset 11923801 unchanged; no coverage context gates merges (#4875, #4876)
 - 02-07: PROFILE-11's characters.description half is NOT discharged in Phase 2 — D-29 defers seed:profile-public-read-character to Phase 4, to land with the characterToProto projection narrowing. EXT-07's admin section registry is still 02-09's.
+- BLOCKING pre-merge: abac-reviewer (/holomush-dev:review-abac) has NOT reviewed the Phase 2 diff. D-05 makes it mandatory. Brief is written verbatim in 02-11-SUMMARY.md; owner is the orchestrator/human.
+- MAINTAINER DECISION: ROADMAP success criterion 4 — the in-world-description half is deferred to Phase 4 by D-29. Three options stated in 02-11-SUMMARY.md, none selected. Criterion 1 is settled by D-30 and MUST NOT be touched.
 
 ### Quick Tasks Completed
 
@@ -525,11 +533,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-05T19:39:22.758Z
+Last session: 2026-08-05T20:16:12.262Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02-10-PLAN.md
+Stopped at: Completed 02-11-PLAN.md — phase 02 closeout; abac-reviewer gate OUTSTANDING
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
