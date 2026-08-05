@@ -183,9 +183,15 @@ What the evidence above hands to that decision: the ledger carries **zero** `rem
 verdicts, because it carries zero rows. There are no row ids to enumerate and no prior
 values to capture.
 
-This section is **not** the `## Remediation verdict` section the plan's completion gate
-requires. That section records an approver and a date and is written by Task 4b, after
-Task 4 is answered.
+This section is **not** the recorded-verdict section the plan's completion gate looks
+for. That one carries an approver and a date, and Task 4b writes it after Task 4 is
+answered.
+
+Its heading is deliberately **not** spelled out anywhere in this file. That gate is a
+literal substring match over this document, so writing the heading inside a sentence
+explaining that the section is absent would satisfy the gate while the decision it
+stands for is still outstanding — which is precisely the fail-open the gate exists to
+prevent (B-13).
 
 ---
 
