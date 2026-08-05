@@ -492,6 +492,92 @@ It works WITHIN `INV-WORLD-4`'s writer-boundary fence:
 (`world_import_graph_test.go`) gained one allowlist entry, documented above. No
 ad-hoc `INV-NAME-*` family was minted.
 
+## Post-landing fix: a production concurrency defect the spec caught
+
+An independent re-run of `task test:int -- ./test/integration/charname/...`
+failed roughly 2 runs in 4 on this plan's concurrent-claim spec, in two
+different ways: `Expect(chars[i]).NotTo(BeNil())` firing inside the
+`errs[i] == nil` branch, and BOTH claims refused with the SYNTACTIC rule
+(`must contain letters and spaces only`) on the literal constant `"Brenna"`.
+
+**Root cause — a real production bug, not a test defect.**
+`internal/charname/pipeline.go` held two **stateful** `golang.org/x/text`
+transformers in package-level vars: `transform.Chain(norm.NFKC,
+runes.Remove(runes.In(unicode.Cf)))` and `cases.Fold()`. `cases.Caser`'s own doc
+states "A Caser may be stateful and should therefore not be shared between
+goroutines", and `transform.Chain` returns a `*chain` carrying mutable `link`,
+`err` and `errStart` fields plus a read/write buffer per link. `Normalize` is
+called by **every** character create, so two players creating at the same moment
+interleave one call's `Reset` with another's `Transform`.
+
+Both observed manifestations follow directly:
+
+- **the syntactic refusal** is a truncated or garbled `display` reaching
+  `syntax.ValidateName`. The input the validator saw was not the string the
+  caller passed — exactly the possibility the coordinator flagged.
+- **the "nil character, nil error"** was never returned by `Create` at all. The
+  goroutine **panicked** inside `Normalize` (`slice bounds out of range` in
+  `transform.String`), so `defer wg.Done()` ran, the assignment never happened,
+  and the main goroutine read a zero-valued slot: `errs[i] == nil` counted as a
+  win and `chars[i]` was nil.
+
+**Made deterministic before fixing.**
+`internal/charname/pipeline_concurrency_test.go` runs `Normalize` from 1,000
+goroutines over five fixtures and asserts **equality with the sequential
+result** — not merely that nothing panicked, since a corrupted transformer
+usually returns a wrong string rather than crashing.
+
+```
+task test -- -run 'TestNormalizeIsSafeForConcurrentUse|TestSkeletonIsSafeForConcurrentUse' ./internal/charname/
+```
+
+**Exit 201**, three concurrent panics with the stack pointing straight at the
+shared chain:
+
+```
+panic: runtime error: slice bounds out of range [36:6]
+  golang.org/x/text/transform.String(...)  transform.go:650
+  charname.Normalize(...)                  pipeline.go:66
+panic: runtime error: slice bounds out of range [36:18]
+  golang.org/x/text/transform.(*link).src(...)      transform.go:370
+  golang.org/x/text/transform.(*chain).Transform(...) transform.go:422
+```
+
+`TestSkeletonIsSafeForConcurrentUse` passed in the same RED run — the paired
+control proving the defect is about **shared state**, not about x/text being
+unusable concurrently (`norm.Form` is a `type Form int` whose `String` allocates
+its own buffer).
+
+**Fix.** The pipeline now uses only stateless forms: `norm.NFKC.String`, a pure
+`strings.Map` for the Cf strip, and a `Caser` constructed per call and never
+escaping. The doc comment says why, and says not to hoist them back for the
+allocation. The transform-error branch became unreachable and was removed; the
+empty-normal-form check still catches everything it caught, and the package's
+existing behavioural table is unchanged and green (173 tests).
+
+**Spec hardening.** The concurrent-claim spec now records that `Create`
+RETURNED, so a future panic in the create path reports itself instead of
+masquerading as a nil winner. That misdirection is what made the original
+diagnosis expensive.
+
+**Proof.**
+
+| Run | Result |
+|---|---|
+| `internal/charname` concurrency test, BEFORE the fix | **exit 201** — three panics |
+| `internal/charname` concurrency test, AFTER | **exit 0** |
+| `task test:int -- ./test/integration/charname/` ×5 | **0, 0, 0, 0, 0** |
+| the concurrent-claim spec focused, ×10 | **0 ×10** |
+| `task test` | **exit 0** — 11,016 tests |
+| `task test:int` (full) | **exit 0** — 11,469 tests, 157.0s |
+| `task lint` / `task fmt:check` | **exit 0** |
+
+Not quarantined, and it should not have been: the cause is a shared-mutable-state
+race with a deterministic reproduction, which is precisely the case
+`.claude/rules/testing.md` excludes from quarantine.
+
+**Commit:** `8e98127d3`.
+
 ## Self-Check: PASSED
 
 All eleven created artifacts exist on disk. All three commits (`7c71a8903`,
