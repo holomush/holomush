@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 )
 
@@ -78,6 +79,69 @@ func (s *PostgresRoleStore) RemoveRole(ctx context.Context, characterID, role st
 		return oops.With("character_id", characterID).With("role", role).Wrap(err)
 	}
 	return nil
+}
+
+// PlayerRoles returns the deduplicated union of roles held by any character of
+// playerID, sorted, or an EMPTY slice when the player holds no roles at all —
+// absence of roles is not an error. A malformed (non-ULID) player id IS an
+// error: silently returning an empty slice would let a caller read "bad input"
+// as "no roles", and every role-gated policy would then default-deny for a
+// reason indistinguishable from a legitimately role-less player.
+//
+// SEMANTICS: this generalizes [PostgresRoleStore.PlayerHasRole]'s documented
+// any-character-of-the-player reading from one role to the whole set, over the
+// same character_roles → characters join on c.player_id. 01-SPEC §10.5 makes
+// the player-scoped reading normative, so the web read path and the operator
+// socket cannot give two different answers to "is this human an admin" at the
+// same moment.
+//
+// The character-scoped storage with a player-scoped read is a KNOWN ASYMMETRY,
+// tracked as issue #4899 — it is a recorded design position, not an accident to
+// be tidied away by re-scoping this query to a character.
+//
+// PlayerRoles is deliberately NOT part of the [RoleStore] interface. The
+// interface is implemented and faked in several places; only this concrete type
+// can answer the query, and the ABAC stack reaches it through the
+// setup.ABACConfig.PlayerRoleLookup func field (the shipped seam shape —
+// PlayerKindLookup is already exactly this). Pinned by
+// TestRoleStoreInterfaceMethodSetIsUnchangedByPlayerRoles.
+func (s *PostgresRoleStore) PlayerRoles(ctx context.Context, playerID string) ([]string, error) {
+	if _, err := ulid.Parse(playerID); err != nil {
+		return nil, oops.Code("INVALID_PLAYER_ID").
+			With("player_id", playerID).
+			Wrapf(err, "invalid player ULID")
+	}
+
+	// DISTINCT dedupes a role held by two of the player's characters; ORDER BY
+	// makes the returned slice stable across calls. A policy's VERDICT is
+	// reproducible either way, but its failure messages are not.
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT cr.role
+		  FROM character_roles cr
+		  JOIN characters c ON cr.character_id = c.id
+		 WHERE c.player_id = $1
+		 ORDER BY cr.role
+	`, playerID)
+	if err != nil {
+		return nil, oops.Code("ROLE_PLAYER_ROLES_FAILED").
+			With("player_id", playerID).Wrap(err)
+	}
+	defer rows.Close()
+
+	roles := []string{}
+	for rows.Next() {
+		var role string
+		if err := rows.Scan(&role); err != nil {
+			return nil, oops.Code("ROLE_PLAYER_ROLES_FAILED").
+				With("player_id", playerID).Wrap(err)
+		}
+		roles = append(roles, role)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("ROLE_PLAYER_ROLES_FAILED").
+			With("player_id", playerID).Wrap(err)
+	}
+	return roles, nil
 }
 
 // PlayerHasRole returns true iff any character of playerID has role.
