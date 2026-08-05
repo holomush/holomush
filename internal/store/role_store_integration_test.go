@@ -155,8 +155,11 @@ var _ = Describe("RoleStore", func() {
 			myChar := idgen.New().String()
 			theirChar := idgen.New().String()
 			for _, p := range []string{mine, theirs} {
+				// Full id in the username, not a prefix: two ULIDs minted in the
+				// same millisecond share their leading timestamp characters, so
+				// a truncated prefix collides on players_username_key.
 				_, err := pool.Exec(ctx, `INSERT INTO players (id, username, password_hash, created_at, updated_at)
-					VALUES ($1, $2, $3, now(), now())`, p, "erin-"+p[:8], "hash")
+					VALUES ($1, $2, $3, now(), now())`, p, "erin-"+p, "hash")
 				Expect(err).NotTo(HaveOccurred())
 			}
 			_, err := pool.Exec(ctx, `INSERT INTO characters (id, player_id, name)
