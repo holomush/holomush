@@ -112,6 +112,23 @@ type ABACConfig struct {
 	// (ADR holomush-ti1b). Production wiring at subsystem.go always supplies
 	// this via auth/postgres.PlayerRepository.
 	PlayerKindLookup attribute.PlayerKindLookup
+	// PlayerRoleLookup is an optional func that resolves the PER-PLAYER role
+	// union (the roles held by any character of that player, per 01-SPEC
+	// §10.5). It feeds BOTH the viewer namespace (viewer.roles) and the player
+	// namespace (player.roles) from ONE source, so the web read path and the
+	// operator socket cannot disagree about whether the same human is an admin.
+	//
+	// It is a FUNC FIELD rather than a method on store.RoleStore deliberately:
+	// only the concrete *PostgresRoleStore can answer the query, and widening
+	// the interface would force every fake and mock of it to grow a method for
+	// no benefit. PlayerKindLookup above is the same shape.
+	//
+	// LEAVING THIS NIL IS SILENT: both namespaces simply omit roles
+	// (has_roles=false), every condition referencing them is false, and the
+	// viewer twins plus seed:admin-section-access default-deny with no error
+	// and no failing test (RESEARCH P-7's failure mode). Production wiring at
+	// internal/access/setup/subsystem.go passes roleStore.PlayerRoles.
+	PlayerRoleLookup attribute.PlayerRoleLookup
 }
 
 // BuildABACStack constructs and wires all ABAC components in the correct dependency order:
@@ -252,9 +269,38 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	if cfg.PlayerKindLookup != nil {
 		playerOpts = append(playerOpts, attribute.WithPlayerKindLookup(cfg.PlayerKindLookup))
 	}
+	if cfg.PlayerRoleLookup != nil {
+		playerOpts = append(playerOpts, attribute.WithPlayerRoleLookup(cfg.PlayerRoleLookup))
+	}
 	playerProvider := attribute.NewPlayerAttributeProvider(cfg.CryptoOperators, playerOpts...)
 	if err := resolver.RegisterProvider(playerProvider); err != nil {
 		return nil, eb.Wrapf(err, "register player provider")
+	}
+
+	// 8e. Viewer provider (subject namespace; resolves viewer.tier,
+	// viewer.player_id, viewer.has_player_id, viewer.roles, viewer.has_roles for
+	// the "viewer:anonymous" / "viewer:guest:<ulid>" / "viewer:player:<ulid>"
+	// rungs of 01-SPEC §8.4.1's tier ladder).
+	//
+	// This registration is 01-SPEC §8.4.1's Phase-2 obligation 1, and SKIPPING
+	// IT IS SILENT — which is exactly why the obligation names it. An
+	// unregistered namespace does not error: principal.viewer.tier is simply
+	// absent, a missing key evaluates FALSE for every operator, and the whole
+	// tier-floor family default-denies in production while unit tests that stub
+	// the attribute bag stay green. Plan 02-03 shipped ViewerTierProvider
+	// deliberately unregistered (provider before any seed references it); this
+	// is where it joins the stack, ahead of the 02-07 seeds that read it.
+	//
+	// Unconditional: unlike the repo-backed providers above, the viewer provider
+	// has no required dependency. The role lookup is optional and omits
+	// viewer.roles when absent (ADR holomush-ti1b).
+	viewerOpts := []attribute.ViewerTierProviderOption{}
+	if cfg.PlayerRoleLookup != nil {
+		viewerOpts = append(viewerOpts, attribute.WithViewerRoleLookup(cfg.PlayerRoleLookup))
+	}
+	viewerProvider := attribute.NewViewerTierProvider(viewerOpts...)
+	if err := resolver.RegisterProvider(viewerProvider); err != nil {
+		return nil, eb.Wrapf(err, "register viewer provider")
 	}
 
 	// 9. Command provider (resolves resource.command.name for seed policies)
