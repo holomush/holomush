@@ -6,6 +6,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/mocks"
+	"github.com/holomush/holomush/internal/charname"
+	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -26,12 +29,14 @@ type recordingGuestGenesis struct {
 	err            error
 	calls          int
 	lastChar       *world.Character
+	lastAdmitted   charname.Admitted
 	lastBindReason string
 }
 
-func (g *recordingGuestGenesis) Create(_ context.Context, char *world.Character, bindReason string) error {
+func (g *recordingGuestGenesis) Create(_ context.Context, char *world.Character, name charname.Admitted, bindReason string) error {
 	g.calls++
 	g.lastChar = char
+	g.lastAdmitted = name
 	g.lastBindReason = bindReason
 	return g.err
 }
@@ -80,7 +85,7 @@ func TestNewGuestServiceNilDeps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions, tt.genesis, tt.cleaner)
+			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions, tt.genesis, tt.cleaner, testGate())
 			require.Error(t, err)
 			assert.Nil(t, svc)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -105,12 +110,12 @@ func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
 
-	chars.EXPECT().ExistsByName(ctx, charName).Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, strings.ToLower(charName), (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -150,18 +155,18 @@ func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 
 	// First name is taken in DB; second name is free.
 	namer.EXPECT().GenerateName().Return(takenName, nil).Once()
-	chars.EXPECT().ExistsByName(ctx, takenCharName).Return(true, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, strings.ToLower(takenCharName), (*ulid.ULID)(nil)).Return(true, nil).Once()
 	namer.EXPECT().ReleaseGuest(takenName).Once()
 
 	namer.EXPECT().GenerateName().Return(freeName, nil).Once()
-	chars.EXPECT().ExistsByName(ctx, freeCharName).Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, strings.ToLower(freeCharName), (*ulid.ULID)(nil)).Return(false, nil).Once()
 
 	namer.EXPECT().StartLocation().Return(startLoc)
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -187,12 +192,12 @@ func TestGuestServiceSucceedsWhenDefaultCharacterUpdateFails(t *testing.T) {
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
-	chars.EXPECT().ExistsByName(ctx, "Coral Breeze").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "coral breeze", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(errors.New("db timeout")).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -215,12 +220,12 @@ func TestGuestServiceReturnsErrorWhenPlayerCreateFails(t *testing.T) {
 	amberStartLoc := ulid.MustNew(ulid.Now(), nil)
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(amberStartLoc)
-	chars.EXPECT().ExistsByName(ctx, "Amber Storm").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "amber storm", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	// player.Create (committed first, own pool) fails -> release name, no genesis.
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(dbErr).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -243,13 +248,13 @@ func TestGuestServiceReturnsErrorWhenCharCreateFails(t *testing.T) {
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
-	chars.EXPECT().ExistsByName(ctx, "Topaz Wind").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "topaz wind", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	// genesis fails after the player commit -> release name + orphan-player cleanup
 	// through the tombstone-emitting reaping service (D-06), NOT a raw player delete.
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -276,13 +281,13 @@ func TestGuestServiceReturnsErrorWhenSessionCreateFails(t *testing.T) {
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
-	chars.EXPECT().ExistsByName(ctx, "Marble Creek").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "marble creek", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(errors.New("session db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -309,11 +314,11 @@ func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
 	for range 10 {
 		name := "Taken_Name"
 		namer.EXPECT().GenerateName().Return(name, nil).Once()
-		chars.EXPECT().ExistsByName(ctx, "Taken Name").Return(true, nil).Once()
+		chars.EXPECT().ExistsByNormalizedName(ctx, "taken name", (*ulid.ULID)(nil)).Return(true, nil).Once()
 		namer.EXPECT().ReleaseGuest(name).Once()
 	}
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -334,10 +339,10 @@ func TestGuestServiceReturnsErrorWhenExistsByNameFails(t *testing.T) {
 	cleaner := &recordingGuestCleaner{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
-	chars.EXPECT().ExistsByName(ctx, "Crystal Fog").Return(false, errors.New("db error")).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "crystal fog", (*ulid.ULID)(nil)).Return(false, errors.New("db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -364,12 +369,12 @@ func TestCreateGuestMintsBinding(t *testing.T) {
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
-	chars.EXPECT().ExistsByName(ctx, "Onyx River").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "onyx river", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -382,4 +387,123 @@ func TestCreateGuestMintsBinding(t *testing.T) {
 	assert.Equal(t, "initial_bind_guest", genesis.lastBindReason)
 	assert.Equal(t, result.Character.ID, genesis.lastChar.ID)
 	assert.Equal(t, result.Player.ID, genesis.lastChar.PlayerID)
+}
+
+// unverifiableCorpusLookup is the D-30 fail-closed state: the corpus carries a
+// row with a NULL skeleton, so the gate refuses to adjudicate ANY name.
+type unverifiableCorpusLookup struct{}
+
+func (unverifiableCorpusLookup) SkeletonExists(_ context.Context, _ string, _ *ulid.ULID) (bool, bool, error) {
+	return false, true, nil
+}
+
+// failingCorpusLookup is the other corpus-level fault: the lookup query itself
+// failed (database down, pool exhausted).
+type failingCorpusLookup struct{}
+
+func (failingCorpusLookup) SkeletonExists(_ context.Context, _ string, _ *ulid.ULID) (bool, bool, error) {
+	return false, false, errors.New("connection refused")
+}
+
+// TestGuestServiceReportsACorpusFaultAsItselfNotAsNameExhaustion is WR-01's
+// regression.
+//
+// Both faults below refuse EVERY generated candidate identically, so the retry
+// loop used to burn all ten attempts and return GUEST_NAME_EXHAUSTED — "unable
+// to find unique guest name" — for a database outage, with the real error
+// discarded and nothing logged. The operator-visible symptom pointed at the
+// name generator; the cause was the database.
+//
+// `.Once()` expectations are deliberately absent on the namer: the point of the
+// fix is that the loop STOPS on the first attempt, so a second GenerateName
+// would be a mock failure.
+func TestGuestServiceReportsACorpusFaultAsItselfNotAsNameExhaustion(t *testing.T) {
+	tests := []struct {
+		name string
+		// wantCode is the GATE's own code, not the outer GUEST_CREATE_FAILED
+		// wrapper: errutil.AssertErrorCode resolves the DEEPEST code in the
+		// chain (issue #4902), and that is the right contract here — the
+		// operator wants "the corpus could not be adjudicated", not a generic
+		// create failure.
+		wantCode string
+		lookup   charname.SkeletonLookup
+	}{
+		{
+			"an unverifiable corpus (the 000054 -> 000055 fail-closed window)",
+			"NAME_SKELETON_UNVERIFIABLE",
+			unverifiableCorpusLookup{},
+		},
+		{
+			"a failed corpus lookup (database unreachable)",
+			"NAME_SKELETON_LOOKUP_FAILED",
+			failingCorpusLookup{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			namer := mocks.NewMockGuestNamer(t)
+			players := mocks.NewMockPlayerRepository(t)
+			chars := mocks.NewMockGuestCharacterRepository(t)
+			sessions := mocks.NewMockPlayerSessionRepository(t)
+
+			const candidate = "Crystal_Fog"
+			namer.EXPECT().GenerateName().Return(candidate, nil).Once()
+			namer.EXPECT().ReleaseGuest(candidate).Once()
+
+			svc, err := auth.NewGuestService(
+				namer, players, chars, sessions,
+				&recordingGuestGenesis{}, &recordingGuestCleaner{},
+				&charname.Gate{Skeletons: tt.lookup},
+			)
+			require.NoError(t, err)
+
+			result, err := svc.CreateGuest(ctx)
+			require.Error(t, err)
+			assert.Nil(t, result)
+			errutil.AssertErrorCode(t, err, tt.wantCode)
+			assert.NotContains(t, err.Error(), "unable to find unique guest name",
+				"a corpus fault must not be reported as name exhaustion")
+		})
+	}
+}
+
+// TestGuestServiceStillReportsGenuineNameExhaustion is the paired control.
+//
+// A per-candidate refusal — one the NEXT generated name could clear — must keep
+// retrying and must keep the existing GUEST_NAME_EXHAUSTED contract, so the fix
+// above cannot have been achieved by aborting on every refusal.
+func TestGuestServiceStillReportsGenuineNameExhaustion(t *testing.T) {
+	ctx := context.Background()
+
+	namer := mocks.NewMockGuestNamer(t)
+	players := mocks.NewMockPlayerRepository(t)
+	chars := mocks.NewMockGuestCharacterRepository(t)
+	sessions := mocks.NewMockPlayerSessionRepository(t)
+
+	// Every candidate is refused by the block list — a policy verdict about the
+	// candidate, not about the corpus.
+	blocked, err := blocklist.Compile([]string{"taken*"})
+	require.NoError(t, err)
+
+	for range 10 {
+		const name = "Taken_Name"
+		namer.EXPECT().GenerateName().Return(name, nil).Once()
+		namer.EXPECT().ReleaseGuest(name).Once()
+	}
+
+	svc, err := auth.NewGuestService(
+		namer, players, chars, sessions,
+		&recordingGuestGenesis{}, &recordingGuestCleaner{},
+		&charname.Gate{Skeletons: noCollisionLookup{}, BlockList: blocked},
+	)
+	require.NoError(t, err)
+
+	result, err := svc.CreateGuest(ctx)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	errutil.AssertErrorCode(t, err, "GUEST_NAME_EXHAUSTED")
+	errutil.AssertErrorContext(t, err, "last_refusal_code", "NAME_BLOCKED")
 }

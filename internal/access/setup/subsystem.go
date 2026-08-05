@@ -101,9 +101,22 @@ func (s *ABACSubsystem) Prepare(ctx context.Context) error {
 		ObjectRepo:             postgres.NewObjectRepository(pool),
 		PropertyRepo:           postgres.NewPropertyRepository(pool),
 		ParentLocationResolver: postgres.NewParentLocationResolver(pool),
+		// Plan 02-13: resolves the row's character-keyed owner / visible_to /
+		// excluded_from into their player-keyed peers, without which the 02-07
+		// `viewer:` twins have nothing to compare a player id against and every
+		// private/restricted/admin profile field goes permanently invisible.
+		// Sits beside NewParentLocationResolver, its in-tree precedent.
+		CharacterOwnerResolver: postgres.NewCharacterOwnerResolver(pool),
 		RoleStore:              roleStore,
-		AuditMode:              s.cfg.AuditMode,
-		CryptoOperators:        operators,
+		// Plan 02-13: a direct method value on the CONCRETE *PostgresRoleStore.
+		// This is the production composition root the cross-AI review found
+		// unowned — the concrete store is reachable only here, so a change that
+		// declared the ABACConfig seam without filling it in this file would
+		// leave viewer.roles and player.roles absent in production while every
+		// unit test stayed green.
+		PlayerRoleLookup: roleStore.PlayerRoles,
+		AuditMode:        s.cfg.AuditMode,
+		CryptoOperators:  operators,
 		PlayerKindLookup: func(ctx context.Context, playerID string) (bool, error) {
 			id, err := ulid.Parse(playerID)
 			if err != nil {

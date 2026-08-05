@@ -21,8 +21,12 @@ func TestSeedPoliciesCount(t *testing.T) {
 	// scene reads/writes are now gated solely by the core-scenes plugin's
 	// read-scene-as-* / write-scene-as-participant policies. Phase-1 channels
 	// added seed:plugin-stream-subscribe (48 → 49) — the instance-level write
-	// analogue of seed:plugin-stream-read (HIGH-3).
-	assert.Len(t, seeds, 49, "expected 49 seed policies (40 permit, 9 forbid)")
+	// analogue of seed:plugin-stream-read (HIGH-3). v0.13 phase 2 plan 02-07
+	// added the two viewer-tier floors and profile reachability (49 → 52), then
+	// the five viewer read twins and the PROFILE-11 property widening (52 → 58)
+	// — one of the five twins is a forbid (9 → 10) — and seed:admin-section-access
+	// (58 → 59).
+	assert.Len(t, seeds, 59, "expected 59 seed policies (49 permit, 10 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -79,8 +83,8 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 40, permitCount, "expected 40 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
-	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
+	assert.Equal(t, 49, permitCount, "expected 49 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, +3 v0.13 phase-2 profile visibility: two viewer-tier floors and profile reachability, +4 viewer read twins, +1 PROFILE-11 property widening, +1 EXT-07 admin-section access, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
+	assert.Equal(t, 10, forbidCount, "expected 10 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies + 1 v0.13 phase-2 seed:viewer-property-restricted-excluded)")
 }
 
 func TestSeedPoliciesExpectedNames(t *testing.T) {
@@ -153,6 +157,26 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:plugin-stream-subscribe",
 		// Character directory (INV-ACCESS-9)
 		"seed:directory-list-characters",
+		// Profile visibility: viewer-tier floors (01-SPEC §8.2.1, §8.6; D-03).
+		// TWO, not three: §8.6 seeds no name at the `player` rung and the DSL's
+		// list grammar forbids an empty `in []`. The conditional re-entry guard
+		// lives in seed_profile_visibility_test.go.
+		"seed:profile-tier-floor-anonymous",
+		"seed:profile-tier-floor-guest",
+		// Profile reachability (01-SPEC §8.4.2)
+		"seed:profile-reachable",
+		// Viewer-flavored row-keyed reads — term B of §8.5.1's conjunction
+		// (D-01). seed:property-owner-write deliberately has NO twin.
+		"seed:viewer-property-public-read",
+		"seed:viewer-property-private-read",
+		"seed:viewer-property-admin-read",
+		"seed:viewer-property-restricted-visible-to",
+		"seed:viewer-property-restricted-excluded",
+		// PROFILE-11 widening (D-10, D-11). The character half
+		// (seed:profile-public-read-character) is DEFERRED TO PHASE 4 by D-29.
+		"seed:profile-public-read-property",
+		// Admin sections (EXT-07, 01-SPEC §10.4, §10.5)
+		"seed:admin-section-access",
 	}
 
 	seeds := SeedPolicies()
@@ -174,6 +198,9 @@ func TestSeedPoliciesForbidPoliciesAreExpected(t *testing.T) {
 		"seed:deny-events-system-crypto-policy-read-plugin":    true,
 		"seed:deny-events-system-read-character":               true,
 		"seed:deny-events-system-read-plugin":                  true,
+		// v0.13 phase 2 (D-01): the viewer twin of
+		// seed:property-restricted-excluded, the family's one forbid.
+		"seed:viewer-property-restricted-excluded": true,
 	}
 	compiler := NewCompiler(emptySchema())
 	for _, s := range SeedPolicies() {

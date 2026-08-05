@@ -362,3 +362,35 @@ func TestExactlyOneBlankImportWiresTheMigrationsPackageIntoStore(t *testing.T) {
 	assert.Equal(t, "migrations_register.go", sites[0],
 		"the blank import lives in its own file so its reason is not buried in an import block")
 }
+
+// TestGoMigrationCensusMatchesTheMigrationsDirectory holds go_migration_census.go
+// to the on-disk corpus in BOTH directions.
+//
+// The census is what loadMigrationVersions and loadMigrationNames merge in for
+// migrations the `.sql`-only embed glob cannot see. A missing entry is not
+// cosmetic: the adopt gate seeds one goose ledger row per version it knows
+// about, so an omitted version is recorded as NOT applied while every higher
+// version IS, and goose refuses the next Up with "detected 1 missing
+// (out-of-order) migration lower than database version". A stale extra entry
+// has the mirror failure — a ledger row for a migration that does not exist.
+func TestGoMigrationCensusMatchesTheMigrationsDirectory(t *testing.T) {
+	entries, err := os.ReadDir(migrationsDirName)
+	require.NoError(t, err, "should read %s/", migrationsDirName)
+
+	onDisk := make(map[uint]string)
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !versionedGoMigrationName.MatchString(name) {
+			continue
+		}
+		var version uint
+		_, scanErr := fmt.Sscanf(name, "%06d", &version)
+		require.NoErrorf(t, scanErr, "should parse a version out of %s", name)
+		onDisk[version] = strings.TrimSuffix(name, ".go")
+	}
+
+	assert.Equal(t, onDisk, goMigrationNames,
+		"go_migration_census.go must name exactly the versioned .go migrations in %s/ — "+
+			"an omission wedges the adopt gate's ledger seed, an extra entry seeds a row for a "+
+			"migration that does not exist", migrationsDirName)
+}

@@ -50,13 +50,31 @@ or got wrong.
   provokes the forbidden repair. — **Reversibility:** one-way — this is a
   correction to a shipped normative section; reversing it reopens the §8.8
   violation.
-- **D-03:** The tier-floor configuration ships as **three policies, one per floor
-  rung** (`anonymous` / `guest` / `player`), each carrying an explicit literal
-  list of the §8.6 attribute names at that floor, ANDed with §8.2.1's
-  set-membership clearing test. Not one policy per attribute name, and not a
-  single name→floor map. The totality rule holds: names are matched as whole
-  strings, no glob or prefix, and a name in no list is denied rather than
-  defaulted.
+- **D-03:** The tier-floor configuration ships as **one policy per floor rung that
+  has at least one seeded §8.6 member**, each carrying an explicit literal list of
+  the §8.6 attribute names at that floor, ANDed with §8.2.1's set-membership
+  clearing test. Not one policy per attribute name, and not a single name→floor
+  map. The totality rule holds: names are matched as whole strings, no glob or
+  prefix, and a name in no list is denied rather than defaulted.
+  - **AMENDED 2026-08-04 — the v0.13 seed emits TWO policies, not three.** This
+    decision originally read "three policies, one per floor rung (`anonymous` /
+    `guest` / `player`)". Verified during planning: §8.6's seeded-default column
+    places every row at `anonymous` or `guest`, so the `player` rung has **no**
+    seeded member; and the DSL's list grammar is `'[' @@ (',' @@)* ']'`
+    (`internal/access/policy/dsl/ast.go:232-236`), which requires at least one
+    literal — an empty `in []` does not parse. A third policy therefore cannot be
+    written at all without inventing a member, which would be worse than omitting
+    it. So the v0.13 seed ships `seed:profile-tier-floor-anonymous` and
+    `seed:profile-tier-floor-guest` and no `player`-rung policy.
+  - **Re-entry condition:** the moment any §8.6 row is seeded at `player`, the
+    third policy becomes both writable and required. Plan `02-07` ships a
+    conditional guard test that is green while the antecedent is false and turns
+    RED at exactly that moment.
+  - This is a **recorded deviation from a locked decision, not a re-decision**: the
+    shape D-03 mandates (one policy per rung, literal name lists, set-membership
+    clearing) is unchanged; only the count follows from the seeded data. Plan
+    `02-11` carries the matching §8.6 amendment and asserts the count recorded
+    here equals the count actually in `internal/access/policy/seed.go`.
 - **D-04:** Phase 2 ships an **additive-permit regression test**: seed a
   `profile.*` row at `visibility='private'`, give the viewer a tier that clears
   that name's floor, and assert the attribute is **absent**. Under the
@@ -68,6 +86,39 @@ or got wrong.
   The finding is additionally **routed to `abac-reviewer`** before Phase 2 merges —
   `abac-reviewer` identified the §8.5.1.1 residual originally and has the context
   to confirm the rejection does not trade one hole for another.
+- **D-27 (added 2026-08-04):** The viewer twins keep **character-scoped**
+  semantics. The derived player-keyed property peers plan `02-13` supplies are
+  derived in the **direction that cannot widen their policy's effect**, never as a
+  plain union across a player's characters:
+  - **Permit-side peers — the ALL direction.** A player id appears in
+    `owner_player_id` or `visible_to_players` only when **every** character of that
+    player appears in the row's corresponding character-keyed field. A viewer
+    therefore never obtains a permit that one of that player's characters lacked.
+  - **Forbid-side peer — the ANY direction.** A player id appears in
+    `excluded_from_players` when **any** of that player's characters appears in
+    `excluded_from`, so an exclusion is never lost.
+  - **What was proposed and deliberately NOT taken.** The plan set originally
+    specified a plain union in both directions — "a player is a member iff ANY of
+    their characters is a member". Union is conservative for the `forbid` and is
+    kept there, but for `owner_player_id` and `visible_to_players` it **broadens
+    read access across a player's alternate characters**, which every shipped
+    `seed:property-*` policy is character-scoped against
+    (`internal/access/policy/seed.go:117-143`). That is an authorization widening,
+    it was never decided, and this phase is the one whose subject is privacy — so
+    the conservative direction is the Phase-2 default and the widening is a
+    Phase-4 decision.
+  - **Consequence, recorded rather than discovered.** A player holding two or more
+    characters does not receive an `owner`/`visible_to` permit through the web
+    viewer path unless the row names all of their characters, so the viewer path
+    can be **narrower** than the grid for identity-keyed rows. That is fail-closed
+    and deliberate.
+  - **Gated.** Plan `02-13` carries a blocking `checkpoint:decision` presenting the
+    union alternative with its widening spelled out, so the maintainer may choose
+    union semantics **before** execution rather than discovering the choice in the
+    code. Plan `02-11`'s Amendment F records the decision in `01-SPEC.md` §8.5
+    alongside the derived peers themselves. — **Reversibility:** costly — the
+    derivation direction is what the five viewer twins evaluate; changing it later
+    re-derives every profile-read fixture in Phase 4.
 
 ### Admin section registry and the D1 denial-code oracle
 
@@ -251,6 +302,65 @@ or got wrong.
   `characters.player_id` row ("never an ordering") stays correct — A2 is a
   different claim, not a contradiction of it.
 
+### Substrate resolutions from cross-AI review cycle 3
+
+Cycle 3 (2026-08-04) surfaced four defects in the **substrate design** rather than
+in plan boundaries. Three of them could not be closed by editing task bodies —
+they needed a decision first, and the maintainer settled all three on 2026-08-04.
+Recorded here because they amend decisions above.
+
+- **D-28:** The `world → charname → world` import cycle is broken by **extracting
+  a dependency-free syntax leaf**. The syntactic name rules move to a new
+  `internal/charname/syntax` package that imports neither `world` nor `charname`;
+  `charname.Gate` calls it directly, and `world.ValidateCharacterName` becomes a
+  thin wrapper over it. The `world → charname` edge (`charname.Admitted` on
+  `CharacterRepository.Create`) therefore survives, so the "the gate is the only
+  constructor of `Admitted`" fence that D-18's census rule and the self-exclusion
+  work both lean on stays intact. — **Reversibility:** reversible — collapsing the
+  leaf back is a mechanical move, but only while the constructor set is unpinned.
+- **D-29:** The broad `permit(principal is character, action in ["read"], resource
+  is character)` **does not land in Phase 2.** It gates
+  `world.Service.GetCharacter`, whose `characterToProto` projection returns
+  `PlayerId` and `LocationId` — so an unconditional permit would let every
+  character, **including every ephemeral guest**, enumerate alt-to-player linkage
+  and live grid position for the whole roster. It was justified by PROFILE-10a,
+  which is **not** in this phase's requirement set (`IDENT-06`, `IDENT-07`,
+  `IDENT-08`, `IDENT-09`, `PROFILE-11`, `EXT-07`), and Phase 2 ships no RPCs, so
+  nothing here needs it. It moves to **Phase 4**, to land together with the
+  projection narrowing that makes it safe.
+  - **This is NOT an instance of D-10/D-11.** Those govern `entity_properties`
+    rows, which carry a `visibility` column; D-11's mandated remedy ("change the
+    row's `visibility`") is what makes that widening acceptable. `characters`
+    (`000001_baseline.sql:72-79`) has **no `visibility` column**, so the escape
+    hatch D-10/D-11 relied on does not exist for this resource. Any plan text
+    citing D-11 to justify a `resource is character` permit is reasoning from a
+    premise that does not hold here. — **Reversibility:** reversible — deferring
+    costs nothing this phase.
+- **D-30:** The confusable guarantee is **enforced by serialization**, not by a
+  unique index and not merely advisory. Three parts, all required:
+  1. The skeleton index **stays non-unique** — D-21's rationale holds (the
+     confusables table shifts between Unicode versions, and a unique constraint
+     would block a legitimate post-upgrade recompute that collapses two live
+     rows).
+  2. The check and the write are **serialized**: `Gate.Check`'s `SkeletonExists`
+     read and the subsequent insert run inside one transaction holding an
+     advisory lock keyed on the skeleton, closing the check-before-insert race
+     that `000056`'s `normalized_name` unique index structurally cannot catch
+     (differing normalized names is precisely what makes a pair confusable).
+  3. `000055`'s duplicate detection **also scans skeleton collisions**, not only
+     `normalized_name`, so **pre-existing** confusable pairs are detected. D-22's
+     halt-and-report path handles them exactly as it handles normalized-name
+     duplicates.
+  - **Sequencing constraint:** the gate MUST NOT adjudicate against a partially
+    populated skeleton column. A live gate reading a `NULL` skeleton admits a new
+    confusable of an existing row, so the backfill must precede the gate going
+    live — the phase's wave ordering has to reflect that, not just its migration
+    ordering.
+  - With all three, ROADMAP success criterion 1's "rejected server-side" is true
+    for concurrent writers and for the pre-existing corpus, so the criterion's
+    wording needs no amendment. — **Reversibility:** one-way for the migration
+    half; the advisory-lock seam is reversible.
+
 ### Claude's Discretion
 
 - **Unicode mechanism for UTS #39 confusables/skeleton.** Offered as a gray area
@@ -262,8 +372,9 @@ or got wrong.
   maintained third-party package, generated-into-repo table, or vendored data.
   **Binding constraint regardless of choice:** the Unicode version MUST be
   pinnable and MUST be recorded per-row (D-23).
-- Exact policy ids/names for the three tier-floor policies and the viewer
-  read-policy twins, so long as D-01 and D-03's shapes hold.
+- Exact policy ids/names for the tier-floor policies (**two** after D-03's
+  2026-08-04 amendment, not three) and the viewer read-policy twins, so long as
+  D-01 and D-03's shapes hold.
 - Test-file placement and naming throughout, per `.claude/rules/testing.md`.
 
 </decisions>

@@ -11,16 +11,38 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
 
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/test/testutil"
 )
+
+// uniqueCharName suffixes a fixture's display name with part of the character
+// id that will carry it.
+//
+// Migration 000056 makes characters.normalized_name UNIQUE, so two fixture rows
+// sharing a literal display name now collide where they previously did not. It
+// is DETERMINISTIC on purpose — unlike charFixtureName, which draws fresh
+// randomness — so a call site may compute the name and its identity columns in
+// two separate expressions and get a matching pair.
+func uniqueCharName(base string, id ulid.ULID) string {
+	// The SUFFIX, never a prefix: a ULID string is 10 characters of timestamp
+	// followed by 16 of randomness, so id.String()[:6] is identical for every
+	// id minted in the same millisecond — which is exactly what a fixture does.
+	return base + " " + id.String()[20:]
+}
 
 // testPool is the shared database pool for integration tests.
 var testPool *pgxpool.Pool
 
 // testCleanup is called to terminate the container after tests.
 var testCleanup func()
+
+// testConnStr is the container's connection string. It exists so a spec can
+// open a database/sql handle — BackfillCharacterIdentity's only production
+// caller is a goose Go migration running on a *sql.Tx, so driving it through
+// the pgx pool would exercise a shape the migration never uses.
+var testConnStr string
 
 // TestMain sets up a PostgreSQL testcontainer for integration tests.
 func TestMain(m *testing.M) {
@@ -52,6 +74,7 @@ func TestMain(m *testing.M) {
 	}
 
 	testPool = pool
+	testConnStr = pgEnv.ConnStr
 	testCleanup = func() {
 		pool.Close()
 		_ = pgEnv.Terminate(ctx)

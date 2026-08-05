@@ -5,13 +5,14 @@ package world
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"regexp"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/oklog/ulid/v2"
+
+	"github.com/holomush/holomush/internal/charname/syntax"
 )
 
 // Validation limits for domain types.
@@ -23,9 +24,14 @@ const (
 	MaxVisibleToCount    = 100
 	MaxLockDataKeys      = 20
 
-	// Character name limits (stricter than general names)
-	MinCharacterNameLength = 2
-	MaxCharacterNameLength = 32
+	// Character name limits (stricter than general names).
+	//
+	// Aliases of the internal/charname/syntax leaf's bounds, so the two cannot
+	// drift: the leaf is the single implementation of the rules (D-28) and
+	// these names stay for the callers outside this package that already read
+	// them.
+	MinCharacterNameLength = syntax.MinNameLength
+	MaxCharacterNameLength = syntax.MaxNameLength
 )
 
 // ValidationError represents an input validation error.
@@ -56,9 +62,6 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// characterNameRegex matches names with only Unicode letters and single spaces between words.
-var characterNameRegex = regexp.MustCompile(`^[\p{L}]+( [\p{L}]+)*$`)
-
 // ValidateCharacterName checks that a character name is valid.
 // Character names have stricter rules than general names:
 // - Letters and spaces only (no numbers, no special characters)
@@ -66,63 +69,26 @@ var characterNameRegex = regexp.MustCompile(`^[\p{L}]+( [\p{L}]+)*$`)
 // - No leading/trailing spaces
 // - No consecutive spaces
 // - Supports Unicode letters (accented characters, Cyrillic, etc.)
-func ValidateCharacterName(name string) error {
-	if name == "" {
-		return &ValidationError{Field: "name", Message: "cannot be empty"}
-	}
-
-	// Validate UTF-8 before any other processing
-	if !utf8.ValidString(name) {
-		return &ValidationError{Field: "name", Message: "must be valid UTF-8"}
-	}
-
-	// Check for leading/trailing whitespace
-	if name != strings.TrimSpace(name) {
-		return &ValidationError{Field: "name", Message: "cannot have leading or trailing spaces"}
-	}
-
-	// Check for consecutive spaces
-	if strings.Contains(name, "  ") {
-		return &ValidationError{Field: "name", Message: "cannot have consecutive spaces"}
-	}
-
-	// Use rune count for proper Unicode character counting
-	runeCount := utf8.RuneCountInString(name)
-	if runeCount < MinCharacterNameLength {
-		return &ValidationError{Field: "name", Message: fmt.Sprintf("must be at least %d characters", MinCharacterNameLength)}
-	}
-
-	if runeCount > MaxCharacterNameLength {
-		return &ValidationError{Field: "name", Message: fmt.Sprintf("must be at most %d characters", MaxCharacterNameLength)}
-	}
-
-	// Check that name contains only letters and single spaces
-	if !characterNameRegex.MatchString(name) {
-		return &ValidationError{Field: "name", Message: "must contain letters and spaces only"}
-	}
-
-	return nil
-}
-
-// NormalizeCharacterName converts a character name to Initial Caps format.
-// - Trims leading/trailing whitespace
-// - Collapses consecutive spaces to single space
-// - Capitalizes first letter of each word, lowercases rest
-// - Handles Unicode letters properly (accented characters, Cyrillic, etc.)
 //
-// Example: "alaric" -> "Alaric", "jOhN sMiTh" -> "John Smith", "josé" -> "José"
-func NormalizeCharacterName(name string) string {
-	// Trim and collapse whitespace
-	words := strings.Fields(name)
-	for i, word := range words {
-		if word != "" {
-			// Convert to runes to handle Unicode properly
-			runes := []rune(strings.ToLower(word))
-			runes[0] = unicode.ToUpper(runes[0])
-			words[i] = string(runes)
-		}
+// The rules themselves live in internal/charname/syntax — a dependency-free
+// leaf — so charname.Gate can enforce the SAME rules without importing
+// internal/world (D-28). This function is a thin wrapper that converts the
+// leaf's error into the *ValidationError shape this package's callers and
+// tests already assert against; its observable behaviour is unchanged.
+func ValidateCharacterName(name string) error {
+	err := syntax.ValidateName(name)
+	if err == nil {
+		return nil
 	}
-	return strings.Join(words, " ")
+
+	var verr *syntax.ValidationError
+	if errors.As(err, &verr) {
+		return &ValidationError{Field: verr.Field, Message: verr.Message}
+	}
+	// Unreachable today — ValidateName returns only *syntax.ValidationError.
+	// Kept as a fail-safe so a future leaf-side error type cannot escape
+	// unlabelled.
+	return &ValidationError{Field: "name", Message: err.Error()}
 }
 
 // ValidateDescription checks that a description is valid.

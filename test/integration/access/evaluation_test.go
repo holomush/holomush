@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	"github.com/samber/oops"
 )
 
@@ -54,9 +55,10 @@ var _ = Describe("ABAC Full Evaluation Path (Canary)", func() {
 
 		charID := core.NewULID()
 		_, err = env.pool.Exec(ctx, `
-			INSERT INTO characters (id, player_id, name, location_id)
-			VALUES ($1, $2, 'CanaryChar', $3)`,
-			charID.String(), playerID.String(), locID.String())
+			INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			append([]any{charID.String(), playerID.String(), uniqueCharFixtureName("CanaryChar", charID), locID.String()},
+				chartest.Columns(uniqueCharFixtureName("CanaryChar", charID))...)...)
 		Expect(err).NotTo(HaveOccurred())
 
 		env.auditWriter.Reset()

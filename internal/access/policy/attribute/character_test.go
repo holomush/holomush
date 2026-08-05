@@ -11,6 +11,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/oklog/ulid/v2"
@@ -42,11 +43,19 @@ func (m *mockCharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockCharacterRepository) Create(_ context.Context, _ *world.Character) (*wmodel.MutationDelta, error) {
+// Create carries the charname.Admitted admission token because
+// world.CharacterRepository's only name parameters are tokens. This mock is
+// HAND-WRITTEN — mockery never generated it, so `task mocks:generate` does not
+// repair it, and it is untagged, so only ./internal/access/... compiles it.
+func (m *mockCharacterRepository) Create(_ context.Context, _ *world.Character, _ charname.Admitted) (*wmodel.MutationDelta, error) {
 	return nil, errors.New("not implemented")
 }
 
 func (m *mockCharacterRepository) Update(_ context.Context, _ *world.Character) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockCharacterRepository) Rename(_ context.Context, _ ulid.ULID, _ charname.Admitted, _ int, _ wmodel.EnvelopeIntent) (*wmodel.MutationDelta, error) {
 	return nil, errors.New("not implemented")
 }
 

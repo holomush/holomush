@@ -4,9 +4,11 @@
 package grpc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -83,7 +85,7 @@ func TestAuthenticatePlayerReturnsTokenAndCharactersOnValidCredentials(t *testin
 	charRepo := authmocks.NewMockCharacterRepository(t)
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: world.StatusActive},
 		}, nil)
 
 	sessionStore := sessiontest.NewStore(t)
@@ -225,7 +227,7 @@ func TestSelectCharacter(t *testing.T) {
 				charRepo := authmocks.NewMockCharacterRepository(t)
 				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 					Return([]*world.Character{
-						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: world.StatusActive},
 					}, nil)
 				sessionStore, pool := sessiontest.NewStoreWithPool(t)
 				sessiontest.SeedPlayerSession(t, pool, ps)
@@ -281,7 +283,7 @@ func TestSelectCharacter(t *testing.T) {
 				charRepo := authmocks.NewMockCharacterRepository(t)
 				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 					Return([]*world.Character{
-						{ID: ulid.Make(), PlayerID: playerID, Name: "Other"},
+						{ID: ulid.Make(), PlayerID: playerID, Name: "Other", Status: world.StatusActive},
 					}, nil)
 
 				server := &CoreServer{
@@ -312,7 +314,7 @@ func TestSelectCharacter(t *testing.T) {
 				charRepo := authmocks.NewMockCharacterRepository(t)
 				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 					Return([]*world.Character{
-						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: world.StatusActive},
 					}, nil)
 
 				sessionStore := sessiontest.NewStore(t)
@@ -356,7 +358,7 @@ func TestSelectCharacter(t *testing.T) {
 				charRepo := authmocks.NewMockCharacterRepository(t)
 				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 					Return([]*world.Character{
-						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: world.StatusActive},
 					}, nil)
 
 				sessionStore, pool := sessiontest.NewStoreWithPool(t)
@@ -404,7 +406,7 @@ func TestSelectCharacter(t *testing.T) {
 				charRepo := authmocks.NewMockCharacterRepository(t)
 				charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 					Return([]*world.Character{
-						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+						{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: world.StatusActive},
 					}, nil)
 
 				originalArrival := time.Now().Add(-2 * time.Hour)
@@ -444,6 +446,36 @@ func TestSelectCharacter(t *testing.T) {
 					"reattach MUST flip status back to Active")
 			},
 		},
+		// INV-WORLD-5's fast pin on the real handler: an idle or retired
+		// character is refused by CoreServer.SelectCharacter itself, never by
+		// re-invoking the predicate in the test. Both are paired with the
+		// lifecycle-active control below (and with the fresh-session case at the
+		// head of this table), so a green refusal cannot mean selection is
+		// simply broken for everyone.
+		{
+			name: "idle character returns success=false with not available for play message",
+			run: func(t *testing.T, ctx context.Context) {
+				resp := selectCharacterWithStatus(ctx, t, world.StatusIdle)
+				assert.False(t, resp.Success)
+				assert.Contains(t, resp.ErrorMessage, "not available for play")
+			},
+		},
+		{
+			name: "retired character returns success=false with not available for play message",
+			run: func(t *testing.T, ctx context.Context) {
+				resp := selectCharacterWithStatus(ctx, t, world.StatusRetired)
+				assert.False(t, resp.Success)
+				assert.Contains(t, resp.ErrorMessage, "not available for play")
+			},
+		},
+		{
+			name: "lifecycle-active character is still selected on the same fixture",
+			run: func(t *testing.T, ctx context.Context) {
+				resp := selectCharacterWithStatus(ctx, t, world.StatusActive)
+				assert.True(t, resp.Success)
+				assert.Equal(t, "Alice", resp.CharacterName)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -451,6 +483,67 @@ func TestSelectCharacter(t *testing.T) {
 			tt.run(t, context.Background())
 		})
 	}
+}
+
+// selectCharacterWithStatus drives the real SelectCharacter handler against a
+// single owned character carrying the given lifecycle status, returning the
+// response. It is the shared fixture behind the lifecycle-refusal pins so the
+// refusing and the selecting cases differ ONLY in the status column — a refusal
+// asserted on a fixture that also differs elsewhere cannot say what refused it.
+func selectCharacterWithStatus(ctx context.Context, t *testing.T, st world.Status) *corev1.SelectCharacterResponse {
+	t.Helper()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: st},
+		}, nil)
+	sessionStore, pool := sessiontest.NewStoreWithPool(t)
+	sessiontest.SeedPlayerSession(t, pool, ps)
+
+	server := &CoreServer{
+		presence:          newTestPresenceEmitter(newTestEventStore()),
+		sessionStore:      sessionStore,
+		playerSessionRepo: sessionRepo,
+		charRepo:          charRepo,
+		newSessionID:      func() ulid.ULID { return core.NewULID() },
+	}
+	resp, err := server.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterId:        charID.String(),
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+// TestSelectCharacterRefusesAndLogsACharacterWithNoLifecycleStatus pins the
+// B-21 call-site rule: an EMPTY status is the zero value of a projection that
+// never read characters.status, so the handler fails closed AND logs it as the
+// programming error it is — while world.Selectable's default arm stays deny.
+// Paired with the active control on the same fixture.
+func TestSelectCharacterRefusesAndLogsACharacterWithNoLifecycleStatus(t *testing.T) {
+	ctx := context.Background()
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	refused := selectCharacterWithStatus(ctx, t, world.Status(""))
+	assert.False(t, refused.Success, "an empty lifecycle status MUST fail closed")
+	assert.Contains(t, refused.ErrorMessage, "not available for play")
+	assert.Contains(t, buf.String(), "CHARACTER_STATUS_ABSENT",
+		"the empty status MUST be logged as a programming error, not silently refused")
+
+	buf.Reset()
+	selected := selectCharacterWithStatus(ctx, t, world.StatusActive)
+	assert.True(t, selected.Success, "the paired active control MUST still select")
+	assert.NotContains(t, buf.String(), "CHARACTER_STATUS_ABSENT")
 }
 
 // TestSelectCharacterReattachesOnSecondCallWithSameToken asserts that calling
@@ -474,7 +567,7 @@ func TestSelectCharacterReattachesOnSecondCallWithSameToken(t *testing.T) {
 	charRepo := authmocks.NewMockCharacterRepository(t)
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: world.StatusActive},
 		}, nil).Times(2)
 
 	sessionStore, pool := sessiontest.NewStoreWithPool(t)
@@ -884,7 +977,7 @@ func TestListCharactersReturnsCharactersWithoutLocationWhenNoWorldQuerier(t *tes
 	charRepo := authmocks.NewMockCharacterRepository(t)
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 		Return([]*world.Character{
-			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+			{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: world.StatusActive},
 		}, nil)
 
 	server := &CoreServer{
@@ -951,7 +1044,7 @@ func TestListCharacters_LocationDerivation(t *testing.T) {
 			charRepo := authmocks.NewMockCharacterRepository(t)
 			charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 				Return([]*world.Character{
-					{ID: charID, PlayerID: playerID, Name: tt.charName, LocationID: &locID},
+					{ID: charID, PlayerID: playerID, Name: tt.charName, LocationID: &locID, Status: world.StatusActive},
 				}, nil)
 
 			server := &CoreServer{
@@ -1472,7 +1565,7 @@ func TestCheckPlayerSessionPopulatesPlayerIDIsGuestAndCharactersOnSuccess(t *tes
 
 	charRepo := authmocks.NewMockCharacterRepository(t)
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Jasper Iodine"}}, nil)
+		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Jasper Iodine", Status: world.StatusActive}}, nil)
 
 	server := &CoreServer{
 		presence:          newTestPresenceEmitter(newTestEventStore()),
@@ -2474,6 +2567,7 @@ func TestGuestSessionCarriesCharacterCreatedAt(t *testing.T) {
 				Name:       "Sapphire Diamond",
 				LocationID: &locID,
 				CreatedAt:  charCreatedAt,
+				Status:     world.StatusActive,
 			},
 		}, nil)
 
@@ -2566,7 +2660,7 @@ func TestSelectCharacterArriveEventEmission(t *testing.T) {
 			charRepo := authmocks.NewMockCharacterRepository(t)
 			charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 				Return([]*world.Character{
-					{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+					{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: world.StatusActive},
 				}, nil)
 
 			sessionStore, pool := sessiontest.NewStoreWithPool(t)
@@ -2642,7 +2736,7 @@ func TestSelectCharacterGridPresent(t *testing.T) {
 			charRepo := authmocks.NewMockCharacterRepository(t)
 			charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 				Return([]*world.Character{
-					{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID},
+					{ID: charID, PlayerID: playerID, Name: "Alice", LocationID: &locID, Status: world.StatusActive},
 				}, nil)
 
 			sessionStore, pool := sessiontest.NewStoreWithPool(t)
@@ -2687,7 +2781,7 @@ func TestListAllCharactersDeniedWhenPolicyDenies(t *testing.T) {
 	charRepo := authmocks.NewMockCharacterRepository(t)
 	// Ownership check: ListByPlayer returns the requesting char so ownership passes.
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Alice"}}, nil)
+		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Alice", Status: world.StatusActive}}, nil)
 	// ListAll MUST NOT be called when ABAC denies — the gate must block before the read.
 
 	server := &CoreServer{
@@ -2722,7 +2816,7 @@ func TestListAllCharactersDeniedWhenEngineUnconfigured(t *testing.T) {
 	charRepo := authmocks.NewMockCharacterRepository(t)
 	// Ownership passes; the nil-engine guard must fire before ListAll is reached.
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Alice"}}, nil)
+		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Alice", Status: world.StatusActive}}, nil)
 
 	server := &CoreServer{
 		presence:          newTestPresenceEmitter(newTestEventStore()),
@@ -2755,7 +2849,7 @@ func TestListAllCharactersReturnsDirectoryForAnyAuthenticatedCaller(t *testing.T
 
 	charRepo := authmocks.NewMockCharacterRepository(t)
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Guest"}}, nil)
+		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Guest", Status: world.StatusActive}}, nil)
 	charRepo.EXPECT().ListAll(mock.Anything).Return([]*world.Character{alice, bob}, nil).Once()
 
 	server := &CoreServer{
@@ -2819,7 +2913,7 @@ func TestListAllCharactersRejectsNonOwnedCharacter(t *testing.T) {
 
 	charRepo := authmocks.NewMockCharacterRepository(t)
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
-		Return([]*world.Character{{ID: ownedCharID, PlayerID: playerID, Name: "Alice"}}, nil)
+		Return([]*world.Character{{ID: ownedCharID, PlayerID: playerID, Name: "Alice", Status: world.StatusActive}}, nil)
 
 	server := &CoreServer{
 		presence:          newTestPresenceEmitter(newTestEventStore()),

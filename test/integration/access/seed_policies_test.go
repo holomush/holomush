@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 )
 
 var _ = Describe("Seed Policy Behavior", func() {
@@ -83,15 +84,17 @@ var _ = Describe("Seed Policy Behavior", func() {
 		charID1 = core.NewULID()
 		charID2 = core.NewULID()
 		_, err = env.pool.Exec(ctx, `
-			INSERT INTO characters (id, player_id, name, location_id)
-			VALUES ($1, $2, 'Alice', $3)`,
-			charID1.String(), playerID1.String(), locID1.String())
+			INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			append([]any{charID1.String(), playerID1.String(), uniqueCharFixtureName("Alice", charID1), locID1.String()},
+				chartest.Columns(uniqueCharFixtureName("Alice", charID1))...)...)
 		Expect(err).NotTo(HaveOccurred())
 
 		_, err = env.pool.Exec(ctx, `
-			INSERT INTO characters (id, player_id, name, location_id)
-			VALUES ($1, $2, 'Bob', $3)`,
-			charID2.String(), playerID2.String(), locID1.String())
+			INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			append([]any{charID2.String(), playerID2.String(), uniqueCharFixtureName("Bob", charID2), locID1.String()},
+				chartest.Columns(uniqueCharFixtureName("Bob", charID2))...)...)
 		Expect(err).NotTo(HaveOccurred())
 
 		env.auditWriter.Reset()
@@ -277,14 +280,16 @@ var _ = Describe("Seed Policy Behavior", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = env.pool.Exec(ctx, `
-				INSERT INTO characters (id, player_id, name, location_id)
-				VALUES ($1, $2, 'Drifter1', NULL)`,
-				unlocChar1.String(), playerA.String())
+				INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+				VALUES ($1, $2, $3, NULL, $4, $5, $6)`,
+				append([]any{unlocChar1.String(), playerA.String(), uniqueCharFixtureName("Drifter1", unlocChar1)},
+					chartest.Columns(uniqueCharFixtureName("Drifter1", unlocChar1))...)...)
 			Expect(err).NotTo(HaveOccurred())
 			_, err = env.pool.Exec(ctx, `
-				INSERT INTO characters (id, player_id, name, location_id)
-				VALUES ($1, $2, 'Drifter2', NULL)`,
-				unlocChar2.String(), playerB.String())
+				INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+				VALUES ($1, $2, $3, NULL, $4, $5, $6)`,
+				append([]any{unlocChar2.String(), playerB.String(), uniqueCharFixtureName("Drifter2", unlocChar2)},
+					chartest.Columns(uniqueCharFixtureName("Drifter2", unlocChar2))...)...)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -364,8 +369,9 @@ var _ = Describe("Seed Policy Behavior", func() {
 				adminPlayerID.String(), "admin_"+adminPlayerID.String())
 			Expect(err).NotTo(HaveOccurred())
 			adminChar = core.NewULID()
-			_, err = env.pool.Exec(ctx, `INSERT INTO characters (id, player_id, name, location_id) VALUES ($1, $2, 'Admin', $3)`,
-				adminChar.String(), adminPlayerID.String(), locID1.String())
+			_, err = env.pool.Exec(ctx, `INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				append([]any{adminChar.String(), adminPlayerID.String(), uniqueCharFixtureName("Admin", adminChar), locID1.String()},
+					chartest.Columns(uniqueCharFixtureName("Admin", adminChar))...)...)
 			Expect(err).NotTo(HaveOccurred())
 			// Wire the "admin" role on the static role resolver exposed via env.
 			// The subject ID format matches what CharacterProvider passes to RoleResolver.GetRoles.
@@ -377,8 +383,9 @@ var _ = Describe("Seed Policy Behavior", func() {
 				targetPlayerID.String(), "target_"+targetPlayerID.String())
 			Expect(err).NotTo(HaveOccurred())
 			targetID = core.NewULID()
-			_, err = env.pool.Exec(ctx, `INSERT INTO characters (id, player_id, name, location_id) VALUES ($1, $2, 'Target', $3)`,
-				targetID.String(), targetPlayerID.String(), locID2.String())
+			_, err = env.pool.Exec(ctx, `INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				append([]any{targetID.String(), targetPlayerID.String(), uniqueCharFixtureName("Target", targetID), locID2.String()},
+					chartest.Columns(uniqueCharFixtureName("Target", targetID))...)...)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -399,8 +406,29 @@ var _ = Describe("Seed Policy Behavior", func() {
 			Expect(decision.Effect()).To(Equal(types.EffectAllow))
 		})
 
-		It("S3: denies reading a public property on a different-location parent", func() {
+		// S3 asserted the PRE-WIDENING posture: a public property on a
+		// different-location CHARACTER was denied. v0.13 phase 2 (PROFILE-11,
+		// 02-CONTEXT.md D-10/D-11) deliberately reverses that.
+		// seed:profile-public-read-property permits it, and the grid-path
+		// consequence is INTENDED: `public` means public on the grid as well as
+		// the web, and the colocation restriction was the anomaly. Plan 02-10's
+		// audit exists to find rows that were relying on colocation as de-facto
+		// privacy, and the fix for any such row is to change THAT ROW's
+		// `visibility`, never to narrow the policy.
+		It("S3: allows reading a public property on a different-location CHARACTER (PROFILE-11 widening, D-10/D-11)", func() {
 			propID := insertProperty("character", targetID, "bio", "secret", "public", nil, nil, nil)
+			decision := evalAccess("character:"+charID1.String(), "read", "property:"+propID.String())
+			Expect(decision.Effect()).To(Equal(types.EffectAllow))
+		})
+
+		// The paired control that keeps S3 from reading as "public is now
+		// readable from anywhere, full stop". seed:profile-public-read-property
+		// is guarded on parent_type == "character", so a public property on a
+		// different-location LOCATION parent is STILL denied — only
+		// seed:property-public-read can reach it, and that one is still
+		// colocation-gated. Drop the parent_type guard and this goes RED.
+		It("S3b: still denies reading a public property on a different-location LOCATION (the widening's parent_type guard)", func() {
+			propID := insertProperty("location", locID2, "greeting", "secret", "public", nil, nil, nil)
 			decision := evalAccess("character:"+charID1.String(), "read", "property:"+propID.String())
 			Expect(decision.Effect()).To(Equal(types.EffectDefaultDeny))
 		})
@@ -544,8 +572,9 @@ var _ = Describe("Seed Policy Behavior", func() {
 				unlocPlayer.String(), "unloc_"+unlocPlayer.String())
 			Expect(err).NotTo(HaveOccurred())
 			unlocChar := core.NewULID()
-			_, err = env.pool.Exec(ctx, `INSERT INTO characters (id, player_id, name, location_id) VALUES ($1, $2, 'Drifter', NULL)`,
-				unlocChar.String(), unlocPlayer.String())
+			_, err = env.pool.Exec(ctx, `INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version) VALUES ($1, $2, $3, NULL, $4, $5, $6)`,
+				append([]any{unlocChar.String(), unlocPlayer.String(), uniqueCharFixtureName("Drifter", unlocChar)},
+					chartest.Columns(uniqueCharFixtureName("Drifter", unlocChar))...)...)
 			Expect(err).NotTo(HaveOccurred())
 
 			got, err := env.parentLocResolver.ResolveParentLocation(ctx, "character", unlocChar)
@@ -678,8 +707,9 @@ var _ = Describe("Seed Policy Behavior", func() {
 			Expect(err).NotTo(HaveOccurred())
 			otherChar := core.NewULID()
 			_, err = env.pool.Exec(context.Background(),
-				`INSERT INTO characters (id, player_id, name, location_id) VALUES ($1, $2, 'Other', $3)`,
-				otherChar.String(), otherPlayer.String(), locID1.String())
+				`INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				append([]any{otherChar.String(), otherPlayer.String(), uniqueCharFixtureName("Other", otherChar), locID1.String()},
+					chartest.Columns(uniqueCharFixtureName("Other", otherChar))...)...)
 			Expect(err).NotTo(HaveOccurred())
 			_ = insertProperty("character", charID2, "thirdparty", "x", "private", &otherChar, nil, nil)
 
@@ -704,8 +734,9 @@ var _ = Describe("Seed Policy Behavior", func() {
 			Expect(err).NotTo(HaveOccurred())
 			remoteChar := core.NewULID()
 			_, err = env.pool.Exec(context.Background(),
-				`INSERT INTO characters (id, player_id, name, location_id) VALUES ($1, $2, 'Remote', $3)`,
-				remoteChar.String(), remotePlayer.String(), locID2.String())
+				`INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				append([]any{remoteChar.String(), remotePlayer.String(), uniqueCharFixtureName("Remote", remoteChar), locID2.String()},
+					chartest.Columns(uniqueCharFixtureName("Remote", remoteChar))...)...)
 			Expect(err).NotTo(HaveOccurred())
 			_ = insertProperty("character", remoteChar, "hidden", "x", "private", &remoteChar, nil, nil)
 

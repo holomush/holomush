@@ -13,6 +13,7 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/mocks"
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -23,14 +24,25 @@ type stubCharacterGenesis struct {
 	err            error
 	calls          int
 	lastChar       *world.Character
+	lastAdmitted   charname.Admitted
 	lastBindReason string
 }
 
-func (s *stubCharacterGenesis) Create(_ context.Context, char *world.Character, bindReason string) error {
+func (s *stubCharacterGenesis) Create(_ context.Context, char *world.Character, name charname.Admitted, bindReason string) error {
 	s.calls++
 	s.lastChar = char
+	s.lastAdmitted = name
 	s.lastBindReason = bindReason
 	return s.err
+}
+
+// testGate builds the character-name gate the service now requires. Its
+// SkeletonLookup reports a verifiable corpus with no collision, so these unit
+// tests exercise normalization, the syntactic rules and the create pipeline;
+// confusability and fail-closed behaviour are asserted against real Postgres in
+// internal/world/postgres/skeleton_guard_test.go.
+func testGate() *charname.Gate {
+	return &charname.Gate{Skeletons: noCollisionLookup{}}
 }
 
 func TestNewCharacterService_NilDependencies(t *testing.T) {
@@ -66,7 +78,7 @@ func TestNewCharacterService_NilDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := auth.NewCharacterService(tt.charRepo, tt.locRepo, tt.genesis)
+			svc, err := auth.NewCharacterService(tt.charRepo, tt.locRepo, tt.genesis, testGate())
 			require.Error(t, err)
 			assert.Nil(t, svc)
 			assert.Contains(t, err.Error(), tt.expectError)
@@ -82,18 +94,18 @@ func TestCharacterService_Create(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
 		genesis := &stubCharacterGenesis{}
-		svc, err := auth.NewCharacterService(charRepo, locRepo, genesis)
+		svc, err := auth.NewCharacterService(charRepo, locRepo, genesis, testGate())
 		require.NoError(t, err)
 
 		startingLoc := &world.Location{ID: ulid.Make()}
 		locRepo.On("GetStartingLocation", ctx).Return(startingLoc, nil)
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(0, nil)
 
 		char, err := svc.Create(ctx, playerID, "alaric")
 		require.NoError(t, err)
 		require.NotNil(t, char)
-		assert.Equal(t, "Alaric", char.Name) // normalized to Initial Caps
+		assert.Equal(t, "alaric", char.Name) // §6.1.5: the player's own capitalization is preserved
 		assert.Equal(t, playerID, char.PlayerID)
 		assert.Equal(t, &startingLoc.ID, char.LocationID)
 
@@ -107,12 +119,12 @@ func TestCharacterService_Create(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
 		genesis := &stubCharacterGenesis{}
-		svc, err := auth.NewCharacterService(charRepo, locRepo, genesis)
+		svc, err := auth.NewCharacterService(charRepo, locRepo, genesis, testGate())
 		require.NoError(t, err)
 
 		startingLoc := &world.Location{ID: ulid.Make()}
 		locRepo.On("GetStartingLocation", ctx).Return(startingLoc, nil)
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(0, nil)
 
 		char, err := svc.CreateBound(ctx, playerID, "alaric", "initial_bind")
@@ -122,27 +134,34 @@ func TestCharacterService_Create(t *testing.T) {
 		assert.Equal(t, "initial_bind", genesis.lastBindReason)
 	})
 
-	t.Run("normalizes character name", func(t *testing.T) {
+	t.Run("canonicalizes whitespace while preserving the submitted capitalization", func(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
-		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{})
+		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
 		startingLoc := &world.Location{ID: ulid.Make()}
 		locRepo.On("GetStartingLocation", ctx).Return(startingLoc, nil)
-		charRepo.On("ExistsByName", ctx, "John Smith").Return(false, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "john smith", (*ulid.ULID)(nil)).Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(0, nil)
 
 		char, err := svc.Create(ctx, playerID, "  jOHN   sMITH  ")
 		require.NoError(t, err)
-		assert.Equal(t, "John Smith", char.Name)
+		assert.Equal(t, "jOHN sMITH", char.Name)
 	})
 
 	t.Run("rejects invalid character name", func(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
-		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{})
+		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
+
+		// The uniqueness pre-check now runs BEFORE the gate (so an exact
+		// duplicate reaches CHARACTER_NAME_TAKEN rather than being intercepted
+		// as a skeleton collision), which costs one existence lookup on the
+		// invalid-name path too. "123" normalizes fine — it is the SYNTACTIC
+		// rule that rejects it, and that rule lives inside the gate.
+		charRepo.On("ExistsByNormalizedName", ctx, "123", (*ulid.ULID)(nil)).Return(false, nil)
 
 		char, err := svc.Create(ctx, playerID, "123")
 		assert.Nil(t, char)
@@ -153,9 +172,12 @@ func TestCharacterService_Create(t *testing.T) {
 	t.Run("rejects empty name", func(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
-		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{})
+		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
+		// No ExistsByNormalizedName expectation on purpose: an empty submission
+		// has no normal form, so charname.Normalize fails before any lookup and
+		// the mock's strict-call assertion is what proves it.
 		char, err := svc.Create(ctx, playerID, "")
 		assert.Nil(t, char)
 		require.Error(t, err)
@@ -165,11 +187,11 @@ func TestCharacterService_Create(t *testing.T) {
 	t.Run("rejects duplicate name case insensitive", func(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
-		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{})
+		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
 		// "Alaric" already exists
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(true, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(true, nil)
 
 		char, err := svc.Create(ctx, playerID, "ALARIC") // different case
 		assert.Nil(t, char)
@@ -180,10 +202,10 @@ func TestCharacterService_Create(t *testing.T) {
 	t.Run("rejects when player at character limit", func(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
-		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{})
+		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(auth.DefaultMaxCharacters, nil)
 
 		char, err := svc.Create(ctx, playerID, "alaric")
@@ -195,10 +217,10 @@ func TestCharacterService_Create(t *testing.T) {
 	t.Run("returns error when starting location unavailable", func(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
-		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{})
+		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(0, nil)
 		locRepo.On("GetStartingLocation", ctx).Return(nil, world.ErrNotFound)
 
@@ -208,13 +230,13 @@ func TestCharacterService_Create(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "CHARACTER_NO_STARTING_LOCATION")
 	})
 
-	t.Run("propagates repository errors on ExistsByName", func(t *testing.T) {
+	t.Run("propagates repository errors on ExistsByNormalizedName", func(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
-		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{})
+		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, assert.AnError)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(false, assert.AnError)
 
 		char, err := svc.Create(ctx, playerID, "alaric")
 		assert.Nil(t, char)
@@ -225,10 +247,10 @@ func TestCharacterService_Create(t *testing.T) {
 	t.Run("propagates repository errors on CountByPlayer", func(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
-		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{})
+		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(0, assert.AnError)
 
 		char, err := svc.Create(ctx, playerID, "alaric")
@@ -241,12 +263,12 @@ func TestCharacterService_Create(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
 		genesis := &stubCharacterGenesis{err: assert.AnError}
-		svc, err := auth.NewCharacterService(charRepo, locRepo, genesis)
+		svc, err := auth.NewCharacterService(charRepo, locRepo, genesis, testGate())
 		require.NoError(t, err)
 
 		startingLoc := &world.Location{ID: ulid.Make()}
 		locRepo.On("GetStartingLocation", ctx).Return(startingLoc, nil)
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(0, nil)
 
 		char, err := svc.Create(ctx, playerID, "alaric")
@@ -263,11 +285,11 @@ func TestCharacterService_CreateWithMaxCharacters(t *testing.T) {
 	t.Run("respects custom max characters limit", func(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
-		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{})
+		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
 		// Custom limit of 3
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(3, nil)
 
 		char, err := svc.CreateWithMaxCharacters(ctx, playerID, "alaric", 3)
@@ -280,19 +302,21 @@ func TestCharacterService_CreateWithMaxCharacters(t *testing.T) {
 		charRepo := mocks.NewMockCharacterRepository(t)
 		locRepo := mocks.NewMockLocationRepository(t)
 		genesis := &stubCharacterGenesis{}
-		svc, err := auth.NewCharacterService(charRepo, locRepo, genesis)
+		svc, err := auth.NewCharacterService(charRepo, locRepo, genesis, testGate())
 		require.NoError(t, err)
 
 		startingLoc := &world.Location{ID: ulid.Make()}
 		locRepo.On("GetStartingLocation", ctx).Return(startingLoc, nil)
-		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
+		charRepo.On("ExistsByNormalizedName", ctx, "alaric", (*ulid.ULID)(nil)).Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(9, nil)
 
 		// Custom limit of 10
 		char, err := svc.CreateWithMaxCharacters(ctx, playerID, "alaric", 10)
 		require.NoError(t, err)
 		require.NotNil(t, char)
-		assert.Equal(t, "Alaric", char.Name)
+		// §6.1.5: the player's own capitalization is preserved; the retired
+		// world.NormalizeCharacterName would have returned "Alaric" here.
+		assert.Equal(t, "alaric", char.Name)
 		assert.Equal(t, 1, genesis.calls)
 	})
 }

@@ -38,7 +38,10 @@ func TestPlayerProviderSchema(t *testing.T) {
 	assert.Equal(t, types.AttrTypeStringList, schema.Attributes["grants"])
 	assert.Equal(t, types.AttrTypeBool, schema.Attributes["is_guest"])
 	assert.Equal(t, types.AttrTypeBool, schema.Attributes["has_is_guest"])
-	assert.Len(t, schema.Attributes, 4, "v1 schema exposes id, grants, is_guest, has_is_guest")
+	assert.Equal(t, types.AttrTypeStringList, schema.Attributes["roles"])
+	assert.Equal(t, types.AttrTypeBool, schema.Attributes["has_roles"])
+	assert.Len(t, schema.Attributes, 6,
+		"schema exposes id, grants, is_guest, has_is_guest, roles, has_roles")
 }
 
 func TestPlayerProviderResolveResourceAlwaysNil(t *testing.T) {
@@ -274,4 +277,90 @@ func TestPlayerProviderOmitsIsGuestWhenLookupAbsentOrFails(t *testing.T) {
 		assert.False(t, ok, "is_guest key MUST be absent when lookup errors (omit-don't-sentinel, ADR holomush-ti1b)")
 		assert.Equal(t, false, attrs["has_is_guest"], "has_is_guest must be false when lookup fails")
 	})
+}
+
+// TestPlayerProviderResolvesRolesPerPlayerWhenALookupIsConfigured is the
+// paired POSITIVE CONTROL for the three omission assertions below. Without it
+// an "absent" assertion could pass simply because the provider emits nothing at
+// all, which is the failure mode `<verification_integrity>` rule 2 exists to
+// close.
+func TestPlayerProviderResolvesRolesPerPlayerWhenALookupIsConfigured(t *testing.T) {
+	var gotPlayerID string
+	lookup := func(_ context.Context, playerID string) ([]string, error) {
+		gotPlayerID = playerID
+		return []string{access.RoleAdmin, access.RoleBuilder}, nil
+	}
+
+	p := NewPlayerAttributeProvider(nil, WithPlayerRoleLookup(lookup))
+	attrs, err := p.ResolveSubject(context.Background(), "player:"+testOperatorULID)
+	require.NoError(t, err)
+	require.NotNil(t, attrs)
+
+	assert.Equal(t, testOperatorULID, gotPlayerID,
+		"the lookup is keyed on the PLAYER id from the subject, never on a character id")
+	assert.Equal(t, []string{access.RoleAdmin, access.RoleBuilder}, attrs["roles"])
+	assert.Equal(t, true, attrs["has_roles"])
+}
+
+// TestPlayerProviderOmitsRolesWhenLookupAbsentOrFails asserts the
+// omit-don't-sentinel invariant (ADR holomush-ti1b) for the roles key: an
+// EMPTY LIST is a RESOLVED value that a containsAny-shaped condition would
+// evaluate against, so the key must be ABSENT — asserted by key presence
+// (comma-ok), never by comparing a value to its zero.
+func TestPlayerProviderOmitsRolesWhenLookupAbsentOrFails(t *testing.T) {
+	t.Run("no lookup configured: roles key absent and has_roles false", func(t *testing.T) {
+		p := NewPlayerAttributeProvider(nil)
+		attrs, err := p.ResolveSubject(context.Background(), "player:"+testOperatorULID)
+		require.NoError(t, err)
+		require.NotNil(t, attrs)
+
+		_, ok := attrs["roles"]
+		assert.False(t, ok,
+			"roles key MUST be absent when no lookup configured (omit-don't-sentinel, ADR holomush-ti1b)")
+		assert.Equal(t, false, attrs["has_roles"])
+	})
+
+	t.Run("lookup returns error: roles key absent and has_roles false", func(t *testing.T) {
+		lookup := func(_ context.Context, _ string) ([]string, error) {
+			return nil, oops.Code("ROLE_LOOKUP_FAILED").Errorf("db down")
+		}
+		p := NewPlayerAttributeProvider(nil, WithPlayerRoleLookup(lookup))
+		attrs, err := p.ResolveSubject(context.Background(), "player:"+testOperatorULID)
+		require.NoError(t, err, "a role-lookup failure is fail-safe, not fatal")
+		require.NotNil(t, attrs)
+
+		_, ok := attrs["roles"]
+		assert.False(t, ok,
+			"roles key MUST be absent when the lookup errors (omit-don't-sentinel, ADR holomush-ti1b)")
+		assert.Equal(t, false, attrs["has_roles"])
+	})
+}
+
+// TestPlayerAndViewerRoleLookupShareOneType pins the shared seam: both
+// providers answer "what roles does this player hold" through ONE signature.
+// Two structurally identical but distinct types would let the viewer and player
+// namespaces be wired to different sources and disagree about whether the same
+// human is an admin at the same moment — the two-sources-of-truth failure
+// 01-SPEC §10.5 exists to prevent.
+func TestPlayerAndViewerRoleLookupShareOneType(t *testing.T) {
+	var fn PlayerRoleLookup = func(_ context.Context, _ string) ([]string, error) {
+		return nil, nil
+	}
+
+	// Both options accept the SAME named type — this does not compile if a
+	// second declaration is ever introduced.
+	playerOpt := WithPlayerRoleLookup(fn)
+	viewerOpt := WithViewerRoleLookup(fn)
+	require.NotNil(t, playerOpt)
+	require.NotNil(t, viewerOpt)
+
+	// Belt and braces: the two options' parameter types are the identical
+	// reflect.Type, so a future duplicate declaration with the same underlying
+	// shape (which would still compile above) is caught here.
+	playerParam := reflect.TypeOf(WithPlayerRoleLookup).In(0)
+	viewerParam := reflect.TypeOf(WithViewerRoleLookup).In(0)
+	assert.Equal(t, playerParam, viewerParam,
+		"WithPlayerRoleLookup and WithViewerRoleLookup MUST take the one shared "+
+			"PlayerRoleLookup type — two types would let the viewer and player "+
+			"namespaces answer 'what roles does this player hold' differently")
 }

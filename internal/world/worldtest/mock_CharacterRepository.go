@@ -8,8 +8,11 @@ package worldtest
 import (
 	context "context"
 
-	ulid "github.com/oklog/ulid/v2"
+	charname "github.com/holomush/holomush/internal/charname"
+
 	mock "github.com/stretchr/testify/mock"
+
+	ulid "github.com/oklog/ulid/v2"
 
 	wmodel "github.com/holomush/holomush/internal/world/wmodel"
 
@@ -29,9 +32,9 @@ func (_m *MockCharacterRepository) EXPECT() *MockCharacterRepository_Expecter {
 	return &MockCharacterRepository_Expecter{mock: &_m.Mock}
 }
 
-// Create provides a mock function with given fields: ctx, char
-func (_m *MockCharacterRepository) Create(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
-	ret := _m.Called(ctx, char)
+// Create provides a mock function with given fields: ctx, char, name
+func (_m *MockCharacterRepository) Create(ctx context.Context, char *world.Character, name charname.Admitted) (*wmodel.MutationDelta, error) {
+	ret := _m.Called(ctx, char, name)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
@@ -39,19 +42,19 @@ func (_m *MockCharacterRepository) Create(ctx context.Context, char *world.Chara
 
 	var r0 *wmodel.MutationDelta
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *world.Character) (*wmodel.MutationDelta, error)); ok {
-		return rf(ctx, char)
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Character, charname.Admitted) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, char, name)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, *world.Character) *wmodel.MutationDelta); ok {
-		r0 = rf(ctx, char)
+	if rf, ok := ret.Get(0).(func(context.Context, *world.Character, charname.Admitted) *wmodel.MutationDelta); ok {
+		r0 = rf(ctx, char, name)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*wmodel.MutationDelta)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, *world.Character) error); ok {
-		r1 = rf(ctx, char)
+	if rf, ok := ret.Get(1).(func(context.Context, *world.Character, charname.Admitted) error); ok {
+		r1 = rf(ctx, char, name)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -67,13 +70,14 @@ type MockCharacterRepository_Create_Call struct {
 // Create is a helper method to define mock.On call
 //   - ctx context.Context
 //   - char *world.Character
-func (_e *MockCharacterRepository_Expecter) Create(ctx interface{}, char interface{}) *MockCharacterRepository_Create_Call {
-	return &MockCharacterRepository_Create_Call{Call: _e.mock.On("Create", ctx, char)}
+//   - name charname.Admitted
+func (_e *MockCharacterRepository_Expecter) Create(ctx interface{}, char interface{}, name interface{}) *MockCharacterRepository_Create_Call {
+	return &MockCharacterRepository_Create_Call{Call: _e.mock.On("Create", ctx, char, name)}
 }
 
-func (_c *MockCharacterRepository_Create_Call) Run(run func(ctx context.Context, char *world.Character)) *MockCharacterRepository_Create_Call {
+func (_c *MockCharacterRepository_Create_Call) Run(run func(ctx context.Context, char *world.Character, name charname.Admitted)) *MockCharacterRepository_Create_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*world.Character))
+		run(args[0].(context.Context), args[1].(*world.Character), args[2].(charname.Admitted))
 	})
 	return _c
 }
@@ -83,7 +87,7 @@ func (_c *MockCharacterRepository_Create_Call) Return(_a0 *wmodel.MutationDelta,
 	return _c
 }
 
-func (_c *MockCharacterRepository_Create_Call) RunAndReturn(run func(context.Context, *world.Character) (*wmodel.MutationDelta, error)) *MockCharacterRepository_Create_Call {
+func (_c *MockCharacterRepository_Create_Call) RunAndReturn(run func(context.Context, *world.Character, charname.Admitted) (*wmodel.MutationDelta, error)) *MockCharacterRepository_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -380,6 +384,68 @@ func (_c *MockCharacterRepository_IsOwnedByPlayer_Call) Return(_a0 bool, _a1 err
 }
 
 func (_c *MockCharacterRepository_IsOwnedByPlayer_Call) RunAndReturn(run func(context.Context, ulid.ULID, ulid.ULID) (bool, error)) *MockCharacterRepository_IsOwnedByPlayer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Rename provides a mock function with given fields: ctx, id, name, expectedVersion, intent
+func (_m *MockCharacterRepository) Rename(ctx context.Context, id ulid.ULID, name charname.Admitted, expectedVersion int, intent wmodel.EnvelopeIntent) (*wmodel.MutationDelta, error) {
+	ret := _m.Called(ctx, id, name, expectedVersion, intent)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Rename")
+	}
+
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, charname.Admitted, int, wmodel.EnvelopeIntent) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, id, name, expectedVersion, intent)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, charname.Admitted, int, wmodel.EnvelopeIntent) *wmodel.MutationDelta); ok {
+		r0 = rf(ctx, id, name, expectedVersion, intent)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, charname.Admitted, int, wmodel.EnvelopeIntent) error); ok {
+		r1 = rf(ctx, id, name, expectedVersion, intent)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockCharacterRepository_Rename_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Rename'
+type MockCharacterRepository_Rename_Call struct {
+	*mock.Call
+}
+
+// Rename is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id ulid.ULID
+//   - name charname.Admitted
+//   - expectedVersion int
+//   - intent wmodel.EnvelopeIntent
+func (_e *MockCharacterRepository_Expecter) Rename(ctx interface{}, id interface{}, name interface{}, expectedVersion interface{}, intent interface{}) *MockCharacterRepository_Rename_Call {
+	return &MockCharacterRepository_Rename_Call{Call: _e.mock.On("Rename", ctx, id, name, expectedVersion, intent)}
+}
+
+func (_c *MockCharacterRepository_Rename_Call) Run(run func(ctx context.Context, id ulid.ULID, name charname.Admitted, expectedVersion int, intent wmodel.EnvelopeIntent)) *MockCharacterRepository_Rename_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(charname.Admitted), args[3].(int), args[4].(wmodel.EnvelopeIntent))
+	})
+	return _c
+}
+
+func (_c *MockCharacterRepository_Rename_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockCharacterRepository_Rename_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockCharacterRepository_Rename_Call) RunAndReturn(run func(context.Context, ulid.ULID, charname.Admitted, int, wmodel.EnvelopeIntent) (*wmodel.MutationDelta, error)) *MockCharacterRepository_Rename_Call {
 	_c.Call.Return(run)
 	return _c
 }

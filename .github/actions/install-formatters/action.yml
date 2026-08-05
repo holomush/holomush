@@ -16,8 +16,20 @@ runs:
       # gfo6 Phase 5 lint tasks (lint:no-timestamptz, lint:no-microsecond-truncate,
       # lint:no-unixnano-in-repos) and the INV bats tests (license-eye.bats,
       # no-lefthook-refs.bats) call `rg`. The runners do not ship ripgrep by default.
+      #
+      # `apt-get update` is REQUIRED and is not optional hygiene: the runner image
+      # ships a package index that goes stale as soon as the upstream archive moves
+      # on, and `apt-get install` against a stale index fails with
+      # `E: Unable to locate package ripgrep` (exit 100) rather than fetching it.
+      # That is a hard failure of the Lint and Bats jobs on EVERY pull request,
+      # repo-wide, because three workflows compose this action — and it presents as
+      # a code failure on whichever PR happens to run next, not as an infra one.
+      # deploy.yaml:81-82 already pairs update-then-install; this is the same fix.
       shell: bash
-      run: sudo apt-get install -y --no-install-recommends ripgrep
+      run: |
+        set -euo pipefail
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends ripgrep
 
     - name: Install rumdl
       shell: bash

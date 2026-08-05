@@ -345,6 +345,13 @@ func loadMigrationVersions() ([]uint, error) {
 		versionSet[version] = struct{}{}
 	}
 
+	// Go migrations are NOT in the embedded FS (the glob is `.sql`-only), so
+	// they are merged in from the literal census. Omitting them makes the adopt
+	// gate seed a ledger with a hole in it. See go_migration_census.go.
+	for version := range goMigrationNames {
+		versionSet[version] = struct{}{}
+	}
+
 	versions := make([]uint, 0, len(versionSet))
 	for v := range versionSet {
 		versions = append(versions, v)
@@ -372,6 +379,10 @@ func loadMigrationNames() (map[uint]string, error) {
 		}
 		// Store name without the .sql suffix
 		names[version] = strings.TrimSuffix(name, ".sql")
+	}
+	// Go migrations, which the `.sql`-only embed glob cannot see.
+	for version, name := range goMigrationNames {
+		names[version] = name
 	}
 	return names, nil
 }

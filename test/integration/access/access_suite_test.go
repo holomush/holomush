@@ -58,6 +58,14 @@ type accessTestEnv struct {
 	// (e.g. env.roleResolver.roles[access.CharacterSubject(adminID)] = []string{"admin"})
 	// for tests that exercise admin-visibility property seeds.
 	roleResolver *staticRoleResolver
+	// resolver and compiler are exposed so a spec can build a SECOND engine over
+	// the SAME real provider stack but a DIFFERENT policy corpus. Plan 02-10's
+	// paired positive control needs exactly that: the widening's permit is only
+	// meaningful if the identical call against a corpus WITHOUT
+	// seed:profile-public-read-property is denied, and rebuilding the provider
+	// stack in the spec would let the control drift from the engine under test.
+	resolver *attribute.Resolver
+	compiler *policy.Compiler
 }
 
 type testAuditWriter struct {
@@ -179,8 +187,26 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 	// real attributes via the REAL ABAC engine. Mirrors the k3ud/g776 pattern.
 	propRepo := worldpg.NewPropertyRepository(pool)
 	parentLocResolver := worldpg.NewParentLocationResolver(pool)
-	propProvider := attribute.NewPropertyProvider(propRepo, parentLocResolver)
+	// Plan 02-13: the third argument resolves the row's character-keyed owner /
+	// visible_to / excluded_from into their player-keyed peers. A REAL
+	// CharacterOwnerResolver is constructible here (the suite holds the pool), so
+	// this suite exercises the derivation rather than the nil-resolver omit path.
+	charOwnerResolver := worldpg.NewCharacterOwnerResolver(pool)
+	propProvider := attribute.NewPropertyProvider(propRepo, parentLocResolver, charOwnerResolver)
 	if err := resolver.RegisterProvider(propProvider); err != nil {
+		pool.Close()
+		return nil, err
+	}
+
+	// Plan 02-10: the viewer namespace, so a spec can assert §8.4.2 profile
+	// REACHABILITY (seed:profile-reachable is `principal is viewer`). Without it
+	// principal.viewer.tier is unresolvable and every viewer-flavored evaluation
+	// default-denies — which reads exactly like a correct denial and is actually
+	// an absent provider. No DB dependency: the tier is carried in the subject
+	// string itself. Adds a namespace; changes no existing spec's outcome,
+	// because no spec before this one used a `viewer:` subject.
+	viewerProvider := attribute.NewViewerTierProvider()
+	if err := resolver.RegisterProvider(viewerProvider); err != nil {
 		pool.Close()
 		return nil, err
 	}
@@ -229,6 +255,8 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 		propProvider:      propProvider,
 		worldService:      worldService,
 		roleResolver:      roleResolver,
+		resolver:          resolver,
+		compiler:          compiler,
 	}, nil
 }
 
@@ -321,4 +349,18 @@ func jsonNullableStringSlice(s []string) ([]byte, error) {
 		return nil, nil
 	}
 	return json.Marshal(s)
+}
+
+// uniqueCharFixtureName suffixes a fixture's display name with part of the
+// character id that will carry it.
+//
+// Migration 000056 makes characters.normalized_name UNIQUE, so two fixture rows
+// sharing a literal display name now collide where they previously did not. It
+// is deterministic, so a call site may compute the name and its identity
+// columns in two separate expressions and get a matching pair.
+func uniqueCharFixtureName(base string, id ulid.ULID) string {
+	// The SUFFIX, never a prefix: a ULID string is 10 characters of timestamp
+	// followed by 16 of randomness, so a prefix slice is identical for every id
+	// minted in the same millisecond.
+	return base + " " + id.String()[20:]
 }

@@ -43,6 +43,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
 	"github.com/holomush/holomush/test/testutil"
@@ -194,10 +195,10 @@ func (c *AdminClient) SeedAdminPlayer(playerID, username, password string) Playe
 
 	charID := playerID + "CHAR"
 	_, err = c.pool.Exec(ctx,
-		`INSERT INTO characters (id, player_id, name)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO characters (id, player_id, name, normalized_name, name_skeleton, name_skeleton_unicode_version)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (id) DO NOTHING`,
-		charID, playerID, username)
+		append([]any{charID, playerID, username}, chartest.Columns(username)...)...)
 	require.NoError(c.t, err, "SeedAdminPlayer: insert character for %s", username)
 
 	return PlayerCreds{PlayerID: playerID, Username: username, Password: password}

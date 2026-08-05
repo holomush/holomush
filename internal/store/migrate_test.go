@@ -339,7 +339,14 @@ func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testin
 	// world_timestamps_to_bigint + totp_misc_timestamps_to_bigint + pregfo6_gap_timestamps_to_bigint +
 	// character_preferences + session_connection_last_seen + disable_unconditional_scene_write_seed
 	// + disable_unconditional_scene_read_seed + world_version_guard + world_outbox
-	// + player_reaping + events_audit_partition + sessions_location_index)
+	// + player_reaping + events_audit_partition + sessions_location_index
+	// + character_identity_and_lifecycle + character_normalized_name_unique)
+	//
+	// Version 55 (backfill_character_normalized_names) is a registered GO
+	// migration and is therefore NOT in the embedded filesystem, which
+	// //go:embed globs for `.sql` only. It appears here because
+	// loadMigrationVersions merges go_migration_census.go in — without that
+	// merge the adopt gate would seed a ledger with a hole at 55.
 	//
 	// This census is written out literally rather than derived from the embedded
 	// filesystem: deriving it from the same helper PendingMigrations() uses would
@@ -348,12 +355,12 @@ func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testin
 	m := &Migrator{m: &mockMigrate{versionVal: 0}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 53 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 53}}
+	// At version 56 (the latest embedded .sql migration), nothing is pending.
+	m := &Migrator{m: &mockMigrate{versionVal: 56}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)

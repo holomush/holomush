@@ -137,7 +137,7 @@ func TestValidateSeedProviderCoverage_ProductionCorpusIsCovered(t *testing.T) {
 	// productionRegistered MUST stay in sync with BuildABACStack's actual
 	// registrations. The integration test asserts no drift.
 	productionRegistered := []string{
-		"character", "location", "object", "property", "player", "command", "stream", "plugin",
+		"character", "location", "object", "property", "player", "viewer", "command", "stream", "plugin",
 	}
 
 	missing := validateSeedProviderCoverage(productionRegistered, policy.SeedPolicies())

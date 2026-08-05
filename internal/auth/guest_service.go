@@ -12,7 +12,9 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // GuestSessionTTL is the time-to-live for guest player sessions.
@@ -36,7 +38,10 @@ type GuestNamer interface {
 // genesis envelope atomically (the compile-level fence, 05-15). Only the
 // name-uniqueness read remains.
 type GuestCharacterRepository interface {
-	ExistsByName(ctx context.Context, name string) (bool, error)
+	// ExistsByNormalizedName is the §6.1.1 uniqueness pre-check — a UX
+	// affordance, not the guarantee, which is migration 000056's UNIQUE index.
+	// excluding is nil on every creation path.
+	ExistsByNormalizedName(ctx context.Context, key string, excluding *ulid.ULID) (bool, error)
 }
 
 // GuestResult holds everything created during guest account setup.
@@ -55,6 +60,12 @@ type GuestService struct {
 	sessions PlayerSessionRepository
 	genesis  CharacterGenesis
 	cleaner  GuestCleaner
+
+	// gate is the SAME character-name admission decision the registered create
+	// path runs. Guest provisioning is automatic and high-volume and never ran
+	// the pipeline at all before this plan; a gate installed only in
+	// CharacterService would have left it open (T-02-31).
+	gate *charname.Gate
 }
 
 // NewGuestService creates a new GuestService.
@@ -71,6 +82,7 @@ func NewGuestService(
 	sessions PlayerSessionRepository,
 	genesis CharacterGenesis,
 	cleaner GuestCleaner,
+	gate *charname.Gate,
 ) (*GuestService, error) {
 	if namer == nil {
 		return nil, oops.Errorf("guest namer is required")
@@ -90,6 +102,9 @@ func NewGuestService(
 	if cleaner == nil {
 		return nil, oops.Errorf("guest cleaner is required")
 	}
+	if gate == nil {
+		return nil, oops.Errorf("character name gate is required")
+	}
 	return &GuestService{
 		namer:    namer,
 		players:  players,
@@ -97,6 +112,7 @@ func NewGuestService(
 		sessions: sessions,
 		genesis:  genesis,
 		cleaner:  cleaner,
+		gate:     gate,
 	}, nil
 }
 
@@ -113,8 +129,9 @@ func NewGuestService(
 // it is OUTSIDE INV-WORLD-4 (which binds the character↔genesis-envelope pairing).
 // Session creation is outside the genesis transaction (separate concern).
 func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
-	// Generate a unique name not already in the database.
-	name, err := s.acquireUniqueName(ctx)
+	// Generate a unique, ADMITTED name not already in the database. The token
+	// comes back with the raw name so it has a path out of the retry loop.
+	name, admitted, err := s.acquireUniqueName(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -127,10 +144,10 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	}
 
 	startLoc := s.namer.StartLocation()
-	// Guest names from the namer are underscore-separated (e.g. "Sapphire_Diamond").
-	// world.Character names must be letters and spaces only, so convert for display.
-	charName := strings.ReplaceAll(name, "_", " ")
-	char, err := world.NewCharacter(player.ID, charName)
+	// The display name is the TOKEN's, never re-derived here. Re-deriving it
+	// from the raw name would be a second normalization of a string the gate
+	// already normalized — exactly what charname.Admitted exists to prevent.
+	char, err := world.NewCharacter(player.ID, admitted.Display())
 	if err != nil {
 		s.namer.ReleaseGuest(name)
 		return nil, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(err)
@@ -148,7 +165,7 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	// ATOMICALLY through the genesis service (the narrow sound atomic unit). On
 	// failure the character/binding/envelope roll back together; the already-
 	// committed player is cleaned up best-effort (orphan-player compensation).
-	if gErr := s.genesis.Create(ctx, char, "initial_bind_guest"); gErr != nil {
+	if gErr := s.genesis.Create(ctx, char, admitted, "initial_bind_guest"); gErr != nil {
 		s.namer.ReleaseGuest(name)
 		s.cleanupGuestPlayer(ctx, player.ID) // best-effort orphan-player compensation
 		return nil, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(gErr)
@@ -215,29 +232,111 @@ func (s *GuestService) cleanupGuestPlayer(ctx context.Context, playerID ulid.ULI
 // database, retrying up to maxGuestNameRetries times.
 // Returns the raw namer name (underscore form), which the caller converts to
 // a character display name as needed.
-func (s *GuestService) acquireUniqueName(ctx context.Context) (string, error) {
+// It returns the raw namer name (underscore form) AND the admission token minted
+// for its display form. The token is a return value rather than something the
+// caller re-derives: this path is automatic and high-volume, and a gate
+// installed only in CharacterService would have left it wide open (T-02-31).
+func (s *GuestService) acquireUniqueName(ctx context.Context) (rawName string, admitted charname.Admitted, err error) {
+	// lastRefusal carries the most recent per-candidate gate refusal into the
+	// exhaustion error, so GUEST_NAME_EXHAUSTED names WHY every candidate was
+	// rejected instead of reporting a bare count.
+	var lastRefusal error
+
 	for range maxGuestNameRetries {
-		name, err := s.namer.GenerateName()
-		if err != nil {
-			return "", oops.Code("GUEST_NAME_GENERATE_FAILED").Wrap(err)
+		name, genErr := s.namer.GenerateName()
+		if genErr != nil {
+			return "", charname.Admitted{}, oops.Code("GUEST_NAME_GENERATE_FAILED").Wrap(genErr)
 		}
 
-		// Character names are stored with spaces; check using the display form.
+		// Namer names are underscore-separated (e.g. "Sapphire_Diamond"); the
+		// display form uses spaces. This is the ONLY place that conversion
+		// happens — everything downstream reads the token.
 		charName := strings.ReplaceAll(name, "_", " ")
-		exists, err := s.chars.ExistsByName(ctx, charName)
-		if err != nil {
+
+		token, admitErr := s.gate.Admit(ctx, charName)
+		if admitErr != nil {
 			s.namer.ReleaseGuest(name)
-			return "", oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(err)
+
+			// Not every gate refusal is about THIS candidate, and retrying the
+			// ones that are not is how a database outage came to be reported as
+			// name exhaustion. NAME_SKELETON_LOOKUP_FAILED (the corpus query
+			// failed) and NAME_SKELETON_UNVERIFIABLE (the documented fail-closed
+			// window between migrations 000054 and 000055, where some row still
+			// has a NULL skeleton) refuse EVERY candidate identically, so the
+			// loop burns all ten attempts and returns GUEST_NAME_EXHAUSTED —
+			// "unable to find unique guest name" — for a fault that has nothing
+			// to do with names. Surface those immediately, with the real cause
+			// attached.
+			if isCorpusUnavailable(admitErr) {
+				return "", charname.Admitted{}, oops.Code("GUEST_CREATE_FAILED").
+					With("name", name).
+					Hint("the character-name corpus could not be adjudicated; this is not name exhaustion").
+					Wrap(admitErr)
+			}
+
+			// A genuine per-candidate refusal — a block-list pattern matches it,
+			// or its skeleton collides with a live character. Retrying a
+			// different candidate can succeed, so the loop continues and
+			// exhaustion keeps its EXISTING caller-visible contract. It is
+			// logged rather than discarded: a block-list pattern broad enough to
+			// match most generated names produces exactly this, and it was
+			// previously invisible.
+			lastRefusal = admitErr
+			slog.DebugContext(ctx, "guest name candidate refused by the name gate",
+				"candidate", charName, "code", refusalCode(admitErr))
+			continue
+		}
+
+		exists, existsErr := s.chars.ExistsByNormalizedName(ctx, token.Key(), nil)
+		if existsErr != nil {
+			s.namer.ReleaseGuest(name)
+			return "", charname.Admitted{}, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(existsErr)
 		}
 		if !exists {
-			return name, nil
+			return name, token, nil
 		}
 
 		// Name exists in DB from a previous server run — release and try again.
 		s.namer.ReleaseGuest(name)
 	}
 
-	return "", oops.Code("GUEST_NAME_EXHAUSTED").
-		With("retries", maxGuestNameRetries).
+	exhausted := oops.Code("GUEST_NAME_EXHAUSTED").With("retries", maxGuestNameRetries)
+	if lastRefusal != nil {
+		exhausted = exhausted.With("last_refusal_code", refusalCode(lastRefusal))
+		errutil.LogErrorContext(ctx, "guest name generation exhausted its retries", lastRefusal,
+			"retries", maxGuestNameRetries)
+	}
+	return "", charname.Admitted{}, exhausted.
 		Errorf("unable to find unique guest name after %d attempts", maxGuestNameRetries)
+}
+
+// corpusUnavailableCodes are the Gate.Admit refusals that are properties of the
+// CORPUS rather than of the candidate. Retrying a different name cannot clear
+// either of them.
+var corpusUnavailableCodes = map[string]struct{}{
+	"NAME_SKELETON_LOOKUP_FAILED": {},
+	"NAME_SKELETON_UNVERIFIABLE":  {},
+}
+
+// isCorpusUnavailable reports whether a gate refusal means the corpus could not
+// be adjudicated at all.
+func isCorpusUnavailable(err error) bool {
+	_, unavailable := corpusUnavailableCodes[refusalCode(err)]
+	return unavailable
+}
+
+// refusalCode extracts an error's oops code, or "" when it carries none.
+func refusalCode(err error) string {
+	if err == nil {
+		return ""
+	}
+	oopsErr, ok := oops.AsOops(err)
+	if !ok {
+		return ""
+	}
+	code, ok := oopsErr.Code().(string)
+	if !ok {
+		return ""
+	}
+	return code
 }

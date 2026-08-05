@@ -30,6 +30,31 @@ const (
 	msgCharacterCreateFailed       = "character creation failed"
 	msgCharacterNoStartingLocation = "character creation unavailable"
 
+	// charname.Gate refusals (plan 02-06). Without these four the gate's
+	// verdicts all fell through to msgGenericRequestFailed, so a player was
+	// told "request failed" for every name the admission decision declined —
+	// including the exact-duplicate case, which is how the PR #4941 regression
+	// surfaced.
+	//
+	// SECURITY: msgCharacterNameConfusable names NO colliding character and
+	// msgCharacterNameBlocked names NO pattern or index. §6.1.2 and the
+	// block-list design are both explicit that these refusals must not become
+	// enumeration oracles — a message that said WHICH character, or WHICH
+	// pattern, would let an attacker read back the corpus or the operator's
+	// configuration one submission at a time. They deliberately mirror the
+	// wording charname.Gate itself uses.
+	msgCharacterNameConfusable  = "that character name is too similar to an existing one"
+	msgCharacterNameBlocked     = "that character name is not available"
+	msgCharacterNameMixedScript = "character names cannot mix writing systems; please use one"
+
+	// msgCharacterNameUnverifiable is the D-30 fail-closed state, and it reads
+	// as TRANSIENT on purpose: the name was not rejected. The corpus simply
+	// could not answer the confusability question yet (some row's skeleton is
+	// still unpopulated), so the gate refused to adjudicate rather than guess.
+	// Telling the player their name is unacceptable would be false and would
+	// send them off to pick a different one for no reason.
+	msgCharacterNameUnverifiable = "character name check is temporarily unavailable; please try again shortly"
+
 	// ConfirmPasswordReset.
 	msgResetPasswordEmpty   = "new password cannot be empty"
 	msgResetInvalidPassword = "invalid password"
@@ -75,6 +100,16 @@ func sanitizeAuthError(err error) string {
 		return msgCharacterCreateFailed
 	case "CHARACTER_NO_STARTING_LOCATION":
 		return msgCharacterNoStartingLocation
+
+	// charname.Gate refusals (plan 02-06).
+	case "NAME_CONFUSABLE":
+		return msgCharacterNameConfusable
+	case "NAME_BLOCKED":
+		return msgCharacterNameBlocked
+	case "NAME_MIXED_SCRIPT":
+		return msgCharacterNameMixedScript
+	case "NAME_SKELETON_UNVERIFIABLE":
+		return msgCharacterNameUnverifiable
 
 	// ConfirmPasswordReset.
 	case "RESET_PASSWORD_EMPTY":

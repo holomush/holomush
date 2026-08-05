@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -41,7 +42,7 @@ func TestParentLocationResolver_CharacterParent_JoinsLocationID(t *testing.T) {
 	ctx := context.Background()
 
 	locID := insertLocation(t, pool, "TestLoc")
-	charID := insertCharacterAt(t, pool, "TestChar", &locID)
+	charID := insertCharacterAt(t, pool, charFixtureName("resolver located"), &locID)
 
 	got, err := resolver.ResolveParentLocation(ctx, "character", charID)
 	require.NoError(t, err)
@@ -54,7 +55,7 @@ func TestParentLocationResolver_CharacterParent_NullLocation_ReturnsNil(t *testi
 	resolver := worldpg.NewParentLocationResolver(pool)
 	ctx := context.Background()
 
-	charID := insertCharacterAt(t, pool, "Wanderer", nil)
+	charID := insertCharacterAt(t, pool, charFixtureName("resolver wanderer"), nil)
 
 	got, err := resolver.ResolveParentLocation(ctx, "character", charID)
 	require.NoError(t, err)
@@ -81,7 +82,7 @@ func TestParentLocationResolver_ObjectParent_HeldByCharacter(t *testing.T) {
 	ctx := context.Background()
 
 	locID := insertLocation(t, pool, "Town")
-	charID := insertCharacterAt(t, pool, "Holder", &locID)
+	charID := insertCharacterAt(t, pool, charFixtureName("resolver holder"), &locID)
 	objID := insertObjectHeldBy(t, pool, "Note", charID)
 
 	got, err := resolver.ResolveParentLocation(ctx, "object", objID)
@@ -184,16 +185,19 @@ func insertCharacterAt(t *testing.T, pool *pgxpool.Pool, name string, locID *uli
 		playerID.String(), "p_"+playerID.String())
 	require.NoError(t, err)
 	charID := ulid.Make()
+	ident := chartest.IdentityFor(name)
 	if locID != nil {
 		_, err = pool.Exec(context.Background(), `
-			INSERT INTO characters (id, player_id, name, location_id)
-			VALUES ($1, $2, $3, $4)`,
-			charID.String(), playerID.String(), name, locID.String())
+			INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			charID.String(), playerID.String(), name, locID.String(),
+			ident.NormalizedName, ident.Skeleton, ident.UnicodeVersion)
 	} else {
 		_, err = pool.Exec(context.Background(), `
-			INSERT INTO characters (id, player_id, name, location_id)
-			VALUES ($1, $2, $3, NULL)`,
-			charID.String(), playerID.String(), name)
+			INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, NULL, $4, $5, $6)`,
+			charID.String(), playerID.String(), name,
+			ident.NormalizedName, ident.Skeleton, ident.UnicodeVersion)
 	}
 	require.NoError(t, err)
 	return charID

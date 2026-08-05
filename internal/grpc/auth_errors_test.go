@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/samber/oops"
@@ -50,6 +51,14 @@ func TestSanitizeAuthErrorMapsKnownCodes(t *testing.T) {
 		{"maps CHARACTER_CREATE_FAILED", "CHARACTER_CREATE_FAILED", msgCharacterCreateFailed},
 		{"maps CHARACTER_NO_STARTING_LOCATION", "CHARACTER_NO_STARTING_LOCATION", msgCharacterNoStartingLocation},
 
+		// charname.Gate refusals (plan 02-06). Before these cases existed all
+		// four fell through to msgGenericRequestFailed, which is how the
+		// PR #4941 "request failed" regression reached the browser.
+		{"maps NAME_CONFUSABLE", "NAME_CONFUSABLE", msgCharacterNameConfusable},
+		{"maps NAME_BLOCKED", "NAME_BLOCKED", msgCharacterNameBlocked},
+		{"maps NAME_MIXED_SCRIPT", "NAME_MIXED_SCRIPT", msgCharacterNameMixedScript},
+		{"maps NAME_SKELETON_UNVERIFIABLE", "NAME_SKELETON_UNVERIFIABLE", msgCharacterNameUnverifiable},
+
 		// ConfirmPasswordReset.
 		{"maps RESET_PASSWORD_EMPTY", "RESET_PASSWORD_EMPTY", msgResetPasswordEmpty},
 		{"maps AUTH_INVALID_PASSWORD", "AUTH_INVALID_PASSWORD", msgResetInvalidPassword},
@@ -76,4 +85,45 @@ func TestSanitizeAuthErrorMapsKnownCodes(t *testing.T) {
 			assert.NotContains(t, got, "internal raw message")
 		})
 	}
+}
+
+// TestGateRefusalMessagesAreDistinctAndDiscloseNothing pins the two properties
+// the table above cannot express.
+//
+// DISTINCTNESS is what makes the mapping load-bearing: four codes collapsed onto
+// one message would satisfy every row of that table and still leave a player
+// unable to tell "too similar" from "temporarily unavailable" — which is the
+// generic-message defect this change exists to remove, one layer in.
+func TestGateRefusalMessagesAreDistinctAndDiscloseNothing(t *testing.T) {
+	messages := map[string]string{
+		"NAME_CONFUSABLE":            sanitizeAuthError(oops.Code("NAME_CONFUSABLE").Errorf("x")),
+		"NAME_BLOCKED":               sanitizeAuthError(oops.Code("NAME_BLOCKED").Errorf("x")),
+		"NAME_MIXED_SCRIPT":          sanitizeAuthError(oops.Code("NAME_MIXED_SCRIPT").Errorf("x")),
+		"NAME_SKELETON_UNVERIFIABLE": sanitizeAuthError(oops.Code("NAME_SKELETON_UNVERIFIABLE").Errorf("x")),
+	}
+
+	seen := map[string]string{}
+	for code, msg := range messages {
+		assert.NotEqual(t, msgGenericRequestFailed, msg,
+			"%s must not fall through to the generic message", code)
+		if other, dup := seen[msg]; dup {
+			t.Errorf("%s and %s share the message %q; a player cannot tell them apart", code, other, msg)
+		}
+		seen[msg] = code
+	}
+
+	// The confusable refusal must not become an enumeration oracle: it says
+	// that a similar name exists, never WHICH one (§6.1.2).
+	confusable := messages["NAME_CONFUSABLE"]
+	assert.NotContains(t, strings.ToLower(confusable), "cocoa")
+	assert.Regexp(t, `(?i)similar`, confusable)
+
+	// The block-list refusal must not echo operator configuration back — not
+	// the pattern, not its index.
+	blocked := messages["NAME_BLOCKED"]
+	assert.NotContains(t, blocked, "pattern")
+	assert.NotContains(t, blocked, "index")
+
+	// The fail-closed state is TRANSIENT, not a rejection of the name.
+	assert.Regexp(t, `(?i)again shortly`, messages["NAME_SKELETON_UNVERIFIABLE"])
 }

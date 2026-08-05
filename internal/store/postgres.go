@@ -93,6 +93,41 @@ func (s *PostgresEventStore) SetSystemInfo(ctx context.Context, key, value strin
 	return nil
 }
 
+// SystemInfoVersion returns a two-signal change indicator for a single
+// holomush_system_info row: its updated_at timestamp and an md5 digest of its
+// value. A missing row yields the zero indicator (0, "") and no error — an
+// unconfigured key is a legitimate state, not a query failure.
+//
+// # Why two signals rather than updated_at alone
+//
+// updated_at is maintained ONLY by SetSystemInfo's ON CONFLICT clause above.
+// Migrations forbid triggers (see .claude/rules/database-migrations.md), so
+// nothing else in the system bumps it. A plain
+//
+//	UPDATE holomush_system_info SET value = '…' WHERE key = '…'
+//
+// therefore leaves updated_at exactly where it was — and direct SQL is the only
+// edit path v0.13 offers for operator-configured keys. A poller watching
+// updated_at alone would never observe the only edit that happens. The content
+// digest closes that, and the timestamp is retained so a same-content rewrite
+// (or a clock-visible touch) is still observed.
+//
+// This mirrors policy.VersionQuerier's own two-signal design
+// (LatestPolicyVersion returns a timestamp AND a count), which exists for the
+// structurally identical reason: one signal cannot see every mutation.
+func (s *PostgresEventStore) SystemInfoVersion(ctx context.Context, key string) (updatedAt int64, valueHash string, err error) {
+	scanErr := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(updated_at, 0), md5(value) FROM holomush_system_info WHERE key = $1`,
+		key).Scan(&updatedAt, &valueHash)
+	if errors.Is(scanErr, pgx.ErrNoRows) {
+		return 0, "", nil
+	}
+	if scanErr != nil {
+		return 0, "", oops.With("operation", "get system info version").With("key", key).Wrap(scanErr)
+	}
+	return updatedAt, valueHash, nil
+}
+
 // InitGameID ensures a game_id exists, generating one if needed.
 func (s *PostgresEventStore) InitGameID(ctx context.Context) (string, error) {
 	gameID, err := s.GetSystemInfo(ctx, "game_id")

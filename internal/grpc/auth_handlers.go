@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -279,6 +280,31 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		return &corev1.SelectCharacterResponse{
 			Success:      false,
 			ErrorMessage: "character does not belong to this player",
+		}, nil
+	}
+
+	// Lifecycle check (INV-WORLD-5): a character that is not active may not be
+	// selected for play. The decision routes through world.Selectable — the one
+	// exhaustive predicate over the closed vocabulary — so a value added to that
+	// vocabulary later is refused here by the same code path that refuses
+	// retired, with no second predicate to keep in sync.
+	//
+	// An EMPTY status is not a lifecycle state. It is the zero value of a
+	// projection that did not read characters.status, and ListByPlayer above is a
+	// full-entity read, so observing it here means a materializer regressed. That
+	// is a programming error rather than a player-facing condition: log it and
+	// fail closed, then fix the projection rather than softening the predicate.
+	if selectedChar.Status == "" {
+		errutil.LogErrorContext(ctx, "grpc: SelectCharacter read a character with no lifecycle status",
+			oops.Code("CHARACTER_STATUS_ABSENT").
+				With("character_id", selectedChar.ID.String()).
+				Errorf("character %s carries no lifecycle status; a partial projection reached the selection path",
+					selectedChar.ID))
+	}
+	if !world.Selectable(selectedChar.Status) {
+		return &corev1.SelectCharacterResponse{
+			Success:      false,
+			ErrorMessage: "character is not available for play",
 		}, nil
 	}
 

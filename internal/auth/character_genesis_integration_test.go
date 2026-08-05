@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -30,7 +31,51 @@ func genesisPool(t *testing.T) *pgxpool.Pool {
 	pool, err := pgxpool.New(context.Background(), connStr)
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
+
+	// Repair the corpus before any character write. Migration
+	// 000001_baseline.sql seeds a bootstrap character with no name_skeleton, so
+	// a freshly migrated database always carries a row guardSkeleton correctly
+	// refuses to adjudicate against (D-30) — every Create here would otherwise
+	// fail NAME_SKELETON_UNVERIFIABLE. This stands in for plan 02-12's 000055
+	// Go migration.
+	backfillGenesisSkeletons(t, pool)
 	return pool
+}
+
+// backfillGenesisSkeletons populates the identity columns of every characters
+// row missing them.
+func backfillGenesisSkeletons(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+	rows, err := pool.Query(ctx, `
+		SELECT id, name FROM characters
+		WHERE normalized_name IS NULL
+		   OR name_skeleton IS NULL
+		   OR name_skeleton_unicode_version IS NULL
+	`)
+	require.NoError(t, err)
+	type pending struct{ id, key, skeleton string }
+	var todo []pending
+	for rows.Next() {
+		var id, name string
+		require.NoError(t, rows.Scan(&id, &name))
+		normalized, nErr := charname.Normalize(name)
+		if nErr != nil {
+			todo = append(todo, pending{id: id, key: id, skeleton: id})
+			continue
+		}
+		todo = append(todo, pending{id: id, key: normalized.Key, skeleton: charname.Skeleton(normalized.Key)})
+	}
+	require.NoError(t, rows.Err())
+	rows.Close()
+	for _, p := range todo {
+		_, execErr := pool.Exec(ctx, `
+			UPDATE characters
+			SET normalized_name = $2, name_skeleton = $3, name_skeleton_unicode_version = $4
+			WHERE id = $1
+		`, p.id, p.key, p.skeleton, charname.UnicodeVersion)
+		require.NoError(t, execErr)
+	}
 }
 
 // seedGenesisPlayer inserts a player row (the character's player_id FK target)
@@ -100,7 +145,7 @@ func TestCharacterGenesisCreateCommitsCharacterBindingAndEnvelope(t *testing.T) 
 	playerID := seedGenesisPlayer(t, pool)
 	char := genesisChar(t, playerID, "Atomic One")
 
-	require.NoError(t, svc.Create(ctx, char, "initial_bind"))
+	require.NoError(t, svc.Create(ctx, char, testAdmitted(t, char.Name), "initial_bind"))
 
 	assert.Equal(t, 1, countCharacter(t, pool, char.ID))
 	assert.Equal(t, 1, countBinding(t, pool, char.ID))
@@ -123,7 +168,7 @@ func TestCharacterGenesisCreateRejectsReapingPlayerAgainstDB(t *testing.T) {
 	require.NoError(t, err)
 
 	char := genesisChar(t, playerID, "Reaping Reject")
-	err = svc.Create(ctx, char, "initial_bind_guest")
+	err = svc.Create(ctx, char, testAdmitted(t, char.Name), "initial_bind_guest")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLAYER_REAPING")
 
@@ -140,7 +185,7 @@ func TestCharacterGenesisCreateNoBindingEmitsEnvelope(t *testing.T) {
 	playerID := seedGenesisPlayer(t, pool)
 	char := genesisChar(t, playerID, "No Bind Admin")
 
-	require.NoError(t, svc.Create(ctx, char, ""))
+	require.NoError(t, svc.Create(ctx, char, testAdmitted(t, char.Name), ""))
 
 	assert.Equal(t, 1, countCharacter(t, pool, char.ID))
 	assert.Equal(t, 0, countBinding(t, pool, char.ID))
@@ -160,7 +205,7 @@ func TestCharacterGenesisEnrollsInAmbientTxAndRollsBackTogether(t *testing.T) {
 
 	sentinel := errors.New("force outer rollback")
 	err := transactor.InTransaction(ctx, func(txCtx context.Context) error {
-		if cErr := svc.Create(txCtx, char, "initial_bind"); cErr != nil {
+		if cErr := svc.Create(txCtx, char, testAdmitted(t, char.Name), "initial_bind"); cErr != nil {
 			return cErr
 		}
 		return sentinel // force the OUTER transaction to roll back
@@ -182,7 +227,7 @@ func TestCharacterGenesisCreateRollsBackOnFailedInsert(t *testing.T) {
 	// player_id references a player that does NOT exist -> character insert fails.
 	char := genesisChar(t, ulid.Make(), "Orphan FK")
 
-	err := svc.Create(ctx, char, "initial_bind")
+	err := svc.Create(ctx, char, testAdmitted(t, char.Name), "initial_bind")
 	require.Error(t, err)
 
 	assert.Equal(t, 0, countCharacter(t, pool, char.ID))

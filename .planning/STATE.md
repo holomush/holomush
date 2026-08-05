@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 01.1
-current_phase_name: migration-framework-adopt-goose-for-go-migrations
+current_phase: 02
+current_phase_name: abac-schema-vocabulary
 status: verifying
-stopped_at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
-last_updated: "2026-08-03T02:13:21.169Z"
-last_activity: 2026-08-02
-last_activity_desc: Phase 01.1 execution started
+stopped_at: Completed 02-11-PLAN.md — phase 02 closeout; abac-reviewer gate OUTSTANDING
+last_updated: "2026-08-05T20:16:23.589Z"
+last_activity: 2026-08-04
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
-  completed_phases: 2
-  total_plans: 13
-  completed_plans: 13
-  percent: 29
+  completed_phases: 3
+  total_plans: 26
+  completed_plans: 26
+  percent: 43
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 01.1 — migration-framework-adopt-goose-for-go-migrations
+**Current focus:** Phase 02 — abac-schema-vocabulary
 complete character identity surface (creation, management, public profiles with privacy) and stand up the
 `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 01.1 (migration-framework-adopt-goose-for-go-migrations) — EXECUTING
-Plan: 7 of 7
+Phase: 02 (abac-schema-vocabulary) — EXECUTING
+Plan: 13 of 13
 Status: Phase complete — ready for verification
 Progress: [██████████] 100% (1/6 phases)
-Last activity: 2026-08-02 — Phase 01.1 execution started
+Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -227,6 +227,19 @@ no action needed.
 | Phase 01.1 P04 | 75m | 3 tasks | 7 files |
 | Phase 01.1 P06 | ~70 min | 2 tasks | 6 files |
 | Phase 01.1 P07 | 85m | 3 tasks | 11 files |
+| Phase 02 P01 | 75m | 3 tasks tasks | 21 files files |
+| Phase 02 P02 | ~95min | 3 tasks | 11 files |
+| Phase 02 P03 | 34min | 2 tasks | 4 files |
+| Phase 02 P04 | 85m | 3 tasks | 11 files |
+| Phase 02 P05 | 110min | 3 tasks | 21 files |
+| Phase 02 P13 | 71min | 4 tasks | 15 files |
+| Phase 02 P06 | 155min | 3 tasks tasks | 36 files files |
+| Phase 02 P07 | 118min | 4 tasks | 9 files |
+| Phase 02 P08 | 20min | 3 tasks | 3 files |
+| Phase 02 P09 | 95min | 3 tasks | 9 files |
+| Phase 02 P12 | ~200min | 3 tasks | 45 files |
+| Phase 02 P10 | 63min | 6 tasks | 5 files |
+| Phase 02 P11 | 105m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -420,6 +433,57 @@ the next milestone yet.
 - [Phase ?]: task migrate:create deleted, not repointed at goose: goose's create -s numbers 5 digits (%05v), the corpus is 6 (migrate_embed_test.go)
 - [Phase ?]: scripts/bootstrap-migrations.sql retired as a comment-only banner, not deleted — an old runbook link lands on the explanation
 - [Phase ?]: D-16 rehearsal and D-18 rollback are WRITTEN, not EXECUTED — recorded as such in the SUMMARY and the WINDOWS ledger
+- [Phase ?]: 02-01: Task 1 checkpoint auto-selected generate-into-repo (auto_advance=true, gate=blocking not blocking-human); no new module — golang.org/x/text promoted indirect->direct
+- [Phase ?]: 02-01: Unicode 17.0.0 security data lives at /Public/17.0.0/security/, NOT /Public/security/17.0.0/ (the plan's URL 404s; /Public/security/ tops out at 16.0.0)
+- [Phase ?]: 02-01: migration 000001_baseline.sql:397 seeds a bootstrap character (TestChar), so EVERY stock database is D-30-unverifiable until the backfill — proven by its own integration spec, not argued
+- [Phase ?]: 02-01: adding a migration reddens THREE untagged-lane constants the plan did not enumerate (migrate_embed_test expectedMigrationCount, migrate_test census list + latest-version mock) on top of the integration-tagged pair B-5 flagged
+- [Phase ?]: 02-01: a machine-readable // Deprecated: on world.NormalizeCharacterName is unlandable before its caller migrates — staticcheck SA1019 fires at internal/auth/character_service.go:105, which this plan must not touch; prose notice used instead
+- [Phase ?]: 02-01: this repo has NO umbrella 'task generate' target, only generate:* subtasks; generate:confusables deliberately kept out of pr-prep's drift block because it fetches over the network
+- [Phase ?]: Mixed-script CJK families matched by containment, not Latin-required — {Han,Hiragana} and {Han,Hangul} are ordinary non-Latin names
+- [Phase ?]: The charname/auth separation guard is directional and file-scoped; a package-wide ban would be RED by design when 02-06 lands Gate.Admit
+- [Phase ?]: gen-confusables now gofmts its output — task fmt:check was red at HEAD and the generator fought task fmt
+- [Phase ?]: 02-03: viewer.roles resolves PER PLAYER (union across the player's characters), matching 01-SPEC §10.5 and the shipped PlayerHasRole join — so web and operator socket cannot disagree about who is an admin
+- [Phase ?]: 02-03: the anonymous viewer rung is exempt from the empty-identifier panic (viewer:anonymous is a complete subject, not a bare prefix) and panics instead on a NON-empty identifier
+- [Phase ?]: 02-03: viewer namespace ships FIVE keys, not §8.4.1's three — roles/has_roles added so seed:viewer-property-admin-read is expressible at all (Amendment F for plan 02-11)
+- [Phase ?]: INV-WORLD-6's registry summary was corrected to enumerate BOTH sanctioned tombstone-emitting deleters (world.Service.DeleteCharacter and auth.CharacterReapingService) in the same change that bound it — the shipped 'ONLY path' wording was already false and binding it would have written a fabricated guarantee no meta-test can catch.
+- [Phase ?]: The empty world.Status zero value is refused and logged at the SelectCharacter call site; world.Selectable's default arm stays deny. Partial projections feeding the selection path were widened instead of softening the predicate.
+- [Phase ?]: 02-05: the policy.Cache read barrier is deliberately NOT mirrored for the block list — it would be harmful, not merely dead (no in-process writer; blocking readers would turn poll latency into admission latency while the last valid list is fully valid)
+- [Phase ?]: 02-05: the block-list poll indicator is the pair (updated_at, md5(value)) — a bare updated_at poll never observes v0.13's only edit path (direct SQL), which leaves updated_at untouched
+- [Phase ?]: 02-05: blocklist.Load does its own strict decode instead of settings.StringSliceN, which collapses absent and unparseable into one (nil,false) and would silently disable the whole list on one malformed direct-SQL edit
+- [Phase ?]: 02-05: production hands charname.Gate the live *blocklist.Cache, never a *Snapshot — a snapshot captured at construction freezes the list for the process lifetime with no failing test and no log line
+- [Phase ?]: 02-13: derived property peers use the no-widening direction (D-27) — ALL on the permit side (owner_player_id, visible_to_players), ANY on the forbid side (excluded_from_players); the plain player union was proposed for both and declined for the permit side
+- [Phase ?]: 02-13: PlayerRoles lands on the concrete *PostgresRoleStore and reaches the ABAC stack via the ABACConfig.PlayerRoleLookup func field — store.RoleStore's interface is unchanged
+- [Phase ?]: 02-13: ViewerTierProvider is now registered in BuildABACStack and both new ABACConfig seams are populated at the production composition root (subsystem.go), so principal.viewer.* resolves in production
+- [Phase ?]: 02-06: charname.Admitted is an opaque single-constructor token — (*Gate).Admit — so an ungated characters.name write is not expressible in Go rather than merely caught by a census
+- [Phase ?]: 02-06: Rename is envelope-atomic through the IN-PACKAGE OutboxStore and takes the intent as a parameter; it MUST NOT be routed through worldMutator.mutate() or two envelopes are emitted per rename
+- [Phase ?]: 02-06: guardSkeleton derives its advisory-lock key with FNV-1a in Go, not Postgres hashtext, so every replica computes the same key (D-30 part 2)
+- [Phase ?]: 02-06: census rule D counts METHODS, so guardSkeleton (takes a token, writes nothing) is not a name-admitting member; rules A and E still cover free functions
+- [Phase ?]: 02-06: mapGateError REPLACES the oops code rather than wrapping it — oops resolves the DEEPEST chain code (#4902), so a wrap would silently change the caller-visible contract
+- [Phase ?]: 02-06: NAME_EMPTY_NORMAL_FORM is mapped to CHARACTER_INVALID_NAME alongside NAME_INVALID_SYNTAX; both were CHARACTER_INVALID_NAME before the gate existed
+- [Phase ?]: 02-06: a stock database is D-30-unverifiable (000001_baseline seeds a skeleton-less bootstrap character), so the integration harness and three suites repair the corpus at setup — every guest login exhausted its retries until they did
+- [Phase ?]: 02-06: block-list window #10 CLOSED — all three composition roots call setup.NewCharacterNameGate, which fails closed on a nil BlockList subsystem
+- [Phase ?]: 02-07: Task 2 checkpoint auto-resolved to author-now-gate-on-audit — D-11's posture is already LOCKED in 02-CONTEXT.md; the phase MUST NOT merge before 02-AUDIT-RESULT.md exists and is non-empty
+- [Phase ?]: 02-07: the plan's D-29 grep criterion (zero 'resource is character' in seed.go) is unsatisfiable — 3 pre-existing shipped seeds match. Replaced with a compiled-target gate pinning the character-typed seed set
+- [Phase ?]: 02-07: createSeedEngine cannot delegate to abactest (import cycle in an in-package test file). The B-6 closure is bought by an external test package in the same directory instead
+- [Phase ?]: 02-07: D-03 ships TWO tier-floor policies, not three — the player rung has no seeded §8.6 member and the DSL list grammar forbids an empty 'in []'. Guarded by a conditional re-entry test
+- [Phase ?]: 02-08: AttributeVisible does NOT short-circuit on a term-A denial — both terms always evaluate, so 'exactly two evaluations' is unconditional and a term-B infra failure cannot be masked as an ordinary withheld (§8.10)
+- [Phase ?]: 02-08: §8.7's not-found-equivalent is signalled as ErrProfileUnreachable, a distinct Go outcome from ErrEvaluationFailed — a caller that cannot tell them apart renders an outage as a missing character; the wire-level indistinguishability binds in Phase 4
+- [Phase ?]: 02-09: gate-then-distinguish — the ABAC evaluation runs BEFORE the registry lookup, so DENY_ADMIN_SECTION vs DENY_ADMIN_SECTION_UNREGISTERED is an admin diagnostic, not an enumeration oracle (D-06); pinned by INV-PRIVACY-11, bound to a differential string-equality assertion demonstrated RED against a lookup-first ordering
+- [Phase ?]: 02-09: Descriptor.Action is enforced as a declared MAXIMUM operation class through a CLOSED rank ladder (read<write); an action off the ladder is refused rather than ranked zero, and the check sits AFTER the gate so the declare-write distinction stays invisible to a denied caller
+- [Phase ?]: 02-09: section.ValidateAtBoot is step 1 of BootstrapSubsystem.Prepare (before the orphan check, no DB needed) — without the call site D-09 would have been satisfied by a unit test only and a zero-valued descriptor would ship
+- [Phase ?]: 02-09: error codes are inline oops.Code literals (adminauth precedent) rather than exported constants, forced by the plan's line-ordering criterion; taxonomy documented on AssertSectionAccess for Phase 4/6
+- [Phase ?]: 02-09: ADMIN_SECTION_EVALUATION_FAILED added under Rule 2 (§8.10 infra failure must not be flattened into a denial) but is UNTESTED — the suite uses only the real engine; Phase 4 owns the seam
+- [Phase ?]: 02-12: migration 000055's Down is a real revert (ClearCharacterIdentity), not an error-returning stub — an erroring Down makes every version below 55 unreachable and wedged 15 in-tree specs
+- [Phase ?]: 02-12: Go migrations are invisible to the .sql-only embed glob, so internal/store/go_migration_census.go merges them into the version helpers — without it the adopt gate seeds a goose ledger with a hole at 55
+- [Phase ?]: 02-12: the UNIQUE index is isolated with direct INSERTs, not through CharacterService.Create — the ExistsByNormalizedName pre-check and 02-06's advisory lock both sit above it and are present in either schema
+- [Phase ?]: 02-12: INV-WORLD-4's 'exactly TWO sanctioned out-of-world writers' is now false (the operator rename CLI is a third); the registry text amendment is owned by plan 02-11
+- [Phase ?]: 02-10 Task 2 (checkpoint:decision, gate=blocking) — evidence-recording scheme for the PROFILE-11 exposure audit: SANITIZED-LEDGER. Maintainer-selected, not auto-selected. 02-AUDIT-RESULT.md carries one ledger line per adjudicated row (stable row id, md5 content digest, character length, verdict) plus the five aggregate result sets; the detailed text is read from an operator-only report generated outside the repository and deleted. Explicitly confirmed: NO player-authored text is to be committed to this repository — no entity_properties value, no characters.description text, no character or player name, and no truncated or representative excerpt. Hashes and lengths only. Rejected: private-detailed-record (splits the phase's evidence across two homes, one outside the review the phase is gated on).
+- [Phase ?]: 02-10 Task 4 (checkpoint:decision, gate=blocking) — remediation of the PROFILE-11 exposure audit: NO-REMEDIATION-REQUIRED. Maintainer-selected, not auto-selected. Rows in scope: none — the property ledger and the description ledger are both 0 rows and entity_properties is empty in its entirety. Enumerated remediate row ids: none. Prior-value capture and rollback: not applicable, because no row is written. Basis: the ledger actually produced by kopia snapshot 7e48a9b592c2e0d302a5da3cf0171835, not an assumption about it — which is the one condition the option's own text attaches. Task 4b therefore performs no write, creates no 02-REMEDIATION.sql, and touches no database.
+- [Phase ?]: abac-reviewer gate is OUTSTANDING and blocking: it is a repo-owned sub-agent and the 02-11 executor had no agent-dispatch tool; no verdict was fabricated
+- [Phase ?]: INV-WORLD-4 amended TWO -> THREE out-of-world writers (02-12's rename CLI), an edit to an existing entry rather than a renumber
+- [Phase ?]: D-03's tier-floor count verified against seed.go (2 == 2) and 02-CONTEXT.md deliberately NOT edited — a check that self-heals is not a check
+- [Phase ?]: 01-SPEC §8.5.1.1 option 2 recorded REJECTED; D-01's five viewer twins are the settled shape
+- [Phase ?]: 02-RESEARCH.md's stale schema section deliberately NOT rewritten — a dated research record is annotated, never rewritten
 
 ### Pending Todos
 
@@ -434,6 +498,9 @@ None yet.
   part of their own definition of done
 
 - Operator action outstanding: ruleset 11923801 unchanged; no coverage context gates merges (#4875, #4876)
+- 02-07: PROFILE-11's characters.description half is NOT discharged in Phase 2 — D-29 defers seed:profile-public-read-character to Phase 4, to land with the characterToProto projection narrowing. EXT-07's admin section registry is still 02-09's.
+- BLOCKING pre-merge: abac-reviewer (/holomush-dev:review-abac) has NOT reviewed the Phase 2 diff. D-05 makes it mandatory. Brief is written verbatim in 02-11-SUMMARY.md; owner is the orchestrator/human.
+- MAINTAINER DECISION: ROADMAP success criterion 4 — the in-world-description half is deferred to Phase 4 by D-29. Three options stated in 02-11-SUMMARY.md, none selected. Criterion 1 is settled by D-30 and MUST NOT be touched.
 
 ### Quick Tasks Completed
 
@@ -452,6 +519,7 @@ None yet.
 - Phase 01.1 edited: edited fields: success_criteria (criterion 1: 49->44 pairs, 'byte-identical' restated as application-schema with bookkeeping objects excluded per D-15; criterion 4: 'real migration' restated as integration-test fixture chain per D-07), research_flag (49->44, baseline question marked resolved per D-02/D-04)
 - Phase 01.1 edited: criterion 1 row-count corrected post-research: 'goose_db_version with 44 rows' -> '44 rows at version_id > 0 plus goose's version-0 bootstrap row (45 total)'. goose inserts a version-0 row at table creation (RESEARCH.md:875-877, verified by execution against postgres:18-alpine), so the prior assertion failed against a correct database.
 - Phase 01.1 edited: criterion 3 amended post-research (maintainer decision): 'up/down/status/version/force parity' -> 'up/down/status/version parity, force REMOVED with docs+tests'. goose commits body and version row in one transaction (provider_run.go:213-219), so the dirty state force repairs cannot arise; force has no analogue and no purpose (RESEARCH.md:777).
+- Phase 2 edited: criterion 4 split: public-properties half stays Phase 2, in-world-description half deferred to Phase 4 as its criterion 6 (D-29)
 
 ## Deferred Items
 
@@ -465,11 +533,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-03T02:13:21.159Z
+Last session: 2026-08-05T20:16:12.262Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 01.1-07-PLAN.md (final plan of phase 01.1)
+Stopped at: Completed 02-11-PLAN.md — phase 02 closeout; abac-reviewer gate OUTSTANDING
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.

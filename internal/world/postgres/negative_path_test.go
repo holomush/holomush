@@ -224,13 +224,13 @@ func TestCharacterRepository_CreateWithNonExistentPlayer(t *testing.T) {
 	char := &world.Character{
 		ID:          ulid.Make(),
 		PlayerID:    ulid.Make(), // no player with this ID exists
-		Name:        "FKViolationHero",
+		Name:        charFixtureName("fk violation hero"),
 		Description: "Orphaned character.",
 		LocationID:  &locationID,
 		CreatedAt:   time.Now().UTC(),
 	}
 
-	err := delErr(repo.Create(ctx, char))
+	err := delErr(repo.Create(ctx, char, admit(ctx, t, char.Name)))
 	require.Error(t, err, "creating a character for a non-existent player must fail")
 	errutil.AssertErrorCode(t, err, "CHARACTER_CREATE_FAILED")
 }
@@ -247,13 +247,13 @@ func TestCharacterRepository_CreateWithNonExistentLocation(t *testing.T) {
 	char := &world.Character{
 		ID:          ulid.Make(),
 		PlayerID:    playerID,
-		Name:        "FKLocationHero",
+		Name:        charFixtureName("fk location hero"),
 		Description: "Character with non-existent location.",
 		LocationID:  &ghostLoc,
 		CreatedAt:   time.Now().UTC(),
 	}
 
-	err := delErr(repo.Create(ctx, char))
+	err := delErr(repo.Create(ctx, char, admit(ctx, t, char.Name)))
 	require.Error(t, err, "creating a character with a non-existent location_id must fail")
 	errutil.AssertErrorCode(t, err, "CHARACTER_CREATE_FAILED")
 }

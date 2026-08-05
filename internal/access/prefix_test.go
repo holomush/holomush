@@ -585,6 +585,22 @@ func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
 			constant: access.ResourceKV,
 			desc:     "ResourceKV",
 		},
+		// Portal vocabulary (01-SPEC §8.4.1, §8.4.2, §10.4)
+		{
+			name:     "subject viewer prefix",
+			constant: access.SubjectViewer,
+			desc:     "SubjectViewer",
+		},
+		{
+			name:     "resource profile prefix",
+			constant: access.ResourceProfile,
+			desc:     "ResourceProfile",
+		},
+		{
+			name:     "resource admin section prefix",
+			constant: access.ResourceAdminSection,
+			desc:     "ResourceAdminSection",
+		},
 	}
 
 	// Verify each constant is in the internal knownPrefixes list
@@ -612,5 +628,129 @@ func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
 	t.Run("unknown prefix rejected", func(t *testing.T) {
 		_, _, err := access.ParseEntityRef("unknown:test-id")
 		errutil.AssertErrorCode(t, err, "INVALID_ENTITY_REF")
+	})
+}
+
+// testViewerPlayerULID is a valid ULID used as the player identifier in the
+// portal-vocabulary tests below.
+const testViewerPlayerULID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+func TestParseEntityRefAcceptsViewerAnonymousSubject(t *testing.T) {
+	typeName, id, err := access.ParseEntityRef("viewer:anonymous")
+	require.NoError(t, err)
+	assert.Equal(t, "viewer", typeName)
+	assert.Equal(t, "anonymous", id)
+}
+
+func TestParseEntityRefCarriesViewerRungAndULIDTogetherInTheID(t *testing.T) {
+	// SplitN(ref, ":", 2) semantics: everything after the first colon is the id,
+	// so the rung token and the player ULID travel together.
+	typeName, id, err := access.ParseEntityRef("viewer:player:" + testViewerPlayerULID)
+	require.NoError(t, err)
+	assert.Equal(t, "viewer", typeName)
+	assert.Equal(t, "player:"+testViewerPlayerULID, id)
+}
+
+func TestParseEntityRefAcceptsProfileResourceNamespace(t *testing.T) {
+	typeName, id, err := access.ParseEntityRef("profile:" + testViewerPlayerULID)
+	require.NoError(t, err)
+	assert.Equal(t, "profile", typeName)
+	assert.Equal(t, testViewerPlayerULID, id)
+}
+
+func TestParseEntityRefAcceptsAdminSectionResourceNamespace(t *testing.T) {
+	typeName, id, err := access.ParseEntityRef("admin_section:characters")
+	require.NoError(t, err)
+	assert.Equal(t, "admin_section", typeName)
+	assert.Equal(t, "characters", id)
+}
+
+func TestViewerSubjectBuildsEachRungOfTheTierLadder(t *testing.T) {
+	tests := []struct {
+		name     string
+		tier     string
+		playerID string
+		want     string
+	}{
+		{
+			name:     "anonymous rung carries the bare tier token and no identifier",
+			tier:     access.ViewerTierAnonymous,
+			playerID: "",
+			want:     "viewer:anonymous",
+		},
+		{
+			name:     "guest rung carries the player ULID",
+			tier:     access.ViewerTierGuest,
+			playerID: testViewerPlayerULID,
+			want:     "viewer:guest:" + testViewerPlayerULID,
+		},
+		{
+			name:     "player rung carries the player ULID",
+			tier:     access.ViewerTierPlayer,
+			playerID: testViewerPlayerULID,
+			want:     "viewer:player:" + testViewerPlayerULID,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, access.ViewerSubject(tt.tier, tt.playerID))
+		})
+	}
+}
+
+// TestViewerSubjectDoesNotPanicForTheAnonymousRungWithNoIdentifier pins the
+// deliberate exception to the empty-identifier guard. §8.4.1 gives the anonymous
+// rung no identifier at all, so "viewer:anonymous" is a COMPLETE subject, not a
+// bare prefix. A later "tighten the guard so every empty id panics" change must
+// turn this RED rather than silently break every anonymous read.
+func TestViewerSubjectDoesNotPanicForTheAnonymousRungWithNoIdentifier(t *testing.T) {
+	assert.NotPanics(t, func() {
+		got := access.ViewerSubject(access.ViewerTierAnonymous, "")
+		assert.Equal(t, "viewer:anonymous", got)
+	})
+}
+
+func TestViewerSubjectPanicsWhenTheAnonymousRungIsHandedAnIdentifier(t *testing.T) {
+	assert.Panics(t, func() {
+		access.ViewerSubject(access.ViewerTierAnonymous, testViewerPlayerULID)
+	})
+}
+
+func TestViewerSubjectPanicsOnEmptyPlayerIDForTheGuestRung(t *testing.T) {
+	assert.Panics(t, func() {
+		access.ViewerSubject(access.ViewerTierGuest, "")
+	})
+}
+
+func TestViewerSubjectPanicsOnEmptyPlayerIDForThePlayerRung(t *testing.T) {
+	assert.Panics(t, func() {
+		access.ViewerSubject(access.ViewerTierPlayer, "")
+	})
+}
+
+func TestViewerSubjectPanicsOnAnUnrecognizedTierToken(t *testing.T) {
+	assert.Panics(t, func() {
+		access.ViewerSubject("spectator", testViewerPlayerULID)
+	})
+}
+
+func TestProfileResourceReturnsAProfileReferenceForACharacterID(t *testing.T) {
+	assert.Equal(t, "profile:"+testViewerPlayerULID, access.ProfileResource(testViewerPlayerULID))
+}
+
+func TestProfileResourcePanicsOnEmptyCharacterID(t *testing.T) {
+	assert.Panics(t, func() {
+		access.ProfileResource("")
+	})
+}
+
+func TestAdminSectionResourceReturnsASectionReference(t *testing.T) {
+	assert.Equal(t, "admin_section:characters", access.AdminSectionResource("characters"))
+}
+
+func TestAdminSectionResourcePanicsOnEmptySectionID(t *testing.T) {
+	assert.Panics(t, func() {
+		access.AdminSectionResource("")
 	})
 }

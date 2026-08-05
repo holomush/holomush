@@ -26,6 +26,7 @@ import (
 	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/content"
@@ -72,6 +73,18 @@ type grpcSubsystemConfig struct {
 	Plugins   *pluginsetup.PluginSubsystem
 	Sessions  *sessionsetup.SessionSubsystem
 	Bootstrap *bootstrapsetup.BootstrapSubsystem
+	// BlockList is the character-name block-list subsystem (IDENT-07, 02-05).
+	// Carried as a whole subsystem pointer like every field above it, rather
+	// than as an extracted *blocklist.Cache or a func field: this struct's
+	// shipped shape is subsystem pointers, and a second pattern would buy
+	// nothing.
+	//
+	// It is the transport that carries the live compiled matcher into this
+	// composition root. Populated in core.go from the SAME blocklist.Subsystem
+	// handed to the bootstrap config, so the two roots cannot drift onto
+	// independently-polled lists. Consuming it — calling Matcher() when
+	// constructing the charname.Gate — belongs to plan 02-06.
+	BlockList *blocklist.Subsystem
 	// EventBus supplies the Publisher used by the shared plugin emitter.
 	// Required post-F1 (cutover commit): plugin emits publish to JetStream,
 	// not to the PostgreSQL events table.
@@ -433,7 +446,17 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		return oops.Code("CHARACTER_GENESIS_SERVICE_FAILED").Wrap(genErr)
 	}
 
-	characterService, charErr := auth.NewCharacterService(authCharRepo, authLocRepo, genesis)
+	// The character-name gate (IDENT-06/07/09). Composition roots TWO and THREE
+	// share this one value: the runtime CharacterService below and the
+	// GuestService further down. It is built through the same
+	// bootstrapsetup.NewCharacterNameGate the bootstrap root calls, so the two
+	// roots cannot drift onto different block lists.
+	nameGate, gateErr := bootstrapsetup.NewCharacterNameGate(pool, s.cfg.BlockList)
+	if gateErr != nil {
+		return oops.Code("CHARACTER_NAME_GATE_FAILED").Wrap(gateErr)
+	}
+
+	characterService, charErr := auth.NewCharacterService(authCharRepo, authLocRepo, genesis, nameGate)
 	if charErr != nil {
 		return oops.Code("CHARACTER_SERVICE_FAILED").Wrap(charErr)
 	}
@@ -473,6 +496,7 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		authPlayerSessionRepo,
 		genesis,
 		reapingService,
+		nameGate, // composition root THREE: the guest path runs the SAME gate
 	)
 	if guestSvcErr != nil {
 		return oops.Code("GUEST_SERVICE_FAILED").Wrap(guestSvcErr)

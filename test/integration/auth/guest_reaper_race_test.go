@@ -10,10 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/charname"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -31,14 +33,14 @@ func TestGuestReaperRaceGenesisAfterMarkIsRejected(t *testing.T) {
 
 	playerID := seedReapGuest(t, pool)
 	existing := reapCharFor(t, playerID, "Existing Guest")
-	require.NoError(t, genesis.Create(ctx, existing, "initial_bind_guest"))
+	require.NoError(t, genesis.Create(ctx, existing, admitReapName(ctx, t, pool, existing.Name), "initial_bind_guest"))
 
 	// The reaper MARKS the player reaping (step 1 of DeleteGuestPlayer).
 	require.NoError(t, playerRepo.MarkReaping(ctx, playerID))
 
 	// A genesis creation attempted now is rejected — no character row created.
 	late := reapCharFor(t, playerID, "Late Guest")
-	err := genesis.Create(ctx, late, "initial_bind_guest")
+	err := genesis.Create(ctx, late, admitReapName(ctx, t, pool, late.Name), "initial_bind_guest")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLAYER_REAPING")
 	assert.Zero(t, rowCount(t, pool, `SELECT COUNT(*) FROM characters WHERE id = $1`, late.ID.String()),
@@ -81,7 +83,7 @@ func TestGuestReaperRaceGenesisInFlightBlocksMarkThenCharacterTombstoned(t *test
 			if gErr := guard.EnsureNotReaping(txCtx, playerID); gErr != nil {
 				return gErr
 			}
-			if _, cErr := charRepo.Create(txCtx, inflight); cErr != nil {
+			if _, cErr := charRepo.Create(txCtx, inflight, admitReapName(ctx, t, pool, inflight.Name)); cErr != nil {
 				return cErr
 			}
 			close(lockAcquired)
@@ -116,4 +118,50 @@ func TestGuestReaperRaceGenesisInFlightBlocksMarkThenCharacterTombstoned(t *test
 		"a character created concurrently with reaping must still be tombstoned")
 	assert.Zero(t, rowCount(t, pool, `SELECT COUNT(*) FROM characters WHERE player_id = $1`, playerID.String()))
 	assert.Zero(t, rowCount(t, pool, `SELECT COUNT(*) FROM players WHERE id = $1`, playerID.String()))
+}
+
+// admitReapName mints a real charname.Admitted for a reaper-suite fixture name,
+// repairing the corpus first.
+//
+// These tests are plain testing.T (not Ginkgo), so they carry their own helper
+// rather than sharing the suite's Gomega-flavoured one. charname.Admitted has
+// exactly one constructor by design (plan 02-06) — there is no hand-built value
+// to reach for.
+func admitReapName(ctx context.Context, t *testing.T, pool *pgxpool.Pool, name string) charname.Admitted {
+	t.Helper()
+
+	rows, err := pool.Query(ctx, `
+		SELECT id, name FROM characters
+		WHERE normalized_name IS NULL
+		   OR name_skeleton IS NULL
+		   OR name_skeleton_unicode_version IS NULL
+	`)
+	require.NoError(t, err)
+	type pending struct{ id, key, skeleton string }
+	var todo []pending
+	for rows.Next() {
+		var id, rowName string
+		require.NoError(t, rows.Scan(&id, &rowName))
+		normalized, nErr := charname.Normalize(rowName)
+		if nErr != nil {
+			todo = append(todo, pending{id: id, key: id, skeleton: id})
+			continue
+		}
+		todo = append(todo, pending{id: id, key: normalized.Key, skeleton: charname.Skeleton(normalized.Key)})
+	}
+	require.NoError(t, rows.Err())
+	rows.Close()
+	for _, p := range todo {
+		_, execErr := pool.Exec(ctx, `
+			UPDATE characters
+			SET normalized_name = $2, name_skeleton = $3, name_skeleton_unicode_version = $4
+			WHERE id = $1
+		`, p.id, p.key, p.skeleton, charname.UnicodeVersion)
+		require.NoError(t, execErr)
+	}
+
+	gate := &charname.Gate{Skeletons: worldpg.NewSkeletonLookup(pool)}
+	admitted, err := gate.Admit(ctx, name)
+	require.NoError(t, err, "reaper fixture name %q must be admissible", name)
+	return admitted
 }

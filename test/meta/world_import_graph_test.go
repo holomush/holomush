@@ -82,6 +82,16 @@ func TestWorldPostgresCompositionAllowlist(t *testing.T) {
 		"internal/access/setup",
 		"internal/testsupport", // the whole testsupport tree
 		"internal/world/postgres",
+		// The goose migration chain. Migration 000055 backfills the character
+		// identity columns by CALLING worldpostgres.BackfillCharacterIdentity
+		// rather than carrying an `UPDATE characters` of its own — because
+		// world_sql_fence_test.go's Go scan does not skip internal/store and its
+		// world-sql-fence:allow marker exists only for `.sql` files, so a
+		// characters mutation written into a Go migration would be an
+		// unexemptable fence violation. This entry is the cost of putting the
+		// SQL on the correct side of the writer boundary; it constructs no
+		// repository, holding only the free-function call.
+		"internal/store/migrations",
 	}
 	isAllowed := func(rel string) bool {
 		for _, a := range allowed {

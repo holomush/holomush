@@ -18,9 +18,11 @@ import (
 	"github.com/holomush/holomush/internal/access/policy"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/admin/section"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/bootstrap"
+	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/lifecycle"
@@ -76,6 +78,16 @@ type BootstrapSubsystemConfig struct {
 	ResetSetting       bool
 	SkipSeedMigrations bool
 	GuestStartLocation string // pre-parsed ULID string; empty = resolve from metadata
+	// BlockList is the character-name block-list subsystem (IDENT-07, 02-05).
+	// It is carried as a WHOLE SUBSYSTEM POINTER, matching how the other
+	// collaborators above are supplied, and it is the transport by which the
+	// live matcher reaches the character-name gate this subsystem builds.
+	//
+	// Populated in cmd/holomush/core.go from the single blocklist.Subsystem it
+	// constructs, so this root and the gRPC root cannot drift onto
+	// independently-polled lists. Consuming it — calling Matcher() when
+	// constructing the gate — belongs to plan 02-06.
+	BlockList *blocklist.Subsystem
 }
 
 // BootstrapSubsystem orchestrates the multi-step bootstrap sequence:
@@ -92,7 +104,9 @@ type BootstrapSubsystem struct {
 // The cfg parameter supplies lazy providers and bootstrap options: database pool,
 // ABAC policy store, world service and transactor, plugin manager, player
 // repository and password hasher providers, optional setting plugin name and
-// reset flag, SkipSeedMigrations, and an optional GuestStartLocation ULID string.
+// reset flag, SkipSeedMigrations, an optional GuestStartLocation ULID string,
+// and the character-name block-list subsystem whose live matcher the
+// character-name gate is built over.
 func NewBootstrapSubsystem(cfg BootstrapSubsystemConfig) *BootstrapSubsystem {
 	return &BootstrapSubsystem{cfg: cfg}
 }
@@ -101,6 +115,14 @@ func NewBootstrapSubsystem(cfg BootstrapSubsystemConfig) *BootstrapSubsystem {
 func (s *BootstrapSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemBootstrap }
 
 // DependsOn returns all subsystems that must start before bootstrap.
+//
+// The CharacterNameBlockList edge is not tidiness. Prepare below constructs a
+// CharacterService and may create the initial admin character; without the
+// edge the orchestrator is free to run that admission before the block-list
+// subsystem has loaded, validated and compiled anything. The cache would then
+// answer "matches nothing", the operator's list would silently not be in
+// force, and the one name it failed to block would be created by a boot nobody
+// is watching.
 func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{
 		lifecycle.SubsystemDatabase,
@@ -109,31 +131,43 @@ func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 		lifecycle.SubsystemAuth,
 		lifecycle.SubsystemPlugins,
 		lifecycle.SubsystemSessions,
+		lifecycle.SubsystemCharacterNameBlockList,
 	}
 }
 
 // Prepare runs the full bootstrap sequence — one-shot DB work against a
 // prepared pool, not a loop and not external (D-13.3 row 8):
-//  1. Create BootstrapRunner
-//  2. Register policy bootstrapper (priority 200)
-//  3. Register setting bootstrapper (priority 300) if configured
-//  4. Register admin bootstrapper (priority 400)
-//  5. Run all bootstrappers
-//  6. Resolve starting location
+//  1. Validate the admin section registry (01-SPEC §10.2 / D-09)
+//  2. Create BootstrapRunner
+//  3. Register policy bootstrapper (priority 200)
+//  4. Register setting bootstrapper (priority 300) if configured
+//  5. Register admin bootstrapper (priority 400)
+//  6. Run all bootstrappers
+//  7. Resolve starting location
 //
 // No idempotency guard: seeding already runs on every boot by design, and
 // re-running is harmless.
 // codecov:ignore — tested by integration and E2E tests
 func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
+	// 1. Validate the admin section registry. It needs no database and no prior
+	// step, so it runs FIRST: a zero-valued authorization descriptor is a
+	// programming error that should abort before the boot does any work, and
+	// long before the first unauthorized caller discovers it at request time.
+	if err := section.ValidateAtBoot(ctx); err != nil {
+		return oops.Code("BOOTSTRAP_FAILED").
+			With("operation", "validate admin section registry").Wrap(err)
+	}
+
 	pool := s.cfg.DB.Pool()
 
 	// Defense-in-depth: refuse to start if any plugin-kind event in
 	// events_audit lacks an actor_id. Migration 000018 makes orphans
 	// impossible from a clean install; this guards against manual restore
 	// from an old backup. Relocated from cmd/holomush's pre-orchestrator
-	// call site (07-09 item 5) — it now runs first against this same pool,
-	// behind the Bootstrap -> Database edge, instead of racing a
-	// hand-sequenced DB pre-start.
+	// call site (07-09 item 5) — it now runs against this same pool, behind the
+	// Bootstrap -> Database edge and before any bootstrapper, instead of racing
+	// a hand-sequenced DB pre-start. The registry validation above precedes it
+	// only because it touches no database at all.
 	if orphanErr := runBootstrapOrphanCheck(ctx, pool); orphanErr != nil {
 		return orphanErr
 	}
@@ -147,10 +181,10 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 		s.startLocationID = parsed
 	}
 
-	// 1. Create bootstrap runner.
+	// 2. Create bootstrap runner.
 	runner := plugins.NewBootstrapRunner(slog.Default())
 
-	// 2. Register policy bootstrapper (priority 200).
+	// 3. Register policy bootstrapper (priority 200).
 	// Uses the ABAC subsystem's policy store (which has the invalidation hook wired)
 	// so that seed policy writes automatically invalidate the cache.
 	policyBootstrapFn := func(ctx context.Context, skipSeedMigrations bool) error {
@@ -163,12 +197,12 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 	}
 	runner.Register(bootstrap.NewPolicyBootstrapper(policyBootstrapFn, s.cfg.SkipSeedMigrations))
 
-	// 3. Register setting bootstrapper (priority 300) if configured.
+	// 4. Register setting bootstrapper (priority 300) if configured.
 	if err := s.registerSettingBootstrapper(ctx, runner, pool); err != nil {
 		return err
 	}
 
-	// 4. Register admin bootstrapper (priority 400).
+	// 5. Register admin bootstrapper (priority 400).
 	charRepo := worldpostgres.NewCharacterRepository(pool)
 	locRepo := worldpostgres.NewLocationRepository(pool)
 
@@ -191,7 +225,17 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 	// startLocationID pointer (resolved after bootstrap completes).
 	authCharRepo := NewCharRepoAdapter(pool, charRepo)
 	authLocRepo := NewLocRepoAdapter(&s.startLocationID, locRepo)
-	characterService, err := auth.NewCharacterService(authCharRepo, authLocRepo, genesis)
+
+	// The character-name gate (IDENT-06/07/09). This is composition root ONE of
+	// three; cmd/holomush builds the other two. All three call the SAME
+	// NewCharacterNameGate, because two struct literals is how two roots end up
+	// polling two different block lists.
+	nameGate, gateErr := NewCharacterNameGate(pool, s.cfg.BlockList)
+	if gateErr != nil {
+		return oops.Code("AUTH_SETUP_FAILED").Wrap(gateErr)
+	}
+
+	characterService, err := auth.NewCharacterService(authCharRepo, authLocRepo, genesis, nameGate)
 	if err != nil {
 		return oops.Code("AUTH_SETUP_FAILED").Wrap(err)
 	}
@@ -205,12 +249,12 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 		NameTheme:   naming.NewStarTheme(),
 	}))
 
-	// 5. Run all bootstrappers in priority order.
+	// 6. Run all bootstrappers in priority order.
 	if err := runner.RunAll(ctx); err != nil {
 		return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(err)
 	}
 
-	// 6. Resolve starting location from bootstrap metadata if not explicitly configured.
+	// 7. Resolve starting location from bootstrap metadata if not explicitly configured.
 	if s.startLocationID.IsZero() {
 		metadataStore := bootstrap.NewPostgresMetadataStore(pool)
 		locIDStr, found, metaErr := metadataStore.Get(ctx, "starting_location_id")
@@ -234,6 +278,15 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 	slog.InfoContext(ctx, "bootstrap subsystem prepared")
 	return nil
 }
+
+// BlockList returns the character-name block-list subsystem this bootstrap
+// subsystem was configured with, or nil when none was supplied.
+//
+// It is the read end of the transport declared by 02-05. Prepare passes the
+// same subsystem to NewCharacterNameGate, which takes its Matcher() to build
+// the charname.Gate the CharacterService admits names through — so this
+// accessor exposes the very subsystem backing that gate, not a parallel copy.
+func (s *BootstrapSubsystem) BlockList() *blocklist.Subsystem { return s.cfg.BlockList }
 
 // Activate is a no-op — bootstrap's work is a one-shot Prepare-time seed
 // (D-13.3 row 8).

@@ -84,27 +84,27 @@ func (_c *MockCharacterRepository_CountByPlayer_Call) RunAndReturn(run func(cont
 	return _c
 }
 
-// ExistsByName provides a mock function with given fields: ctx, name
-func (_m *MockCharacterRepository) ExistsByName(ctx context.Context, name string) (bool, error) {
-	ret := _m.Called(ctx, name)
+// ExistsByNormalizedName provides a mock function with given fields: ctx, key, excluding
+func (_m *MockCharacterRepository) ExistsByNormalizedName(ctx context.Context, key string, excluding *ulid.ULID) (bool, error) {
+	ret := _m.Called(ctx, key, excluding)
 
 	if len(ret) == 0 {
-		panic("no return value specified for ExistsByName")
+		panic("no return value specified for ExistsByNormalizedName")
 	}
 
 	var r0 bool
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (bool, error)); ok {
-		return rf(ctx, name)
+	if rf, ok := ret.Get(0).(func(context.Context, string, *ulid.ULID) (bool, error)); ok {
+		return rf(ctx, key, excluding)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) bool); ok {
-		r0 = rf(ctx, name)
+	if rf, ok := ret.Get(0).(func(context.Context, string, *ulid.ULID) bool); ok {
+		r0 = rf(ctx, key, excluding)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, name)
+	if rf, ok := ret.Get(1).(func(context.Context, string, *ulid.ULID) error); ok {
+		r1 = rf(ctx, key, excluding)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -112,31 +112,32 @@ func (_m *MockCharacterRepository) ExistsByName(ctx context.Context, name string
 	return r0, r1
 }
 
-// MockCharacterRepository_ExistsByName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ExistsByName'
-type MockCharacterRepository_ExistsByName_Call struct {
+// MockCharacterRepository_ExistsByNormalizedName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ExistsByNormalizedName'
+type MockCharacterRepository_ExistsByNormalizedName_Call struct {
 	*mock.Call
 }
 
-// ExistsByName is a helper method to define mock.On call
+// ExistsByNormalizedName is a helper method to define mock.On call
 //   - ctx context.Context
-//   - name string
-func (_e *MockCharacterRepository_Expecter) ExistsByName(ctx interface{}, name interface{}) *MockCharacterRepository_ExistsByName_Call {
-	return &MockCharacterRepository_ExistsByName_Call{Call: _e.mock.On("ExistsByName", ctx, name)}
+//   - key string
+//   - excluding *ulid.ULID
+func (_e *MockCharacterRepository_Expecter) ExistsByNormalizedName(ctx interface{}, key interface{}, excluding interface{}) *MockCharacterRepository_ExistsByNormalizedName_Call {
+	return &MockCharacterRepository_ExistsByNormalizedName_Call{Call: _e.mock.On("ExistsByNormalizedName", ctx, key, excluding)}
 }
 
-func (_c *MockCharacterRepository_ExistsByName_Call) Run(run func(ctx context.Context, name string)) *MockCharacterRepository_ExistsByName_Call {
+func (_c *MockCharacterRepository_ExistsByNormalizedName_Call) Run(run func(ctx context.Context, key string, excluding *ulid.ULID)) *MockCharacterRepository_ExistsByNormalizedName_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string))
+		run(args[0].(context.Context), args[1].(string), args[2].(*ulid.ULID))
 	})
 	return _c
 }
 
-func (_c *MockCharacterRepository_ExistsByName_Call) Return(_a0 bool, _a1 error) *MockCharacterRepository_ExistsByName_Call {
+func (_c *MockCharacterRepository_ExistsByNormalizedName_Call) Return(_a0 bool, _a1 error) *MockCharacterRepository_ExistsByNormalizedName_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockCharacterRepository_ExistsByName_Call) RunAndReturn(run func(context.Context, string) (bool, error)) *MockCharacterRepository_ExistsByName_Call {
+func (_c *MockCharacterRepository_ExistsByNormalizedName_Call) RunAndReturn(run func(context.Context, string, *ulid.ULID) (bool, error)) *MockCharacterRepository_ExistsByNormalizedName_Call {
 	_c.Call.Return(run)
 	return _c
 }

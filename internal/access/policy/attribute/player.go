@@ -37,6 +37,22 @@ func WithPlayerKindLookup(fn PlayerKindLookup) PlayerAttributeProviderOption {
 	}
 }
 
+// WithPlayerRoleLookup supplies an optional per-player role lookup. Without it
+// the provider omits roles (has_roles=false) per the omit-don't-sentinel rule
+// (ADR holomush-ti1b).
+//
+// The parameter type is [PlayerRoleLookup] — the SHARED seam declared in
+// viewer.go and consumed by WithViewerRoleLookup too. One signature, deliberately:
+// two structurally identical types would let the viewer and player namespaces be
+// wired to different sources and disagree about whether the same human is an
+// admin at the same moment, which is the two-sources-of-truth failure 01-SPEC
+// §10.5 exists to prevent.
+func WithPlayerRoleLookup(fn PlayerRoleLookup) PlayerAttributeProviderOption {
+	return func(p *PlayerAttributeProvider) {
+		p.roleLookup = fn
+	}
+}
+
 // PlayerAttributeProvider exposes player-level attributes for ABAC subject
 // resolution. v1 schema: player.id, player.grants, player.is_guest,
 // player.has_is_guest. The grant set is captured at construction time from the
@@ -54,6 +70,10 @@ type PlayerAttributeProvider struct {
 	// When nil the provider omits the is_guest key (has_is_guest=false) per
 	// the omit-don't-sentinel invariant (ADR holomush-ti1b).
 	kindLookup PlayerKindLookup
+	// roleLookup is an optional func that resolves the per-player role union.
+	// When nil the provider omits the roles key (has_roles=false) per the
+	// omit-don't-sentinel invariant (ADR holomush-ti1b).
+	roleLookup PlayerRoleLookup
 }
 
 // NewPlayerAttributeProvider constructs a provider with the given operator
@@ -92,10 +112,17 @@ func (p *PlayerAttributeProvider) ResolveResource(_ context.Context, _ string) (
 }
 
 // Schema returns the namespace schema: id (string), grants (string list),
-// is_guest (bool), has_is_guest (bool). The resolver namespaces these keys at
-// merge time as "player.id", "player.grants", etc. — see resolver.go.
-// is_guest and has_is_guest follow ADR holomush-ti1b: has_is_guest is always
-// present; is_guest is present only when a PlayerKindLookup resolves it.
+// is_guest (bool), has_is_guest (bool), roles (string list), has_roles (bool).
+// The resolver namespaces these keys at merge time as "player.id",
+// "player.grants", etc. — see resolver.go.
+//
+// is_guest/has_is_guest and roles/has_roles follow ADR holomush-ti1b: the
+// witness is always present; the value key is present only when its lookup
+// resolves.
+//
+// Every key this provider can emit MUST be declared here: the resolver drops
+// and counts any provider attribute whose key is not in the namespace schema,
+// so an undeclared key is silently absent rather than loudly wrong.
 func (p *PlayerAttributeProvider) Schema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
@@ -103,6 +130,8 @@ func (p *PlayerAttributeProvider) Schema() *types.NamespaceSchema {
 			"grants":       types.AttrTypeStringList,
 			"is_guest":     types.AttrTypeBool,
 			"has_is_guest": types.AttrTypeBool,
+			"roles":        types.AttrTypeStringList,
+			"has_roles":    types.AttrTypeBool,
 		},
 	}
 }
@@ -179,7 +208,41 @@ func (p *PlayerAttributeProvider) ResolveSubject(ctx context.Context, subjectID 
 		attrs["has_is_guest"] = false
 	}
 
+	p.resolveRoles(ctx, idStr, attrs)
+
 	return attrs, nil
+}
+
+// resolveRoles populates roles/has_roles for a player subject.
+//
+// Per ADR holomush-ti1b, roles is OMITTED — never emitted as an empty list — on
+// both unresolved paths (no configured lookup, failing lookup). An empty list is
+// the list-flavored version of the empty-string sentinel: it is a RESOLVED value
+// that a containsAny-shaped condition would evaluate against. The has_roles
+// witness is emitted on every code path.
+//
+// A lookup failure is fail-safe, not fatal: it logs at warn with the ctx and
+// resolution continues, mirroring the is_guest branch above and
+// ViewerTierProvider.resolveRoles.
+func (p *PlayerAttributeProvider) resolveRoles(ctx context.Context, playerID string, attrs map[string]any) {
+	if p.roleLookup == nil {
+		attrs["has_roles"] = false
+		return
+	}
+
+	roles, err := p.roleLookup(ctx, playerID)
+	if err != nil {
+		slog.WarnContext(
+			ctx, "player role lookup failed — omitting roles attribute (fail-safe)",
+			"player_id", playerID,
+			"err", err,
+		)
+		attrs["has_roles"] = false
+		return
+	}
+
+	attrs["roles"] = roles
+	attrs["has_roles"] = true
 }
 
 // operatorCount is a test-only accessor for the operator-set size. Unexported
