@@ -200,9 +200,11 @@ var _ = Describe("INV-WORLD-6: retirement preserves the name reservation", func(
 		env.roleResolver.Grant(adminSubject, "admin")
 	})
 
-	// nameIsTaken reports whether the real creation path refuses the name.
-	// The reclaim attempt goes through auth.CharacterService.Create so the
-	// assertion is about the system's behaviour, not a hand-written query.
+	// reclaim attempts to take the name through the real creation path and
+	// returns whatever that path says — nil when the name was free, an error
+	// when it is still reserved. It goes through auth.CharacterService.Create
+	// so the assertion is about the system's behaviour, not a hand-written
+	// query.
 	reclaim := func(name string) error {
 		_, err := env.characters.Create(ctx, playerID, name)
 		return err
