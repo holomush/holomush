@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 5
+open_count: 6
 waived_count: 0
 fixed_count: 6
-total_count: 11
-last_updated: 2026-08-05T01:45:32.455Z
+total_count: 12
+last_updated: 2026-08-05T04:50:04.129Z
 ---
 
 # Broken Windows Ledger
@@ -26,6 +26,7 @@ last_updated: 2026-08-05T01:45:32.455Z
 | 9 | 01.1 | unrun-verify | site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md |  | D-16 pre-deploy rehearsal and D-18 surgical rollback are WRITTEN but never EXECUTED against restored sandbox data — a rehearsal nobody has run is a hypothesis, not a control | open |  | 2026-08-03T02:13:07.324Z |  |
 | 10 | 02 | stub | cmd/holomush/core.go |  | 02-05 declares the block-list transport (grpcSubsystemConfig.BlockList / BootstrapSubsystemConfig.BlockList) but constructs no charname.Gate; until 02-06 consumes Matcher() at the three composition roots, no production create path evaluates the block list | fixed |  | 2026-08-05T00:02:10.144Z | 2026-08-05T01:45:32.455Z |
 | 11 | 02 | deviation | internal/store/role_store_integration_test.go |  | 02-13 Rule 1 fix: colliding player usernames from an 8-char ULID prefix; caught only by the plan-level integration sweep because no per-task verify covers ./internal/store/ | open |  | 2026-08-05T00:29:54.787Z |  |
+| 12 | 02 | deviation | .planning/phases/02-abac-schema-vocabulary/02-12-SUMMARY.md |  | INV-WORLD-4's 'exactly TWO sanctioned out-of-world writers' text is false until plan 02-11 amends it to three | open |  | 2026-08-05T04:50:04.129Z |  |
 
 ````json
 [
@@ -159,6 +160,18 @@ last_updated: 2026-08-05T01:45:32.455Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-05T00:29:54.787Z",
+    "resolved_at": null
+  },
+  {
+    "id": 12,
+    "kind": "deviation",
+    "phase": "02",
+    "file": ".planning/phases/02-abac-schema-vocabulary/02-12-SUMMARY.md",
+    "line": null,
+    "description": "INV-WORLD-4's 'exactly TWO sanctioned out-of-world writers' text is false until plan 02-11 amends it to three",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-05T04:50:04.129Z",
     "resolved_at": null
   }
 ]
