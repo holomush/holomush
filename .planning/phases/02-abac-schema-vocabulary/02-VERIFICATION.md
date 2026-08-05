@@ -1,46 +1,59 @@
 ---
 phase: 02-abac-schema-vocabulary
 verified: 2026-08-05T21:40:00Z
-status: human_needed
+status: passed
 score: 5/5 roadmap success criteria verified
 behavior_unverified: 0
 overrides_applied: 0
 requirements:
+
   - id: IDENT-06
     status: discharged
+
   - id: IDENT-07
     status: discharged
+
   - id: IDENT-08
     status: discharged
+
   - id: IDENT-09
     status: discharged
+
   - id: PROFILE-11
     status: partial_by_decision
     discharged: "entity_properties half"
     deferred: "characters.description half — Phase 4, D-29"
+
   - id: EXT-07
     status: discharged_to_phase_ceiling
     note: "policy contract fully met; endpoint-level denial proof deferred to Phase 4 by D-08 (Phase 2 ships no RPCs by design)"
 deferred:
+
   - truth: "PROFILE-11's characters.description half (the `resource is character` permit)"
     addressed_in: "Phase 4"
     evidence: "02-CONTEXT.md D-29; ROADMAP criterion 4 text already carries the deferral; absence is pinned by TestNoPhase2SeedIntroducesACharacterResourceTypePermit"
+
   - truth: "§10.2's endpoint-level admin-section denial test"
     addressed_in: "Phase 4"
     evidence: "02-CONTEXT.md D-08 — Phase 2 ships no RPCs, so the endpoint form is unwritable; helper-level form shipped"
+
   - truth: "EXT-04 registry ↔ authorization-descriptor census"
     addressed_in: "Phase 6"
     evidence: "ROADMAP Phase 6 Requirements list includes EXT-04; 01-SPEC.md:2375 assigns it there"
+
   - truth: "INV-ACCESS-10/11/12, INV-PRIVACY-9/10, INV-WORLD-7 bindings"
     addressed_in: "Phase 3/4"
     evidence: "all remain binding: pending with NO asserted_by — verified in docs/architecture/invariants.yaml"
 human_verification:
+
   - test: "Dispatch `abac-reviewer` over the phase's authorization surface"
     expected: "A READY / NOT READY verdict on internal/access/, internal/admin/section/, and the seed family"
     why_human: "Repo-owned sub-agent requiring agent dispatch; D-05 makes it MANDATORY before merge. The 02-11 executor could not dispatch it and correctly refused to fabricate a verdict."
+
   - test: "Reconcile .planning/REQUIREMENTS.md's two disagreeing halves"
     expected: "Checkboxes and traceability-table rows agree, and PROFILE-11 is not recorded as fully closed"
     why_human: "Tool-owned parsed artifact; `requirements.mark-complete` has no partial-credit model. Must not be hand-edited."
+
   - test: "Re-run 02-10's exposure audit against a populated corpus before Phase 4's description widening"
     expected: "Per-row verdict machinery adjudicates at least one real row"
     why_human: "The audited sandbox corpus had zero entity_properties rows, so the verdict machinery is structurally verified but behaviourally unexercised."
