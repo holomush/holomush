@@ -6,7 +6,7 @@ current_phase: 02
 current_phase_name: abac-schema-vocabulary
 status: executing
 stopped_at: Completed 02-12-PLAN.md
-last_updated: "2026-08-05T04:49:57.945Z"
+last_updated: "2026-08-05T18:33:11.277Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
@@ -475,6 +475,7 @@ the next milestone yet.
 - [Phase ?]: 02-12: Go migrations are invisible to the .sql-only embed glob, so internal/store/go_migration_census.go merges them into the version helpers — without it the adopt gate seeds a goose ledger with a hole at 55
 - [Phase ?]: 02-12: the UNIQUE index is isolated with direct INSERTs, not through CharacterService.Create — the ExistsByNormalizedName pre-check and 02-06's advisory lock both sit above it and are present in either schema
 - [Phase ?]: 02-12: INV-WORLD-4's 'exactly TWO sanctioned out-of-world writers' is now false (the operator rename CLI is a third); the registry text amendment is owned by plan 02-11
+- [Phase ?]: 02-10 Task 2 (checkpoint:decision, gate=blocking) — evidence-recording scheme for the PROFILE-11 exposure audit: SANITIZED-LEDGER. Maintainer-selected, not auto-selected. 02-AUDIT-RESULT.md carries one ledger line per adjudicated row (stable row id, md5 content digest, character length, verdict) plus the five aggregate result sets; the detailed text is read from an operator-only report generated outside the repository and deleted. Explicitly confirmed: NO player-authored text is to be committed to this repository — no entity_properties value, no characters.description text, no character or player name, and no truncated or representative excerpt. Hashes and lengths only. Rejected: private-detailed-record (splits the phase's evidence across two homes, one outside the review the phase is gated on).
 
 ### Pending Todos
 
