@@ -260,3 +260,53 @@ var _ auth.GuestCharacterRepository = (*gateGuestCharRepo)(nil)
 // unused keeps world imported for the compile-time assertion above when the
 // spec set changes shape.
 var _ = world.Character{}
+
+// TestProductionCreatePathReportsAnExactDuplicateAsTakenNotConfusable is the
+// durable guard for the regression PR #4941's E2E run caught.
+//
+// # The defect
+//
+// An EXACT duplicate has an identical skeleton, so charname.Gate.Check step 5
+// intercepted it and returned NAME_CONFUSABLE — which internal/grpc's
+// sanitizeAuthError had no case for, so the web client rendered the generic
+// "request failed" where it had always shown "already taken". The friendly
+// uniqueness pre-check that exists precisely for this case sat AFTER the gate
+// and was unreachable for it.
+//
+// # Why the pair is asserted on one fixture
+//
+// A fix that simply reported "already taken" for every skeleton collision would
+// satisfy the first half and be WRONG: a name confusable with a DIFFERENT
+// player's character would then assert something untrue and disclose more about
+// the corpus than §6.1.2 intends. The second half is what forbids that shape.
+func TestProductionCreatePathReportsAnExactDuplicateAsTakenNotConfusable(t *testing.T) {
+	ctx := context.Background()
+	env := newGateTestEnv(t, nil)
+
+	seeded, err := env.characters.Create(ctx, env.seedPlayer(t), "cocoa")
+	require.NoError(t, err)
+	require.NotNil(t, seeded)
+
+	t.Run("an exact duplicate is CHARACTER_NAME_TAKEN", func(t *testing.T) {
+		_, err := env.characters.Create(ctx, env.seedPlayer(t), "cocoa")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NAME_TAKEN")
+	})
+
+	t.Run("a case variant of an existing name is CHARACTER_NAME_TAKEN too", func(t *testing.T) {
+		// Same §6.1.1 uniqueness key, different display form: still the same
+		// name, so still "already taken" rather than "too similar".
+		_, err := env.characters.Create(ctx, env.seedPlayer(t), "COCOA")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NAME_TAKEN")
+	})
+
+	t.Run("a DIFFERENT but confusable name is still NAME_CONFUSABLE", func(t *testing.T) {
+		// A whole-script Cyrillic homoglyph: a genuinely different name whose
+		// normalized key differs, so claiming it was "already taken" would be
+		// false. This control is what stops the fix collapsing the two verdicts.
+		_, err := env.characters.Create(ctx, env.seedPlayer(t), "сосоа")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "NAME_CONFUSABLE")
+	})
+}

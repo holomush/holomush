@@ -117,6 +117,44 @@ func (s *CharacterService) CreateWithMaxCharacters(ctx context.Context, playerID
 // createWithMaxAndBind runs the validation pipeline then persists the character +
 // optional binding + genesis envelope atomically through the genesis service.
 func (s *CharacterService) createWithMaxAndBind(ctx context.Context, playerID ulid.ULID, name string, maxCharacters int, bindReason string) (*world.Character, error) {
+	// Friendly uniqueness pre-check (§6.1.3), and it runs BEFORE the gate on
+	// purpose.
+	//
+	// An EXACT duplicate has an identical skeleton, so charname.Gate.Check's
+	// step 5 intercepts it and returns NAME_CONFUSABLE. When this check sat
+	// AFTER the gate it was unreachable for the very case it exists to serve:
+	// a player retyping a name that is already taken got "too similar to an
+	// existing one" — and, because internal/grpc had no case for that code, the
+	// web client rendered the generic "request failed". That is the regression
+	// PR #4941's E2E run caught, and it is why the order here is load-bearing
+	// rather than incidental.
+	//
+	// The check is keyed on the §6.1.1 uniqueness key, so a case or
+	// NFKC-collapsible variant of an existing name is the SAME name and is
+	// reported as taken. A genuinely DIFFERENT name that merely LOOKS like an
+	// existing one has a different key, falls through to the gate, and is
+	// refused NAME_CONFUSABLE — claiming it was "already taken" would assert
+	// something untrue and disclose more about the corpus than §6.1.2 intends.
+	//
+	// This is still only a UX affordance. The guarantee is guardSkeleton's
+	// in-transaction advisory lock (D-30 part 2) and the unique index plan
+	// 02-12 creates, whose 23505 the handler below surfaces.
+	normalized, err := charname.Normalize(name)
+	if err != nil {
+		// The only failure is an empty normal form, which mapGateError already
+		// translates to the pre-existing CHARACTER_INVALID_NAME.
+		return nil, mapGateError(name, err)
+	}
+	taken, err := s.charRepo.ExistsByNormalizedName(ctx, normalized.Key, nil)
+	if err != nil {
+		return nil, oops.Code("CHARACTER_CREATE_FAILED").With("name", normalized.Display).Wrap(err)
+	}
+	if taken {
+		return nil, oops.Code("CHARACTER_NAME_TAKEN").
+			With("name", normalized.Display).
+			Errorf("character name %q is already taken", normalized.Display)
+	}
+
 	// ONE admission decision. Gate.Admit runs §6.1.1 normalization, the
 	// syntactic rules, the mixed-script rule, the block list and the skeleton
 	// corpus check, and mints the token the writer requires.
@@ -132,9 +170,10 @@ func (s *CharacterService) createWithMaxAndBind(ctx context.Context, playerID ul
 	}
 	normalizedName := admitted.Display()
 
-	// Friendly uniqueness pre-check (§6.1.3): a UX affordance, not the
-	// guarantee. The guarantee is the database constraint plan 02-12 creates,
-	// and the 23505 handler below is what surfaces it.
+	// The same check again, now on the ADMITTED key. It is not redundant: the
+	// pre-check above and the gate are two round trips, and a concurrent create
+	// can land between them. This is the second-cheapest net; guardSkeleton and
+	// the 23505 handler are the ones that actually close the race.
 	exists, err := s.charRepo.ExistsByNormalizedName(ctx, admitted.Key(), nil)
 	if err != nil {
 		return nil, oops.Code("CHARACTER_CREATE_FAILED").With("name", normalizedName).Wrap(err)
@@ -223,8 +262,23 @@ const pgUniqueViolation = "23505"
 //     "cannot be empty" syntactic rule produced CHARACTER_INVALID_NAME too.
 //
 // Everything else the gate can say — NAME_CONFUSABLE, NAME_BLOCKED,
-// NAME_SKELETON_UNVERIFIABLE, NAME_MIXED_SCRIPT — is a NEW refusal with no
-// legacy code to preserve, so it passes through untouched.
+// NAME_SKELETON_UNVERIFIABLE, NAME_MIXED_SCRIPT — passes through untouched and
+// is sanitized for the client by internal/grpc's sanitizeAuthError, which
+// carries a case for each.
+//
+// An earlier form of this comment justified that pass-through by claiming those
+// four are "NEW refusals with no legacy code to preserve". That premise was
+// FALSE for one case, and the falsehood shipped: an exact duplicate reaches
+// step 5 with an identical skeleton, so NAME_CONFUSABLE was what a player
+// retyping a taken name actually got — and "already taken" is the OLDEST
+// refusal on this path, which certainly did have a code.
+//
+// The fix is NOT to map NAME_CONFUSABLE onto CHARACTER_NAME_TAKEN here. That
+// would make a name confusable with a DIFFERENT player's character claim to be
+// "already taken" — untrue, and a broader disclosure than §6.1.2 intends. The
+// duplicate is caught by the uniqueness pre-check that now runs BEFORE the
+// gate, so by the time a NAME_CONFUSABLE reaches this function the name really
+// is a different one.
 //
 // The remap REPLACES the code rather than wrapping it. errutil.AssertErrorCode
 // and oops.AsOops(...).Code() both resolve the DEEPEST code in the chain

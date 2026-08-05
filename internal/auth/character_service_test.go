@@ -156,6 +156,13 @@ func TestCharacterService_Create(t *testing.T) {
 		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
+		// The uniqueness pre-check now runs BEFORE the gate (so an exact
+		// duplicate reaches CHARACTER_NAME_TAKEN rather than being intercepted
+		// as a skeleton collision), which costs one existence lookup on the
+		// invalid-name path too. "123" normalizes fine — it is the SYNTACTIC
+		// rule that rejects it, and that rule lives inside the gate.
+		charRepo.On("ExistsByNormalizedName", ctx, "123", (*ulid.ULID)(nil)).Return(false, nil)
+
 		char, err := svc.Create(ctx, playerID, "123")
 		assert.Nil(t, char)
 		require.Error(t, err)
@@ -168,6 +175,9 @@ func TestCharacterService_Create(t *testing.T) {
 		svc, err := auth.NewCharacterService(charRepo, locRepo, &stubCharacterGenesis{}, testGate())
 		require.NoError(t, err)
 
+		// No ExistsByNormalizedName expectation on purpose: an empty submission
+		// has no normal form, so charname.Normalize fails before any lookup and
+		// the mock's strict-call assertion is what proves it.
 		char, err := svc.Create(ctx, playerID, "")
 		assert.Nil(t, char)
 		require.Error(t, err)
