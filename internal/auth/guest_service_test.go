@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/charname"
+	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -386,4 +387,123 @@ func TestCreateGuestMintsBinding(t *testing.T) {
 	assert.Equal(t, "initial_bind_guest", genesis.lastBindReason)
 	assert.Equal(t, result.Character.ID, genesis.lastChar.ID)
 	assert.Equal(t, result.Player.ID, genesis.lastChar.PlayerID)
+}
+
+// unverifiableCorpusLookup is the D-30 fail-closed state: the corpus carries a
+// row with a NULL skeleton, so the gate refuses to adjudicate ANY name.
+type unverifiableCorpusLookup struct{}
+
+func (unverifiableCorpusLookup) SkeletonExists(_ context.Context, _ string, _ *ulid.ULID) (bool, bool, error) {
+	return false, true, nil
+}
+
+// failingCorpusLookup is the other corpus-level fault: the lookup query itself
+// failed (database down, pool exhausted).
+type failingCorpusLookup struct{}
+
+func (failingCorpusLookup) SkeletonExists(_ context.Context, _ string, _ *ulid.ULID) (bool, bool, error) {
+	return false, false, errors.New("connection refused")
+}
+
+// TestGuestServiceReportsACorpusFaultAsItselfNotAsNameExhaustion is WR-01's
+// regression.
+//
+// Both faults below refuse EVERY generated candidate identically, so the retry
+// loop used to burn all ten attempts and return GUEST_NAME_EXHAUSTED — "unable
+// to find unique guest name" — for a database outage, with the real error
+// discarded and nothing logged. The operator-visible symptom pointed at the
+// name generator; the cause was the database.
+//
+// `.Once()` expectations are deliberately absent on the namer: the point of the
+// fix is that the loop STOPS on the first attempt, so a second GenerateName
+// would be a mock failure.
+func TestGuestServiceReportsACorpusFaultAsItselfNotAsNameExhaustion(t *testing.T) {
+	tests := []struct {
+		name string
+		// wantCode is the GATE's own code, not the outer GUEST_CREATE_FAILED
+		// wrapper: errutil.AssertErrorCode resolves the DEEPEST code in the
+		// chain (issue #4902), and that is the right contract here — the
+		// operator wants "the corpus could not be adjudicated", not a generic
+		// create failure.
+		wantCode string
+		lookup   charname.SkeletonLookup
+	}{
+		{
+			"an unverifiable corpus (the 000054 -> 000055 fail-closed window)",
+			"NAME_SKELETON_UNVERIFIABLE",
+			unverifiableCorpusLookup{},
+		},
+		{
+			"a failed corpus lookup (database unreachable)",
+			"NAME_SKELETON_LOOKUP_FAILED",
+			failingCorpusLookup{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			namer := mocks.NewMockGuestNamer(t)
+			players := mocks.NewMockPlayerRepository(t)
+			chars := mocks.NewMockGuestCharacterRepository(t)
+			sessions := mocks.NewMockPlayerSessionRepository(t)
+
+			const candidate = "Crystal_Fog"
+			namer.EXPECT().GenerateName().Return(candidate, nil).Once()
+			namer.EXPECT().ReleaseGuest(candidate).Once()
+
+			svc, err := auth.NewGuestService(
+				namer, players, chars, sessions,
+				&recordingGuestGenesis{}, &recordingGuestCleaner{},
+				&charname.Gate{Skeletons: tt.lookup},
+			)
+			require.NoError(t, err)
+
+			result, err := svc.CreateGuest(ctx)
+			require.Error(t, err)
+			assert.Nil(t, result)
+			errutil.AssertErrorCode(t, err, tt.wantCode)
+			assert.NotContains(t, err.Error(), "unable to find unique guest name",
+				"a corpus fault must not be reported as name exhaustion")
+		})
+	}
+}
+
+// TestGuestServiceStillReportsGenuineNameExhaustion is the paired control.
+//
+// A per-candidate refusal — one the NEXT generated name could clear — must keep
+// retrying and must keep the existing GUEST_NAME_EXHAUSTED contract, so the fix
+// above cannot have been achieved by aborting on every refusal.
+func TestGuestServiceStillReportsGenuineNameExhaustion(t *testing.T) {
+	ctx := context.Background()
+
+	namer := mocks.NewMockGuestNamer(t)
+	players := mocks.NewMockPlayerRepository(t)
+	chars := mocks.NewMockGuestCharacterRepository(t)
+	sessions := mocks.NewMockPlayerSessionRepository(t)
+
+	// Every candidate is refused by the block list — a policy verdict about the
+	// candidate, not about the corpus.
+	blocked, err := blocklist.Compile([]string{"taken*"})
+	require.NoError(t, err)
+
+	for range 10 {
+		const name = "Taken_Name"
+		namer.EXPECT().GenerateName().Return(name, nil).Once()
+		namer.EXPECT().ReleaseGuest(name).Once()
+	}
+
+	svc, err := auth.NewGuestService(
+		namer, players, chars, sessions,
+		&recordingGuestGenesis{}, &recordingGuestCleaner{},
+		&charname.Gate{Skeletons: noCollisionLookup{}, BlockList: blocked},
+	)
+	require.NoError(t, err)
+
+	result, err := svc.CreateGuest(ctx)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	errutil.AssertErrorCode(t, err, "GUEST_NAME_EXHAUSTED")
+	errutil.AssertErrorContext(t, err, "last_refusal_code", "NAME_BLOCKED")
 }

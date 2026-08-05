@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // GuestSessionTTL is the time-to-live for guest player sessions.
@@ -236,6 +237,11 @@ func (s *GuestService) cleanupGuestPlayer(ctx context.Context, playerID ulid.ULI
 // caller re-derives: this path is automatic and high-volume, and a gate
 // installed only in CharacterService would have left it wide open (T-02-31).
 func (s *GuestService) acquireUniqueName(ctx context.Context) (rawName string, admitted charname.Admitted, err error) {
+	// lastRefusal carries the most recent per-candidate gate refusal into the
+	// exhaustion error, so GUEST_NAME_EXHAUSTED names WHY every candidate was
+	// rejected instead of reporting a bare count.
+	var lastRefusal error
+
 	for range maxGuestNameRetries {
 		name, genErr := s.namer.GenerateName()
 		if genErr != nil {
@@ -249,13 +255,35 @@ func (s *GuestService) acquireUniqueName(ctx context.Context) (rawName string, a
 
 		token, admitErr := s.gate.Admit(ctx, charName)
 		if admitErr != nil {
-			// A generated candidate the gate refuses — a block-list pattern
-			// matches it, or its skeleton collides with a live character —
-			// releases the name and retries through the loop that already
-			// exists. Exhausting the retries surfaces the EXISTING exhaustion
-			// error, not a gate error, so the caller-visible contract for
-			// "could not find a name" is unchanged.
 			s.namer.ReleaseGuest(name)
+
+			// Not every gate refusal is about THIS candidate, and retrying the
+			// ones that are not is how a database outage came to be reported as
+			// name exhaustion. NAME_SKELETON_LOOKUP_FAILED (the corpus query
+			// failed) and NAME_SKELETON_UNVERIFIABLE (the documented fail-closed
+			// window between migrations 000054 and 000055, where some row still
+			// has a NULL skeleton) refuse EVERY candidate identically, so the
+			// loop burns all ten attempts and returns GUEST_NAME_EXHAUSTED —
+			// "unable to find unique guest name" — for a fault that has nothing
+			// to do with names. Surface those immediately, with the real cause
+			// attached.
+			if isCorpusUnavailable(admitErr) {
+				return "", charname.Admitted{}, oops.Code("GUEST_CREATE_FAILED").
+					With("name", name).
+					Hint("the character-name corpus could not be adjudicated; this is not name exhaustion").
+					Wrap(admitErr)
+			}
+
+			// A genuine per-candidate refusal — a block-list pattern matches it,
+			// or its skeleton collides with a live character. Retrying a
+			// different candidate can succeed, so the loop continues and
+			// exhaustion keeps its EXISTING caller-visible contract. It is
+			// logged rather than discarded: a block-list pattern broad enough to
+			// match most generated names produces exactly this, and it was
+			// previously invisible.
+			lastRefusal = admitErr
+			slog.DebugContext(ctx, "guest name candidate refused by the name gate",
+				"candidate", charName, "code", refusalCode(admitErr))
 			continue
 		}
 
@@ -272,7 +300,43 @@ func (s *GuestService) acquireUniqueName(ctx context.Context) (rawName string, a
 		s.namer.ReleaseGuest(name)
 	}
 
-	return "", charname.Admitted{}, oops.Code("GUEST_NAME_EXHAUSTED").
-		With("retries", maxGuestNameRetries).
+	exhausted := oops.Code("GUEST_NAME_EXHAUSTED").With("retries", maxGuestNameRetries)
+	if lastRefusal != nil {
+		exhausted = exhausted.With("last_refusal_code", refusalCode(lastRefusal))
+		errutil.LogErrorContext(ctx, "guest name generation exhausted its retries", lastRefusal,
+			"retries", maxGuestNameRetries)
+	}
+	return "", charname.Admitted{}, exhausted.
 		Errorf("unable to find unique guest name after %d attempts", maxGuestNameRetries)
+}
+
+// corpusUnavailableCodes are the Gate.Admit refusals that are properties of the
+// CORPUS rather than of the candidate. Retrying a different name cannot clear
+// either of them.
+var corpusUnavailableCodes = map[string]struct{}{
+	"NAME_SKELETON_LOOKUP_FAILED": {},
+	"NAME_SKELETON_UNVERIFIABLE":  {},
+}
+
+// isCorpusUnavailable reports whether a gate refusal means the corpus could not
+// be adjudicated at all.
+func isCorpusUnavailable(err error) bool {
+	_, unavailable := corpusUnavailableCodes[refusalCode(err)]
+	return unavailable
+}
+
+// refusalCode extracts an error's oops code, or "" when it carries none.
+func refusalCode(err error) string {
+	if err == nil {
+		return ""
+	}
+	oopsErr, ok := oops.AsOops(err)
+	if !ok {
+		return ""
+	}
+	code, ok := oopsErr.Code().(string)
+	if !ok {
+		return ""
+	}
+	return code
 }
