@@ -2,7 +2,7 @@
 phase: 02-abac-schema-vocabulary
 reviewed: 2026-08-05T00:00:00Z
 depth: standard
-files_reviewed: 26
+files_reviewed: 42
 files_reviewed_list:
   - cmd/holomush/cmd_character_name.go
   - cmd/holomush/core.go

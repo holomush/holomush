@@ -74,9 +74,9 @@ coverage:
     verification:
       - kind: gate
         ref: "set 6 WHERE clause carries no §8.6-name exclusion; in_spec_86 present"
-        status: pass
-    human_judgment: false
-    rationale: "The strictly-greater fixture check the plan asks for was not exercisable: on a corpus where set 3 and set 6 are both 0, >= holds but strict > cannot. See Deviations."
+        status: unknown
+    human_judgment: true
+    rationale: "NOT fully exercised, so recorded `unknown` rather than `pass`. The WHERE-clause half was verified by reading, but the strictly-greater fixture check the plan requires was not exercisable: on a corpus where set 3 and set 6 are both 0, `>=` holds while strict `>` cannot, so the assertion is vacuous. Recording this as `pass` would have claimed a check that never ran — the same defect class this phase caught three times elsewhere. `unknown` is one of the three statuses `uat classify-coverage` accepts (`pass`/`fail`/`unknown`), so this moves A3 out of auto-passed and into a human checkpoint, which is the honest state. Re-run against a populated corpus closes it: GitHub #4937. See Deviations."
   - id: A4
     description: "The audit ran against a REACHED database and its result is recorded with a date, a database identifier and a per-row verdict"
     requirement: PROFILE-11

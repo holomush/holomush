@@ -63,7 +63,7 @@ human_verification:
 
 **Phase Goal** (`.planning/ROADMAP.md:204`): Land the authorization vocabulary, name policy, and schema primitives every later phase gates on — `admin_section:` + `seed:admin-section-access`, `seed:profile-public-read`, the character lifecycle column, and the normalized-name unique index — with no UI and no new RPCs.
 
-**Verified:** 2026-08-05 · **Status:** human_needed · **Re-verification:** No — initial verification
+**Verified:** 2026-08-05 · **Status:** passed · **Re-verification:** No — initial verification
 
 **Verification stance:** every claim below was checked against the tree, not against SUMMARY prose. Where a SUMMARY and the code disagreed, the code won.
 
