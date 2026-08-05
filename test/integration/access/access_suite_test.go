@@ -58,6 +58,14 @@ type accessTestEnv struct {
 	// (e.g. env.roleResolver.roles[access.CharacterSubject(adminID)] = []string{"admin"})
 	// for tests that exercise admin-visibility property seeds.
 	roleResolver *staticRoleResolver
+	// resolver and compiler are exposed so a spec can build a SECOND engine over
+	// the SAME real provider stack but a DIFFERENT policy corpus. Plan 02-10's
+	// paired positive control needs exactly that: the widening's permit is only
+	// meaningful if the identical call against a corpus WITHOUT
+	// seed:profile-public-read-property is denied, and rebuilding the provider
+	// stack in the spec would let the control drift from the engine under test.
+	resolver *attribute.Resolver
+	compiler *policy.Compiler
 }
 
 type testAuditWriter struct {
@@ -190,6 +198,19 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 		return nil, err
 	}
 
+	// Plan 02-10: the viewer namespace, so a spec can assert §8.4.2 profile
+	// REACHABILITY (seed:profile-reachable is `principal is viewer`). Without it
+	// principal.viewer.tier is unresolvable and every viewer-flavored evaluation
+	// default-denies — which reads exactly like a correct denial and is actually
+	// an absent provider. No DB dependency: the tier is carried in the subject
+	// string itself. Adds a namespace; changes no existing spec's outcome,
+	// because no spec before this one used a `viewer:` subject.
+	viewerProvider := attribute.NewViewerTierProvider()
+	if err := resolver.RegisterProvider(viewerProvider); err != nil {
+		pool.Close()
+		return nil, err
+	}
+
 	compiler := policy.NewCompiler(registry.Schema())
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
@@ -234,6 +255,8 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 		propProvider:      propProvider,
 		worldService:      worldService,
 		roleResolver:      roleResolver,
+		resolver:          resolver,
+		compiler:          compiler,
 	}, nil
 }
 
