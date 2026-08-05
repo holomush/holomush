@@ -7,6 +7,7 @@ package auth_test
 
 import (
 	"context"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
@@ -76,8 +77,17 @@ func expectErrorCode(err error, code string) {
 // newGateTestEnv builds a CharacterService and a GuestService over one pool,
 // sharing ONE charname.Gate — the same shape bootstrapsetup and cmd/holomush
 // build.
-func newGateTestEnv(ctx context.Context, blockPatterns []string) *gateTestEnv {
+//
+// namerFor optionally replaces the production gemstone/element namer. It is a
+// factory rather than a value because the namer needs the start location, which
+// this function mints. Omit it to get the production namer.
+func newGateTestEnv(
+	ctx context.Context,
+	blockPatterns []string,
+	namerFor ...func(startLoc ulid.ULID) auth.GuestNamer,
+) *gateTestEnv {
 	GinkgoHelper()
+	Expect(len(namerFor)).To(BeNumerically("<=", 1), "at most one namer factory")
 	pool := gatePool()
 
 	// A verifiable corpus. 000001_baseline seeds a bootstrap character with no
@@ -136,8 +146,13 @@ func newGateTestEnv(ctx context.Context, blockPatterns []string) *gateTestEnv {
 	)
 	Expect(err).NotTo(HaveOccurred())
 
+	var namer auth.GuestNamer = telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLoc)
+	if len(namerFor) == 1 {
+		namer = namerFor[0](startLoc)
+	}
+
 	guests, err := auth.NewGuestService(
-		telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLoc),
+		namer,
 		playerRepo,
 		&gateGuestCharRepo{pool: pool},
 		store.NewPostgresPlayerSessionStore(pool),
@@ -180,8 +195,65 @@ func (e *gateTestEnv) seedPlayer(ctx context.Context) ulid.ULID {
 	return playerID
 }
 
-// compile-time assertion: the spec's guest repo really is what the service takes.
-var _ auth.GuestCharacterRepository = (*gateGuestCharRepo)(nil)
+// scriptedGuestNamer hands out a FIXED sequence of guest names and records
+// every name the service asked for and released.
+//
+// The production gemstone/element namer picks at random, which makes any
+// retry-loop assertion built on it vacuous: if the first draw happens to be
+// admissible the loop never runs, and a spec asserting only "the name that came
+// back is admissible" passes without exercising the thing it names. Scripting
+// the sequence makes the retry mandatory, and recording the requests is what
+// proves it actually happened.
+//
+// Running out of names is deliberately an ERROR rather than a wrap-around: it
+// turns "the service asked for more names than the script allows" into a loud
+// GUEST_NAME_GENERATE_FAILED instead of a silent extra lap.
+type scriptedGuestNamer struct {
+	names    []string
+	startLoc ulid.ULID
+
+	mu        sync.Mutex
+	requested []string
+	released  []string
+}
+
+func (n *scriptedGuestNamer) GenerateName() (string, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if len(n.requested) >= len(n.names) {
+		return "", oops.Errorf("scriptedGuestNamer: asked for name %d, script holds only %d",
+			len(n.requested)+1, len(n.names))
+	}
+	name := n.names[len(n.requested)]
+	n.requested = append(n.requested, name)
+	return name, nil
+}
+
+func (n *scriptedGuestNamer) ReleaseGuest(name string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.released = append(n.released, name)
+}
+
+func (n *scriptedGuestNamer) StartLocation() ulid.ULID { return n.startLoc }
+
+func (n *scriptedGuestNamer) requestedNames() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]string(nil), n.requested...)
+}
+
+func (n *scriptedGuestNamer) releasedNames() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]string(nil), n.released...)
+}
+
+// compile-time assertions: the spec's stubs really are what the services take.
+var (
+	_ auth.GuestCharacterRepository = (*gateGuestCharRepo)(nil)
+	_ auth.GuestNamer               = (*scriptedGuestNamer)(nil)
+)
 
 var _ = Describe("The production character-create path admits names through charname.Gate", func() {
 	var ctx context.Context
@@ -237,18 +309,32 @@ var _ = Describe("The production character-create path admits names through char
 	// this plan (T-02-31), so a gate installed only in CharacterService would
 	// have left the automatic, high-volume path wide open.
 	It("retries guest provisioning rather than persisting a block-listed generated name", func() {
-		// The gemstone/element namer produces two-word names; blocking every name
-		// beginning with a vowel forces the retry loop to run for real without
-		// making it impossible to succeed.
-		env := newGateTestEnv(ctx, []string{`^[aeiou]`})
+		// The namer is SCRIPTED: a blocked candidate first, an admissible one
+		// second, so the retry loop is forced to run.
+		//
+		// Driving this from the production gemstone/element namer made the spec
+		// vacuous. It picks at random, `^[aeiou]` blocks only vowel-initial
+		// names, and roughly 21 of 26 first letters are consonants — so most
+		// runs were admitted on attempt ONE, never entered the retry loop, and
+		// still satisfied "the name that came back is not vowel-initial". A
+		// green run proved nothing about retrying.
+		blocked, admissible := "Amber_Ember", "Jade_River"
+		namer := &scriptedGuestNamer{names: []string{blocked, admissible}}
+		env := newGateTestEnv(ctx, []string{`^[aeiou]`}, func(startLoc ulid.ULID) auth.GuestNamer {
+			namer.startLoc = startLoc
+			return namer
+		})
 
 		result, err := env.guests.CreateGuest(ctx)
 		Expect(err).NotTo(HaveOccurred(), "the retry loop must find an admissible name")
 		Expect(result).NotTo(BeNil())
 		Expect(result.Character).NotTo(BeNil())
 
-		// Whatever name landed, it does NOT match the configured pattern — the
-		// assertion the whole spec exists for.
+		// The name that landed is the SECOND candidate — the namer's underscores
+		// become spaces on the way to the display form.
+		Expect(result.Character.Name).To(Equal("Jade River"))
+
+		// It does NOT match the configured pattern.
 		normalized, nErr := charname.Normalize(result.Character.Name)
 		Expect(nErr).NotTo(HaveOccurred())
 		Expect("aeiou").NotTo(ContainSubstring(string(normalized.Key[0])),
@@ -264,6 +350,24 @@ var _ = Describe("The production character-create path admits names through char
 		Expect(key).To(Equal(normalized.Key))
 		Expect(skeleton).NotTo(BeEmpty())
 		Expect(version).To(Equal(charname.UnicodeVersion))
+
+		// The blocked candidate never reached the database — the "never
+		// persisted" half of this spec's name.
+		var blockedRows int
+		Expect(env.pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM characters WHERE normalized_name = $1`, "amber ember").
+			Scan(&blockedRows)).To(Succeed())
+		Expect(blockedRows).To(BeZero(), "the blocked candidate must never be persisted")
+
+		// THE load-bearing assertion. Everything above is also satisfied by a
+		// service that never retried and simply drew an admissible name first —
+		// which is exactly how this spec used to pass while proving nothing.
+		// Asserting the service asked for BOTH names, in order, is what pins the
+		// retry itself.
+		Expect(namer.requestedNames()).To(Equal([]string{blocked, admissible}),
+			"the service must request the blocked candidate, have it refused, then request another")
+		Expect(namer.releasedNames()).To(ContainElement(blocked),
+			"a refused candidate must be released back to the namer")
 	})
 
 	// Pairs the refusal with a populated config that succeeds, on the same fixture.
