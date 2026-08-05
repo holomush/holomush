@@ -115,7 +115,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       of `Cf` format characters, and a **confusable/mixed-script rule**, so a visually-identical name
       cannot impersonate an existing character.
 
-- [ ] **IDENT-07**: Character names are additionally checked against a **configurable block/disallow list
+- [x] **IDENT-07**: Character names are additionally checked against a **configurable block/disallow list
       of regular expressions**, evaluated server-side at both create and rename.
 
 - [x] **IDENT-08**: Player usernames remain **ASCII-only** — a regression guard pinning the existing

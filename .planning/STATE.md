@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: abac-schema-vocabulary
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-08-04T23:21:25.396Z"
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-08-05T00:01:42.902Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 17
+  completed_plans: 18
   percent: 29
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 (abac-schema-vocabulary) — EXECUTING
-Plan: 5 of 13
+Plan: 6 of 13
 Status: Ready to execute
-Progress: [███████░░░] 65% (1/6 phases)
+Progress: [███████░░░] 69% (1/6 phases)
 Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -231,6 +231,7 @@ no action needed.
 | Phase 02 P02 | ~95min | 3 tasks | 11 files |
 | Phase 02 P03 | 34min | 2 tasks | 4 files |
 | Phase 02 P04 | 85m | 3 tasks | 11 files |
+| Phase 02 P05 | 110min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -438,6 +439,10 @@ the next milestone yet.
 - [Phase ?]: 02-03: viewer namespace ships FIVE keys, not §8.4.1's three — roles/has_roles added so seed:viewer-property-admin-read is expressible at all (Amendment F for plan 02-11)
 - [Phase ?]: INV-WORLD-6's registry summary was corrected to enumerate BOTH sanctioned tombstone-emitting deleters (world.Service.DeleteCharacter and auth.CharacterReapingService) in the same change that bound it — the shipped 'ONLY path' wording was already false and binding it would have written a fabricated guarantee no meta-test can catch.
 - [Phase ?]: The empty world.Status zero value is refused and logged at the SelectCharacter call site; world.Selectable's default arm stays deny. Partial projections feeding the selection path were widened instead of softening the predicate.
+- [Phase ?]: 02-05: the policy.Cache read barrier is deliberately NOT mirrored for the block list — it would be harmful, not merely dead (no in-process writer; blocking readers would turn poll latency into admission latency while the last valid list is fully valid)
+- [Phase ?]: 02-05: the block-list poll indicator is the pair (updated_at, md5(value)) — a bare updated_at poll never observes v0.13's only edit path (direct SQL), which leaves updated_at untouched
+- [Phase ?]: 02-05: blocklist.Load does its own strict decode instead of settings.StringSliceN, which collapses absent and unparseable into one (nil,false) and would silently disable the whole list on one malformed direct-SQL edit
+- [Phase ?]: 02-05: production hands charname.Gate the live *blocklist.Cache, never a *Snapshot — a snapshot captured at construction freezes the list for the process lifetime with no failing test and no log line
 
 ### Pending Todos
 
@@ -484,11 +489,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-04T23:21:25.386Z
+Last session: 2026-08-05T00:01:42.891Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02-04-PLAN.md
+Stopped at: Completed 02-05-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
