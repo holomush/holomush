@@ -173,25 +173,38 @@ Stated plainly so the zero is not over-read:
 
 ---
 
-## Remediation
+## Remediation verdict
 
-**Task 4's checkpoint is deliberately unanswered.** It approves irreversible writes to
-live player data and the maintainer has reserved that decision; this run does not
-select an option, performs no write, and writes no `02-REMEDIATION.sql`.
+**Decision: `no-remediation-required`.**
 
-What the evidence above hands to that decision: the ledger carries **zero** `remediate`
-verdicts, because it carries zero rows. There are no row ids to enumerate and no prior
-values to capture.
+| Field | Value |
+| --- | --- |
+| Approver | the maintainer (Sean Brandt), via plan 02-10 Task 4's blocking checkpoint |
+| Decided | 2026-08-05 |
+| Selection | maintainer-selected — **not** auto-selected, and not a planner's default |
+| Ledger rows in scope | **none** |
+| Enumerated `remediate` row ids | **none** |
+| Prior values captured | not applicable — no row is written |
+| Rollback | not applicable — no row is written |
 
-This section is **not** the recorded-verdict section the plan's completion gate looks
-for. That one carries an approver and a date, and Task 4b writes it after Task 4 is
-answered.
+**Basis.** The property ledger and the description ledger are each **0 rows**, and
+`entity_properties` is empty in its entirety. No row carries a `remediate` verdict, so
+there are no row ids to enumerate, nothing to capture, and nothing to restore.
 
-Its heading is deliberately **not** spelled out anywhere in this file. That gate is a
-literal substring match over this document, so writing the heading inside a sentence
-explaining that the section is absent would satisfy the gate while the decision it
-stands for is still outstanding — which is precisely the fail-open the gate exists to
-prevent (B-13).
+The option's own text attaches exactly one condition — that the answer reflect the
+ledger rather than an assumption about it. It does: the ledger above was produced by
+running both committed queries against the corpus restored from kopia snapshot
+`7e48a9b592c2e0d302a5da3cf0171835`, and its zero is a measured zero.
+
+**Task 4b performed no write.** No `visibility` was changed, no text was edited, no
+`02-REMEDIATION.sql` was created, and no database was contacted after the read-only
+audit. There is no after-ledger because no row moved — an after-ledger would be
+identical to the before-ledger and would prove nothing that this section does not.
+
+The remaining description remedy in the three-option vocabulary — raising the §8.6
+description floor to `player` — is **not** exercised here and is not this plan's to
+exercise: it is a posture-table row owned by plan `02-11`'s amendment pass. It is
+recorded as not-taken rather than omitted.
 
 ---
 
