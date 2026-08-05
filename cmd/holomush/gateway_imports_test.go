@@ -33,6 +33,18 @@ var coreOnlyFiles = map[string]struct{}{
 	"migrate_test.go":                 {},
 	"cmd_plugin_events.go":            {},
 	"cmd_plugin_validate.go":          {},
+	// `holomush character name` is a host-shell operator tool, not the
+	// gateway, and it deliberately opens its own pool rather than dialling the
+	// running server: migration 000055 ABORTS STARTUP on a pre-existing
+	// duplicate (D-22), so at the moment this command is needed there is no
+	// server to reach. It imports internal/store (settings source for the
+	// block list), internal/world/postgres (the gated CharacterRepository, and
+	// the collision scan the migration itself calls) and internal/world/wmodel
+	// (the outbox envelope intent). Core-only by design; same precedent as
+	// migrate.go and cmd_admin.go.
+	"cmd_character_name.go":                  {},
+	"cmd_character_name_test.go":             {},
+	"cmd_character_name_integration_test.go": {},
 	// 07-09 item 5: the bootstrap orphan boot gate's definition + tests
 	// moved to internal/bootstrap/setup (behind the Bootstrap -> Database
 	// edge); the two bootstrap-orphan files no longer exist here.
