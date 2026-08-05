@@ -9,8 +9,6 @@ import (
 
 	"github.com/samber/oops"
 	"golang.org/x/text/cases"
-	"golang.org/x/text/runes"
-	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -31,23 +29,60 @@ type Normalized struct {
 	Key string
 }
 
-// nameTransform is steps 1 and 2 of §6.1.1, in that order.
+// # No package-level x/text transformer lives here, and that is deliberate
 //
-// Step 2 (stripping general-category Cf) is the reason "a<ZWJ>b" and "ab"
-// cannot both be seated: Cf codepoints render as nothing, so they are pure
-// padding for producing two byte-distinct strings that look identical.
-var nameTransform = transform.Chain(
-	norm.NFKC,                          // step 1: compatibility composition
-	runes.Remove(runes.In(unicode.Cf)), // step 2: strip format codepoints
-)
+// Steps 1, 2 and 4 below were once a shared `transform.Chain(norm.NFKC,
+// runes.Remove(runes.In(unicode.Cf)))` and a shared `cases.Fold()`, held in
+// package-level vars. Both are STATEFUL, and Normalize is called concurrently
+// in production — two players creating characters at the same moment is the
+// ordinary case, and the guest path retries in a loop.
+//
+//   - cases.Caser's own doc: "A Caser may be stateful and should therefore not
+//     be shared between goroutines."
+//   - transform.Chain returns a *chain carrying mutable `link`, `err` and
+//     `errStart` fields plus a read/write buffer per link.
+//
+// Sharing either interleaves one call's Reset with another's Transform. The
+// observable results were a truncated or garbled display form — which the
+// syntactic rule then rejects, on a name that is unambiguously letters-only —
+// and, when the link buffers' indices crossed, `slice bounds out of range`
+// inside transform.String. Neither is theoretical: both were reproduced, and
+// they are what made 02-12's concurrent-claim spec intermittent.
+//
+// So this pipeline uses only forms that carry no shared state:
+//
+//   - norm.Form is a `type Form int` whose String() allocates its own buffer.
+//   - stripFormatRunes is a pure strings.Map.
+//   - the Caser is constructed PER CALL and never escapes.
+//
+// Do not hoist any of them back into a package-level var for the allocation.
+// Normalize runs on character create, rename, guest-name generation and the
+// 000055 backfill — none of them hot enough to trade correctness for.
 
-// caseFolder performs Unicode FULL case folding, not an ASCII-oriented
-// lowercase.
+// stripFormatRunes removes every general-category Cf codepoint.
+//
+// This is step 2 of §6.1.1 and the reason "a<ZWJ>b" and "ab" cannot both be
+// seated: Cf codepoints render as nothing, so they are pure padding for
+// producing two byte-distinct strings that look identical.
+func stripFormatRunes(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Cf, r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// foldCase performs Unicode FULL case folding, not an ASCII-oriented lowercase.
 //
 // The difference is load-bearing: lowercasing "straße" leaves it unchanged, while full
 // folding expands U+00DF to "ss", so "Straße" and "STRASSE" collapse onto one
 // key. An ASCII-oriented lowercase leaves that pair as two distinct names.
-var caseFolder = cases.Fold()
+//
+// The Caser is built here rather than reused: see the note above.
+func foldCase(s string) string {
+	return cases.Fold().String(s)
+}
 
 // Normalize runs the §6.1.1 pipeline over a submitted character name:
 //
@@ -63,13 +98,10 @@ var caseFolder = cases.Fold()
 // and is never stored. Without that check an invisible-only submission would
 // seat a character whose name renders as nothing.
 func Normalize(submitted string) (Normalized, error) {
-	folded, _, err := transform.String(nameTransform, submitted)
-	if err != nil {
-		return Normalized{}, oops.
-			Code("NAME_EMPTY_NORMAL_FORM").
-			With("reason", "normalization transform failed").
-			Wrap(err)
-	}
+	// Steps 1 and 2, in that order. norm.Form.String allocates its own buffer
+	// and stripFormatRunes is a pure map, so neither carries state between
+	// calls — see the note above stripFormatRunes for why that matters.
+	folded := stripFormatRunes(norm.NFKC.String(submitted))
 
 	// Step 3. strings.Fields splits on every Unicode whitespace run and drops
 	// empties, so Join with a single space trims and collapses in one pass.
@@ -99,6 +131,6 @@ func Normalize(submitted string) (Normalized, error) {
 
 	return Normalized{
 		Display: display,
-		Key:     caseFolder.String(display),
+		Key:     foldCase(display),
 	}, nil
 }

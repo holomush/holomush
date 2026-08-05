@@ -311,10 +311,17 @@ var _ = Describe("Character-name uniqueness is decided by the database (IDENT-09
 
 			const contested = "Brenna"
 			var (
-				wg     sync.WaitGroup
-				errs   [2]error
-				chars  [2]*world.Character
-				owners = [2]ulid.ULID{playerA, playerB}
+				wg    sync.WaitGroup
+				errs  [2]error
+				chars [2]*world.Character
+				// returned records that Create actually RETURNED, as opposed to
+				// its goroutine dying inside it. Without it a panic in the create
+				// path leaves both slots zero, and the loop below reads
+				// errs[i] == nil as a WIN and then trips over a nil character —
+				// a misdirection that cost real diagnosis time when a shared
+				// x/text transformer was panicking inside charname.Normalize.
+				returned [2]bool
+				owners   = [2]ulid.ULID{playerA, playerB}
 			)
 			start := make(chan struct{})
 			for i := range owners {
@@ -324,10 +331,17 @@ var _ = Describe("Character-name uniqueness is decided by the database (IDENT-09
 					defer wg.Done()
 					<-start
 					chars[i], errs[i] = path.chars.Create(ctx, owners[i], contested)
+					returned[i] = true
 				}(i)
 			}
 			close(start)
 			wg.Wait()
+
+			for i := range returned {
+				Expect(returned[i]).To(BeTrue(),
+					"claim %d never returned from Create — its goroutine panicked, so neither the "+
+						"character nor the error below means anything; read the recovered panic above", i)
+			}
 
 			winners := 0
 			for i := range errs {
