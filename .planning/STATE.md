@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: abac-schema-vocabulary
 status: executing
-stopped_at: Completed 02-08-PLAN.md
-last_updated: "2026-08-05T03:10:36.360Z"
+stopped_at: Completed 02-09-PLAN.md
+last_updated: "2026-08-05T03:40:06.872Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 22
+  completed_plans: 23
   percent: 29
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 (abac-schema-vocabulary) — EXECUTING
-Plan: 10 of 13
+Plan: 11 of 13
 Status: Ready to execute
-Progress: [█████████░] 85% (1/6 phases)
+Progress: [█████████░] 88% (1/6 phases)
 Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -236,6 +236,7 @@ no action needed.
 | Phase 02 P06 | 155min | 3 tasks tasks | 36 files files |
 | Phase 02 P07 | 118min | 4 tasks | 9 files |
 | Phase 02 P08 | 20min | 3 tasks | 3 files |
+| Phase 02 P09 | 95min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -464,6 +465,11 @@ the next milestone yet.
 - [Phase ?]: 02-07: D-03 ships TWO tier-floor policies, not three — the player rung has no seeded §8.6 member and the DSL list grammar forbids an empty 'in []'. Guarded by a conditional re-entry test
 - [Phase ?]: 02-08: AttributeVisible does NOT short-circuit on a term-A denial — both terms always evaluate, so 'exactly two evaluations' is unconditional and a term-B infra failure cannot be masked as an ordinary withheld (§8.10)
 - [Phase ?]: 02-08: §8.7's not-found-equivalent is signalled as ErrProfileUnreachable, a distinct Go outcome from ErrEvaluationFailed — a caller that cannot tell them apart renders an outage as a missing character; the wire-level indistinguishability binds in Phase 4
+- [Phase ?]: 02-09: gate-then-distinguish — the ABAC evaluation runs BEFORE the registry lookup, so DENY_ADMIN_SECTION vs DENY_ADMIN_SECTION_UNREGISTERED is an admin diagnostic, not an enumeration oracle (D-06); pinned by INV-PRIVACY-11, bound to a differential string-equality assertion demonstrated RED against a lookup-first ordering
+- [Phase ?]: 02-09: Descriptor.Action is enforced as a declared MAXIMUM operation class through a CLOSED rank ladder (read<write); an action off the ladder is refused rather than ranked zero, and the check sits AFTER the gate so the declare-write distinction stays invisible to a denied caller
+- [Phase ?]: 02-09: section.ValidateAtBoot is step 1 of BootstrapSubsystem.Prepare (before the orphan check, no DB needed) — without the call site D-09 would have been satisfied by a unit test only and a zero-valued descriptor would ship
+- [Phase ?]: 02-09: error codes are inline oops.Code literals (adminauth precedent) rather than exported constants, forced by the plan's line-ordering criterion; taxonomy documented on AssertSectionAccess for Phase 4/6
+- [Phase ?]: 02-09: ADMIN_SECTION_EVALUATION_FAILED added under Rule 2 (§8.10 infra failure must not be flattened into a denial) but is UNTESTED — the suite uses only the real engine; Phase 4 owns the seam
 
 ### Pending Todos
 
@@ -511,11 +517,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-05T03:10:36.349Z
+Last session: 2026-08-05T03:39:56.875Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02-08-PLAN.md
+Stopped at: Completed 02-09-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
