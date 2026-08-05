@@ -488,7 +488,7 @@ the active value, constrained by a `CHECK` over a closed vocabulary.**
 | `characters.status` | `TEXT` | Yes | The character's lifecycle state. Phase 2 transcribes this DDL fragment verbatim: `status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retired', 'idle'))`. Exactly three values; see §4.2 for the vocabulary and §4.3 for the exhaustiveness rule that makes shipping all three safe. |
 
 There is no status column on `characters` today
-(`internal/store/migrations/000001_baseline.up.sql:67-76` — `id`, `player_id`,
+(`internal/store/migrations/000001_baseline.sql:71-80` — `id`, `player_id`,
 `name`, `description`, `location_id`, `created_at`, and nothing else). Phase 2
 adds this one.
 
@@ -497,10 +497,10 @@ in-tree precedents in the baseline migration alone:
 
 | Precedent | Location |
 | --- | --- |
-| `access_policies.effect` | `internal/store/migrations/000001_baseline.up.sql:259` |
-| `access_policies.source` | `internal/store/migrations/000001_baseline.up.sql:261` |
-| `access_audit_log.effect` | `internal/store/migrations/000001_baseline.up.sql:294` |
-| `entity_properties.visibility` | `internal/store/migrations/000001_baseline.up.sql:358` |
+| `access_policies.effect` | `internal/store/migrations/000001_baseline.sql:263` |
+| `access_policies.source` | `internal/store/migrations/000001_baseline.sql:265` |
+| `access_audit_log.effect` | `internal/store/migrations/000001_baseline.sql:298` |
+| `entity_properties.visibility` | `internal/store/migrations/000001_baseline.sql:362` |
 
 **The rejected alternatives, and why.**
 
@@ -583,10 +583,10 @@ hypothetical:
 
 | Referencing column | On delete | Consequence |
 | --- | --- | --- |
-| `character_roles.character_id` | `ON DELETE CASCADE` (`internal/store/migrations/000001_baseline.up.sql:84`) | The character's roles are dropped silently. |
-| `players.default_character_id` | `ON DELETE SET NULL` (`internal/store/migrations/000001_baseline.up.sql:80`) | The player's default character is silently nulled. |
-| `locations.owner_id` | **no `ON DELETE` clause** (`internal/store/migrations/000001_baseline.up.sql:99`) — Postgres defaults to `NO ACTION` | The delete **errors at runtime** for any character that owns a location. |
-| `objects.owner_id` | **no `ON DELETE` clause** (`internal/store/migrations/000001_baseline.up.sql:143`) | Same — the delete errors for any character that owns an object. |
+| `character_roles.character_id` | `ON DELETE CASCADE` (`internal/store/migrations/000001_baseline.sql:88`) | The character's roles are dropped silently. |
+| `players.default_character_id` | `ON DELETE SET NULL` (`internal/store/migrations/000001_baseline.sql:84`) | The player's default character is silently nulled. |
+| `locations.owner_id` | **no `ON DELETE` clause** (`internal/store/migrations/000001_baseline.sql:103`) — Postgres defaults to `NO ACTION` | The delete **errors at runtime** for any character that owns a location. |
+| `objects.owner_id` | **no `ON DELETE` clause** (`internal/store/migrations/000001_baseline.sql:147`) | Same — the delete errors for any character that owns an object. |
 
 **`purge` MUST NOT be wired to any player-facing affordance.** It is not the
 implementation of a "delete my character" button, and an admin surface whose
@@ -721,7 +721,7 @@ row of this table by position**, and reordering the table changes nothing.
 | Capture site | Where the name is stored | Verdict | Reachable by rename | Consequence |
 | --- | --- | --- | --- | --- |
 | `actor_display_name` on the communication-content payload, stamped at emit time from the acting character's name | `api/proto/holomush/comm/v1/comm.proto:25-28`; stamped at `pkg/plugin/comm/builder.go:41`, `:48`, `:55` (each passing `a.Name`) | `historical` | no | The canonical name capture. Every say / pose / OOC line carries the name the character had when the line was emitted. |
-| The same payload, durably projected into the **host** audit table | `internal/store/migrations/000052_events_audit_partition.up.sql:114` (`envelope BYTEA NOT NULL` — the name is inside the opaque envelope, not a column) | `historical` | no | Append-only. There is no column to update and no update path; a rename reaches none of it. |
+| The same payload, durably projected into the **host** audit table | `internal/store/migrations/000052_events_audit_partition.sql:120` (`envelope BYTEA NOT NULL` — the name is inside the opaque envelope, not a column) | `historical` | no | Append-only. There is no column to update and no update path; a rename reaches none of it. |
 | The same payload, durably projected into the **plugin-owned** scene log | `plugins/core-scenes/migrations/000004_create_scene_log.up.sql:23` (`payload BYTEA NOT NULL`) | `historical` | no | Same shape as the host table, in the plugin's own schema. Served publicly through the export surfaces below. |
 | The legacy payload keys `character_name` and `sender_name`, still read by the web translator for un-migrated emitters | `internal/web/translate.go:25-26` (the `genericPayload` fields), consumed at `internal/web/translate.go:88-96` | `historical` | no | The same frozen value under two older key names. Migrating an emitter to the new key does **not** rewrite what earlier emits already stored. |
 | `GameEvent.actor`, the rendered read-side of the three rows above | `api/proto/holomush/web/v1/web.proto:426-429` — documented as *"the DISPLAY NAME of the acting character, extracted from the event payload… For stable identity use `actor_id`, not this field"* | `historical` | no | Recomputed on every read, yet still `historical` by Rule 1: it is recomputed **from frozen bytes**. This is the row that makes Rule 1's write-path test necessary — a read-path test would classify it `live` and be wrong. |
@@ -732,7 +732,7 @@ row of this table by position**, and reordering the table changes nothing.
 
 | Capture site | Where the name is read from | Verdict | Reachable by rename | Consequence |
 | --- | --- | --- | --- | --- |
-| `characters.name` — the source of truth every live surface resolves against | `internal/store/migrations/000001_baseline.up.sql:71` | `live` | yes | The anchor row. A rename is a write here and nowhere else. |
+| `characters.name` — the source of truth every live surface resolves against | `internal/store/migrations/000001_baseline.sql:75` | `live` | yes | The anchor row. A rename is a write here and nowhere else. |
 | The whole §3 character-projection family — `CharacterInfo.name`, `CharacterSummary.name`, `CharacterDirectoryEntry.name`, `PresenceEntry`, and the v0.13 `PublicCharacter` / `OwnCharacter` / `AdminCharacter` replacements | §3.2's type-reachable table | `live` | yes | Projected from the character row per read. A rename is visible on the next read with no further work. |
 | `SelectCharacterResponse.character_name` and its three siblings (§3.3's name-reachable scalar rows) | `internal/grpc/auth_handlers.go:352`, `:380`, `:413`, `:505` — each assigning from the freshly-read character row's `Name` | `live` | yes | A bare `string` on the wire, but resolved live, so a rename reaches it. |
 | `ParticipantInfo.character_name` — the scene roster | `plugins/core-scenes/service.go:522-528`, `:534-538`, `:1504-1513` | `live` | yes | Resolved per read, best-effort. Today no name resolver is wired in the plugin, so it falls back to the character id — the proto documents that fallback (`api/proto/holomush/scene/v1/scene.proto:328-330`). Wiring a resolver later keeps it `live`; it does not move the verdict. |
@@ -744,8 +744,8 @@ Stated so that a later reader does not have to re-derive the negative:
 
 | Candidate | Why it is not a member |
 | --- | --- |
-| `events_audit.rendering` (`internal/store/migrations/000052_events_audit_partition.up.sql:119`, `JSONB NOT NULL`) | Carries `RenderingMetadata` — `Category`, `Format`, `Label`, `DisplayTarget`, `SourcePlugin`, `SourcePluginVersion` (`internal/eventbus/types.go:127-134`). Verb-level presentation metadata; no character name and no actor field. |
-| Every foreign key referencing `characters(id)` | They hold the **id**, which a rename does not touch. `players.default_character_id` (`:80`), `character_roles.character_id` (`:84`), `locations.owner_id` (`:99`), `objects.owner_id` (`:143`) — all in `internal/store/migrations/000001_baseline.up.sql`. Correct by construction; listed so the enumeration is visibly complete rather than visibly silent about them. |
+| `events_audit.rendering` (`internal/store/migrations/000052_events_audit_partition.sql:125`, `JSONB NOT NULL`) | Carries `RenderingMetadata` — `Category`, `Format`, `Label`, `DisplayTarget`, `SourcePlugin`, `SourcePluginVersion` (`internal/eventbus/types.go:127-134`). Verb-level presentation metadata; no character name and no actor field. |
+| Every foreign key referencing `characters(id)` | They hold the **id**, which a rename does not touch. `players.default_character_id` (`:84`), `character_roles.character_id` (`:88`), `locations.owner_id` (`:103`), `objects.owner_id` (`:147`) — all in `internal/store/migrations/000001_baseline.sql`. Correct by construction; listed so the enumeration is visibly complete rather than visibly silent about them. |
 
 ### 5.3 Cross-listing: which capture site each public export surface serves
 
@@ -893,6 +893,43 @@ check the implementation against the same document. The three explicitly-named
 rejections are the confusable-rich pairs: Cyrillic `а` (U+0430) against Latin `a`
 (U+0061), Greek `ο` (U+03BF) against Latin `o` (U+006F).
 
+> **Recorded divergence — Script, not Script_Extensions (§14 row 14, 2026-08-05).**
+> The paragraph above says "script extensions (UTS #24)", which is what the
+> Moderately Restrictive profile is defined over. **The shipped implementation
+> (`internal/charname/mixedscript.go`) computes over the plain **Script** (`sc`)
+> property from Go's stdlib `unicode.Scripts`, not over **Script_Extensions**
+> (`scx`).** No Go module surveyed supplies `scx`, and `golang.org/x/text` has no
+> script package at all, so the faithful profile is not expressible against the
+> pinned dependency set.
+>
+> **The approximation is closed-direction.** Per UAX #24 §3.3, a character's `scx`
+> set is always a superset of (or equal to) its `sc` value, so computing over `sc`
+> can only ever see **fewer** scripts than the faithful profile would — it can
+> **miss** a rejection, never invent one. It therefore cannot reject a name the
+> Moderately Restrictive profile admits, which is the direction that matters for
+> §6.1's prohibition on rejecting a non-Latin name its Latin equivalent would pass.
+> All three explicitly-named rejections above are unaffected: Cyrillic and Greek
+> letters carry real, non-`Common` `sc` values, so Latin+Cyrillic, Latin+Greek and
+> Cyrillic+Greek are all caught by `sc` alone. All eight verdict rows hold as
+> written.
+>
+> **A rune with no script assignment is REJECTED, fail-closed**
+> (`NAME_UNASSIGNED_SCRIPT`). Go's tables are Unicode 15.0.0 while this SPEC's
+> confusables data is 17.0.0, so a codepoint assigned after 15.0.0 resolves to no
+> script. Treating that gap as script-neutral would let a genuinely two-script
+> name read as single-script — the exact splice Mechanism A exists to catch — so
+> the unassigned case denies.
+>
+> **Note on the permitted CJK families.** The three CJK rows are matched by
+> **subset containment** — a name's script set must be a subset of
+> `{Latin, Han, Hiragana, Katakana}`, `{Latin, Han, Bopomofo}` or
+> `{Latin, Han, Hangul}` — rather than requiring Latin to be present. A literal
+> reading of the table's "Latin + …" phrasing would reject `{Han, Hiragana}`
+> (ordinary Japanese) and `{Han, Hangul}` (ordinary Korean), which §6.1 forbids.
+> Containment is what UTS #39's own augmented script sets specify, so the widening
+> is toward the standard rather than away from it. Every row above still lands
+> exactly as written.
+
 **Mechanism B — the skeleton check (catches whole-script confusables).**
 Mechanism A alone passes a name written **entirely** in Cyrillic that renders
 identically to an existing Latin name — it is single-script, so it is permitted.
@@ -922,8 +959,8 @@ index over it**. Uniqueness is a database constraint, not an application check.
 
 **That index MUST land before or with `Rename`.** Not after. Today there is no
 unique index on `characters.name` and no `LOWER(name)` index — the baseline
-`characters` table (`internal/store/migrations/000001_baseline.up.sql:67-76`)
-carries only `idx_characters_location` (`:76`). Uniqueness is enforced entirely by
+`characters` table (`internal/store/migrations/000001_baseline.sql:71-80`)
+carries only `idx_characters_location` (`:80`). Uniqueness is enforced entirely by
 a check-then-insert sequence with a window between the check and the write:
 
 | Participant | Location | Role |
@@ -995,7 +1032,7 @@ validation.
 | --- | --- |
 | The rule | `^[a-zA-Z][a-zA-Z0-9_]*$` — starts with a letter, then letters, digits and underscores (`internal/auth/player.go:31`, applied at `internal/auth/player.go:167`) |
 | Length | 3 to 30 (`internal/auth/player.go:24-25`) |
-| Uniqueness | A real database constraint — `username TEXT UNIQUE NOT NULL` (`internal/store/migrations/000001_baseline.up.sql:54`). No check-then-insert race exists here. |
+| Uniqueness | A real database constraint — `username TEXT UNIQUE NOT NULL` (`internal/store/migrations/000001_baseline.sql:58`). No check-then-insert race exists here. |
 
 **None of §6.1 applies to usernames. No NFKC, no `Cf` stripping, no case folding,
 no script analysis, and no confusable folding.** The character set is ASCII, so
@@ -1051,7 +1088,7 @@ The split is:
 
 | Lives as | What |
 | --- | --- |
-| A column on `characters` | The character's `name`; the in-world `description` (`internal/store/migrations/000001_baseline.up.sql:72`); the lifecycle `status` (added by Phase 2 per the §4 vocabulary); the optimistic-concurrency `version` (`internal/store/migrations/000049_world_version_guard.up.sql:20`, `version INTEGER NOT NULL DEFAULT 1`). |
+| A column on `characters` | The character's `name`; the in-world `description` (`internal/store/migrations/000001_baseline.sql:76`); the lifecycle `status` (added by Phase 2 per the §4 vocabulary); the optimistic-concurrency `version` (`internal/store/migrations/000049_world_version_guard.sql:22`, `version INTEGER NOT NULL DEFAULT 1`). |
 | An `entity_properties` row | Every `profile.*` field in §7.2 and every media reference in §7.3. |
 
 The rule separating them: a value the world model itself reads — to render a
@@ -1061,7 +1098,7 @@ concurrent write — is a column. A value only the profile publishes is a row.
 **This requires zero DDL for a twelfth field or an eleventh image.** That is what
 makes the "no migration later" claim literally true rather than aspirational: the
 `entity_properties` table already ships the whole mechanism
-(`internal/store/migrations/000001_baseline.up.sql:350-371`) — `parent_type` /
+(`internal/store/migrations/000001_baseline.sql:354-375`) — `parent_type` /
 `parent_id` / `name` / `value`, a per-row `visibility` CHECK over
 `('public', 'private', 'restricted', 'system', 'admin')`, the `visible_to` /
 `excluded_from` lists, and
@@ -1100,7 +1137,7 @@ distinct storage type. No field is required — see §7.4.
 
 **Naming collision, called out deliberately.** `profile.rp_preferences` is **not**
 `characters.preferences`. The latter is a shipped `JSONB` column
-(`internal/store/migrations/000045_character_preferences.up.sql:5`) holding the
+(`internal/store/migrations/000045_character_preferences.sql:7`) holding the
 owner-partitioned **settings** scope — client and display settings. The OOC
 RP-preferences block is published profile prose. Phase 5 **MUST NOT** write the
 RP block into the settings column, and the property name carries the `rp_`
@@ -1125,7 +1162,7 @@ time.
 
 **Exactly-one-primary is enforced by the database, not by application code.**
 `CONSTRAINT entity_properties_parent_name_unique UNIQUE(parent_type, parent_id, name)`
-(`internal/store/migrations/000001_baseline.up.sql:364`) makes a second
+(`internal/store/migrations/000001_baseline.sql:368`) makes a second
 `profile.image.primary` row for the same character an insert error. No service
 layer check is required, and none **SHOULD** be added — a hand-written check
 beside a database constraint is a second source of truth that can disagree with
@@ -1301,7 +1338,7 @@ The floor lives as an **ABAC policy family extending the existing
 shipped property policies, each a `permit`/`forbid` over
 `resource is property`), overridden by rows in `access_policies` carrying
 `source='admin'` — a value the shipped CHECK vocabulary already models
-(`internal/store/migrations/000001_baseline.up.sql:261`,
+(`internal/store/migrations/000001_baseline.sql:265`,
 `CHECK (source IN ('seed', 'lock', 'admin', 'plugin'))`).
 
 Therefore the configuration requires **zero new storage** and introduces zero new
@@ -1369,6 +1406,31 @@ shape of `PlayerAttributeProvider`
 | `tier` | string | **Always** — exactly one of `anonymous`, `guest`, `player`. |
 | `player_id` | string | Only on the `guest` and `player` rungs. |
 | `has_player_id` | bool | Always, true or false on every code path. |
+| `roles` | string list | Only on the `guest` and `player` rungs, **and** only when a `PlayerRoleLookup` is configured **and** the lookup succeeds. Omitted — never `[]string{}` — on all three unresolved paths (anonymous rung, no lookup configured, lookup error). Resolved **per player**: the union of roles held by any character of that player. |
+| `has_roles` | bool | Always, true or false on every code path. |
+
+> **`roles` and `has_roles` added by §14 row 16 (2026-08-05, plan `02-03`).** This
+> table originally declared exactly three keys. Phase 2 ships **five**, and the two
+> additions are not convenience: the shipped admin read policy gates on
+> `"admin" in principal.character.roles`
+> (`internal/access/policy/seed.go`), so its viewer twin
+> `seed:viewer-property-admin-read` needs a peer attribute in the `viewer`
+> namespace. Without `roles` the twin references a key nothing supplies; a missing
+> key is **FALSE** for every operator
+> (`internal/access/policy/dsl/evaluator.go`), so the twin would **deny every
+> caller forever** — silently, fail-closed, with no error and no failing
+> behavioural test, and with *"admins see a bare profile"* as the only symptom.
+> `roles` is what makes the twin expressible at all.
+>
+> **`roles` resolves per player, not per character**, matching §10.5's normative
+> verdict and the shipped `PostgresRoleStore.PlayerHasRole` join, so the web read
+> path and the operator socket cannot give two different answers to "is this human
+> an admin" at the same moment. A role-lookup failure is **fail-safe, not fatal**:
+> `roles` is omitted, `has_roles` is `false`, the failure is logged at warn with
+> the ctx, and resolution continues — mirroring `PlayerAttributeProvider`'s
+> `is_guest` branch. An empty list would be the list-flavored empty-string
+> sentinel — a *resolved* value a `containsAny`-shaped condition evaluates
+> against — which is why the omit-don't-sentinel rule below governs `roles` too.
 
 `player_id` follows the omit-don't-sentinel rule
 (`.claude/rules/abac-providers.md`, ADR holomush-ti1b): on the anonymous rung the
@@ -1378,10 +1440,11 @@ default-deny system. The `has_player_id` witness is emitted on every path, so a
 policy that needs to distinguish absent from present has something to test.
 
 `ResolveResource` returns `(nil, nil)` — a viewer is a Subject, never a Resource.
-All three keys **MUST** be declared in `ViewerTierProvider.Schema()`: the resolver
-drops and counts (`abac_rejected_provider_attributes_total`) any provider attribute
-whose key is not in the namespace schema, so an undeclared `tier` is silently
-absent rather than loudly wrong.
+**Every** key the provider emits — all **five** as of §14 row 16 — **MUST** be
+declared in `ViewerTierProvider.Schema()`: the resolver drops and counts
+(`abac_rejected_provider_attributes_total`) any provider attribute whose key is not
+in the namespace schema, so an undeclared `tier` is silently absent rather than
+loudly wrong.
 
 **The tier is server-derived.** The token **MUST** be derived from the server-side
 session state the gateway already authenticated. It **MUST NOT** be read from a
@@ -1482,7 +1545,84 @@ as an ABAC resource attribute before seeding the family. It is reachable today:
 `PropertyProvider.ResolveResource` emits `attrs["name"] = prop.Name`
 (`internal/access/policy/attribute/property.go:80-86`), alongside `parent_type`,
 `parent_id` and `visibility`. Phase 2 confirms this still holds at the version it
-builds against rather than inheriting the claim.
+builds against rather than inheriting the claim. *(Discharged: plan `02-13` pins
+it by test rather than by a read instruction.)*
+
+#### 8.5.2 The derived player-keyed property peers
+
+> **Added by §14 row 16 (2026-08-05, plans `02-13` and `02-07`).** Without this
+> subsection §8.5 describes a mapping the code does not have, and the next reader
+> sees `owner` and `owner_player_id` side by side and deletes one.
+
+The `property` namespace gains **six** keys beyond the shipped
+`name` / `parent_type` / `parent_id` / `visibility` / `owner` / `visible_to` /
+`excluded_from` set:
+
+| Key | Type | Derived from |
+| --- | --- | --- |
+| `owner_player_id` | string | the row's `owner` (a **character** id) |
+| `has_owner_player_id` | bool | — (witness, present on every path) |
+| `visible_to_players` | string list | the row's `visible_to` (**character** ids) |
+| `has_visible_to_players` | bool | — (witness, present on every path) |
+| `excluded_from_players` | string list | the row's `excluded_from` (**character** ids) |
+| `has_excluded_from_players` | bool | — (witness, present on every path) |
+
+**Why they exist.** The shipped row semantics are **character-keyed**:
+`seed:property-private-read` compares `resource.property.owner ==
+principal.character.id`, and `visible_to` / `excluded_from` hold character ids. A
+§8.4.1 `viewer:` subject is **player-flavored**. A player id compared against a
+character id never matches, and a non-matching key evaluates FALSE — so under a
+naive twin every `private`, `restricted` and `admin` field would be permanently
+invisible to the web: fail-closed, no error, no failing test, and *"the profile
+looks bare"* as the only symptom, which §8.5.1.1 records as the state that
+provokes the forbidden repair.
+
+The DSL cannot bridge the two in a policy: `in` needs a **scalar** left operand
+and `containsAny` takes **literal** needles, so it cannot intersect two attribute
+lists. The character→player relation is therefore resolved **server-side, in the
+provider**, from the row's own fields.
+
+**The peers are derived from the ROW, never from the caller.** A peer computed
+from the requesting subject would make the policy compare a value to itself and
+permit unconditionally. The derivation reads only `prop.Owner`,
+`prop.VisibleTo` and `prop.ExcludedFrom`.
+
+**Derivation direction (`02-CONTEXT.md` D-27).** The direction is invisible in the
+twins' DSL text — the twins read identically in shape to their character-flavored
+originals — so a reviewer asking *"does the viewer path widen access across a
+player's alternate characters?"* has nowhere to look but here. **Each peer is
+computed in the direction that cannot widen its own policy's effect:**
+
+- **Permit side — the ALL direction.** A player id appears in `owner_player_id`
+  or `visible_to_players` only when **every** character of that player appears in
+  the row's corresponding character-keyed field. A viewer therefore never obtains
+  a permit that one of that player's characters lacked.
+- **Forbid side — the ANY direction.** A player id appears in
+  `excluded_from_players` when **any** of that player's characters appears in
+  `excluded_from`, so an exclusion is never lost. Do **not** "fix" this into an
+  ALL rule for symmetry: that would let a player evade an exclusion by holding a
+  second, unnamed character.
+
+**The plain player union was proposed for both sides and DECLINED for the permit
+side.** Union ("a player is a member iff **any** of their characters is") is
+conservative for the `forbid` and is kept there. On the permit side it broadens a
+grant an author made to a **named character** into a grant to the **human behind
+it** — an authorization widening across a player's alternate characters that every
+shipped `seed:property-*` policy is character-scoped against, and that no artifact
+had decided. Phase 2's subject is privacy, so the conservative direction is its
+default and the widening is a Phase-4 decision. Plan `02-13`'s Task 0 was a
+blocking `checkpoint:decision` presenting the union with its widening spelled out;
+it resolved to the no-widening direction, which is what shipped.
+
+**Recorded consequence, so it is not discovered later.** A player holding **two or
+more** characters does **not** receive an `owner` or `visible_to` permit through
+the viewer path unless the row names **all** of their characters. The web path can
+therefore be **narrower** than the grid for identity-keyed rows. That is
+fail-closed and deliberate.
+
+A resolver failure omits **all three** value keys together with all three
+witnesses false — never a partial set, which would read as "this row names nobody"
+rather than "this could not be resolved".
 
 ### 8.5.1 The tier floor composes conjunctively with the row-keyed decision
 
@@ -1513,10 +1653,13 @@ at will. An additive tier-floor permit publishes those rows to the open web.
 
 Two evaluations, ANDed by the caller. Not one evaluation with two permits in it.
 
-#### 8.5.1.1 Phase-2 obligation: term B's request shape, and why it MUST NOT be removed
+#### 8.5.1.1 Term B's request shape, and why it MUST NOT be removed
 
-This section fixes the **composition** but deliberately does not fix the second
-evaluation's **request shape**, which Phase 2 MUST settle before seeding.
+> **SETTLED IN PHASE 2 (2026-08-05, `02-CONTEXT.md` D-01/D-02/D-05; §14 row 11).**
+> This section originally left the second evaluation's **request shape** open and
+> offered Phase 2 two candidates. **Option 2 is REJECTED** and option 1 — D-01's
+> viewer-flavored twins — is the settled shape. The rejection and the shipped
+> policy set are recorded below; the section's core prohibition is unchanged.
 
 The hazard is specific. All six shipped property policies are
 `principal is character` (`internal/access/policy/seed.go:110-145`). Term B issued
@@ -1531,13 +1674,57 @@ exists to close, and does so quietly, because the symptom it relieves looks like
 bug and the hole it reopens has no symptom at all.
 
 **Removing term B is a normative violation of this section, not a tuning decision.**
-Phase 2 MUST instead give term B a shape that can match: either viewer-flavored
-row-keyed policies alongside the existing character-flavored ones, or an explicit
-rule that term B evaluates against a co-located character subject where one exists
-and **DENIES** where one does not. Whichever is chosen, the conjunction stands.
+
+**Why option 2 was rejected.** The rejected candidate read: *"an explicit rule that
+term B evaluates against a co-located character subject where one exists and
+**DENIES** where one does not."* That violates §8.8 and INV-PRIVACY-10 at the
+`anonymous` rung. An anonymous viewer has no character at all; `profile.pronouns`
+is an `entity_properties` row (§7.1) seeded at the `anonymous` floor (§8.6); so
+term B would deny it, and a **reachable** profile would carry `name` — a one-term
+`characters` column with no row-keyed peer (§8.6's closing note) — without
+`pronouns`. §8.8 forbids exactly that pairing.
+
+The failure is **closed**, which is what makes it dangerous rather than merely
+wrong: no test in the suite would catch it, because nothing leaks. It surfaces as
+*"the public profile looks bare"* — which is precisely the symptom this section
+warns provokes the forbidden repair of dropping term B. Option 2 therefore does
+not trade one hole for another; it manufactures the pressure that reopens the
+first one.
+
+**The settled shape: viewer-flavored twins (D-01).** The read-side subset of the
+shipped `seed:property-*` family gains `principal is viewer` twins evaluating the
+same `visibility` / `visible_to` / `excluded_from` row semantics. Five shipped in
+Phase 2 (`internal/access/policy/seed.go`):
+
+| Viewer twin | Twins |
+| --- | --- |
+| `seed:viewer-property-public-read` | `seed:property-public-read` |
+| `seed:viewer-property-private-read` | `seed:property-private-read` |
+| `seed:viewer-property-admin-read` | `seed:property-admin-read` |
+| `seed:viewer-property-restricted-visible-to` | `seed:property-restricted-visible-to` |
+| `seed:viewer-property-restricted-excluded` | `seed:property-restricted-excluded` (the family's one `forbid`) |
+
+**`seed:property-owner-write` deliberately has no twin.** A `viewer:` subject must
+never hold a write permit, and the guarantee is asserted as the stronger claim that
+**no** `seed:viewer-*` policy carries a `write` or `delete` action — not merely
+that one name is absent.
+
+The twins are keyed on the **derived player-keyed peers** of §8.5's derived-peer
+subsection, not on the character-keyed originals: a `viewer:` subject is
+player-flavored, so a direct comparison against `resource.property.owner` never
+matches and would reproduce option 2's permanently-empty profile by a different
+route.
+
+**The mechanical guard.** D-04's additive-permit regression
+(`internal/access/profilevis`) seeds a `visibility='private'` row, gives the
+viewer a tier that clears that name's floor, and asserts the attribute is
+**absent**. It was observed RED with term B dropped — the private row published,
+along with the `admin` row and both D-27 denials. That is what makes this
+section's prohibition enforceable rather than advisory.
 
 Identified by `abac-reviewer` at the Phase 1 hand-off gate (2026-08-01) as the one
-residual after the four blocking §8 findings were closed.
+residual after the four blocking §8 findings were closed; closed by Phase 2 and
+routed back to `abac-reviewer` before merge per D-05.
 
 ### 8.6 The configured postures
 
@@ -1602,6 +1789,35 @@ nothing at all, which the engine already resolves as deny.
 Adding a field to §7.2 therefore means adding a row here in the same change. That
 is friction by design, and it is the same shape as §3's census rule 3: the correct
 response is to add the row, never to widen the match.
+
+**How many tier-floor policies this table produces, and why it is two (§14 row 17,
+2026-08-05).** `02-CONTEXT.md` D-03 fixes the *shape*: **one policy per floor rung
+that has at least one seeded §8.6 member**, each carrying an explicit literal list
+of that rung's attribute names, ANDed with §8.2.1's set-membership clearing test.
+Read the **Seeded v0.13 default** column above: every governed row sits at
+`anonymous` or `guest`, so **the `player` rung has no seeded member**. The v0.13
+seed therefore emits **TWO** policies — `seed:profile-tier-floor-anonymous` and
+`seed:profile-tier-floor-guest` — and no `player`-rung policy.
+
+D-03 as originally written said three, one per rung. The count is **two**, and the
+cause is an empty seeded set plus a grammar constraint rather than a scope
+reduction: the DSL's list grammar is `'[' @@ (',' @@)* ']'`
+(`internal/access/policy/dsl/ast.go`), which requires at least one literal, so an
+empty `in []` does not parse. A third policy cannot be written **at all** without
+inventing a member of the `player` rung — which would be worse than the recorded
+omission, because it would seat a floor nobody chose. **This is a recorded
+deviation from a locked decision, not a re-decision:** the shape D-03 mandates is
+unchanged; only the count follows from the seeded data.
+
+**Re-entry condition.** The moment any row in the table above is seeded at
+`player`, the third policy becomes both **writable and required**. Plan `02-07`
+ships a conditional guard test
+(`TestAPlayerRungTierFloorPolicyIsRequiredExactlyWhenSpec86SeedsAName`) that is
+green while the antecedent is false and turns **RED at exactly that moment**, and
+transcribes the clearing test the absent policy would carry
+(`principal.viewer.tier in ["player"]`) into `seed.go`'s block comment so it does
+not have to be re-derived. Raising a floor to `player` is therefore a change that
+announces itself rather than one that silently leaves a rung ungoverned.
 
 *Note on the profile-reachability row.* Reachability is a facet **above** the
 fields: it governs whether the profile resolves at all, and it is evaluated
@@ -1853,7 +2069,7 @@ message.** It is **NOT** a shared embedded precondition message, and no
 
 | Property | Value | Grounding |
 | --- | --- | --- |
-| Storage column | `characters.version` | `internal/store/migrations/000049_world_version_guard.up.sql:20` — `ALTER TABLE characters ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;` |
+| Storage column | `characters.version` | `internal/store/migrations/000049_world_version_guard.sql:22` — `ALTER TABLE characters ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;` |
 | Column type | Postgres `INTEGER` (32-bit signed) | same line |
 | Domain type | `Version int` on `world.Character` | `internal/world/character.go:29` |
 | Proto type | `int32 expected_version` | transcribed from the column |
@@ -2244,7 +2460,7 @@ after Phase 4 or 6 writes it is a wire-compat change to every caller.
 
 **This is what the tree already does, at every site the check exists.** Roles are
 *stored* per character — `character_roles` is keyed `(character_id, role)`
-(`internal/store/migrations/000001_baseline.up.sql:83-87`) — but the only shipped
+(`internal/store/migrations/000001_baseline.sql:87-91`) — but the only shipped
 lookup reads them per player:
 
 - `PostgresRoleStore.PlayerHasRole` says so in its own comment: *"PlayerHasRole
@@ -2269,6 +2485,21 @@ match what exists.
 tidied away here.** It is a known asymmetry, tracked as issue **#4899**, and it
 is precisely why §10.8 excludes role mutation: a character-scoped write into
 `character_roles` has **player-scoped blast radius**.
+
+> **Phase 2 addition (§14 row 16, 2026-08-05, plan `02-13`).** The verdict above is
+> now expressible as an ABAC attribute rather than only as a Go call. The `player`
+> attribute namespace gains **`roles`** (string list) and **`has_roles`** (bool),
+> resolved through `(*store.PostgresRoleStore).PlayerRoles` — the deduplicated,
+> ordered union of roles held by any character of that player, i.e. exactly
+> `PlayerHasRole`'s semantics widened from a predicate to a list. `roles` follows
+> omit-don't-sentinel: omitted, never `[]string{}`, when no lookup is configured or
+> the lookup fails; `has_roles` is present on every path.
+>
+> **One lookup feeds both namespaces.** `viewer.roles` (§8.4.1) and `player.roles`
+> resolve through the single `attribute.PlayerRoleLookup` seam, so the web read path
+> and the operator socket cannot disagree about the same human — which is the
+> property this section's verdict exists to protect, now enforced by construction
+> rather than by two implementations happening to match.
 
 #### 10.5.1 What follows from the verdict
 
@@ -2502,6 +2733,8 @@ does not have to infer it:
 | `characters.created_at` | Yes | Yes | Intrinsic row metadata, carrying no profile content. |
 | `characters.status` | Yes | Yes | The lifecycle column of §4.1. Administration needs to separate active from retired; the value is `admin`-audience already. |
 | `characters.player_id` | No | Yes | The OOC player↔character linkage, already visible to the `admin` audience. Equality filter only — grouping a player's alts — never an ordering. |
+| `characters.last_active_at` | Yes | Yes | **Added by §14 row 12 (sketch A1, `02-CONTEXT.md` D-24/D-25).** Intrinsic row metadata carrying no profile content — a `BIGINT` epoch-nanosecond stamp of when the character was last active, not anything the character authored. The `0` never-active sentinel (D-25) is the column minimum, so a most-recent-first ordering places never-active rows last **without** a `NULLS LAST` clause; any rendering MUST special-case `0` rather than displaying 1970. |
+| joined `players.username` | Yes | Yes | **Added by §14 row 12 (sketch A2).** The admin list already sorts by this and §11.3 never enumerated it. Safe on the same ground as every other row here: the `admin` audience already sees the username (§2.1), so the ordering discloses no withheld value. **This does not supersede the `characters.player_id` row above** — that row's "never an ordering" verdict remains correct and unchanged. A2 is a different claim: `player_id` is an opaque ULID whose ordering is meaningless *and* whose sort order would leak creation sequence, while `players.username` is the human-readable label the surface actually orders by. Both rows stand. |
 
 That is the whole list. **Every other column and every `profile.*` row is
 excluded**, including the in-world `characters.description`: it is an intrinsic
@@ -2815,12 +3048,27 @@ surface set that decision must cover — are `ACCESS`, which is where
   non-vacuously rather than by the absence of a fixture that can reach it.
   **Binding lands in Phase 2**, with the migration that adds the column.
 - **INV-WORLD-6 (retire preserves the name reservation):** retiring a character
-  leaves its row and its name reservation intact; the irreversible character
-  delete (`internal/world/service.go:745-777`) is the only path by which a
-  character name becomes claimable again. Bound by a test that retires a
-  character and asserts a second character cannot take its name, paired with the
-  positive half — that the delete path does release it — so the test pins the
-  boundary rather than one side of it. **Binding lands in Phase 2.**
+  leaves its row and its name reservation intact; a character name becomes
+  claimable again only through a sanctioned tombstone-emitting hard delete, and
+  there are exactly **TWO** such paths — `world.Service.DeleteCharacter` (the
+  in-world authorized delete) and `auth.CharacterReapingService` (guest reaping,
+  the second sanctioned out-of-world writer under INV-WORLD-4). **Both** are
+  asserted; an enumeration proven on one path while claiming two is a fabricated
+  guarantee no meta-test can detect. Bound by a test that retires a character and
+  asserts a second character cannot take its name, paired with the positive half
+  — that each delete path does release it — so the test pins the boundary rather
+  than one side of it. **Bound in Phase 2** by
+  `test/integration/world/character_lifecycle_test.go`.
+  > **Amended 2026-08-05 (§14 row 15).** The original text read: *"the
+  > irreversible character delete (`internal/world/service.go:745-777`) is the
+  > **only** path by which a character name becomes claimable again."* That was
+  > already false when written — `auth.CharacterReapingService`
+  > (`internal/auth/character_reaping.go:263`) hard-deletes reaped guests and
+  > releases their names too. Plan `02-04` corrected the registry summary **before**
+  > binding the invariant, because binding the unamended text would have written a
+  > fabricated guarantee into `docs/architecture/invariants.yaml`; this row is the
+  > matching SPEC-side edit, taken from `02-04`'s recorded before/after rather than
+  > re-derived, so the registry and the SPEC cannot state one guarantee two ways.
 - **INV-WORLD-7 (guarded character mutation):** every new character mutation RPC
   **that targets an existing character row** carries `expected_version` on its
   request, rejects an absent or zero value rather than writing unguarded, and
@@ -2838,11 +3086,33 @@ surface set that decision must cover — are `ACCESS`, which is where
   guard is not satisfied vacuously by a caller that simply never omits the field.
   **Binding lands in Phase 4**, with the domain commands landing in Phase 3.
 
-**All eight ship `binding: pending`.** Their asserting tests do not exist until
-Phase 2 or Phase 4, and a `// Verifies:` annotation on a test that does not
-genuinely assert the guarantee is a false-green — the documented failure this
+**All eight shipped `binding: pending` at Phase 1.** Their asserting tests did not
+exist until Phase 2 or Phase 4, and a `// Verifies:` annotation on a test that does
+not genuinely assert the guarantee is a false-green — the documented failure this
 registry's binding ratchet exists to catch. A `pending` entry carries no
 `asserted_by`.
+
+> **Binding state after Phase 2 (§14 row 15, 2026-08-05).** The sentence above is
+> a Phase-1 statement and is preserved as one; this note records what the registry
+> actually holds now, so a reader does not carry "all eight pending" forward as
+> current.
+>
+> | Entry | State | Where |
+> | --- | --- | --- |
+> | INV-WORLD-5 | **bound** | `test/integration/world/character_lifecycle_test.go` (plan `02-04`) |
+> | INV-WORLD-6 | **bound** | same spec (plan `02-04`) |
+> | INV-ACCESS-10, INV-ACCESS-11, INV-ACCESS-12, INV-PRIVACY-9, INV-PRIVACY-10 | `pending`, no `asserted_by` | bind in Phase 4, against the read path and its marshaled response |
+> | INV-WORLD-7 | `pending`, no `asserted_by` | binds in Phase 4; its domain commands land in Phase 3 |
+>
+> Phase 2 additionally hand-registered a **ninth** entry this section did not
+> allocate: **INV-PRIVACY-11** (`02-CONTEXT.md` D-07) — a non-admin's admin-section
+> refusal is byte-identical across a registered and an unregistered section id, so
+> the `DENY_ADMIN_SECTION` / `DENY_ADMIN_SECTION_UNREGISTERED` pair §10.4 defines is
+> an operator diagnostic rather than a registry-enumeration oracle. It ships
+> `binding: bound` against `internal/admin/section/gate_test.go` (plan `02-09`), in
+> the **existing** `PRIVACY` scope — no new family, consistent with this section's
+> opening rule. Hand-registration was required because the orphan check walks only
+> `docs/superpowers/specs/`, so a `.planning/` `origin_spec` is never auto-caught.
 
 ## 14. Amendments and Divergences
 
@@ -2850,6 +3120,16 @@ This SPEC supersedes text in four live planning artifacts and records one
 deliberate divergence from a principle its own maintainer stated. **Each entry is
 listed with its rationale, and the reviewer is expected to evaluate it as
 intentional, not a defect.**
+
+> **Rows 11–18 were added by Phase 2's amendment pass (plan `02-11`, 2026-08-05).**
+> Rows 1–10 amend *sibling* artifacts; rows 11–17 amend **this SPEC's own sections**
+> where Phase 2 settled something Phase 1 left open, or where execution found a
+> statement that was already false, and row 18 amends
+> `docs/architecture/invariants.yaml`. Two of the eight are **divergences** rather
+> than corrections — row 14 (Script vs Script_Extensions) and row 17 (the
+> tier-floor count) — and both say so. Every one was applied in place and proven
+> by a recorded single-line search; the searches and their results are in
+> `02-11-SUMMARY.md`.
 
 **Recording an amendment is not applying it.** A downstream planner reads
 `.planning/ROADMAP.md` and `.planning/REQUIREMENTS.md` directly; a criterion that
@@ -2885,6 +3165,14 @@ catches a string still live somewhere nobody inventoried.
 | **8.** **PORTAL-10 rule 5** — `.planning/REQUIREMENTS.md`: *"**Top-level oops code assertions** via `oops.AsOops(err).Code()`; `errutil.AssertErrorCode` chain-walks and passes on double-wrap."* Restated at `.planning/ROADMAP.md` in the PORTAL-10 preamble, Phase 1 criterion 5 and Phase 6 criterion 1; sourced from `.planning/research/SUMMARY.md` and `.planning/research/PITFALLS.md`; originating in `.claude/rules/grpc-errors.md` §*"Wire opacity needs TOP-LEVEL code assertions"*. | **Both halves are false against the pinned dependency**, and rule 5 is restated around the **wire** per §9.6.1 and §12.1: `status.Code(err)`, a generic `status.Convert(err).Message()` with the internal code string absent from it, and a differential two-viewer assertion where the contract is indistinguishability. `errutil.AssertErrorCode` stays **endorsed** for asserting *which* internal code a handler produced. | Under `github.com/samber/oops v1.22.0` (`go.mod:32`), `OopsError.Code()` is documented in the dependency as *"returns the error code from the deepest error in the chain"* and is implemented as a recursive `getDeepestErrorCode` walk; `errutil.AssertErrorCode` (`pkg/errutil/testing.go:15-20`) is a thin wrapper over `oops.AsOops` plus that same `.Code()`. The two spellings are behaviorally identical and **both** pass on a double-wrap. Additionally `oops.AsOops` returns `(OopsError, bool)`, so the single-expression spelling does not compile. **This is the most load-bearing row in this table:** rule 5 is one of the six §12 copies verbatim into every v0.13 plan, so shipping it as written would seed an assertion that cannot fail on the leak it exists to catch into all five remaining phases — the exact *"verification that cannot fail"* PORTAL-10 was written to end. Verified empirically against the pinned version, 2026-08-01. Tracked as issue **#4902**. **The `.claude/rules/grpc-errors.md` half is deliberately NOT applied here:** §9.6.1 already committed to documenting current behavior without changing the rule file, a repo rule file is outside a SPEC-authoring phase's blast radius, and #4902 owns that edit. The planning artifacts, which downstream planners read as directives, are amended. |
 | **9.** `.planning/REQUIREMENTS.md` ADMIN-06 — *"in-transaction"* against *"the existing `events_audit`"* — and `.planning/ROADMAP.md` Phase 6 success criterion 3: *"Every admin mutation writes an `events_audit` row **in the same transaction**"* | The durability boundary is the **outbox envelope**, per §10.7: an admin mutation emits its audit envelope in the same transaction as the state change, and the `events_audit` row is **projected** from that envelope. | **No transactional write path into `events_audit` exists, and one would be the wrong thing to build.** The table is written by the asynchronous JetStream audit projection — `projection.persist` (`internal/eventbus/audit/projection.go:319-331`) calling `writeAuditRow`, whose `INSERT INTO events_audit` is at `internal/eventbus/audit/projection.go:434` — plus the retention-partition mover (`internal/eventbus/audit/retention_partitions.go:546`). A Phase-6 planner building to the criterion's letter would find no path and would either invent a bespoke direct insert — bypassing the codec / `dek_ref` / dedup contract `writeAuditRow` maintains, and creating a second writer to a partitioned table — or quietly weaken the criterion to whatever got built. The guarantee ADMIN-06 actually wants, that an admin mutation cannot commit without its audit record being durably queued, is fully delivered by the envelope boundary (`INV-WORLD-1`, at-least-once projection with DLQ capture). Only the sentence naming the wrong table changes. |
 | **10.** *Divergence, not an amendment.* The maintainer's stated grid-parity principle: *"Anything that is readable in the same location 'on grid' is visible to other logged in users on the web."* Strict grid-parity puts the in-world `description` at a **player** floor. | The seeded default places `description` at **anonymous** — more open than the principle requires (§8.6, §8.12). | Surfaced and confirmed at context-gathering (D-14). **Grid-parity is the floor the principle guarantees, not a ceiling on what a game may publish**, and an open default is what makes a shareable profile URL worth having. A game wanting strict grid-parity raises `description` to `player` in configuration — one row of the posture table, no code change. This is recorded here so it reads as a **choice rather than an oversight**, which is the whole reason D-14 asked for it in writing. §8.11 carries the same divergence in its own section; this row exists so a reviewer scanning only §14 still finds it. |
+| **11.** *This SPEC, §8.5.1.1* — *"Phase 2 MUST instead give term B a shape that can match: either viewer-flavored row-keyed policies alongside the existing character-flavored ones, or an explicit rule that term B evaluates against a co-located character subject where one exists and **DENIES** where one does not."* | **Option 2 is REJECTED**; option 1 — D-01's viewer-flavored twins — is the settled shape. §8.5.1.1 now records the rejection with its reason, names the five shipped twin policies, and records that `seed:property-owner-write` deliberately has none. The section's core prohibition (*"Removing term B is a normative violation of this section, not a tuning decision"*) is preserved **verbatim**. | `02-CONTEXT.md` D-02/D-05. Option 2 violates §8.8 / INV-PRIVACY-10 at the `anonymous` rung: an anonymous viewer has no character, `profile.pronouns` is an `entity_properties` row seeded at the `anonymous` floor, so term B would deny it and a reachable profile would carry `name` without `pronouns`. The failure is **closed**, so no test in the suite would catch it — it surfaces as *"the public profile looks bare"*, which is precisely the symptom §8.5.1.1 warns provokes the forbidden repair. Leaving the option live is not cosmetic: a Phase-4 planner reads §8.5.1.1 directly and would plan against it. |
+| **12.** *This SPEC, §11.3* — the permitted sort/filter table, whose four rows enumerate *"the whole list"*: `characters.name`, `characters.created_at`, `characters.status`, `characters.player_id`. | **Two rows added:** `characters.last_active_at` (Sort Yes / Filter Yes) and the joined `players.username` (Sort Yes / Filter Yes), each with its safety rationale. The existing `characters.player_id` row is **byte-identical** — its *"never an ordering"* verdict stays correct. | `02-CONTEXT.md` D-26, from sketch findings A1 and A2. A1: `last_active_at` did not exist and could not be derived, so Phase 2 lands it as a column (D-24/D-25) and §11.3 must enumerate it or Phase 6 cannot sort on it. A2: the admin list **already** sorts by the joined `players.username` and §11.3 never enumerated it — an omission that reads as a prohibition. The new username row states explicitly that it does **not** supersede the `player_id` row, because a reader seeing two player-linkage rows will otherwise read one as replacing the other. |
+| **13.** *This SPEC, throughout* — every `internal/store/migrations/*.up.sql` citation, e.g. *"`internal/store/migrations/000001_baseline.up.sql:67-76`"*. **36 citations across §4.1, §4.4, §5.2, §6.1.3, §6.2, §7.1, §7.3, §7.4, §8.4, §9.4.1, §10.5 and §16.** | Corrected to the goose single-file paths with **re-derived** line numbers: `internal/store/migrations/000001_baseline.sql:71-80`, and so on for all 36. | Phase 01.1's goose adoption (D-20) collapsed every `.up.sql` / `.down.sql` pair in `internal/store/migrations/` into one `.sql` file carrying both directions, and the inserted `-- +goose Up` header shifted every line number. **Both halves of every citation were stale**, so a later planner transcribing one into an `Edit` gets a file-not-found on the path and, if they fix only the path, a wrong region on the line. Line numbers were re-derived against the current tree and each was verified to resolve to the content the SPEC claims — not transcribed from `02-RESEARCH.md`, which predates further movement. **The five `plugins/core-scenes/migrations/*.up.sql` citations are NOT corrected: they are still accurate.** The plugin migration corpus was not part of the goose cutover and remains `.up.sql` / `.down.sql` pairs on disk. |
+| **14.** *This SPEC, §6.1.2 Mechanism A* — *"Resolve the name's script set using Unicode script extensions (UTS #24)"*, and the eight-row verdict table's *"Latin + any of Han, Hiragana, Katakana"* phrasing. | *Divergence, recorded rather than amended away.* The shipped implementation computes over the plain **Script** (`sc`) property from stdlib `unicode.Scripts`, **not** Script_Extensions (`scx`); a rune with no script assignment is **rejected** fail-closed; and the three CJK families are matched by **subset containment** rather than requiring Latin. All eight verdict rows hold as written. | No Go module surveyed supplies `scx` and `golang.org/x/text` has no script package, so the faithful Moderately Restrictive profile is not expressible against the pinned dependency set. The approximation is **closed-direction**: per UAX #24 §3.3 a character's `scx` set is a superset of its `sc` value, so computing over `sc` can only ever see **fewer** scripts — it can **miss** a rejection, never invent one. The three explicitly-named rejections are unaffected because Cyrillic and Greek letters carry real `sc` values. Containment is required by §6.1's own prohibition on rejecting a non-Latin name its Latin equivalent would pass: a literal reading rejects ordinary Japanese (`{Han, Hiragana}`) and Korean (`{Han, Hangul}`). Recorded in the shape of row 10 — a **choice**, not an oversight. Found by plan `02-02`. |
+| **15.** *This SPEC, §13 INV-WORLD-6* — *"the irreversible character delete (`internal/world/service.go:745-777`) is the **only** path by which a character name becomes claimable again"*; and the closing *"**All eight ship `binding: pending`**."* | INV-WORLD-6's text is replaced with the corrected enumeration — **exactly TWO** sanctioned tombstone-emitting hard-delete paths, `world.Service.DeleteCharacter` **and** `auth.CharacterReapingService` — taken **verbatim in substance** from the registry summary plan `02-04` corrected. The binding sentence is preserved as a Phase-1 statement and followed by a table of the state after Phase 2, which also records the **ninth** entry §13 did not allocate, INV-PRIVACY-11. | The "ONLY path" claim was **already false when written**: `auth.CharacterReapingService` (`internal/auth/character_reaping.go:263`) hard-deletes reaped guests and releases their names. Plan `02-04` corrected the registry summary **before** binding the invariant, because binding it unamended would have written a fabricated guarantee into `docs/architecture/invariants.yaml` — the failure `.claude/rules/invariants.md` forbids. The SPEC-side text is taken from `02-04`'s recorded before/after rather than re-derived: **two independent rewordings of one guarantee is how the registry and the SPEC drifted apart in the first place.** The binding-state half is in scope for the same reason — a reader carrying "all eight pending" forward would treat two bound entries as unproven and miss INV-PRIVACY-11 entirely. |
+| **16.** *This SPEC, §8.4.1* — the viewer attribute table declaring **exactly three** keys (`tier`, `player_id`, `has_player_id`) and the sentence *"All three keys **MUST** be declared in `ViewerTierProvider.Schema()`"*; §8.5, which describes no player-keyed property peers; and §10.5, which describes the per-player role verdict only as a Go call. | §8.4.1's table gains **`roles`** and **`has_roles`** with their presence rules (five keys). §8.5 gains **§8.5.2**, recording the three derived player-keyed property peers and their witnesses, why the DSL forces them, that they are derived from the **ROW** and never from the caller, and **D-27's derivation direction** — ALL on the permit side, ANY on the forbid side — with the declined plain union and its recorded consequence. §10.5 records that the `player` namespace gains `roles` / `has_roles` through the same single lookup seam. | The shipped admin read policy gates on `"admin" in principal.character.roles`; its viewer twin needs a peer attribute the three-key namespace does not have. A **missing key is FALSE** for every operator, so the twin would deny **every caller forever** — silently, fail-closed, no error, no failing test, with *"admins see a bare profile"* as the only symptom and widening the policy as the cheap repair (plan `02-03`). The peers close the same class one layer down: a player id compared against a character id never matches, so without them every `private`, `restricted` and `admin` field is permanently invisible on the web (plans `02-13`, `02-07`). **The derivation direction belongs in the SPEC and not only in a provider comment**, because the twins' DSL text is identical in shape to their character-flavored originals — a reviewer asking *"does the viewer path widen access across a player's alternate characters?"* has nowhere else to look. |
+| **17.** *This SPEC, §8.6* — the posture table with no statement of how many tier-floor policies it produces; and `.planning/phases/02-abac-schema-vocabulary/02-CONTEXT.md` **D-03** as originally written: *"three policies, one per floor rung (`anonymous` / `guest` / `player`)"*. | §8.6 records that the v0.13 seed emits **TWO** policies — one per rung **that has at least one seeded §8.6 member** — with the cause and the re-entry condition. D-03 already carries the matching amendment as of its 2026-08-04 revision; this plan **verified** that record against the code rather than rewriting it. | Read §8.6's own seeded-default column: every governed row sits at `anonymous` or `guest`, so the `player` rung has **no seeded member**, and the DSL list grammar (`internal/access/policy/dsl/ast.go`) requires at least one literal — an empty `in []` does not parse. A third policy cannot be written at all without **inventing a member**, which would seat a floor nobody chose. This is a **recorded deviation from a locked decision, not a re-decision**: D-03's shape is unchanged and only the count follows from the seeded data. **The count was checked, not asserted:** the distinct `seed:profile-tier-floor-` entries in `internal/access/policy/seed.go` were counted (**2**: `-anonymous`, `-guest`) and compared against what D-03 records (**2**, same two names). **A disagreement was specified to HALT this plan, never to be reconciled by editing D-03** — a verification step whose failure mode is "edit the thing being verified" launders an authorization drift into the specification and has no failure mode at all. Plan `02-07` ships the conditional guard that turns RED the moment a §8.6 row is seeded at `player`. |
+| **18.** `docs/architecture/invariants.yaml` — `INV-WORLD-4`'s summary: *"there are exactly **TWO** sanctioned out-of-world writers, each emitting its envelope atomically"*. | **THREE.** The third is the operator name-resolution command `holomush character name set` (plan `02-12`), named in the summary together with the property that qualifies it, and `cmd/holomush/cmd_character_name_integration_test.go` added to the entry's `asserted_by:`. `docs/architecture/invariants.md` regenerated with `go run ./cmd/inv-render`. | The CLI runs in `cmd/holomush` (already in the import-graph allowlist), holds no `characters` SQL of its own, and writes through `CharacterRepository.Rename` — which plan `02-06` made emit its outbox envelope **inside its own transaction**, so the write carries an envelope even though the command discards the returned delta. **The alternative was worse:** neither genesis nor reaping is a rename, and inventing a third application service for one operator command is more machinery than the guarantee needs. The invariant's substance is *every out-of-world write emits its envelope atomically*, and the CLI satisfies it — **what was false was the count**. Leaving a `bound` invariant whose text is false beside a shipped third writer is precisely the false-green `.claude/rules/invariants.md` forbids, so the count is amended deliberately, with the justifying property named, rather than silently or by weakening the atomicity clause. Plan `02-12` could not carry the edit itself: `02-09` modified the same file in the same wave. |
 
 ### 14.1 What is NOT amended
 
@@ -3043,29 +3331,29 @@ across those lines.
   `visibility`; the reachability §8.5's Phase-2 obligation confirms.
 - `internal/access/prefix.go:23-33` — the shipped resource-prefix family
   `admin_section:` joins (§10.4).
-- `internal/store/migrations/000001_baseline.up.sql:261` — `CHECK (source IN
+- `internal/store/migrations/000001_baseline.sql:265` — `CHECK (source IN
   ('seed', 'lock', 'admin', 'plugin'))`, the vocabulary that already models the
   `source='admin'` override rows §8.4 uses.
-- `internal/store/migrations/000001_baseline.up.sql:350-371` — the whole
-  `entity_properties` table: the per-row `visibility` CHECK (`:358`) and
-  `entity_properties_parent_name_unique` (`:364`).
+- `internal/store/migrations/000001_baseline.sql:354-375` — the whole
+  `entity_properties` table: the per-row `visibility` CHECK (`:362`) and
+  `entity_properties_parent_name_unique` (`:368`).
 - `internal/world/service.go:1144-1171` — `ListPropertiesByParent`'s three-way
   filter loop; the `ErrAccessEvaluationFailed` arm that aborts is the shipped
   precedent for §8.10's fail-closed rule and binds INV-ACCESS-10.
 
 ### 16.2 World model, lifecycle and concurrency (§4, §9.4)
 
-- `internal/store/migrations/000001_baseline.up.sql:67-76` — the `characters`
+- `internal/store/migrations/000001_baseline.sql:71-80` — the `characters`
   table as it stands: seven columns, no `status`, and only
-  `idx_characters_location` (`:76`).
-- `internal/store/migrations/000001_baseline.up.sql:259`, `:294`, `:358` — the
+  `idx_characters_location` (`:80`).
+- `internal/store/migrations/000001_baseline.sql:263`, `:298`, `:362` — the
   three further enum-by-`CHECK` precedents §4.1 follows.
-- `internal/store/migrations/000001_baseline.up.sql:80`, `:84`, `:99`, `:143` —
+- `internal/store/migrations/000001_baseline.sql:84`, `:88`, `:103`, `:147` —
   the four foreign keys into `characters(id)`: `ON DELETE SET NULL`, `ON DELETE
   CASCADE`, and two with no `ON DELETE` clause at all (§4.4's purge blast radius).
-- `internal/store/migrations/000001_baseline.up.sql:83-87` — `character_roles`
+- `internal/store/migrations/000001_baseline.sql:87-91` — `character_roles`
   keyed `(character_id, role)`: roles stored per character (§10.5).
-- `internal/store/migrations/000049_world_version_guard.up.sql:20` —
+- `internal/store/migrations/000049_world_version_guard.sql:22` —
   `version INTEGER NOT NULL DEFAULT 1`, the column §9.4.1 transcribes `int32` from.
 - `internal/world/character.go:29` — `Version int` on the domain type.
 - `internal/world/service.go:745-777` — `DeleteCharacter`: the ABAC `delete` gate,
@@ -3139,7 +3427,7 @@ across those lines.
   scene name resolution is deferred.
 - `pkg/plugin/comm/builder.go:41`, `:48`, `:55` — the three builders stamping
   `a.Name` into that field at emit time.
-- `internal/store/migrations/000052_events_audit_partition.up.sql:114` — the
+- `internal/store/migrations/000052_events_audit_partition.sql:120` — the
   opaque `envelope BYTEA` the host audit table freezes the payload into; `:119` is
   the `rendering JSONB` column §5.2 checks and excludes.
 - `internal/eventbus/types.go:127-134` — `RenderingMetadata`'s six fields, none a
@@ -3171,7 +3459,7 @@ across those lines.
 - `internal/grpc/auth_handlers.go:352`, `:380`, `:413`, `:505` — the four
   `CharacterName` assignments from a freshly-read row, which is why §5.2 classes
   those scalars `live`.
-- `internal/store/migrations/000001_baseline.up.sql:71` — `characters.name`, the
+- `internal/store/migrations/000001_baseline.sql:75` — `characters.name`, the
   anchor row a rename writes.
 - `internal/world/validation.go:114-126` — `NormalizeCharacterName`: whitespace
   collapse plus per-word title case, and nothing else; `:69-105` is
@@ -3182,18 +3470,18 @@ across those lines.
   `internal/auth/guest_service.go:227` are the **two** writers racing on it
   (§6.1.3, §14 row 7).
 - `internal/auth/player.go:24-25`, `:31`, `:167` — the username length bounds, the
-  ASCII regex, and its application; `internal/store/migrations/000001_baseline.up.sql:54`
+  ASCII regex, and its application; `internal/store/migrations/000001_baseline.sql:58`
   is the real `UNIQUE` constraint §6.2 contrasts with the character-name race.
 
 ### 16.5 Profile storage and media (§7)
 
-- `internal/store/migrations/000001_baseline.up.sql:72` — `characters.description`,
+- `internal/store/migrations/000001_baseline.sql:76` — `characters.description`,
   the in-world `look` text §7.4 governs.
-- `internal/store/migrations/000001_baseline.up.sql:350-371`, `:364` — the
+- `internal/store/migrations/000001_baseline.sql:354-375`, `:368` — the
   `entity_properties` mechanism and the uniqueness constraint that makes
   exactly-one-primary a database guarantee (§7.3), with no DDL for a twelfth
   field or an eleventh image (§7.1).
-- `internal/store/migrations/000045_character_preferences.up.sql:5` —
+- `internal/store/migrations/000045_character_preferences.sql:7` —
   `characters.preferences JSONB`, the settings column §7.2 forbids the OOC
   RP-preferences block from being written into.
 

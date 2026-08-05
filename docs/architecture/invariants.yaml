@@ -5063,17 +5063,24 @@ invariants:
       files (a migration mutating a world table without an envelope/epoch marker fails the fence — round-6 Codex MEDIUM: the
       Go-source fence cannot see SQL migrations, and 000001_baseline already seeds world rows). world.Service exposes no directly-callable
       writer repo (its fields are reader views — the compile fence), and ONLY composition/test packages may import internal/world/postgres
-      (the import-graph allowlist). The write executor is the sole in-world writer-repo owner; there are exactly TWO sanctioned
-      out-of-world writers, each emitting its envelope atomically: the character-genesis application service (05-15, CREATION)
-      and the character-reaping application service (05-16, D-06, DELETION — guest reaping + failed-guest cleanup emit one
-      character tombstone per reaped character; previously an FK cascade with no tombstone). The guest-DELETION side is proven
-      by the D-06 tombstone regression so the FK-cascade hole cannot regrow."
+      (the import-graph allowlist). The write executor is the sole in-world writer-repo owner; there are exactly THREE sanctioned
+      out-of-world writers, each emitting its envelope atomically: the character-genesis application service (05-15, CREATION),
+      the character-reaping application service (05-16, D-06, DELETION — guest reaping + failed-guest cleanup emit one character
+      tombstone per reaped character; previously an FK cascade with no tombstone), and the operator name-resolution command
+      `holomush character name set` (02-12, RENAME — it runs in cmd/holomush, is in the import-graph allowlist, holds no characters
+      SQL of its own, and writes through CharacterRepository.Rename, which 02-06 made emit its outbox envelope INSIDE its
+      own transaction, so the CLI's write carries an envelope even though the command discards the returned delta). The guest-DELETION
+      side is proven by the D-06 tombstone regression so the FK-cascade hole cannot regrow; the RENAME side is proven by the
+      CLI integration spec, which observes the outbox row committed alongside the renamed row. The count was TWO until 02-12
+      shipped the third writer; it is amended deliberately rather than the atomicity clause being weakened, because what was
+      false was the enumeration and not the guarantee."
     binding: bound
     asserted_by:
       - "internal/world/outbox/writer_boundary_test.go"
       - "test/meta/world_sql_fence_test.go"
       - "test/meta/world_import_graph_test.go"
       - "test/integration/auth/guest_reaper_tombstone_test.go"
+      - "cmd/holomush/cmd_character_name_integration_test.go"
   - id: INV-WORLD-5
     scope: INV-WORLD
     origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
