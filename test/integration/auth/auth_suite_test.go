@@ -274,7 +274,7 @@ func createTestCharacter(ctx context.Context, playerID ulid.ULID, name string, l
 // name_skeleton, and the gate correctly refuses to adjudicate against a corpus
 // it cannot verify (D-30).
 func admitSuiteName(ctx context.Context, name string) charname.Admitted {
-	backfillSuiteSkeletons(ctx)
+	backfillSuiteSkeletons(ctx, env.pool)
 	gate := &charname.Gate{Skeletons: worldpg.NewSkeletonLookup(env.pool)}
 	admitted, err := gate.Admit(ctx, name)
 	Expect(err).NotTo(HaveOccurred())
@@ -282,8 +282,12 @@ func admitSuiteName(ctx context.Context, name string) charname.Admitted {
 }
 
 // backfillSuiteSkeletons stands in for plan 02-12's 000055 Go migration.
-func backfillSuiteSkeletons(ctx context.Context) {
-	rows, err := env.pool.Query(ctx, `
+//
+// It takes the pool explicitly because the gate specs run against their own
+// fresh database rather than the suite's shared env.pool.
+func backfillSuiteSkeletons(ctx context.Context, pool *pgxpool.Pool) {
+	GinkgoHelper()
+	rows, err := pool.Query(ctx, `
 		SELECT id, name FROM characters
 		WHERE normalized_name IS NULL
 		   OR name_skeleton IS NULL
@@ -305,7 +309,7 @@ func backfillSuiteSkeletons(ctx context.Context) {
 	Expect(rows.Err()).NotTo(HaveOccurred())
 	rows.Close()
 	for _, p := range todo {
-		_, execErr := env.pool.Exec(ctx, `
+		_, execErr := pool.Exec(ctx, `
 			UPDATE characters
 			SET normalized_name = $2, name_skeleton = $3, name_skeleton_unicode_version = $4
 			WHERE id = $1

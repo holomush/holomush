@@ -7,12 +7,12 @@ package auth_test
 
 import (
 	"context"
-	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
@@ -22,9 +22,8 @@ import (
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
-	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
-	"github.com/holomush/holomush/pkg/errutil"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // These specs prove the PRODUCTION create path is gated.
@@ -45,19 +44,51 @@ type gateTestEnv struct {
 	startLoc   ulid.ULID
 }
 
+// gatePool returns a fresh, fully migrated database pool for one gate spec.
+//
+// The database is provisioned through suiteT because testutil takes a
+// testing.TB and Ginkgo's GinkgoT() does not satisfy that interface; the pool
+// itself is closed per-spec via DeferCleanup. This is the same suiteT pattern
+// every other database-backed Ginkgo suite in test/integration uses.
+func gatePool() *pgxpool.Pool {
+	GinkgoHelper()
+	shared := testutil.SharedPostgres(suiteT)
+	connStr := testutil.FreshDatabase(suiteT, shared)
+	pool, err := pgxpool.New(context.Background(), connStr)
+	Expect(err).NotTo(HaveOccurred())
+	DeferCleanup(pool.Close)
+	return pool
+}
+
+// expectErrorCode is the Gomega twin of errutil.AssertErrorCode, which cannot be
+// used here: it takes a testing.TB, and GinkgoT() does not satisfy that
+// interface. It asserts the TOP-LEVEL oops code via oops.AsOops(err).Code()
+// rather than chain-walking with errors.Is — the same strength
+// errutil.AssertErrorCode carries, and the strength these specs need, since a
+// double-wrapped INTERNAL around NAME_CONFUSABLE must NOT satisfy them.
+func expectErrorCode(err error, code string) {
+	GinkgoHelper()
+	oopsErr, ok := oops.AsOops(err)
+	Expect(ok).To(BeTrue(), "expected an oops error, got %T", err)
+	Expect(oopsErr.Code()).To(Equal(code))
+}
+
 // newGateTestEnv builds a CharacterService and a GuestService over one pool,
 // sharing ONE charname.Gate — the same shape bootstrapsetup and cmd/holomush
 // build.
-func newGateTestEnv(t *testing.T, blockPatterns []string) *gateTestEnv {
-	t.Helper()
-	ctx := context.Background()
-	pool := reaperPool(t)
+func newGateTestEnv(ctx context.Context, blockPatterns []string) *gateTestEnv {
+	GinkgoHelper()
+	pool := gatePool()
 
 	// A verifiable corpus. 000001_baseline seeds a bootstrap character with no
 	// name_skeleton, and the gate correctly refuses to adjudicate against a
 	// corpus it cannot verify (D-30) — so without this every spec below would
-	// fail NAME_SKELETON_UNVERIFIABLE and prove nothing about the gate.
-	admitReapName(ctx, t, pool, "Corpus Warmup")
+	// fail NAME_SKELETON_UNVERIFIABLE and prove nothing about the gate. The
+	// warmup Admit is the proof the repair worked.
+	backfillSuiteSkeletons(ctx, pool)
+	_, warmupErr := (&charname.Gate{Skeletons: worldpg.NewSkeletonLookup(pool)}).
+		Admit(ctx, "Corpus Warmup")
+	Expect(warmupErr).NotTo(HaveOccurred(), "the repaired corpus must be adjudicable")
 
 	charRepo := worldpg.NewCharacterRepository(pool)
 	locRepo := worldpg.NewLocationRepository(pool)
@@ -67,13 +98,13 @@ func newGateTestEnv(t *testing.T, blockPatterns []string) *gateTestEnv {
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
 		VALUES ($1, 'Gate Test Start', '', 'persistent', 'last:0', (EXTRACT(EPOCH FROM now()) * 1e9)::BIGINT)
 	`, startLoc.String())
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	// The block list arrives as a compiled Snapshot rather than the production
 	// Cache: both satisfy charname.BlockList, and the reload behaviour the Cache
 	// exists for is 02-05's to assert, not this spec's.
 	snapshot, err := blocklist.Compile(blockPatterns)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 	gate := &charname.Gate{
 		Skeletons: worldpg.NewSkeletonLookup(pool),
 		BlockList: snapshot,
@@ -85,7 +116,7 @@ func newGateTestEnv(t *testing.T, blockPatterns []string) *gateTestEnv {
 		charRepo, transactor, bindingRepo,
 		worldpg.NewOutboxStore(pool), worldpg.NewReapingGuard(pool),
 	)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	characters, err := auth.NewCharacterService(
 		bootstrapsetup.NewCharRepoAdapter(pool, charRepo),
@@ -93,7 +124,7 @@ func newGateTestEnv(t *testing.T, blockPatterns []string) *gateTestEnv {
 		genesis,
 		gate,
 	)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	playerRepo := authpg.NewPlayerRepository(pool)
 	reaping, err := auth.NewCharacterReapingService(
@@ -103,7 +134,7 @@ func newGateTestEnv(t *testing.T, blockPatterns []string) *gateTestEnv {
 		worldpg.NewOutboxStore(pool),
 		playerRepo, playerRepo,
 	)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	guests, err := auth.NewGuestService(
 		telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLoc),
@@ -114,7 +145,7 @@ func newGateTestEnv(t *testing.T, blockPatterns []string) *gateTestEnv {
 		reaping,
 		gate,
 	)
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 
 	return &gateTestEnv{pool: pool, characters: characters, guests: guests, startLoc: startLoc}
 }
@@ -139,174 +170,163 @@ func (r *gateGuestCharRepo) ExistsByNormalizedName(ctx context.Context, key stri
 	return exists, err
 }
 
-func (e *gateTestEnv) seedPlayer(t *testing.T) ulid.ULID {
-	t.Helper()
+func (e *gateTestEnv) seedPlayer(ctx context.Context) ulid.ULID {
+	GinkgoHelper()
 	playerID := ulid.Make()
-	_, err := e.pool.Exec(context.Background(),
+	_, err := e.pool.Exec(ctx,
 		`INSERT INTO players (id, username, password_hash) VALUES ($1, $2, '')`,
 		playerID.String(), "gate_"+playerID.String())
-	require.NoError(t, err)
+	Expect(err).NotTo(HaveOccurred())
 	return playerID
-}
-
-// TestProductionCreatePathRejectsAConfusableName drives CharacterService.Create
-// — the path a registered player's character creation actually takes.
-func TestProductionCreatePathRejectsAConfusableName(t *testing.T) {
-	ctx := context.Background()
-	env := newGateTestEnv(t, nil)
-	playerID := env.seedPlayer(t)
-
-	// Paired positive control FIRST, on the same fixture: an ordinary name
-	// succeeds, so the refusal below cannot pass because creation is broken.
-	seeded, err := env.characters.Create(ctx, playerID, "cocoa")
-	require.NoError(t, err)
-	require.NotNil(t, seeded)
-	assert.Equal(t, "cocoa", seeded.Name, "§6.1.5: the player's own capitalization is preserved")
-
-	// A whole-script Cyrillic homoglyph of the seeded name.
-	_, err = env.characters.Create(ctx, env.seedPlayer(t), "сосоа")
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "NAME_CONFUSABLE")
-}
-
-// TestProductionCreatePathRejectsABlockListedName proves plan 02-05's matcher
-// actually reaches the gate the create path uses.
-func TestProductionCreatePathRejectsABlockListedName(t *testing.T) {
-	ctx := context.Background()
-	env := newGateTestEnv(t, []string{`^admin$`})
-	playerID := env.seedPlayer(t)
-
-	_, err := env.characters.Create(ctx, playerID, "Admin")
-	require.Error(t, err, "the block list matches the case-folded KEY, so 'Admin' must be refused")
-	errutil.AssertErrorCode(t, err, "NAME_BLOCKED")
-
-	// Paired success on the same fixture.
-	ok, err := env.characters.Create(ctx, playerID, "administrative assistant")
-	require.NoError(t, err, "a name the pattern does not match must still be creatable")
-	require.NotNil(t, ok)
-}
-
-// TestProductionCreatePathMapsASyntacticRefusalToTheExistingCode proves the
-// gate's NAME_INVALID_SYNTAX is mapped, not leaked: the caller-visible contract
-// for a digit-bearing name is unchanged.
-func TestProductionCreatePathMapsASyntacticRefusalToTheExistingCode(t *testing.T) {
-	ctx := context.Background()
-	env := newGateTestEnv(t, nil)
-	playerID := env.seedPlayer(t)
-
-	_, err := env.characters.Create(ctx, playerID, "Alaric2")
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "CHARACTER_INVALID_NAME")
-}
-
-// TestGuestProvisioningRetriesRatherThanPersistingABlockListedName is the guest
-// twin. The guest path never ran the name pipeline at all before this plan
-// (T-02-31), so a gate installed only in CharacterService would have left the
-// automatic, high-volume path wide open.
-func TestGuestProvisioningRetriesRatherThanPersistingABlockListedName(t *testing.T) {
-	ctx := context.Background()
-
-	// The gemstone/element namer produces two-word names; blocking every name
-	// beginning with a vowel forces the retry loop to run for real without
-	// making it impossible to succeed.
-	env := newGateTestEnv(t, []string{`^[aeiou]`})
-
-	result, err := env.guests.CreateGuest(ctx)
-	require.NoError(t, err, "the retry loop must find an admissible name")
-	require.NotNil(t, result)
-	require.NotNil(t, result.Character)
-
-	// Whatever name landed, it does NOT match the configured pattern — the
-	// assertion the whole spec exists for.
-	normalized, nErr := charname.Normalize(result.Character.Name)
-	require.NoError(t, nErr)
-	assert.NotContains(t, "aeiou", string(normalized.Key[0]),
-		"a generated name matching a configured block pattern must be retried, never persisted")
-
-	// And the stored row carries its identity columns, because it went through
-	// the gated writer.
-	var key, skeleton, version string
-	require.NoError(t, env.pool.QueryRow(ctx, `
-		SELECT normalized_name, name_skeleton, name_skeleton_unicode_version
-		FROM characters WHERE id = $1
-	`, result.Character.ID.String()).Scan(&key, &skeleton, &version))
-	assert.Equal(t, normalized.Key, key)
-	assert.NotEmpty(t, skeleton)
-	assert.Equal(t, charname.UnicodeVersion, version)
-}
-
-// TestGateConstructionRefusesANilBlockListSubsystem pairs the refusal with a
-// populated config that succeeds, on the same fixture.
-func TestGateConstructionRefusesANilBlockListSubsystem(t *testing.T) {
-	pool := reaperPool(t)
-
-	gate, err := bootstrapsetup.NewCharacterNameGate(pool, nil)
-	require.Error(t, err, "a production root must not build a gate with no block list")
-	assert.Nil(t, gate)
-	errutil.AssertErrorCode(t, err, "CHARACTER_NAME_GATE_MISCONFIGURED")
-
-	gate, err = bootstrapsetup.NewCharacterNameGate(pool, blocklist.NewSubsystem(blocklist.SubsystemConfig{
-		Source: func() blocklist.Source { return nil },
-	}))
-	require.NoError(t, err)
-	require.NotNil(t, gate)
-	assert.NotNil(t, gate.BlockList, "the gate must carry the subsystem's live matcher")
-	assert.NotNil(t, gate.Skeletons)
 }
 
 // compile-time assertion: the spec's guest repo really is what the service takes.
 var _ auth.GuestCharacterRepository = (*gateGuestCharRepo)(nil)
 
-// unused keeps world imported for the compile-time assertion above when the
-// spec set changes shape.
-var _ = world.Character{}
+var _ = Describe("The production character-create path admits names through charname.Gate", func() {
+	var ctx context.Context
 
-// TestProductionCreatePathReportsAnExactDuplicateAsTakenNotConfusable is the
-// durable guard for the regression PR #4941's E2E run caught.
-//
-// # The defect
-//
-// An EXACT duplicate has an identical skeleton, so charname.Gate.Check step 5
-// intercepted it and returned NAME_CONFUSABLE — which internal/grpc's
-// sanitizeAuthError had no case for, so the web client rendered the generic
-// "request failed" where it had always shown "already taken". The friendly
-// uniqueness pre-check that exists precisely for this case sat AFTER the gate
-// and was unreachable for it.
-//
-// # Why the pair is asserted on one fixture
-//
-// A fix that simply reported "already taken" for every skeleton collision would
-// satisfy the first half and be WRONG: a name confusable with a DIFFERENT
-// player's character would then assert something untrue and disclose more about
-// the corpus than §6.1.2 intends. The second half is what forbids that shape.
-func TestProductionCreatePathReportsAnExactDuplicateAsTakenNotConfusable(t *testing.T) {
-	ctx := context.Background()
-	env := newGateTestEnv(t, nil)
-
-	seeded, err := env.characters.Create(ctx, env.seedPlayer(t), "cocoa")
-	require.NoError(t, err)
-	require.NotNil(t, seeded)
-
-	t.Run("an exact duplicate is CHARACTER_NAME_TAKEN", func(t *testing.T) {
-		_, err := env.characters.Create(ctx, env.seedPlayer(t), "cocoa")
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "CHARACTER_NAME_TAKEN")
+	BeforeEach(func() {
+		ctx = context.Background()
 	})
 
-	t.Run("a case variant of an existing name is CHARACTER_NAME_TAKEN too", func(t *testing.T) {
+	It("rejects a confusable name submitted through CharacterService.Create", func() {
+		env := newGateTestEnv(ctx, nil)
+		playerID := env.seedPlayer(ctx)
+
+		// Paired positive control FIRST, on the same fixture: an ordinary name
+		// succeeds, so the refusal below cannot pass because creation is broken.
+		seeded, err := env.characters.Create(ctx, playerID, "cocoa")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seeded).NotTo(BeNil())
+		Expect(seeded.Name).To(Equal("cocoa"), "§6.1.5: the player's own capitalization is preserved")
+
+		// A whole-script Cyrillic homoglyph of the seeded name.
+		_, err = env.characters.Create(ctx, env.seedPlayer(ctx), "сосоа")
+		Expect(err).To(HaveOccurred())
+		expectErrorCode(err, "NAME_CONFUSABLE")
+	})
+
+	// Proves plan 02-05's matcher actually reaches the gate the create path uses.
+	It("rejects a block-listed name and still admits one the pattern does not match", func() {
+		env := newGateTestEnv(ctx, []string{`^admin$`})
+		playerID := env.seedPlayer(ctx)
+
+		_, err := env.characters.Create(ctx, playerID, "Admin")
+		Expect(err).To(HaveOccurred(),
+			"the block list matches the case-folded KEY, so 'Admin' must be refused")
+		expectErrorCode(err, "NAME_BLOCKED")
+
+		// Paired success on the same fixture.
+		ok, err := env.characters.Create(ctx, playerID, "administrative assistant")
+		Expect(err).NotTo(HaveOccurred(), "a name the pattern does not match must still be creatable")
+		Expect(ok).NotTo(BeNil())
+	})
+
+	// Proves the gate's NAME_INVALID_SYNTAX is mapped, not leaked: the
+	// caller-visible contract for a digit-bearing name is unchanged.
+	It("maps a syntactic refusal to the pre-existing CHARACTER_INVALID_NAME code", func() {
+		env := newGateTestEnv(ctx, nil)
+
+		_, err := env.characters.Create(ctx, env.seedPlayer(ctx), "Alaric2")
+		Expect(err).To(HaveOccurred())
+		expectErrorCode(err, "CHARACTER_INVALID_NAME")
+	})
+
+	// The guest twin. The guest path never ran the name pipeline at all before
+	// this plan (T-02-31), so a gate installed only in CharacterService would
+	// have left the automatic, high-volume path wide open.
+	It("retries guest provisioning rather than persisting a block-listed generated name", func() {
+		// The gemstone/element namer produces two-word names; blocking every name
+		// beginning with a vowel forces the retry loop to run for real without
+		// making it impossible to succeed.
+		env := newGateTestEnv(ctx, []string{`^[aeiou]`})
+
+		result, err := env.guests.CreateGuest(ctx)
+		Expect(err).NotTo(HaveOccurred(), "the retry loop must find an admissible name")
+		Expect(result).NotTo(BeNil())
+		Expect(result.Character).NotTo(BeNil())
+
+		// Whatever name landed, it does NOT match the configured pattern — the
+		// assertion the whole spec exists for.
+		normalized, nErr := charname.Normalize(result.Character.Name)
+		Expect(nErr).NotTo(HaveOccurred())
+		Expect("aeiou").NotTo(ContainSubstring(string(normalized.Key[0])),
+			"a generated name matching a configured block pattern must be retried, never persisted")
+
+		// And the stored row carries its identity columns, because it went through
+		// the gated writer.
+		var key, skeleton, version string
+		Expect(env.pool.QueryRow(ctx, `
+			SELECT normalized_name, name_skeleton, name_skeleton_unicode_version
+			FROM characters WHERE id = $1
+		`, result.Character.ID.String()).Scan(&key, &skeleton, &version)).To(Succeed())
+		Expect(key).To(Equal(normalized.Key))
+		Expect(skeleton).NotTo(BeEmpty())
+		Expect(version).To(Equal(charname.UnicodeVersion))
+	})
+
+	// Pairs the refusal with a populated config that succeeds, on the same fixture.
+	It("refuses to construct a gate with a nil block-list subsystem", func() {
+		pool := gatePool()
+
+		gate, err := bootstrapsetup.NewCharacterNameGate(pool, nil)
+		Expect(err).To(HaveOccurred(), "a production root must not build a gate with no block list")
+		Expect(gate).To(BeNil())
+		expectErrorCode(err, "CHARACTER_NAME_GATE_MISCONFIGURED")
+
+		gate, err = bootstrapsetup.NewCharacterNameGate(pool, blocklist.NewSubsystem(blocklist.SubsystemConfig{
+			Source: func() blocklist.Source { return nil },
+		}))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gate).NotTo(BeNil())
+		Expect(gate.BlockList).NotTo(BeNil(), "the gate must carry the subsystem's live matcher")
+		Expect(gate.Skeletons).NotTo(BeNil())
+	})
+
+	// The durable guard for the regression PR #4941's E2E run caught.
+	//
+	// # The defect
+	//
+	// An EXACT duplicate has an identical skeleton, so charname.Gate.Check step 5
+	// intercepted it and returned NAME_CONFUSABLE — which internal/grpc's
+	// sanitizeAuthError had no case for, so the web client rendered the generic
+	// "request failed" where it had always shown "already taken". The friendly
+	// uniqueness pre-check that exists precisely for this case sat AFTER the gate
+	// and was unreachable for it.
+	//
+	// # Why the three are asserted on ONE fixture
+	//
+	// A fix that simply reported "already taken" for every skeleton collision
+	// would satisfy the first two and be WRONG: a name confusable with a
+	// DIFFERENT player's character would then assert something untrue and
+	// disclose more about the corpus than §6.1.2 intends. The third is what
+	// forbids that shape — so all three share one seeded corpus and one spec.
+	It("reports an exact duplicate as taken, and a merely confusable name as confusable", func() {
+		env := newGateTestEnv(ctx, nil)
+
+		seeded, err := env.characters.Create(ctx, env.seedPlayer(ctx), "cocoa")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seeded).NotTo(BeNil())
+
+		By("an exact duplicate is CHARACTER_NAME_TAKEN")
+		_, err = env.characters.Create(ctx, env.seedPlayer(ctx), "cocoa")
+		Expect(err).To(HaveOccurred())
+		expectErrorCode(err, "CHARACTER_NAME_TAKEN")
+
+		By("a case variant of an existing name is CHARACTER_NAME_TAKEN too")
 		// Same §6.1.1 uniqueness key, different display form: still the same
 		// name, so still "already taken" rather than "too similar".
-		_, err := env.characters.Create(ctx, env.seedPlayer(t), "COCOA")
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "CHARACTER_NAME_TAKEN")
-	})
+		_, err = env.characters.Create(ctx, env.seedPlayer(ctx), "COCOA")
+		Expect(err).To(HaveOccurred())
+		expectErrorCode(err, "CHARACTER_NAME_TAKEN")
 
-	t.Run("a DIFFERENT but confusable name is still NAME_CONFUSABLE", func(t *testing.T) {
+		By("a DIFFERENT but confusable name is still NAME_CONFUSABLE")
 		// A whole-script Cyrillic homoglyph: a genuinely different name whose
 		// normalized key differs, so claiming it was "already taken" would be
 		// false. This control is what stops the fix collapsing the two verdicts.
-		_, err := env.characters.Create(ctx, env.seedPlayer(t), "сосоа")
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "NAME_CONFUSABLE")
+		_, err = env.characters.Create(ctx, env.seedPlayer(ctx), "сосоа")
+		Expect(err).To(HaveOccurred())
+		expectErrorCode(err, "NAME_CONFUSABLE")
 	})
-}
+})
