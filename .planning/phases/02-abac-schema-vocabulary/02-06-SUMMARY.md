@@ -390,6 +390,112 @@ writer-boundary fence rather than amending it:
 `docs/architecture/invariants.yaml` is unmodified. No ad-hoc `INV-NAME-*` family
 was minted.
 
+## Post-merge fix: the create path reported "request failed" for a duplicate name
+
+CI on PR #4941 caught a **user-visible regression this plan introduced**.
+`web/e2e/negative-journeys.spec.ts:253` expected `/already taken/i` on
+`p.text-destructive` and got `"request failed"` (103 passed, 1 failed). E2E is a
+required check; `task pr-prep`'s fast lane does not run it, which is why every
+local gate in this plan was green.
+
+### The defect
+
+An EXACT duplicate has an identical skeleton, so `charname.Gate.Check` step 5
+(`internal/charname/gate.go:177`) intercepted it and returned `NAME_CONFUSABLE`.
+The friendly uniqueness pre-check that exists for precisely this case sat AFTER
+`Gate.Admit` and was therefore **unreachable for it** —
+`oops.Code("CHARACTER_NAME_TAKEN")` was dead code on the exact-duplicate path.
+`internal/grpc/auth_errors.go` then had no `case` for `NAME_CONFUSABLE` and fell
+through to `msgGenericRequestFailed`.
+
+The irony worth recording: the pre-check's own comment called it *"a UX
+affordance"*, and the gate ordering had silently made it dead for the one case
+it exists to serve.
+
+### The false premise that shipped
+
+`mapGateError`'s comment justified passing the gate's codes through untouched
+with:
+
+> Everything else the gate can say — `NAME_CONFUSABLE`, `NAME_BLOCKED`,
+> `NAME_SKELETON_UNVERIFIABLE`, `NAME_MIXED_SCRIPT` — is a NEW refusal with no
+> legacy code to preserve.
+
+**That premise was false for the exact-duplicate case.** "Already taken" is the
+oldest refusal on this path and certainly did have a code. The comment is
+corrected in place rather than deleted, so the next reader sees what was wrong
+and why the obvious fix is not the right one.
+
+### What was NOT done, deliberately
+
+`NAME_CONFUSABLE` is **not** mapped onto `CHARACTER_NAME_TAKEN`. A name
+confusable with a *different* player's character would then claim to be "already
+taken" — asserting something untrue and disclosing more about the corpus than
+§6.1.2 intends. D-30's `guardSkeleton` advisory-lock guard, the post-gate
+existence check and the 23505 handler are all untouched: those are the
+guarantee, and this is only the affordance in front of it.
+
+### RED-then-GREEN proof
+
+The durable guard is Go-level; the Playwright spec is only the UX confirmation.
+
+| Step | Command | Exit |
+|---|---|---|
+| RED | `task test:int -- ./test/integration/auth/` | **201** — both duplicate subtests returned `NAME_CONFUSABLE` where `CHARACTER_NAME_TAKEN` was expected; the confusable control already passed |
+| GREEN | same | **0** |
+
+The spec asserts three cases on one fixture: an exact duplicate and a case
+variant are `CHARACTER_NAME_TAKEN`, and a whole-script Cyrillic homoglyph is
+still `NAME_CONFUSABLE`. Without that third case the fix could have been "always
+report taken" and looked correct.
+
+### Second, independent gap: four codes rendered as "request failed"
+
+`NAME_CONFUSABLE`, `NAME_BLOCKED`, `NAME_MIXED_SCRIPT` and
+`NAME_SKELETON_UNVERIFIABLE` had **no case** in `sanitizeAuthError`, so every
+gate refusal reached the client generically. Each now has a sanitized constant
+and case:
+
+- confusable names NO colliding character; blocked names NO pattern or index —
+  §6.1.2 and the block-list design both forbid these becoming enumeration
+  oracles
+- `NAME_SKELETON_UNVERIFIABLE` reads as **transient** ("try again shortly"),
+  because the D-30 fail-closed state means the corpus could not answer yet, not
+  that the name was rejected
+
+`auth_errors_test.go` gains a row per code plus a distinctness guard — four
+codes collapsed onto one message would satisfy every table row while reproducing
+the generic-message defect one layer in. Proven falsifiable: collapsing
+`NAME_BLOCKED` onto the confusable message fails it (exit **201**) naming both
+codes.
+
+### Consequence recorded
+
+Moving the pre-check ahead of the gate costs one existence lookup on the
+invalid-name path (`"123"` normalizes fine; it is the *syntactic* rule inside the
+gate that rejects it). Two unit subtests were updated: the invalid-name case
+gains that expectation, and the empty-name case deliberately gains **none** —
+`charname.Normalize` fails before any lookup, and mockery's strict-call
+assertion is what proves it.
+
+### Gates
+
+| Check | Result |
+|---|---|
+| `task test` | **exit 0** — 11,022 tests |
+| `task test:int` | **exit 0** — 11,484 tests, 7 skipped |
+| `task lint` | **exit 0** |
+| `task fmt:check` | **exit 0** |
+| `task build` | **exit 0** |
+
+Playwright was not run locally (it needs the full compose stack); CI confirms
+it. The chain was verified by reading: `CreateBound` → the pre-check →
+`CHARACTER_NAME_TAKEN` → `sanitizeAuthError` → `msgCharacterNameTaken`
+("character name is already taken") → `CreateCharacterResponse.ErrorMessage` →
+`p.text-destructive`, which satisfies `/already taken/i`.
+
+Commits: `47a620958` (ordering), `306ff5e8d` (sanitized messages).
+
 ## Self-Check: PASSED
 
 All nine created artifacts exist on disk. All three commits (`706e7e53f`,
