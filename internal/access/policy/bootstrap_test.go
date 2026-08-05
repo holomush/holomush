@@ -353,6 +353,9 @@ func TestBootstrapSetsCorrectPolicyEffect(t *testing.T) {
 		"seed:deny-events-system-crypto-policy-read-plugin":    true,
 		"seed:deny-events-system-read-character":               true,
 		"seed:deny-events-system-read-plugin":                  true,
+		// v0.13 phase 2 (D-01): the viewer twin of
+		// seed:property-restricted-excluded, the family's one forbid.
+		"seed:viewer-property-restricted-excluded": true,
 	}
 	var forbidCount int
 	for _, created := range mockStore.created {
@@ -362,7 +365,7 @@ func TestBootstrapSetsCorrectPolicyEffect(t *testing.T) {
 				"unexpected forbid policy: %q", created.Name)
 		}
 	}
-	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
+	assert.Equal(t, 10, forbidCount, "expected 10 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies + 1 v0.13 phase-2 seed:viewer-property-restricted-excluded)")
 }
 
 func TestBootstrapNilSeedVersionNotUpgraded(t *testing.T) {

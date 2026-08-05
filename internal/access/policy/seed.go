@@ -587,5 +587,184 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is viewer, action in ["read"], resource is profile) when { principal.viewer.tier in ["anonymous", "guest", "player"] };`,
 			SeedVersion: 1,
 		},
+
+		// --- Profile visibility: viewer-flavored row-keyed reads (D-01, §8.5.1) ---
+		//
+		// TERM B of §8.5.1's conjunction, for the viewer path. Each entry is the
+		// corresponding shipped seed:property-* policy with `principal is
+		// character` replaced by `principal is viewer` and every
+		// principal.character.* reference re-expressed against the vocabulary
+		// plan 02-13 supplies, evaluating the SAME visibility / visible_to /
+		// excluded_from row semantics. The colocation clause is dropped: the
+		// viewer path is a web read, and colocation has no meaning for a viewer
+		// with no character. The tier floor is term A and is a SEPARATE
+		// evaluation, ANDed by the caller.
+		//
+		// §8.5.1.1's OPTION 2 IS REJECTED (D-02). "Term B evaluates against a
+		// co-located character subject and DENIES where one does not exist"
+		// violates §8.8 / INV-PRIVACY-10 on the anonymous rung: an anonymous
+		// viewer has no character, profile.pronouns is an entity_properties row
+		// seeded at the anonymous floor, so term B would deny it and a reachable
+		// profile would carry `name` without `pronouns`. That failure is CLOSED,
+		// so no test in the suite catches it — it surfaces as "the public
+		// profile looks bare", which §8.5.1.1 records as the symptom that
+		// provokes the forbidden repair of dropping term B.
+		//
+		// THE IDENTITY MAPPING, transcribed (cross-AI review 02-07 HIGH). The
+		// shipped row semantics are CHARACTER-keyed; a `viewer:` subject is
+		// PLAYER-flavored. Comparing a player id against character ids never
+		// matches, and a non-matching key evaluates FALSE
+		// (dsl/evaluator.go), so a twin keyed on the character-keyed field would
+		// make every private / restricted / admin field permanently invisible —
+		// silently, fail-closed, with no error and no failing behavioural test:
+		//
+		//	resource.property.owner == principal.character.id
+		//	  → resource.property.owner_player_id == principal.viewer.player_id
+		//	principal.character.id in resource.property.visible_to
+		//	  → principal.viewer.player_id in resource.property.visible_to_players
+		//	principal.character.id in resource.property.excluded_from
+		//	  → principal.viewer.player_id in resource.property.excluded_from_players
+		//	"admin" in principal.character.roles
+		//	  → "admin" in principal.viewer.roles
+		//
+		// player_id IS OMITTED ON THE ANONYMOUS RUNG, so every identity-bearing
+		// twin is unsatisfiable there rather than matching an empty peer. That
+		// is the omit-don't-sentinel guarantee from plan 02-03
+		// (.claude/rules/abac-providers.md), not an accident of the policy text.
+		//
+		// THE DERIVED PEERS COME FROM THE ROW, NEVER FROM THE CALLER. A peer
+		// computed from the requesting subject would make every row match its
+		// own reader — a total authorization bypass that reads as a working
+		// feature.
+		//
+		// WHY DERIVED PEERS EXIST AT ALL: the DSL cannot intersect two attribute
+		// lists. `X in Y` needs a scalar left operand, and containsAll /
+		// containsAny take literal needles only. So the character→player
+		// relation is resolved once, server-side, in PropertyProvider — where
+		// ParentLocationResolver is the precedent — and the policy compares
+		// player to player. Seeing `owner` and `owner_player_id` side by side is
+		// not duplication; deleting either breaks one of the two families.
+		//
+		// THE PEERS ARE NOT A PLAIN PLAYER UNION, AND THE DSL TEXT CANNOT SHOW
+		// IT (02-CONTEXT.md D-27). owner_player_id and visible_to_players hold a
+		// player only when EVERY character of that player appears in the source
+		// field (the ALL direction, permit side); excluded_from_players holds a
+		// player when ANY does (the ANY direction, forbid side). Each peer leans
+		// the way that CANNOT WIDEN ITS OWN POLICY'S EFFECT. The plain union was
+		// proposed for both sides and DECLINED for the permit side, because it
+		// broadens a grant made to a NAMED character into a grant to the human
+		// behind it. These twins read identically to their character-flavored
+		// originals, so this comment is the only place a reviewer asking "does
+		// the viewer path widen access across a player's alternate characters?"
+		// can find the answer.
+		//
+		// seed:property-owner-write gets NO twin. D-01 is explicit: a `viewer:`
+		// subject must never hold a write permit. Its absence is a decision.
+		{
+			Name:        "seed:viewer-property-public-read",
+			Description: "Term B (viewer path): public properties readable by any viewer, with no colocation clause",
+			DSLText:     `permit(principal is viewer, action in ["read"], resource is property) when { resource.property.visibility == "public" };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:viewer-property-private-read",
+			Description: "Term B (viewer path): private properties readable only by the owning player (derived peer, D-27 ALL direction)",
+			DSLText:     `permit(principal is viewer, action in ["read"], resource is property) when { resource.property.visibility == "private" && resource.property.owner_player_id == principal.viewer.player_id };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:viewer-property-admin-read",
+			Description: "Term B (viewer path): admin properties readable only by admins, resolved per player (§10.5)",
+			DSLText:     `permit(principal is viewer, action in ["read"], resource is property) when { resource.property.visibility == "admin" && "admin" in principal.viewer.roles };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:viewer-property-restricted-visible-to",
+			Description: "Term B (viewer path): restricted properties readable by players in the derived visible_to peer (D-27 ALL direction)",
+			DSLText:     `permit(principal is viewer, action in ["read"], resource is property) when { resource.property.visibility == "restricted" && resource has property.visible_to_players && principal.viewer.player_id in resource.property.visible_to_players };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:viewer-property-restricted-excluded",
+			Description: "Term B (viewer path): restricted properties denied to players in the derived excluded_from peer (D-27 ANY direction)",
+			DSLText:     `forbid(principal is viewer, action in ["read"], resource is property) when { resource.property.visibility == "restricted" && resource has property.excluded_from_players && principal.viewer.player_id in resource.property.excluded_from_players };`,
+			SeedVersion: 1,
+		},
+
+		// --- The seed:profile-public-read widening (PROFILE-11, D-10, D-11) ---
+		//
+		// seed:property-public-read minus its colocation clause, guarded on
+		// parent_type so the widening reaches character rows only. Per D-10 it
+		// covers ANY public parent_type='character' row and is NOT scoped to
+		// §8.6's enumeration — web exposure stays bounded regardless, because a
+		// name in no §8.6 row is denied by term A.
+		//
+		// It is a NEW ADDITIVE PERMIT. seed:player-character-colocation and
+		// seed:property-public-read are left untouched at their existing
+		// SeedVersion: permits combine disjunctively (combineDecisions,
+		// engine.go), so adding a permit widens without editing a shipped policy
+		// and without an upgrade path that could collide with an
+		// admin-customized row.
+		//
+		// THE GRID-PATH CONSEQUENCE IS INTENDED (D-11). An off-location
+		// character in-game can now read public character properties it
+		// previously could not, and the tier floor does not gate that path.
+		// `public` means public on the grid as well as the web; the colocation
+		// restriction was the anomaly. Plan 02-10's audit exists to find rows
+		// that were relying on colocation as de-facto privacy, and THE FIX FOR
+		// ANY SUCH ROW IS TO CHANGE THAT ROW'S `visibility`, NEVER TO NARROW THE
+		// POLICY. That remedy is available precisely because entity_properties
+		// HAS a visibility column. The phase MUST NOT merge before that audit's
+		// result is recorded.
+		//
+		// D-13: the in-world description stays at the `anonymous` floor — a
+		// deliberate divergence from strict grid-parity, already recorded in
+		// §8.11.
+		//
+		// REJECTED: a single seed:profile-public-read with a BARE `resource`
+		// clause. It would also match location:, object: and stream:.
+		//
+		// NOT SHIPPED IN PHASE 2 — the character half, deferred by D-29.
+		// An earlier revision of this family added, with no `when` clause:
+		//
+		//	permit(principal is character, action in ["read"], resource is character);
+		//
+		// Do not write it, and do not write a narrowed variant: Phase 2 needs no
+		// character-typed resource permit at all. Reasons, so the absence reads
+		// as a decision rather than an oversight:
+		//
+		//   - It gates world.Service.GetCharacter (internal/world/service.go) on
+		//     exactly that action/resource pair, and that RPC's projection
+		//     characterToProto (internal/world/grpc_server.go) returns Id,
+		//     PlayerId, Name, Description and LocationId. It was justified as
+		//     carrying characters.description; it carries the whole
+		//     CharacterInfo.
+		//   - Its principal test is `principal is character`, and guests HAVE
+		//     characters — so every ephemeral guest could enumerate
+		//     alt-to-player ownership and live grid position for the entire
+		//     roster.
+		//   - It was justified by PROFILE-10a, which is not in this phase's
+		//     requirement set (IDENT-06, IDENT-07, IDENT-08, IDENT-09,
+		//     PROFILE-11, EXT-07), and Phase 2 ships no RPCs, so nothing here
+		//     consumes it.
+		//   - It is NOT an instance of D-10/D-11 and MUST NOT be justified by
+		//     citing them. Those govern entity_properties rows, which carry a
+		//     visibility column; D-11's mandated remedy — change the row's
+		//     visibility — is what makes that widening acceptable. The
+		//     characters table (000001_baseline.sql) is id, player_id, name,
+		//     description, location_id, created_at, with NO visibility column,
+		//     and no plan in this phase adds one. The escape hatch does not
+		//     exist for that resource.
+		//
+		// It moves to Phase 4, to land with the projection narrowing that makes
+		// it safe. CONSEQUENCE, stated so no plan silently depends on the
+		// permit: PROFILE-11's characters.description half is NOT discharged in
+		// Phase 2. The entry below discharges the entity_properties half alone.
+		{
+			Name:        "seed:profile-public-read-property",
+			Description: "Public properties on a character are readable off-location (PROFILE-11 widening; D-10/D-11)",
+			DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.property.visibility == "public" && resource.property.parent_type == "character" };`,
+			SeedVersion: 1,
+		},
 	}
 }

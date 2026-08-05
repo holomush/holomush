@@ -409,3 +409,315 @@ func TestTheElevenMediaNamesAreEnumeratedAndTheTwelfthIsNot(t *testing.T) {
 	assert.NotContains(t, seen, excluded,
 		"%q is an unenumerated name and is therefore DENIED, not defaulted (§8.6)", excluded)
 }
+
+// --- Viewer-flavored row-keyed reads (D-01, §8.5.1) ---
+
+// viewerTwins maps each viewer twin to the character-flavored policy it twins.
+// The read-side subset of the shipped seed:property-* family gains twins;
+// seed:property-owner-write does NOT (D-01 — a `viewer:` subject must never hold
+// a write permit).
+var viewerTwins = map[string]string{
+	"seed:viewer-property-public-read":           "seed:property-public-read",
+	"seed:viewer-property-private-read":          "seed:property-private-read",
+	"seed:viewer-property-admin-read":            "seed:property-admin-read",
+	"seed:viewer-property-restricted-visible-to": "seed:property-restricted-visible-to",
+	"seed:viewer-property-restricted-excluded":   "seed:property-restricted-excluded",
+}
+
+func TestExactlyTheFiveReadSideRowKeyedPoliciesHaveAViewerTwin(t *testing.T) {
+	t.Parallel()
+
+	var got []string
+	for _, s := range SeedPolicies() {
+		if strings.HasPrefix(s.Name, "seed:viewer-property-") {
+			got = append(got, s.Name)
+		}
+	}
+	want := make([]string, 0, len(viewerTwins))
+	for name := range viewerTwins {
+		want = append(want, name)
+	}
+	sort.Strings(want)
+	sort.Strings(got)
+
+	assert.Equal(t, want, got,
+		"exactly the five READ-side seed:property-* policies gain viewer twins (D-01)")
+}
+
+// TestSeedPropertyOwnerWriteHasNoViewerTwin is D-01's write prohibition, stated
+// as its own assertion rather than left implicit in the count above: a `viewer:`
+// subject must never hold a write permit on a property.
+func TestSeedPropertyOwnerWriteHasNoViewerTwin(t *testing.T) {
+	t.Parallel()
+
+	for _, s := range SeedPolicies() {
+		if !strings.HasPrefix(s.Name, "seed:viewer-") {
+			continue
+		}
+		parsed := parseSeed(t, s)
+		require.NotNil(t, parsed.Target.Action, "%s MUST scope its actions", s.Name)
+		for _, action := range parsed.Target.Action.Actions {
+			assert.NotContains(t, []string{"write", "delete"}, action,
+				"%s carries the %q action — a viewer: subject must never hold a write permit (D-01)",
+				s.Name, action)
+		}
+	}
+}
+
+func TestEachViewerTwinMirrorsItsOriginalsEffectAndActions(t *testing.T) {
+	t.Parallel()
+
+	compiler := NewCompiler(emptySchema())
+	for twinName, originalName := range viewerTwins {
+		t.Run(twinName, func(t *testing.T) {
+			t.Parallel()
+
+			twin := requireSeedPolicy(t, twinName)
+			original := requireSeedPolicy(t, originalName)
+
+			compiledTwin, _, err := compiler.Compile(twin.DSLText)
+			require.NoError(t, err)
+			compiledOriginal, _, err := compiler.Compile(original.DSLText)
+			require.NoError(t, err)
+
+			assert.Equal(t, compiledOriginal.Effect, compiledTwin.Effect,
+				"%s MUST carry the same effect as %s — the excluded_from twin is the family's one forbid",
+				twinName, originalName)
+			assert.Equal(t, compiledOriginal.Target.ActionList, compiledTwin.Target.ActionList,
+				"%s MUST carry the same actions as %s", twinName, originalName)
+
+			require.NotNil(t, compiledTwin.Target.PrincipalType)
+			assert.Equal(t, "viewer", *compiledTwin.Target.PrincipalType)
+			require.NotNil(t, compiledTwin.Target.ResourceType)
+			assert.Equal(t, "property", *compiledTwin.Target.ResourceType)
+		})
+	}
+}
+
+// TestNoViewerTwinReferencesACharacterKeyedRowField is the mechanical guard on
+// the defect cross-AI review found: `owner`, `visible_to` and `excluded_from`
+// hold CHARACTER ids, and a player id compared against them never matches. A
+// non-matching key evaluates FALSE (dsl/evaluator.go), so a twin keyed on one
+// would make every private/restricted/admin field permanently invisible —
+// silently, fail-closed, with no error and no failing behavioural test.
+//
+// The comparison is on the EXACT attribute key: `owner_player_id` is a legal
+// reference that merely shares a prefix with the forbidden `owner`.
+func TestNoViewerTwinReferencesACharacterKeyedRowField(t *testing.T) {
+	t.Parallel()
+
+	characterKeyed := map[string]struct{}{
+		"owner":         {},
+		"visible_to":    {},
+		"excluded_from": {},
+	}
+
+	for twinName := range viewerTwins {
+		t.Run(twinName, func(t *testing.T) {
+			t.Parallel()
+
+			parsed := parseSeed(t, requireSeedPolicy(t, twinName))
+			require.NotNil(t, parsed.Conditions)
+
+			for _, ref := range collectAttrRefs(parsed.Conditions) {
+				if ref.namespace != "resource" {
+					continue
+				}
+				key, ok := strings.CutPrefix(ref.key, "property.")
+				if !ok {
+					continue
+				}
+				_, forbidden := characterKeyed[key]
+				assert.False(t, forbidden,
+					"%s references the CHARACTER-keyed resource.property.%s — a viewer: subject is "+
+						"player-flavored, so this compares a player id against character ids and can only "+
+						"ever deny. Use the derived player-keyed peer (02-CONTEXT.md D-27).",
+					twinName, key)
+			}
+		})
+	}
+}
+
+// TestTheIdentityBearingViewerTwinsKeyOnTheDerivedPlayerPeers is the positive
+// control paired with the absence assertion above: proving the character-keyed
+// fields are gone proves nothing unless the derived peers are actually there.
+func TestTheIdentityBearingViewerTwinsKeyOnTheDerivedPlayerPeers(t *testing.T) {
+	t.Parallel()
+
+	want := map[string][]string{
+		"seed:viewer-property-private-read":          {"resource.property.owner_player_id", "principal.viewer.player_id"},
+		"seed:viewer-property-restricted-visible-to": {"resource.property.visible_to_players", "principal.viewer.player_id"},
+		"seed:viewer-property-restricted-excluded":   {"resource.property.excluded_from_players", "principal.viewer.player_id"},
+		"seed:viewer-property-admin-read":            {"principal.viewer.roles"},
+	}
+
+	for twinName, refs := range want {
+		t.Run(twinName, func(t *testing.T) {
+			t.Parallel()
+			s := requireSeedPolicy(t, twinName)
+			for _, ref := range refs {
+				assert.Contains(t, s.DSLText, ref,
+					"%s MUST key its identity term on %s", twinName, ref)
+			}
+		})
+	}
+}
+
+// TestTheRestrictedViewerTwinsKeepTheirHasGuardRetargeted asserts the
+// `resource has property.<field>` guard survives the retarget, so a row whose
+// derived list did not resolve is SKIPPED rather than compared against nothing.
+func TestTheRestrictedViewerTwinsKeepTheirHasGuardRetargeted(t *testing.T) {
+	t.Parallel()
+
+	want := map[string]string{
+		"seed:viewer-property-restricted-visible-to": "property.visible_to_players",
+		"seed:viewer-property-restricted-excluded":   "property.excluded_from_players",
+	}
+
+	for twinName, guarded := range want {
+		t.Run(twinName, func(t *testing.T) {
+			t.Parallel()
+
+			parsed := parseSeed(t, requireSeedPolicy(t, twinName))
+			require.NotNil(t, parsed.Conditions)
+
+			var found bool
+			for _, conj := range parsed.Conditions.Disjunctions {
+				for _, cond := range conj.Conditions {
+					if cond.Has == nil {
+						continue
+					}
+					if cond.Has.Root == "resource" && strings.Join(cond.Has.Path, ".") == guarded {
+						found = true
+					}
+				}
+			}
+			assert.True(t, found,
+				"%s MUST guard on `resource has %s` so an unresolved list is skipped, not compared against nothing",
+				twinName, guarded)
+		})
+	}
+}
+
+// TestNoViewerTwinAndNoPublicReadWideningIsLocationGated: the viewer path is a
+// web read, not a grid read, and colocation has no meaning for a viewer with no
+// character. The widening's whole purpose is to drop the colocation clause.
+func TestNoViewerTwinAndNoPublicReadWideningIsLocationGated(t *testing.T) {
+	t.Parallel()
+
+	names := make([]string, 0, len(viewerTwins)+1)
+	for twinName := range viewerTwins {
+		names = append(names, twinName)
+	}
+	names = append(names, "seed:profile-public-read-property")
+
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := requireSeedPolicy(t, name)
+			assert.NotContains(t, s.DSLText, "principal.character.location",
+				"%s MUST NOT be location-gated", name)
+			assert.NotContains(t, s.DSLText, "parent_location",
+				"%s MUST NOT be location-gated", name)
+		})
+	}
+}
+
+// --- The seed:profile-public-read widening (PROFILE-11, D-10, D-11) ---
+
+func TestSeedProfilePublicReadPropertyIsAnAdditivePermitGuardedOnCharacterRows(t *testing.T) {
+	t.Parallel()
+
+	s := requireSeedPolicy(t, "seed:profile-public-read-property")
+
+	const want = `permit(principal is character, action in ["read"], resource is property) ` +
+		`when { resource.property.visibility == "public" && resource.property.parent_type == "character" };`
+	assert.Equal(t, want, s.DSLText,
+		"the widening is seed:property-public-read minus its colocation clause, guarded on "+
+			"parent_type == \"character\" so it reaches character rows only (D-10)")
+}
+
+// TestTheShippedRowKeyedFamilyIsUntouchedByTheWidening pins that the widening is
+// ADDITIVE. Permits combine disjunctively (combineDecisions, engine.go), so a new
+// permit widens without editing a shipped policy — and therefore without a
+// SeedVersion bump that could collide with an admin-customized row.
+func TestTheShippedRowKeyedFamilyIsUntouchedByTheWidening(t *testing.T) {
+	t.Parallel()
+
+	untouched := map[string]struct {
+		dsl         string
+		seedVersion int
+	}{
+		"seed:player-character-colocation": {
+			dsl:         `permit(principal is character, action in ["read"], resource is character) when { resource.character.location == principal.character.location };`,
+			seedVersion: 2,
+		},
+		"seed:property-public-read": {
+			dsl:         `permit(principal is character, action in ["read"], resource is property) when { resource.property.visibility == "public" && principal.character.location == resource.property.parent_location };`,
+			seedVersion: 2,
+		},
+	}
+
+	for name, want := range untouched {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := requireSeedPolicy(t, name)
+			assert.Equal(t, want.dsl, s.DSLText, "%s MUST be untouched by the additive widening", name)
+			assert.Equal(t, want.seedVersion, s.SeedVersion,
+				"%s MUST keep its shipped SeedVersion — a bump on a shipped policy triggers the "+
+					"upgrade path and can collide with an admin-customized row", name)
+		})
+	}
+}
+
+// TestNoPhase2SeedIntroducesACharacterResourceTypePermit is D-29's mechanical
+// gate.
+//
+// The plan's own acceptance criterion for this was a file-wide grep asserting
+// ZERO occurrences of the string `resource is character` in non-comment lines of
+// seed.go. That grep cannot pass against this file and never could: the shipped
+// seed:player-self-access and seed:player-character-colocation both carry
+// `resource is character)`, and seed:directory-list-characters' `resource is
+// character_directory` matches the same substring. Satisfying it literally would
+// mean deleting shipped policies.
+//
+// What D-29 actually forbids is SEEDING A NEW ONE. This test is that gate,
+// stated on the compiled target rather than on file text: the set of seed
+// policies whose resource clause is the `character` TYPE is pinned, so adding
+// one turns this RED by name. `character_directory` is a different resource type
+// and `resource == "character:*"` is an exact-match clause, so neither is
+// swept in by accident — both failure modes of the grep.
+func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
+	t.Parallel()
+
+	// The complete pre-Phase-2 set. Each is CONDITIONED (self-access, and
+	// colocation); neither is the unconditional shape D-29 defers.
+	want := []string{
+		"seed:player-character-colocation",
+		"seed:player-self-access",
+	}
+
+	compiler := NewCompiler(emptySchema())
+	var got []string
+	for _, s := range SeedPolicies() {
+		compiled, _, err := compiler.Compile(s.DSLText)
+		require.NoError(t, err, "seed %q MUST compile", s.Name)
+		if compiled.Target.ResourceType != nil && *compiled.Target.ResourceType == "character" {
+			got = append(got, s.Name)
+		}
+	}
+	sort.Strings(got)
+
+	assert.Equal(t, want, got,
+		"D-29: Phase 2 seeds NO policy whose resource clause is the `character` type. Such a permit "+
+			"gates world.Service.GetCharacter, whose characterToProto projection returns PlayerId and "+
+			"LocationId, and `principal is character` admits every ephemeral guest — so it would let any "+
+			"guest enumerate alt-to-player linkage and live grid position for the whole roster. It moves "+
+			"to Phase 4 with the projection narrowing that makes it safe. This is NOT an instance of "+
+			"D-10/D-11: `characters` has no `visibility` column, so D-11's mandated remedy does not exist "+
+			"for that resource.")
+
+	_, exists := seedPolicyByName("seed:profile-public-read-character")
+	assert.False(t, exists,
+		"seed:profile-public-read-character is DEFERRED TO PHASE 4 by D-29 and MUST NOT be seeded here")
+}
