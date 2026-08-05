@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: abac-schema-vocabulary
 status: executing
-stopped_at: Completed 02-13-PLAN.md
-last_updated: "2026-08-05T00:29:49.817Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-08-05T01:47:32.841Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 19
+  completed_plans: 20
   percent: 29
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 (abac-schema-vocabulary) — EXECUTING
-Plan: 7 of 13
+Plan: 8 of 13
 Status: Ready to execute
-Progress: [███████░░░] 73% (1/6 phases)
+Progress: [████████░░] 77% (1/6 phases)
 Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -233,6 +233,7 @@ no action needed.
 | Phase 02 P04 | 85m | 3 tasks | 11 files |
 | Phase 02 P05 | 110min | 3 tasks | 21 files |
 | Phase 02 P13 | 71min | 4 tasks | 15 files |
+| Phase 02 P06 | 155min | 3 tasks tasks | 36 files files |
 
 ## Accumulated Context
 
@@ -447,6 +448,14 @@ the next milestone yet.
 - [Phase ?]: 02-13: derived property peers use the no-widening direction (D-27) — ALL on the permit side (owner_player_id, visible_to_players), ANY on the forbid side (excluded_from_players); the plain player union was proposed for both and declined for the permit side
 - [Phase ?]: 02-13: PlayerRoles lands on the concrete *PostgresRoleStore and reaches the ABAC stack via the ABACConfig.PlayerRoleLookup func field — store.RoleStore's interface is unchanged
 - [Phase ?]: 02-13: ViewerTierProvider is now registered in BuildABACStack and both new ABACConfig seams are populated at the production composition root (subsystem.go), so principal.viewer.* resolves in production
+- [Phase ?]: 02-06: charname.Admitted is an opaque single-constructor token — (*Gate).Admit — so an ungated characters.name write is not expressible in Go rather than merely caught by a census
+- [Phase ?]: 02-06: Rename is envelope-atomic through the IN-PACKAGE OutboxStore and takes the intent as a parameter; it MUST NOT be routed through worldMutator.mutate() or two envelopes are emitted per rename
+- [Phase ?]: 02-06: guardSkeleton derives its advisory-lock key with FNV-1a in Go, not Postgres hashtext, so every replica computes the same key (D-30 part 2)
+- [Phase ?]: 02-06: census rule D counts METHODS, so guardSkeleton (takes a token, writes nothing) is not a name-admitting member; rules A and E still cover free functions
+- [Phase ?]: 02-06: mapGateError REPLACES the oops code rather than wrapping it — oops resolves the DEEPEST chain code (#4902), so a wrap would silently change the caller-visible contract
+- [Phase ?]: 02-06: NAME_EMPTY_NORMAL_FORM is mapped to CHARACTER_INVALID_NAME alongside NAME_INVALID_SYNTAX; both were CHARACTER_INVALID_NAME before the gate existed
+- [Phase ?]: 02-06: a stock database is D-30-unverifiable (000001_baseline seeds a skeleton-less bootstrap character), so the integration harness and three suites repair the corpus at setup — every guest login exhausted its retries until they did
+- [Phase ?]: 02-06: block-list window #10 CLOSED — all three composition roots call setup.NewCharacterNameGate, which fails closed on a nil BlockList subsystem
 
 ### Pending Todos
 
@@ -493,11 +502,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-05T00:29:49.805Z
+Last session: 2026-08-05T01:47:32.831Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02-13-PLAN.md
+Stopped at: Completed 02-06-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 6
+open_count: 5
 waived_count: 0
-fixed_count: 5
+fixed_count: 6
 total_count: 11
-last_updated: 2026-08-05T00:29:54.787Z
+last_updated: 2026-08-05T01:45:32.455Z
 ---
 
 # Broken Windows Ledger
@@ -24,7 +24,7 @@ last_updated: 2026-08-05T00:29:54.787Z
 | 7 | 01.1 | deviation | internal/store/migrate_adopt.go |  | adopt seeded-probe filters version_id>0: a read-only verb creating goose's bootstrap row must not disable the cutover | fixed |  | 2026-08-03T01:03:53.873Z | 2026-08-03T12:21:31.623Z |
 | 8 | 01.1 | deviation | .claude/skills/new-migration/SKILL.md |  | new-migration skill taught TIMESTAMPTZ (contradicting INV-STORE-1); corrected to BIGINT epoch-ns as a Rule 2 deviation not named in the plan | fixed |  | 2026-08-03T02:13:07.263Z | 2026-08-03T12:21:31.696Z |
 | 9 | 01.1 | unrun-verify | site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md |  | D-16 pre-deploy rehearsal and D-18 surgical rollback are WRITTEN but never EXECUTED against restored sandbox data — a rehearsal nobody has run is a hypothesis, not a control | open |  | 2026-08-03T02:13:07.324Z |  |
-| 10 | 02 | stub | cmd/holomush/core.go |  | 02-05 declares the block-list transport (grpcSubsystemConfig.BlockList / BootstrapSubsystemConfig.BlockList) but constructs no charname.Gate; until 02-06 consumes Matcher() at the three composition roots, no production create path evaluates the block list | open |  | 2026-08-05T00:02:10.144Z |  |
+| 10 | 02 | stub | cmd/holomush/core.go |  | 02-05 declares the block-list transport (grpcSubsystemConfig.BlockList / BootstrapSubsystemConfig.BlockList) but constructs no charname.Gate; until 02-06 consumes Matcher() at the three composition roots, no production create path evaluates the block list | fixed |  | 2026-08-05T00:02:10.144Z | 2026-08-05T01:45:32.455Z |
 | 11 | 02 | deviation | internal/store/role_store_integration_test.go |  | 02-13 Rule 1 fix: colliding player usernames from an 8-char ULID prefix; caught only by the plan-level integration sweep because no per-task verify covers ./internal/store/ | open |  | 2026-08-05T00:29:54.787Z |  |
 
 ````json
@@ -144,10 +144,10 @@ last_updated: 2026-08-05T00:29:54.787Z
     "file": "cmd/holomush/core.go",
     "line": null,
     "description": "02-05 declares the block-list transport (grpcSubsystemConfig.BlockList / BootstrapSubsystemConfig.BlockList) but constructs no charname.Gate; until 02-06 consumes Matcher() at the three composition roots, no production create path evaluates the block list",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-05T00:02:10.144Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-05T01:45:32.455Z"
   },
   {
     "id": 11,
