@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/admin/section"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/bootstrap"
@@ -136,26 +137,37 @@ func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 
 // Prepare runs the full bootstrap sequence — one-shot DB work against a
 // prepared pool, not a loop and not external (D-13.3 row 8):
-//  1. Create BootstrapRunner
-//  2. Register policy bootstrapper (priority 200)
-//  3. Register setting bootstrapper (priority 300) if configured
-//  4. Register admin bootstrapper (priority 400)
-//  5. Run all bootstrappers
-//  6. Resolve starting location
+//  1. Validate the admin section registry (01-SPEC §10.2 / D-09)
+//  2. Create BootstrapRunner
+//  3. Register policy bootstrapper (priority 200)
+//  4. Register setting bootstrapper (priority 300) if configured
+//  5. Register admin bootstrapper (priority 400)
+//  6. Run all bootstrappers
+//  7. Resolve starting location
 //
 // No idempotency guard: seeding already runs on every boot by design, and
 // re-running is harmless.
 // codecov:ignore — tested by integration and E2E tests
 func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
+	// 1. Validate the admin section registry. It needs no database and no prior
+	// step, so it runs FIRST: a zero-valued authorization descriptor is a
+	// programming error that should abort before the boot does any work, and
+	// long before the first unauthorized caller discovers it at request time.
+	if err := section.ValidateAtBoot(ctx); err != nil {
+		return oops.Code("BOOTSTRAP_FAILED").
+			With("operation", "validate admin section registry").Wrap(err)
+	}
+
 	pool := s.cfg.DB.Pool()
 
 	// Defense-in-depth: refuse to start if any plugin-kind event in
 	// events_audit lacks an actor_id. Migration 000018 makes orphans
 	// impossible from a clean install; this guards against manual restore
 	// from an old backup. Relocated from cmd/holomush's pre-orchestrator
-	// call site (07-09 item 5) — it now runs first against this same pool,
-	// behind the Bootstrap -> Database edge, instead of racing a
-	// hand-sequenced DB pre-start.
+	// call site (07-09 item 5) — it now runs against this same pool, behind the
+	// Bootstrap -> Database edge and before any bootstrapper, instead of racing
+	// a hand-sequenced DB pre-start. The registry validation above precedes it
+	// only because it touches no database at all.
 	if orphanErr := runBootstrapOrphanCheck(ctx, pool); orphanErr != nil {
 		return orphanErr
 	}
@@ -169,10 +181,10 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 		s.startLocationID = parsed
 	}
 
-	// 1. Create bootstrap runner.
+	// 2. Create bootstrap runner.
 	runner := plugins.NewBootstrapRunner(slog.Default())
 
-	// 2. Register policy bootstrapper (priority 200).
+	// 3. Register policy bootstrapper (priority 200).
 	// Uses the ABAC subsystem's policy store (which has the invalidation hook wired)
 	// so that seed policy writes automatically invalidate the cache.
 	policyBootstrapFn := func(ctx context.Context, skipSeedMigrations bool) error {
@@ -185,12 +197,12 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 	}
 	runner.Register(bootstrap.NewPolicyBootstrapper(policyBootstrapFn, s.cfg.SkipSeedMigrations))
 
-	// 3. Register setting bootstrapper (priority 300) if configured.
+	// 4. Register setting bootstrapper (priority 300) if configured.
 	if err := s.registerSettingBootstrapper(ctx, runner, pool); err != nil {
 		return err
 	}
 
-	// 4. Register admin bootstrapper (priority 400).
+	// 5. Register admin bootstrapper (priority 400).
 	charRepo := worldpostgres.NewCharacterRepository(pool)
 	locRepo := worldpostgres.NewLocationRepository(pool)
 
@@ -237,12 +249,12 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 		NameTheme:   naming.NewStarTheme(),
 	}))
 
-	// 5. Run all bootstrappers in priority order.
+	// 6. Run all bootstrappers in priority order.
 	if err := runner.RunAll(ctx); err != nil {
 		return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(err)
 	}
 
-	// 6. Resolve starting location from bootstrap metadata if not explicitly configured.
+	// 7. Resolve starting location from bootstrap metadata if not explicitly configured.
 	if s.startLocationID.IsZero() {
 		metadataStore := bootstrap.NewPostgresMetadataStore(pool)
 		locIDStr, found, metaErr := metadataStore.Get(ctx, "starting_location_id")

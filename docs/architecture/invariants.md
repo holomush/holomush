@@ -190,6 +190,7 @@ invariants.
 | `INV-PRIVACY-8` | OpenSession (incl. reattach) and SetFilters query the existing durable before CreateOrUpdateConsumer; an existing durable's DeliverPolicy/OptStartTime/OptStartSeq are copied verbatim (only FilterSubjects mutates); NATS is the source of truth. | `I-PRIV-8` | bound |
 | `INV-PRIVACY-9` | A character profile below its configured reachability floor returns a not-found-equivalent whose wire shape is identical to the response for a character id that does not exist — no distinct 'this profile is private' signal, error code or status, which would disclose that the character exists. | — | pending |
 | `INV-PRIVACY-10` | If a viewer can reach a character profile at all, that profile carries name and pronouns. The game configuration MAY set the profile's own reachability floor arbitrarily high but MUST NOT raise name or pronouns above that floor, so every reachable profile is non-empty. | — | pending |
+| `INV-PRIVACY-11` | An admin-section refusal issued to a caller the authorization gate DENIED is indistinguishable across a registered and an unregistered section id — the same code, the same message, and no field that would disclose which sections exist. The ABAC gate is evaluated BEFORE the registry is consulted, so only a caller the gate permitted can ever receive the unregistered-section diagnostic. | — | bound |
 
 ### `INV-PRESENCE`
 
