@@ -282,10 +282,10 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 // BlockList returns the character-name block-list subsystem this bootstrap
 // subsystem was configured with, or nil when none was supplied.
 //
-// It is the read end of the transport declared by 02-05. Plan 02-06 calls
-// BlockList().Matcher() when it constructs the charname.Gate this subsystem's
-// CharacterService admits names through; this plan declares the seam and
-// constructs no gate.
+// It is the read end of the transport declared by 02-05. Prepare passes the
+// same subsystem to NewCharacterNameGate, which takes its Matcher() to build
+// the charname.Gate the CharacterService admits names through — so this
+// accessor exposes the very subsystem backing that gate, not a parallel copy.
 func (s *BootstrapSubsystem) BlockList() *blocklist.Subsystem { return s.cfg.BlockList }
 
 // Activate is a no-op — bootstrap's work is a one-shot Prepare-time seed
