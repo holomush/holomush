@@ -551,58 +551,15 @@ func TestValidateCharacterName(t *testing.T) {
 	}
 }
 
-func TestNormalizeCharacterName(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{name: "already correct", input: "Alaric", expected: "Alaric"},
-		{name: "lowercase to title", input: "alaric", expected: "Alaric"},
-		{name: "all caps to title", input: "ALARIC", expected: "Alaric"},
-		{name: "mixed case single word", input: "aLaRiC", expected: "Alaric"},
-		{name: "two words lowercase", input: "john smith", expected: "John Smith"},
-		{name: "two words uppercase", input: "JOHN SMITH", expected: "John Smith"},
-		{name: "mixed case two words", input: "jOhN sMiTh", expected: "John Smith"},
-		{name: "three words", input: "john paul smith", expected: "John Paul Smith"},
-		{name: "preserves single spaces", input: "John Smith", expected: "John Smith"},
-		{name: "trims leading space", input: " alaric", expected: "Alaric"},
-		{name: "trims trailing space", input: "alaric ", expected: "Alaric"},
-		{name: "trims both", input: " alaric ", expected: "Alaric"},
-		{name: "collapses multiple spaces", input: "john   smith", expected: "John Smith"},
-		{name: "collapses and trims", input: "  john   smith  ", expected: "John Smith"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := world.NormalizeCharacterName(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestNormalizeCharacterName_Unicode(t *testing.T) {
-	// Note: Current implementation only handles ASCII letters.
-	// These tests document the current behavior with unicode.
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		// Unicode letters - NormalizeCharacterName handles them via unicode.ToUpper/ToLower
-		{name: "accented lowercase", input: "élise", expected: "Élise"},
-		{name: "accented uppercase", input: "ÉLISE", expected: "Élise"},
-		{name: "german eszett", input: "groß", expected: "Groß"},
-		{name: "cyrillic lowercase", input: "иван", expected: "Иван"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := world.NormalizeCharacterName(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
+// The 14 TestNormalizeCharacterName / TestNormalizeCharacterName_Unicode
+// subtests that stood here pinned world.NormalizeCharacterName's per-word title
+// casing ("alaric" -> "Alaric", "ÉLISE" -> "Élise", "groß" -> "Groß").
+//
+// 01-SPEC.md §6.1.5 retires that behaviour: a player's chosen capitalization is
+// preserved, and the display form and the uniqueness key are SEPARATE values
+// rather than one conflated string. charname.Normalize owns the replacement and
+// internal/charname/pipeline_test.go pins it; the function and these assertions
+// are gone together, in the change that migrated their only production caller.
 
 func TestCharacterNameValidation_Integration(t *testing.T) {
 	// Test that character creation uses the validation

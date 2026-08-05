@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -86,10 +87,21 @@ func seedLifecyclePlayer(ctx context.Context, isGuest bool) ulid.ULID {
 func insertCharacterWithStatus(ctx context.Context, playerID, locID ulid.ULID, name, status string) ulid.ULID {
 	GinkgoHelper()
 	charID := core.NewULID()
+
+	// The three derived identity columns are written alongside the name, exactly
+	// as the gated writer does. A direct-SQL seed that left them NULL would make
+	// the whole corpus unverifiable, and charname.Gate would then correctly
+	// refuse EVERY subsequent create with NAME_SKELETON_UNVERIFIABLE (D-30) —
+	// including the reclaim this spec expects to SUCCEED.
+	normalized, nErr := charname.Normalize(name)
+	Expect(nErr).NotTo(HaveOccurred())
+
 	_, err := env.pool.Exec(ctx, `
-		INSERT INTO characters (id, player_id, name, description, location_id, status)
-		VALUES ($1, $2, $3, '', $4, $5)`,
-		charID.String(), playerID.String(), name, locID.String(), status)
+		INSERT INTO characters (id, player_id, name, description, location_id, status,
+		                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, $2, $3, '', $4, $5, $6, $7, $8)`,
+		charID.String(), playerID.String(), name, locID.String(), status,
+		normalized.Key, charname.Skeleton(normalized.Key), charname.UnicodeVersion)
 	Expect(err).NotTo(HaveOccurred())
 	return charID
 }

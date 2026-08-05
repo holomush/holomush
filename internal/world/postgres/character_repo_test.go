@@ -7,6 +7,7 @@ package postgres_test
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -169,7 +170,12 @@ func TestCharacterRepository_GetByLocation(t *testing.T) {
 		for i, c := range chars {
 			names[i] = c.Name
 		}
-		assert.Equal(t, []string{"Alice", "Bob"}, names)
+		// The fixture names are random-suffixed (a skeleton collision with a
+		// live row is now a refusal), so the assertion is on the seeded values
+		// and their order, not on literals.
+		expected := []string{char1.Name, char2.Name}
+		sort.Strings(expected)
+		assert.Equal(t, expected, names, "GetByLocation orders by name ascending")
 	})
 }
 
@@ -489,8 +495,8 @@ func TestCharacterRepository_GetNamesByIDs(t *testing.T) {
 		missingID := ulid.Make()
 		names, err := repo.GetNamesByIDs(ctx, []ulid.ULID{char1.ID, char2.ID, missingID})
 		require.NoError(t, err)
-		assert.Equal(t, "alice", names[char1.ID])
-		assert.Equal(t, "bob", names[char2.ID])
+		assert.Equal(t, char1.Name, names[char1.ID])
+		assert.Equal(t, char2.Name, names[char2.ID])
 		_, present := names[missingID]
 		assert.False(t, present, "missing id MUST NOT be in result map")
 	})

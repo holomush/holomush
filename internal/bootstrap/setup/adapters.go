@@ -11,9 +11,45 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/charname"
+	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 )
+
+// NewCharacterNameGate builds the character-name admission gate.
+//
+// # There is exactly ONE of these, and that is the point
+//
+// CharacterService is constructed at TWO independent composition roots
+// (internal/bootstrap/setup and cmd/holomush) and GuestService at a third. A
+// gate built separately at each is a gate that can drift: two caches polling
+// two copies of the block list, one root wired and the other quietly not. Both
+// roots call THIS function, so there is one construction and one set of
+// dependencies.
+//
+// It fails closed on a nil block-list subsystem. A nil matcher means "no list
+// configured", and silently accepting one at a production root is how the whole
+// IDENT-07 mechanism becomes decorative: everything compiles, every unit test
+// passes, and no name is ever checked against the operator's list.
+//
+// The matcher is read through blocklist.Subsystem.Matcher(), which hands back
+// the LIVE cache rather than a snapshot, so a gate built once at boot sees every
+// later reload.
+func NewCharacterNameGate(pool *pgxpool.Pool, blockList *blocklist.Subsystem) (*charname.Gate, error) {
+	if pool == nil {
+		return nil, oops.Code("CHARACTER_NAME_GATE_MISCONFIGURED").
+			Errorf("database pool is required to build the character-name gate")
+	}
+	if blockList == nil {
+		return nil, oops.Code("CHARACTER_NAME_GATE_MISCONFIGURED").
+			Errorf("character-name block list subsystem is required; refusing to build a gate with no block list")
+	}
+	return &charname.Gate{
+		Skeletons: worldpostgres.NewSkeletonLookup(pool),
+		BlockList: blockList.Matcher(),
+	}, nil
+}
 
 // Compile-time checks.
 var (
@@ -35,16 +71,49 @@ func NewCharRepoAdapter(pool *pgxpool.Pool, charRepo *worldpostgres.CharacterRep
 	return &CharRepoAdapter{pool: pool, charRepo: charRepo}
 }
 
-// ExistsByName reports whether a character with the given name already exists (case-insensitive).
-func (a *CharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {
+// ExistsByNormalizedName reports whether any character holds the given §6.1.1
+// uniqueness key, optionally excluding one character's own row.
+//
+// The predicate is TRANSITIONAL and its NULL branch is deliberate:
+//
+//	normalized_name = $1 OR (normalized_name IS NULL AND LOWER(name) = LOWER($1))
+//
+// Cutting straight to `normalized_name = $1` here would make every pre-existing
+// row invisible to this check for a whole wave — the backfill is migration
+// 000055 and the UNIQUE index 000056, both in plan 02-12, while the LOWER(name)
+// safety net is removed here. In that window a duplicate would be caught by
+// NOTHING, in a commit that deploys green and whose tests all pass because
+// every fixture writes the column.
+//
+// REMOVE with migration 000056; see plan 02-12.
+//
+// excluding is the B-18 self-exclusion channel: 01-SPEC.md:702-706 settles that
+// a rename whose uniqueness key matches the current one but whose display form
+// differs is a REAL rename and does not collide with itself. Create passes nil;
+// only a rename path passes an id.
+//
+// This check is a UX AFFORDANCE, not the uniqueness guarantee. §6.1.3 assigns
+// that to the database constraint; this exists to produce a friendly error most
+// of the time and it does not close the race.
+func (a *CharRepoAdapter) ExistsByNormalizedName(ctx context.Context, key string, excluding *ulid.ULID) (bool, error) {
+	var excludingArg *string
+	if excluding != nil {
+		s := excluding.String()
+		excludingArg = &s
+	}
 	var exists bool
 	err := a.pool.QueryRow(
 		ctx,
-		"SELECT EXISTS(SELECT 1 FROM characters WHERE LOWER(name) = LOWER($1))",
-		name,
+		`SELECT EXISTS(
+			SELECT 1 FROM characters
+			WHERE (normalized_name = $1
+			       OR (normalized_name IS NULL AND LOWER(name) = LOWER($1)))
+			  AND ($2::text IS NULL OR id::text <> $2)
+		)`,
+		key, excludingArg,
 	).Scan(&exists)
 	if err != nil {
-		return false, oops.Code("CHARACTER_EXISTS_CHECK_FAILED").With("name", name).Wrap(err)
+		return false, oops.Code("CHARACTER_EXISTS_CHECK_FAILED").With("name", key).Wrap(err)
 	}
 	return exists, nil
 }

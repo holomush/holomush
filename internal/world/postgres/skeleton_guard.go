@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
@@ -122,3 +123,54 @@ func guardSkeleton(ctx context.Context, tx pgx.Tx, admitted charname.Admitted, e
 
 	return nil
 }
+
+// SkeletonLookup answers charname.Gate's confusable question against the stored
+// corpus. It is the PRODUCTION charname.SkeletonLookup.
+//
+// It is a READ, so it is outside the raw-world-SQL fence's INSERT/UPDATE/DELETE
+// scope; it lives here because it must ask the corpus EXACTLY the two questions
+// guardSkeleton asks inside the write transaction. Two implementations that
+// drift would mean the gate and the guard disagree about what a collision is,
+// and the divergence would show up only as a create that passes the friendly
+// check and is then refused by the writer.
+type SkeletonLookup struct {
+	pool *pgxpool.Pool
+}
+
+// NewSkeletonLookup constructs the production skeleton lookup.
+func NewSkeletonLookup(pool *pgxpool.Pool) *SkeletonLookup {
+	return &SkeletonLookup{pool: pool}
+}
+
+// SkeletonExists reports whether any OTHER character holds this skeleton, and
+// whether the corpus can answer at all.
+//
+// unverifiable is set when any characters row still has name_skeleton IS NULL:
+// a lookup that read a NULL skeleton and reported "no collision" would admit a
+// confusable of an existing row (D-30).
+func (l *SkeletonLookup) SkeletonExists(ctx context.Context, skeleton string, excluding *ulid.ULID) (exists, unverifiable bool, err error) {
+	var excludingArg *string
+	if excluding != nil {
+		s := excluding.String()
+		excludingArg = &s
+	}
+
+	err = l.pool.QueryRow(ctx, `
+		SELECT
+			EXISTS(
+				SELECT 1 FROM characters
+				WHERE name_skeleton = $1
+				  AND ($2::text IS NULL OR id::text <> $2)
+			),
+			EXISTS(SELECT 1 FROM characters WHERE name_skeleton IS NULL)
+	`, skeleton, excludingArg).Scan(&exists, &unverifiable)
+	if err != nil {
+		return false, false, oops.Code("NAME_SKELETON_LOOKUP_FAILED").
+			With("operation", "corpus skeleton lookup").
+			Wrap(err)
+	}
+	return exists, unverifiable, nil
+}
+
+// Compile-time interface check.
+var _ charname.SkeletonLookup = (*SkeletonLookup)(nil)

@@ -6,6 +6,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/mocks"
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -26,12 +28,14 @@ type recordingGuestGenesis struct {
 	err            error
 	calls          int
 	lastChar       *world.Character
+	lastAdmitted   charname.Admitted
 	lastBindReason string
 }
 
-func (g *recordingGuestGenesis) Create(_ context.Context, char *world.Character, bindReason string) error {
+func (g *recordingGuestGenesis) Create(_ context.Context, char *world.Character, name charname.Admitted, bindReason string) error {
 	g.calls++
 	g.lastChar = char
+	g.lastAdmitted = name
 	g.lastBindReason = bindReason
 	return g.err
 }
@@ -80,7 +84,7 @@ func TestNewGuestServiceNilDeps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions, tt.genesis, tt.cleaner)
+			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions, tt.genesis, tt.cleaner, testGate())
 			require.Error(t, err)
 			assert.Nil(t, svc)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -105,12 +109,12 @@ func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
 
-	chars.EXPECT().ExistsByName(ctx, charName).Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, strings.ToLower(charName), (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -150,18 +154,18 @@ func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 
 	// First name is taken in DB; second name is free.
 	namer.EXPECT().GenerateName().Return(takenName, nil).Once()
-	chars.EXPECT().ExistsByName(ctx, takenCharName).Return(true, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, strings.ToLower(takenCharName), (*ulid.ULID)(nil)).Return(true, nil).Once()
 	namer.EXPECT().ReleaseGuest(takenName).Once()
 
 	namer.EXPECT().GenerateName().Return(freeName, nil).Once()
-	chars.EXPECT().ExistsByName(ctx, freeCharName).Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, strings.ToLower(freeCharName), (*ulid.ULID)(nil)).Return(false, nil).Once()
 
 	namer.EXPECT().StartLocation().Return(startLoc)
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -187,12 +191,12 @@ func TestGuestServiceSucceedsWhenDefaultCharacterUpdateFails(t *testing.T) {
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
-	chars.EXPECT().ExistsByName(ctx, "Coral Breeze").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "coral breeze", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(errors.New("db timeout")).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -215,12 +219,12 @@ func TestGuestServiceReturnsErrorWhenPlayerCreateFails(t *testing.T) {
 	amberStartLoc := ulid.MustNew(ulid.Now(), nil)
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(amberStartLoc)
-	chars.EXPECT().ExistsByName(ctx, "Amber Storm").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "amber storm", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	// player.Create (committed first, own pool) fails -> release name, no genesis.
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(dbErr).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -243,13 +247,13 @@ func TestGuestServiceReturnsErrorWhenCharCreateFails(t *testing.T) {
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
-	chars.EXPECT().ExistsByName(ctx, "Topaz Wind").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "topaz wind", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	// genesis fails after the player commit -> release name + orphan-player cleanup
 	// through the tombstone-emitting reaping service (D-06), NOT a raw player delete.
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -276,13 +280,13 @@ func TestGuestServiceReturnsErrorWhenSessionCreateFails(t *testing.T) {
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
-	chars.EXPECT().ExistsByName(ctx, "Marble Creek").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "marble creek", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(errors.New("session db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -309,11 +313,11 @@ func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
 	for range 10 {
 		name := "Taken_Name"
 		namer.EXPECT().GenerateName().Return(name, nil).Once()
-		chars.EXPECT().ExistsByName(ctx, "Taken Name").Return(true, nil).Once()
+		chars.EXPECT().ExistsByNormalizedName(ctx, "taken name", (*ulid.ULID)(nil)).Return(true, nil).Once()
 		namer.EXPECT().ReleaseGuest(name).Once()
 	}
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -334,10 +338,10 @@ func TestGuestServiceReturnsErrorWhenExistsByNameFails(t *testing.T) {
 	cleaner := &recordingGuestCleaner{}
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
-	chars.EXPECT().ExistsByName(ctx, "Crystal Fog").Return(false, errors.New("db error")).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "crystal fog", (*ulid.ULID)(nil)).Return(false, errors.New("db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -364,12 +368,12 @@ func TestCreateGuestMintsBinding(t *testing.T) {
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
-	chars.EXPECT().ExistsByName(ctx, "Onyx River").Return(false, nil).Once()
+	chars.EXPECT().ExistsByNormalizedName(ctx, "onyx river", (*ulid.ULID)(nil)).Return(false, nil).Once()
 	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, genesis, cleaner, testGate())
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)

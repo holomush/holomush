@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -25,11 +26,13 @@ type fakeCharWriter struct {
 	seq       *[]string
 	createErr error
 	created   *world.Character
+	admitted  charname.Admitted
 }
 
-func (f *fakeCharWriter) Create(_ context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
+func (f *fakeCharWriter) Create(_ context.Context, char *world.Character, name charname.Admitted) (*wmodel.MutationDelta, error) {
 	*f.seq = append(*f.seq, "writer")
 	f.created = char
+	f.admitted = name
 	if f.createErr != nil {
 		return nil, f.createErr
 	}
@@ -163,7 +166,7 @@ func TestCharacterGenesisCreateWritesCharacterBindingThenEnvelopeInOrder(t *test
 	require.NoError(t, err)
 
 	char := newGenesisChar(t)
-	require.NoError(t, svc.Create(context.Background(), char, "initial_bind"))
+	require.NoError(t, svc.Create(context.Background(), char, testAdmitted(t, char.Name), "initial_bind"))
 
 	// character write, then binding, then envelope — in that order.
 	assert.Equal(t, []string{"writer", "binding", "outbox"}, seq)
@@ -190,7 +193,7 @@ func TestCharacterGenesisCreateEmptyBindReasonEmitsEnvelopeWithNoBinding(t *test
 	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, &fakeReapingGuard{})
 	require.NoError(t, err)
 
-	require.NoError(t, svc.Create(context.Background(), newGenesisChar(t), ""))
+	require.NoError(t, createWithFreshChar(t, svc, ""))
 
 	// No binding created (bootstrap-admin mode) but the envelope IS still emitted.
 	assert.Equal(t, []string{"writer", "outbox"}, seq)
@@ -209,7 +212,7 @@ func TestCharacterGenesisCreateFailsWhenWriterFails(t *testing.T) {
 	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, &fakeReapingGuard{})
 	require.NoError(t, err)
 
-	err = svc.Create(context.Background(), newGenesisChar(t), "initial_bind")
+	err = createWithFreshChar(t, svc, "initial_bind")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CHARACTER_GENESIS_FAILED")
 	// Neither binding nor envelope written when the character insert fails.
@@ -226,7 +229,7 @@ func TestCharacterGenesisCreateFailsWhenBindingFails(t *testing.T) {
 	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, &fakeReapingGuard{})
 	require.NoError(t, err)
 
-	err = svc.Create(context.Background(), newGenesisChar(t), "initial_bind")
+	err = createWithFreshChar(t, svc, "initial_bind")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CHARACTER_GENESIS_BINDING_FAILED")
 	// Envelope never written when the binding fails.
@@ -242,7 +245,7 @@ func TestCharacterGenesisCreateFailsWhenEnvelopeFails(t *testing.T) {
 	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, &fakeReapingGuard{})
 	require.NoError(t, err)
 
-	err = svc.Create(context.Background(), newGenesisChar(t), "initial_bind")
+	err = createWithFreshChar(t, svc, "initial_bind")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CHARACTER_GENESIS_ENVELOPE_FAILED")
 }
@@ -256,7 +259,7 @@ func TestCharacterGenesisCreateRejectsNilCharacter(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	err = svc.Create(context.Background(), nil, "initial_bind")
+	err = svc.Create(context.Background(), nil, testAdmitted(t, "Nil Char"), "initial_bind")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CHARACTER_GENESIS_FAILED")
 }
@@ -273,7 +276,7 @@ func TestCharacterGenesisCreateRejectsReapingPlayer(t *testing.T) {
 	svc, err := auth.NewCharacterGenesisService(writer, fakeGenesisTransactor{}, bind, outboxW, guard)
 	require.NoError(t, err)
 
-	err = svc.Create(context.Background(), newGenesisChar(t), "initial_bind_guest")
+	err = createWithFreshChar(t, svc, "initial_bind_guest")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "PLAYER_REAPING")
 
@@ -284,4 +287,34 @@ func TestCharacterGenesisCreateRejectsReapingPlayer(t *testing.T) {
 	assert.Nil(t, writer.created)
 	assert.Equal(t, 0, bind.calls)
 	assert.Equal(t, 0, outboxW.calls)
+}
+
+// testAdmitted mints a real charname.Admitted for a unit-test fixture name.
+//
+// charname.Admitted has exactly one constructor by design (plan 02-06): there is
+// no hand-built value and no test escape hatch. The double supplies a
+// SkeletonLookup reporting no collision, so the gate's corpus read is a no-op
+// and what the token attests is the syntactic + normalization contract.
+func testAdmitted(t *testing.T, name string) charname.Admitted {
+	t.Helper()
+	gate := &charname.Gate{Skeletons: noCollisionLookup{}}
+	admitted, err := gate.Admit(t.Context(), name)
+	require.NoError(t, err, "fixture name %q must be admissible", name)
+	return admitted
+}
+
+// noCollisionLookup is a charname.SkeletonLookup reporting a verifiable corpus
+// with no collision.
+type noCollisionLookup struct{}
+
+func (noCollisionLookup) SkeletonExists(_ context.Context, _ string, _ *ulid.ULID) (bool, bool, error) {
+	return false, false, nil
+}
+
+// createWithFreshChar builds a fixture character and its token together, so a
+// call site cannot name one and admit the other, and drives the service.
+func createWithFreshChar(t *testing.T, svc *auth.CharacterGenesisService, bindReason string) error {
+	t.Helper()
+	char := newGenesisChar(t)
+	return svc.Create(context.Background(), char, testAdmitted(t, char.Name), bindReason)
 }

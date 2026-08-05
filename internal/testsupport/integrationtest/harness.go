@@ -75,6 +75,7 @@ import (
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/commandquery"
 	"github.com/holomush/holomush/internal/command/handlers"
@@ -451,11 +452,18 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		playerRepo, playerRepo,
 	)
 	require.NoError(t, err, "integrationtest.Start: create character reaping service")
+	// The character-name gate. The harness supplies no block list (a nil
+	// BlockList means "no list configured" and matches nothing) but a REAL
+	// skeleton lookup, so the harness's guest path runs the same admission
+	// decision production runs.
+	harnessNameGate := &charname.Gate{Skeletons: worldpg.NewSkeletonLookup(pool)}
+
 	guestSvc, err := auth.NewGuestService(
 		telnet.NewGuestAuthenticator(guestNamer, guestLocID),
 		playerRepo, charRepo, playerSessionStore,
 		guestGenesis,
 		guestReaping,
+		harnessNameGate,
 	)
 	require.NoError(t, err, "integrationtest.Start: create guest service")
 
@@ -838,6 +846,17 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		srv.pluginConsumers = startPluginConsumers(t, ctx, bus, pluginSub.Manager(), cryptowiring.KeySelector())
 		t.Cleanup(func() { _ = srv.pluginConsumers.Stop(context.Background()) })
 	}
+
+	// Repair the character-name corpus before any spec runs.
+	//
+	// Migration 000001_baseline.sql seeds a bootstrap character with NO
+	// name_skeleton, so a freshly migrated database always carries a row
+	// charname.Gate correctly refuses to adjudicate against (D-30). Without this
+	// repair EVERY guest provisioning in every harness-backed suite exhausts its
+	// retries with GUEST_NAME_EXHAUSTED — the gate refusing, correctly, to admit
+	// against a corpus it cannot verify. Stands in for plan 02-12's 000055 Go
+	// migration.
+	srv.backfillCharacterSkeletons(ctx)
 
 	return srv
 }
@@ -1286,7 +1305,7 @@ func (p *AuthedPlayer) AdditionalCharacter(ctx context.Context, charName string)
 	char, err := world.NewCharacter(p.PlayerID, charName)
 	require.NoError(p.server.t, err, "integrationtest.AuthedPlayer.AdditionalCharacter: NewCharacter")
 	char.LocationID = &startLocID
-	_, seedErr := p.server.worldCharRepo.Create(ctx, char)
+	_, seedErr := p.server.worldCharRepo.Create(ctx, char, p.server.admitCharacterName(ctx, charName))
 	require.NoError(p.server.t, seedErr,
 		"integrationtest.AuthedPlayer.AdditionalCharacter: persist character %q", charName)
 
@@ -1341,7 +1360,7 @@ func (s *Server) ConnectAuthedWithRoles(ctx context.Context, charName string, ro
 	char.LocationID = &startLocID
 	// Test-support direct seeding via the concrete world char repo (outside the
 	// production genesis fence by design — harness only).
-	_, seedErr := s.worldCharRepo.Create(ctx, char)
+	_, seedErr := s.worldCharRepo.Create(ctx, char, s.admitCharacterName(ctx, charName))
 	require.NoError(s.t, seedErr,
 		"integrationtest.ConnectAuthedWithRoles: persist character")
 
@@ -1423,7 +1442,7 @@ func (s *Server) AuthedPlayer(ctx context.Context, charName string) *AuthedPlaye
 	require.NoError(s.t, err, "integrationtest.Server.AuthedPlayer: NewCharacter")
 	char.LocationID = &startLocID
 	// Test-support direct seeding via the concrete world char repo (harness only).
-	_, seedErr := s.worldCharRepo.Create(ctx, char)
+	_, seedErr := s.worldCharRepo.Create(ctx, char, s.admitCharacterName(ctx, charName))
 	require.NoError(s.t, seedErr,
 		"integrationtest.Server.AuthedPlayer: persist character")
 
@@ -1540,20 +1559,35 @@ type authCharRepoAdapter struct {
 	charRepo *worldpg.CharacterRepository
 }
 
-func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
+func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character, name charname.Admitted) error {
 	// Discards the *wmodel.MutationDelta return (05-14 wave-1 compatibility bridge).
-	_, err := a.charRepo.Create(ctx, char)
+	_, err := a.charRepo.Create(ctx, char, name)
 	return err
 }
 
-func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {
+// ExistsByNormalizedName carries the SAME transitional predicate every other
+// site carries; see setup.CharRepoAdapter.ExistsByNormalizedName for why the
+// NULL branch exists.
+//
+// REMOVE with migration 000056; see plan 02-12.
+func (a *authCharRepoAdapter) ExistsByNormalizedName(ctx context.Context, key string, excluding *ulid.ULID) (bool, error) {
+	var excludingArg *string
+	if excluding != nil {
+		s := excluding.String()
+		excludingArg = &s
+	}
 	var exists bool
 	err := a.pool.QueryRow(
 		ctx,
-		"SELECT EXISTS(SELECT 1 FROM characters WHERE LOWER(name) = LOWER($1))", name,
+		`SELECT EXISTS(
+			SELECT 1 FROM characters
+			WHERE (normalized_name = $1
+			       OR (normalized_name IS NULL AND LOWER(name) = LOWER($1)))
+			  AND ($2::text IS NULL OR id::text <> $2)
+		)`, key, excludingArg,
 	).Scan(&exists)
 	if err != nil {
-		return false, oops.Code("CHARACTER_EXISTS_CHECK_FAILED").With("name", name).Wrap(err)
+		return false, oops.Code("CHARACTER_EXISTS_CHECK_FAILED").With("name", key).Wrap(err)
 	}
 	return exists, nil
 }
@@ -1733,4 +1767,62 @@ func (a *focusHistoryReaderAdapter) ReplayTail(ctx context.Context, stream strin
 		result[j] = collected[i]
 	}
 	return result, nil
+}
+
+// admitCharacterName mints a real charname.Admitted for a harness-seeded
+// character name.
+//
+// There is no test escape hatch for charname.Admitted by design — its single
+// constructor is the whole guarantee of plan 02-06 — so the harness runs a real
+// gate. The corpus is repaired first: migration 000001_baseline.sql seeds a
+// bootstrap character with no name_skeleton, so a freshly migrated database
+// always carries a row the gate correctly refuses to adjudicate against (D-30),
+// and every harness seed would otherwise fail NAME_SKELETON_UNVERIFIABLE. This
+// stands in for plan 02-12's 000055 Go migration.
+func (s *Server) admitCharacterName(ctx context.Context, name string) charname.Admitted {
+	s.t.Helper()
+	s.backfillCharacterSkeletons(ctx)
+
+	gate := &charname.Gate{Skeletons: worldpg.NewSkeletonLookup(s.pool)}
+	admitted, err := gate.Admit(ctx, name)
+	require.NoError(s.t, err,
+		"integrationtest: harness character name %q must be admissible by charname.Gate", name)
+	return admitted
+}
+
+// backfillCharacterSkeletons populates the identity columns of every characters
+// row missing them, so the corpus can answer the confusability question.
+func (s *Server) backfillCharacterSkeletons(ctx context.Context) {
+	s.t.Helper()
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, name FROM characters
+		WHERE normalized_name IS NULL
+		   OR name_skeleton IS NULL
+		   OR name_skeleton_unicode_version IS NULL
+	`)
+	require.NoError(s.t, err)
+
+	type pending struct{ id, key, skeleton string }
+	var todo []pending
+	for rows.Next() {
+		var id, name string
+		require.NoError(s.t, rows.Scan(&id, &name))
+		normalized, nErr := charname.Normalize(name)
+		if nErr != nil {
+			todo = append(todo, pending{id: id, key: id, skeleton: id})
+			continue
+		}
+		todo = append(todo, pending{id: id, key: normalized.Key, skeleton: charname.Skeleton(normalized.Key)})
+	}
+	require.NoError(s.t, rows.Err())
+	rows.Close()
+
+	for _, p := range todo {
+		_, execErr := s.pool.Exec(ctx, `
+			UPDATE characters
+			SET normalized_name = $2, name_skeleton = $3, name_skeleton_unicode_version = $4
+			WHERE id = $1
+		`, p.id, p.key, p.skeleton, charname.UnicodeVersion)
+		require.NoError(s.t, execErr)
+	}
 }

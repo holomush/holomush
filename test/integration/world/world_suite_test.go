@@ -27,6 +27,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
@@ -182,6 +183,16 @@ func setupWorldTestEnv() (*testEnv, error) {
 		return nil, err
 	}
 
+	// Repair the character-name corpus: 000001_baseline seeds a bootstrap
+	// character with no name_skeleton, and charname.Gate correctly refuses to
+	// adjudicate against a corpus it cannot verify (D-30). Stands in for plan
+	// 02-12's 000055 Go migration.
+	if bErr := backfillWorldSuiteSkeletons(ctx, pool); bErr != nil {
+		pool.Close()
+		eventStore.Close()
+		return nil, bErr
+	}
+
 	locRepo := worldpg.NewLocationRepository(pool)
 	charRepo := worldpg.NewCharacterRepository(pool)
 
@@ -277,6 +288,7 @@ func setupLifecycleServices(
 	authCharRepo := bootstrapsetup.NewCharRepoAdapter(pool, charRepo)
 	characters, err := auth.NewCharacterService(
 		authCharRepo, bootstrapsetup.NewLocRepoAdapter(startLocationID, locRepo), genesis,
+		&charname.Gate{Skeletons: worldpg.NewSkeletonLookup(pool)},
 	)
 	if err != nil {
 		return nil, err
@@ -399,4 +411,48 @@ func cleanupLocations(ctx context.Context, pool *pgxpool.Pool) {
 	_, _ = pool.Exec(ctx, "DELETE FROM characters")
 	_, _ = pool.Exec(ctx, "DELETE FROM locations")
 	_, _ = pool.Exec(ctx, "DELETE FROM players")
+}
+
+// backfillWorldSuiteSkeletons populates the identity columns of every characters
+// row missing them.
+func backfillWorldSuiteSkeletons(ctx context.Context, pool *pgxpool.Pool) error {
+	rows, err := pool.Query(ctx, `
+		SELECT id, name FROM characters
+		WHERE normalized_name IS NULL
+		   OR name_skeleton IS NULL
+		   OR name_skeleton_unicode_version IS NULL
+	`)
+	if err != nil {
+		return err
+	}
+	type pending struct{ id, key, skeleton string }
+	var todo []pending
+	for rows.Next() {
+		var id, name string
+		if scanErr := rows.Scan(&id, &name); scanErr != nil {
+			rows.Close()
+			return scanErr
+		}
+		normalized, nErr := charname.Normalize(name)
+		if nErr != nil {
+			todo = append(todo, pending{id: id, key: id, skeleton: id})
+			continue
+		}
+		todo = append(todo, pending{id: id, key: normalized.Key, skeleton: charname.Skeleton(normalized.Key)})
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		rows.Close()
+		return rowsErr
+	}
+	rows.Close()
+	for _, p := range todo {
+		if _, execErr := pool.Exec(ctx, `
+			UPDATE characters
+			SET normalized_name = $2, name_skeleton = $3, name_skeleton_unicode_version = $4
+			WHERE id = $1
+		`, p.id, p.key, p.skeleton, charname.UnicodeVersion); execErr != nil {
+			return execErr
+		}
+	}
+	return nil
 }

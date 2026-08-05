@@ -12,6 +12,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -36,7 +37,10 @@ type GuestNamer interface {
 // genesis envelope atomically (the compile-level fence, 05-15). Only the
 // name-uniqueness read remains.
 type GuestCharacterRepository interface {
-	ExistsByName(ctx context.Context, name string) (bool, error)
+	// ExistsByNormalizedName is the transitional §6.1.1 uniqueness pre-check;
+	// see CharRepoAdapter.ExistsByNormalizedName for why the NULL branch exists
+	// and when it is removed. excluding is nil on every creation path.
+	ExistsByNormalizedName(ctx context.Context, key string, excluding *ulid.ULID) (bool, error)
 }
 
 // GuestResult holds everything created during guest account setup.
@@ -55,6 +59,12 @@ type GuestService struct {
 	sessions PlayerSessionRepository
 	genesis  CharacterGenesis
 	cleaner  GuestCleaner
+
+	// gate is the SAME character-name admission decision the registered create
+	// path runs. Guest provisioning is automatic and high-volume and never ran
+	// the pipeline at all before this plan; a gate installed only in
+	// CharacterService would have left it open (T-02-31).
+	gate *charname.Gate
 }
 
 // NewGuestService creates a new GuestService.
@@ -71,6 +81,7 @@ func NewGuestService(
 	sessions PlayerSessionRepository,
 	genesis CharacterGenesis,
 	cleaner GuestCleaner,
+	gate *charname.Gate,
 ) (*GuestService, error) {
 	if namer == nil {
 		return nil, oops.Errorf("guest namer is required")
@@ -90,6 +101,9 @@ func NewGuestService(
 	if cleaner == nil {
 		return nil, oops.Errorf("guest cleaner is required")
 	}
+	if gate == nil {
+		return nil, oops.Errorf("character name gate is required")
+	}
 	return &GuestService{
 		namer:    namer,
 		players:  players,
@@ -97,6 +111,7 @@ func NewGuestService(
 		sessions: sessions,
 		genesis:  genesis,
 		cleaner:  cleaner,
+		gate:     gate,
 	}, nil
 }
 
@@ -113,8 +128,9 @@ func NewGuestService(
 // it is OUTSIDE INV-WORLD-4 (which binds the character↔genesis-envelope pairing).
 // Session creation is outside the genesis transaction (separate concern).
 func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
-	// Generate a unique name not already in the database.
-	name, err := s.acquireUniqueName(ctx)
+	// Generate a unique, ADMITTED name not already in the database. The token
+	// comes back with the raw name so it has a path out of the retry loop.
+	name, admitted, err := s.acquireUniqueName(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -127,10 +143,10 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	}
 
 	startLoc := s.namer.StartLocation()
-	// Guest names from the namer are underscore-separated (e.g. "Sapphire_Diamond").
-	// world.Character names must be letters and spaces only, so convert for display.
-	charName := strings.ReplaceAll(name, "_", " ")
-	char, err := world.NewCharacter(player.ID, charName)
+	// The display name is the TOKEN's, never re-derived here. Re-deriving it
+	// from the raw name would be a second normalization of a string the gate
+	// already normalized — exactly what charname.Admitted exists to prevent.
+	char, err := world.NewCharacter(player.ID, admitted.Display())
 	if err != nil {
 		s.namer.ReleaseGuest(name)
 		return nil, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(err)
@@ -148,7 +164,7 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	// ATOMICALLY through the genesis service (the narrow sound atomic unit). On
 	// failure the character/binding/envelope roll back together; the already-
 	// committed player is cleaned up best-effort (orphan-player compensation).
-	if gErr := s.genesis.Create(ctx, char, "initial_bind_guest"); gErr != nil {
+	if gErr := s.genesis.Create(ctx, char, admitted, "initial_bind_guest"); gErr != nil {
 		s.namer.ReleaseGuest(name)
 		s.cleanupGuestPlayer(ctx, player.ID) // best-effort orphan-player compensation
 		return nil, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(gErr)
@@ -215,29 +231,48 @@ func (s *GuestService) cleanupGuestPlayer(ctx context.Context, playerID ulid.ULI
 // database, retrying up to maxGuestNameRetries times.
 // Returns the raw namer name (underscore form), which the caller converts to
 // a character display name as needed.
-func (s *GuestService) acquireUniqueName(ctx context.Context) (string, error) {
+// It returns the raw namer name (underscore form) AND the admission token minted
+// for its display form. The token is a return value rather than something the
+// caller re-derives: this path is automatic and high-volume, and a gate
+// installed only in CharacterService would have left it wide open (T-02-31).
+func (s *GuestService) acquireUniqueName(ctx context.Context) (rawName string, admitted charname.Admitted, err error) {
 	for range maxGuestNameRetries {
-		name, err := s.namer.GenerateName()
-		if err != nil {
-			return "", oops.Code("GUEST_NAME_GENERATE_FAILED").Wrap(err)
+		name, genErr := s.namer.GenerateName()
+		if genErr != nil {
+			return "", charname.Admitted{}, oops.Code("GUEST_NAME_GENERATE_FAILED").Wrap(genErr)
 		}
 
-		// Character names are stored with spaces; check using the display form.
+		// Namer names are underscore-separated (e.g. "Sapphire_Diamond"); the
+		// display form uses spaces. This is the ONLY place that conversion
+		// happens — everything downstream reads the token.
 		charName := strings.ReplaceAll(name, "_", " ")
-		exists, err := s.chars.ExistsByName(ctx, charName)
-		if err != nil {
+
+		token, admitErr := s.gate.Admit(ctx, charName)
+		if admitErr != nil {
+			// A generated candidate the gate refuses — a block-list pattern
+			// matches it, or its skeleton collides with a live character —
+			// releases the name and retries through the loop that already
+			// exists. Exhausting the retries surfaces the EXISTING exhaustion
+			// error, not a gate error, so the caller-visible contract for
+			// "could not find a name" is unchanged.
 			s.namer.ReleaseGuest(name)
-			return "", oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(err)
+			continue
+		}
+
+		exists, existsErr := s.chars.ExistsByNormalizedName(ctx, token.Key(), nil)
+		if existsErr != nil {
+			s.namer.ReleaseGuest(name)
+			return "", charname.Admitted{}, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(existsErr)
 		}
 		if !exists {
-			return name, nil
+			return name, token, nil
 		}
 
 		// Name exists in DB from a previous server run — release and try again.
 		s.namer.ReleaseGuest(name)
 	}
 
-	return "", oops.Code("GUEST_NAME_EXHAUSTED").
+	return "", charname.Admitted{}, oops.Code("GUEST_NAME_EXHAUSTED").
 		With("retries", maxGuestNameRetries).
 		Errorf("unable to find unique guest name after %d attempts", maxGuestNameRetries)
 }

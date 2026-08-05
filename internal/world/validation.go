@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -90,53 +89,6 @@ func ValidateCharacterName(name string) error {
 	// Kept as a fail-safe so a future leaf-side error type cannot escape
 	// unlabelled.
 	return &ValidationError{Field: "name", Message: err.Error()}
-}
-
-// NormalizeCharacterName converts a character name to Initial Caps format.
-// - Trims leading/trailing whitespace
-// - Collapses consecutive spaces to single space
-// - Capitalizes first letter of each word, lowercases rest
-// - Handles Unicode letters properly (accented characters, Cyrillic, etc.)
-//
-// Example: "alaric" -> "Alaric", "jOhN sMiTh" -> "John Smith", "josé" -> "José"
-//
-// Superseded — treat as Deprecated: use charname.Normalize instead. That
-// function implements the 01-SPEC.md §6.1.1 pipeline (NFKC, Cf stripping,
-// whitespace canonicalization, Unicode full case folding) and returns the
-// display form and the uniqueness key as SEPARATE values.
-//
-// This one conflates them: its per-word title-casing overwrites the
-// capitalization the player chose, and the single string it returns serves as
-// both the display name and the equality key. 01-SPEC.md §6.1.5 records that
-// Phase 2 replaces it.
-//
-// Two things are deliberate here, and both are the same decision:
-//
-//   - The body stays. Its only production caller is
-//     internal/auth/character_service.go, and migrating that caller — together
-//     with the assertions in internal/world/character_test.go and
-//     internal/auth/character_service_test.go that pin this behaviour — belongs
-//     to the plan that owns the writer boundary. Emptying it here would redden
-//     tests this plan does not own.
-//   - The notice is prose rather than a machine-readable "Deprecated:"
-//     paragraph. staticcheck's SA1019 fires at the call site, so the
-//     machine-readable form is only landable in the same change that migrates
-//     that caller. Landing it earlier would force either a lint suppression in
-//     a file this plan must not touch, or a red lint across every intervening
-//     wave. The plan that migrates the caller promotes this to a real
-//     "Deprecated:" paragraph in the same commit.
-func NormalizeCharacterName(name string) string {
-	// Trim and collapse whitespace
-	words := strings.Fields(name)
-	for i, word := range words {
-		if word != "" {
-			// Convert to runes to handle Unicode properly
-			runes := []rune(strings.ToLower(word))
-			runes[0] = unicode.ToUpper(runes[0])
-			words[i] = string(runes)
-		}
-	}
-	return strings.Join(words, " ")
 }
 
 // ValidateDescription checks that a description is valid.

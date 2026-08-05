@@ -446,7 +446,17 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		return oops.Code("CHARACTER_GENESIS_SERVICE_FAILED").Wrap(genErr)
 	}
 
-	characterService, charErr := auth.NewCharacterService(authCharRepo, authLocRepo, genesis)
+	// The character-name gate (IDENT-06/07/09). Composition roots TWO and THREE
+	// share this one value: the runtime CharacterService below and the
+	// GuestService further down. It is built through the same
+	// bootstrapsetup.NewCharacterNameGate the bootstrap root calls, so the two
+	// roots cannot drift onto different block lists.
+	nameGate, gateErr := bootstrapsetup.NewCharacterNameGate(pool, s.cfg.BlockList)
+	if gateErr != nil {
+		return oops.Code("CHARACTER_NAME_GATE_FAILED").Wrap(gateErr)
+	}
+
+	characterService, charErr := auth.NewCharacterService(authCharRepo, authLocRepo, genesis, nameGate)
 	if charErr != nil {
 		return oops.Code("CHARACTER_SERVICE_FAILED").Wrap(charErr)
 	}
@@ -486,6 +496,7 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		authPlayerSessionRepo,
 		genesis,
 		reapingService,
+		nameGate, // composition root THREE: the guest path runs the SAME gate
 	)
 	if guestSvcErr != nil {
 		return oops.Code("GUEST_SERVICE_FAILED").Wrap(guestSvcErr)

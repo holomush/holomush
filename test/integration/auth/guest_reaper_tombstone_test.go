@@ -128,7 +128,7 @@ func TestGuestReaperEmitsCharacterTombstoneClosingD06(t *testing.T) {
 
 	playerID := seedReapGuest(t, pool)
 	char := reapCharFor(t, playerID, "Reaped Guest")
-	require.NoError(t, genesis.Create(ctx, char, "initial_bind_guest"))
+	require.NoError(t, genesis.Create(ctx, char, admitReapName(ctx, t, pool, char.Name), "initial_bind_guest"))
 
 	// Genesis create envelope is on the feed at creation.
 	require.Equal(t, 1, outboxKindCount(t, pool, char.ID, "character_genesis"),
@@ -174,8 +174,8 @@ func TestGuestReaperTombstonesEveryCharacter(t *testing.T) {
 	playerID := seedReapGuest(t, pool)
 	c1 := reapCharFor(t, playerID, "Guest Alpha")
 	c2 := reapCharFor(t, playerID, "Guest Beta")
-	require.NoError(t, genesis.Create(ctx, c1, "initial_bind_guest"))
-	require.NoError(t, genesis.Create(ctx, c2, "initial_bind_guest"))
+	require.NoError(t, genesis.Create(ctx, c1, admitReapName(ctx, t, pool, c1.Name), "initial_bind_guest"))
+	require.NoError(t, genesis.Create(ctx, c2, admitReapName(ctx, t, pool, c2.Name), "initial_bind_guest"))
 
 	require.NoError(t, reaping.DeleteGuestPlayer(ctx, playerID))
 

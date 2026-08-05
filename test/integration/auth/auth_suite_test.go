@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/eventbus"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -148,7 +149,8 @@ func setupTestEnv() (*testEnv, error) {
 		eventStore.Close()
 		return nil, oops.Wrap(err)
 	}
-	guestService, err := auth.NewGuestService(guestAuth, playerRepo, charRepo, playerSessionStore, guestGenesis, guestReaping)
+	suiteNameGate := &charname.Gate{Skeletons: worldpg.NewSkeletonLookup(pool)}
+	guestService, err := auth.NewGuestService(guestAuth, playerRepo, charRepo, playerSessionStore, guestGenesis, guestReaping, suiteNameGate)
 	if err != nil {
 		eventStore.Close()
 		return nil, oops.Wrap(err)
@@ -259,9 +261,57 @@ func createTestCharacter(ctx context.Context, playerID ulid.ULID, name string, l
 	char, err := world.NewCharacter(playerID, name)
 	Expect(err).NotTo(HaveOccurred())
 	char.LocationID = &locationID
-	err = env.charRepo.Create(ctx, char)
+	err = env.charRepo.Create(ctx, char, admitSuiteName(ctx, name))
 	Expect(err).NotTo(HaveOccurred())
 	return char
+}
+
+// admitSuiteName mints a real charname.Admitted for a suite fixture name.
+//
+// charname.Admitted has exactly one constructor by design (plan 02-06), so a
+// fixture runs a real gate. The corpus is repaired first because a freshly
+// migrated database carries the 000001_baseline bootstrap character with no
+// name_skeleton, and the gate correctly refuses to adjudicate against a corpus
+// it cannot verify (D-30).
+func admitSuiteName(ctx context.Context, name string) charname.Admitted {
+	backfillSuiteSkeletons(ctx)
+	gate := &charname.Gate{Skeletons: worldpg.NewSkeletonLookup(env.pool)}
+	admitted, err := gate.Admit(ctx, name)
+	Expect(err).NotTo(HaveOccurred())
+	return admitted
+}
+
+// backfillSuiteSkeletons stands in for plan 02-12's 000055 Go migration.
+func backfillSuiteSkeletons(ctx context.Context) {
+	rows, err := env.pool.Query(ctx, `
+		SELECT id, name FROM characters
+		WHERE normalized_name IS NULL
+		   OR name_skeleton IS NULL
+		   OR name_skeleton_unicode_version IS NULL
+	`)
+	Expect(err).NotTo(HaveOccurred())
+	type pending struct{ id, key, skeleton string }
+	var todo []pending
+	for rows.Next() {
+		var id, name string
+		Expect(rows.Scan(&id, &name)).To(Succeed())
+		normalized, nErr := charname.Normalize(name)
+		if nErr != nil {
+			todo = append(todo, pending{id: id, key: id, skeleton: id})
+			continue
+		}
+		todo = append(todo, pending{id: id, key: normalized.Key, skeleton: charname.Skeleton(normalized.Key)})
+	}
+	Expect(rows.Err()).NotTo(HaveOccurred())
+	rows.Close()
+	for _, p := range todo {
+		_, execErr := env.pool.Exec(ctx, `
+			UPDATE characters
+			SET normalized_name = $2, name_skeleton = $3, name_skeleton_unicode_version = $4
+			WHERE id = $1
+		`, p.id, p.key, p.skeleton, charname.UnicodeVersion)
+		Expect(execErr).NotTo(HaveOccurred())
+	}
 }
 
 // loginPlayer authenticates and creates a player session, returning the raw token and session.
@@ -288,20 +338,35 @@ type authCharRepoAdapter struct {
 	charRepo *worldpg.CharacterRepository
 }
 
-func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
+func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character, name charname.Admitted) error {
 	// Discards the *wmodel.MutationDelta return (05-14 wave-1 compatibility bridge).
-	_, err := a.charRepo.Create(ctx, char)
+	_, err := a.charRepo.Create(ctx, char, name)
 	return err
 }
 
-func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {
+// ExistsByNormalizedName carries the SAME transitional predicate every other
+// site carries; see setup.CharRepoAdapter.ExistsByNormalizedName for why the
+// NULL branch exists.
+//
+// REMOVE with migration 000056; see plan 02-12.
+func (a *authCharRepoAdapter) ExistsByNormalizedName(ctx context.Context, key string, excluding *ulid.ULID) (bool, error) {
+	var excludingArg *string
+	if excluding != nil {
+		s := excluding.String()
+		excludingArg = &s
+	}
 	var exists bool
 	err := a.pool.QueryRow(
 		ctx,
-		"SELECT EXISTS(SELECT 1 FROM characters WHERE LOWER(name) = LOWER($1))", name,
+		`SELECT EXISTS(
+			SELECT 1 FROM characters
+			WHERE (normalized_name = $1
+			       OR (normalized_name IS NULL AND LOWER(name) = LOWER($1)))
+			  AND ($2::text IS NULL OR id::text <> $2)
+		)`, key, excludingArg,
 	).Scan(&exists)
 	if err != nil {
-		return false, oops.Code("CHARACTER_EXISTS_CHECK_FAILED").With("name", name).Wrap(err)
+		return false, oops.Code("CHARACTER_EXISTS_CHECK_FAILED").With("name", key).Wrap(err)
 	}
 	return exists, nil
 }

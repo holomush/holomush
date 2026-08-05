@@ -213,7 +213,17 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 	// startLocationID pointer (resolved after bootstrap completes).
 	authCharRepo := NewCharRepoAdapter(pool, charRepo)
 	authLocRepo := NewLocRepoAdapter(&s.startLocationID, locRepo)
-	characterService, err := auth.NewCharacterService(authCharRepo, authLocRepo, genesis)
+
+	// The character-name gate (IDENT-06/07/09). This is composition root ONE of
+	// three; cmd/holomush builds the other two. All three call the SAME
+	// NewCharacterNameGate, because two struct literals is how two roots end up
+	// polling two different block lists.
+	nameGate, gateErr := NewCharacterNameGate(pool, s.cfg.BlockList)
+	if gateErr != nil {
+		return oops.Code("AUTH_SETUP_FAILED").Wrap(gateErr)
+	}
+
+	characterService, err := auth.NewCharacterService(authCharRepo, authLocRepo, genesis, nameGate)
 	if err != nil {
 		return oops.Code("AUTH_SETUP_FAILED").Wrap(err)
 	}

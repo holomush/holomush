@@ -116,12 +116,12 @@ func BackfillCharacterIdentity(ctx context.Context, db BackfillExecutor) ([]Iden
 	for rows.Next() {
 		var id, name string
 		if scanErr := rows.Scan(&id, &name); scanErr != nil {
-			_ = rows.Close()
+			_ = rows.Close() //nolint:errcheck // the scan already failed; the close error would mask it
 			return nil, oops.Code("CHARACTER_IDENTITY_BACKFILL_SCAN_FAILED").With("id", id).Wrap(scanErr)
 		}
 		normalized, nErr := charname.Normalize(name)
 		if nErr != nil {
-			_ = rows.Close()
+			_ = rows.Close() //nolint:errcheck // the scan already failed; the close error would mask it
 			return nil, oops.Code("CHARACTER_IDENTITY_BACKFILL_NORMALIZE_FAILED").
 				With("id", id).
 				Wrap(nErr)
@@ -133,7 +133,7 @@ func BackfillCharacterIdentity(ctx context.Context, db BackfillExecutor) ([]Iden
 		})
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
-		_ = rows.Close()
+		_ = rows.Close() //nolint:errcheck // the iteration already failed; the close error would mask it
 		return nil, oops.Code("CHARACTER_IDENTITY_BACKFILL_SCAN_FAILED").Wrap(rowsErr)
 	}
 	if closeErr := rows.Close(); closeErr != nil {

@@ -7,6 +7,8 @@ package postgres_test
 
 import (
 	"context"
+	"crypto/rand"
+	"math/big"
 	"sync"
 	"testing"
 	"time"
@@ -36,11 +38,15 @@ import (
 // DIFFERENT normalized names: a Latin form and its whole-script Cyrillic
 // homoglyph, both carrying the same random Latin prefix so the pair is unique
 // against whatever else the shared database holds.
+// The pair must ALSO be single-script on both sides: charname.Gate rejects a
+// cross-script splice (§6.1.2 Mechanism A) before it ever reaches the skeleton
+// step, so a Latin prefix glued to a Cyrillic word never mints a token. Both
+// forms are therefore drawn from the homoglyph alphabet below and transliterated
+// wholesale.
 func confusablePair(t *testing.T) (latin, cyrillic string) {
 	t.Helper()
-	prefix := randomFixtureLetters(8)
-	latin = prefix + " cocoa"
-	cyrillic = prefix + " сосоа" // Cyrillic с о с о а
+	latin = randomHomoglyphWord(8)
+	cyrillic = toCyrillicHomoglyphs(latin)
 
 	require.Equal(t,
 		charname.Skeleton(mustKeyOf(t, latin)),
@@ -50,6 +56,50 @@ func confusablePair(t *testing.T) (latin, cyrillic string) {
 		"the fixture pair must have DIFFERENT normalized names — that is what makes "+
 			"000056's unique index structurally unable to catch it")
 	return latin, cyrillic
+}
+
+// latinHomoglyphAlphabet is the set of lowercase Latin letters that have a
+// Cyrillic homoglyph in the UTS #39 confusables table, so a word built from it
+// transliterates to a skeleton-equal, single-script Cyrillic twin.
+const latinHomoglyphAlphabet = "aceopxy"
+
+// cyrillicHomoglyphs maps each letter of latinHomoglyphAlphabet to its Cyrillic
+// homoglyph.
+var cyrillicHomoglyphs = map[rune]rune{
+	'a': 'а', // U+0430
+	'c': 'с', // U+0441
+	'e': 'е', // U+0435
+	'o': 'о', // U+043E
+	'p': 'р', // U+0440
+	'x': 'х', // U+0445
+	'y': 'у', // U+0443
+}
+
+// randomHomoglyphWord returns n random letters drawn from latinHomoglyphAlphabet.
+func randomHomoglyphWord(n int) string {
+	buf := make([]byte, n)
+	for i := range buf {
+		v, err := rand.Int(rand.Reader, big.NewInt(int64(len(latinHomoglyphAlphabet))))
+		if err != nil {
+			panic("confusable fixture generation failed: " + err.Error())
+		}
+		buf[i] = latinHomoglyphAlphabet[v.Int64()]
+	}
+	return string(buf)
+}
+
+// toCyrillicHomoglyphs transliterates every letter to its Cyrillic homoglyph,
+// producing a WHOLE-script twin rather than a cross-script splice.
+func toCyrillicHomoglyphs(s string) string {
+	out := make([]rune, 0, len(s))
+	for _, r := range s {
+		mapped, ok := cyrillicHomoglyphs[r]
+		if !ok {
+			panic("confusable fixture: no Cyrillic homoglyph for " + string(r))
+		}
+		out = append(out, mapped)
+	}
+	return string(out)
 }
 
 func mustKeyOf(t *testing.T, name string) string {
