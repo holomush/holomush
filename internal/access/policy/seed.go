@@ -485,5 +485,107 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is character, action in ["list_character_directory"], resource is character_directory);`,
 			SeedVersion: 1,
 		},
+
+		// --- Profile visibility: viewer-tier floors (§8.2.1, §8.6) ---
+		//
+		// TERM A of 01-SPEC §8.5.1's conjunction. A profile attribute publishes
+		// only when BOTH decisions permit: the viewer clears the attribute's
+		// tier floor (this family), AND the underlying entity_properties row's
+		// own visibility / visible_to / excluded_from permits the read (the
+		// row-keyed family, further below). The caller ANDs the two. This family
+		// MUST NOT be dropped into the same evaluation as the row-keyed one:
+		// combineDecisions (engine.go) returns the FIRST satisfied permit, so
+		// two permits in one evaluation are ADDITIVE, and a row carrying
+		// visibility='private' or 'admin' would publish to every viewer that
+		// clears its name's floor.
+		//
+		// THE ACTION TOKEN IS THE SEPARATOR. The tier floors carry the action
+		// "read_profile_attribute"; the row-keyed twins carry "read". If both
+		// carried "read" against the same property:<id> resource, each
+		// evaluation would match BOTH families and the conjunction would
+		// silently reduce to the additive shape §8.5.1.1 exists to prevent.
+		// Actions are free-form strings in this engine and the corpus already
+		// carries domain-specific tokens (list_character_directory,
+		// read_unrestricted_history) — this is house style, not a new mechanism.
+		// A future reader seeing two actions on one resource should NOT unify
+		// them.
+		//
+		// SET MEMBERSHIP, NEVER ORDINAL COMPARISON (§8.2.1). The clearing tests
+		// below are transcribed verbatim. The DSL's only string ordering is Go
+		// byte order (compareStrings, dsl/evaluator.go); the three v0.13 tokens
+		// sort in ladder order by alphabetical accident, and each of
+		// "spectator", "unverified" and "visitor" sorts lexicographically ABOVE
+		// "player" — so a >= test would hand a newly appended fourth rung the
+		// highest clearance in the system on the day the token is added, with no
+		// policy edit anywhere. No numeric rank attribute either: that
+		// reintroduces the ordering in a second place that can drift.
+		//
+		// WHOLE-STRING NAME MATCHING, NO GLOB / PREFIX / WILDCARD / CATCH-ALL
+		// (§8.6 totality rule). A name appearing in no list is DENIED, not
+		// defaulted. The earlier residual-`guest` formulation was wrong in the
+		// permissive direction: §7.1 makes a new profile field an INSERT, so the
+		// namespace is open and seed:property-owner-write lets an owner write
+		// any property on their own character — a name-keyed residual permit is
+		// therefore a permit for a name nobody has ever considered, which is
+		// MORE permissive than the engine's own default-deny. Adding a governed
+		// field means adding it to a list here in the same change.
+		//
+		// The media names are eleven exact bytes (§7.3), enumerated literally
+		// below; gallery index 10 is not a member and is denied.
+		//
+		// ONE POLICY PER RUNG THAT HAS AT LEAST ONE SEEDED §8.6 MEMBER — TWO,
+		// NOT THREE. This is a RECORDED DEVIATION from locked decision D-03,
+		// which as originally written mandated three (one per rung). §8.6's
+		// seeded-default column places every governed row at `anonymous` or
+		// `guest`, so the `player` rung has NO seeded member; and the DSL's list
+		// grammar is `'[' @@ (',' @@)* ']'` (dsl/ast.go), which requires at
+		// least one literal — an empty `in []` does not parse. A third policy
+		// cannot be written at all without inventing a member, which would be
+		// worse. The shape D-03 mandates (one policy per rung, literal name
+		// lists, set-membership clearing) is unchanged; only the count follows
+		// from the seeded data. 02-CONTEXT.md's D-03 carries the amendment.
+		//
+		// The clearing test the absent `player`-rung policy would carry, so the
+		// day it becomes writable it does not have to be re-derived:
+		//
+		//	principal.viewer.tier in ["player"]
+		//
+		// TestAPlayerRungTierFloorPolicyIsRequiredExactlyWhenSpec86SeedsAName is
+		// green while that rung has no seeded member and turns RED the moment
+		// one appears.
+		{
+			Name:        "seed:profile-tier-floor-anonymous",
+			Description: "Term A: profile attributes seeded at the anonymous floor are readable by every viewer rung (§8.2.1, §8.6)",
+			DSLText:     `permit(principal is viewer, action in ["read_profile_attribute"], resource is property) when { principal.viewer.tier in ["anonymous", "guest", "player"] && resource.property.name in ["profile.pronouns"] };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:profile-tier-floor-guest",
+			Description: "Term A: profile attributes seeded at the guest floor are readable by guest and player viewers (§8.2.1, §8.6)",
+			DSLText:     `permit(principal is viewer, action in ["read_profile_attribute"], resource is property) when { principal.viewer.tier in ["guest", "player"] && resource.property.name in ["profile.rumors", "profile.currently", "profile.rp_preferences", "profile.timezone", "profile.concept", "profile.species", "profile.age", "profile.faction", "profile.appearance", "profile.personality", "profile.biography", "profile.image.primary", "profile.image.gallery.00", "profile.image.gallery.01", "profile.image.gallery.02", "profile.image.gallery.03", "profile.image.gallery.04", "profile.image.gallery.05", "profile.image.gallery.06", "profile.image.gallery.07", "profile.image.gallery.08", "profile.image.gallery.09"] };`,
+			SeedVersion: 1,
+		},
+
+		// Profile reachability (§8.4.2). A facet ABOVE the fields: it governs
+		// whether the profile resolves at all, and it is evaluated FIRST and
+		// INDEPENDENTLY of every per-field result — a DENY returns §8.7's
+		// not-found-equivalent and no per-field evaluation runs.
+		//
+		// It reads NO resource attributes, so it needs no `profile`-namespace
+		// AttributeProvider: `resource is profile` is a target match on the
+		// parsed resource type (parseEntityType, engine.go). Raising the
+		// reachability floor is an edit to this clearing set and nothing else.
+		//
+		// Not `character:<id>` with action `read`: that pair is already
+		// permitted for character subjects by seed:admin-full-access and
+		// seed:player-character-colocation, and it means "may read the character
+		// entity", which is a different question from "does this character's
+		// profile resolve on the web".
+		{
+			Name:        "seed:profile-reachable",
+			Description: "A viewer at any rung may reach a character's profile (§8.4.2 reachability floor: anonymous)",
+			DSLText:     `permit(principal is viewer, action in ["read"], resource is profile) when { principal.viewer.tier in ["anonymous", "guest", "player"] };`,
+			SeedVersion: 1,
+		},
 	}
 }

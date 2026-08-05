@@ -21,8 +21,9 @@ func TestSeedPoliciesCount(t *testing.T) {
 	// scene reads/writes are now gated solely by the core-scenes plugin's
 	// read-scene-as-* / write-scene-as-participant policies. Phase-1 channels
 	// added seed:plugin-stream-subscribe (48 → 49) — the instance-level write
-	// analogue of seed:plugin-stream-read (HIGH-3).
-	assert.Len(t, seeds, 49, "expected 49 seed policies (40 permit, 9 forbid)")
+	// analogue of seed:plugin-stream-read (HIGH-3). v0.13 phase 2 plan 02-07
+	// added the two viewer-tier floors and profile reachability (49 → 52).
+	assert.Len(t, seeds, 52, "expected 52 seed policies (43 permit, 9 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -79,7 +80,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 40, permitCount, "expected 40 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
+	assert.Equal(t, 43, permitCount, "expected 43 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, +3 v0.13 phase-2 profile visibility: two viewer-tier floors and profile reachability, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
 	assert.Equal(t, 9, forbidCount, "expected 9 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies)")
 }
 
@@ -153,6 +154,14 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:plugin-stream-subscribe",
 		// Character directory (INV-ACCESS-9)
 		"seed:directory-list-characters",
+		// Profile visibility: viewer-tier floors (01-SPEC §8.2.1, §8.6; D-03).
+		// TWO, not three: §8.6 seeds no name at the `player` rung and the DSL's
+		// list grammar forbids an empty `in []`. The conditional re-entry guard
+		// lives in seed_profile_visibility_test.go.
+		"seed:profile-tier-floor-anonymous",
+		"seed:profile-tier-floor-guest",
+		// Profile reachability (01-SPEC §8.4.2)
+		"seed:profile-reachable",
 	}
 
 	seeds := SeedPolicies()
