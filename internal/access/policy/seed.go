@@ -766,5 +766,39 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.property.visibility == "public" && resource.property.parent_type == "character" };`,
 			SeedVersion: 1,
 		},
+
+		// --- Admin sections (EXT-07, §10.4, §10.5) ---
+		//
+		// SCOPED BY RESOURCE TYPE, NOT BY ENUMERATED ID. `resource is
+		// admin_section` is a target match on the parsed resource type, so all
+		// seven registered sections AND EVERY FUTURE SECTION are covered at zero
+		// additional policy cost (EXT-07) — an eighth section needs no policy
+		// edit. seed:directory-list-characters is the in-tree precedent that an
+		// underscore-bearing resource type matches. Type scoping is also what
+		// makes D-06's gate-first-then-distinguish ordering work: an
+		// UNREGISTERED section id is still covered by this policy, so a caller
+		// the gate denies gets DENY_ADMIN_SECTION whether or not the id exists,
+		// and only a caller the gate permits can ever see
+		// DENY_ADMIN_SECTION_UNREGISTERED. An id-enumerated policy would leak
+		// the registry through that difference.
+		//
+		// PLAYER-FLAVORED PRINCIPAL. §10.5's verdict is normative — the admin
+		// gate is evaluated PER PLAYER — and it is what the tree already does at
+		// every site the check exists: PostgresRoleStore.PlayerHasRole reads
+		// roles per player, and the shipped operator path calls
+		// AssertOperatorAdmin with a player id
+		// (internal/admin/auth/operator_admin.go). A character-flavored
+		// principal would put two different answers to "is this caller an admin"
+		// over one table, the operator socket saying yes and the web saying no
+		// for the same human at the same moment.
+		//
+		// BOTH ACTIONS ON THE SECTION RESOURCE: `read` to reach a section,
+		// `write` for a mutation within it (§10.4).
+		{
+			Name:        "seed:admin-section-access",
+			Description: "Admin players may read and write every admin section, scoped by resource type (EXT-07, §10.4, §10.5)",
+			DSLText:     `permit(principal is player, action in ["read", "write"], resource is admin_section) when { "admin" in principal.player.roles };`,
+			SeedVersion: 1,
+		},
 	}
 }

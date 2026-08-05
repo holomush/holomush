@@ -23,9 +23,10 @@ func TestSeedPoliciesCount(t *testing.T) {
 	// added seed:plugin-stream-subscribe (48 → 49) — the instance-level write
 	// analogue of seed:plugin-stream-read (HIGH-3). v0.13 phase 2 plan 02-07
 	// added the two viewer-tier floors and profile reachability (49 → 52), then
-	// the five viewer read twins and the PROFILE-11 property widening (52 → 58);
-	// one of the five twins is a forbid (9 → 10).
-	assert.Len(t, seeds, 58, "expected 58 seed policies (48 permit, 10 forbid)")
+	// the five viewer read twins and the PROFILE-11 property widening (52 → 58)
+	// — one of the five twins is a forbid (9 → 10) — and seed:admin-section-access
+	// (58 → 59).
+	assert.Len(t, seeds, 59, "expected 59 seed policies (49 permit, 10 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -82,7 +83,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 48, permitCount, "expected 48 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, +3 v0.13 phase-2 profile visibility: two viewer-tier floors and profile reachability, +4 viewer read twins, +1 PROFILE-11 property widening, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
+	assert.Equal(t, 49, permitCount, "expected 49 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, +3 v0.13 phase-2 profile visibility: two viewer-tier floors and profile reachability, +4 viewer read twins, +1 PROFILE-11 property widening, +1 EXT-07 admin-section access, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
 	assert.Equal(t, 10, forbidCount, "expected 10 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies + 1 v0.13 phase-2 seed:viewer-property-restricted-excluded)")
 }
 
@@ -174,6 +175,8 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		// PROFILE-11 widening (D-10, D-11). The character half
 		// (seed:profile-public-read-character) is DEFERRED TO PHASE 4 by D-29.
 		"seed:profile-public-read-property",
+		// Admin sections (EXT-07, 01-SPEC §10.4, §10.5)
+		"seed:admin-section-access",
 	}
 
 	seeds := SeedPolicies()

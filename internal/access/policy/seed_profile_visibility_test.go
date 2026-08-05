@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/dsl"
+	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
 // --- 01-SPEC §8.6, transcribed ---
@@ -720,4 +722,126 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	_, exists := seedPolicyByName("seed:profile-public-read-character")
 	assert.False(t, exists,
 		"seed:profile-public-read-character is DEFERRED TO PHASE 4 by D-29 and MUST NOT be seeded here")
+}
+
+// --- Admin sections (EXT-07, §10.4, §10.5) ---
+
+func TestSeedAdminSectionAccessIsTypeScopedAndPlayerFlavored(t *testing.T) {
+	t.Parallel()
+
+	s := requireSeedPolicy(t, "seed:admin-section-access")
+
+	const want = `permit(principal is player, action in ["read", "write"], resource is admin_section) ` +
+		`when { "admin" in principal.player.roles };`
+	assert.Equal(t, want, s.DSLText)
+
+	compiled, _, err := NewCompiler(emptySchema()).Compile(s.DSLText)
+	require.NoError(t, err)
+
+	require.NotNil(t, compiled.Target.PrincipalType)
+	assert.Equal(t, "player", *compiled.Target.PrincipalType,
+		"§10.5's verdict is normative — the admin gate is evaluated PER PLAYER. A character-flavored "+
+			"principal would put two different answers to \"is this caller an admin\" over one table, the "+
+			"operator socket saying yes and the web saying no for the same human at the same moment.")
+
+	require.NotNil(t, compiled.Target.ResourceType)
+	assert.Equal(t, "admin_section", *compiled.Target.ResourceType,
+		"scoped by resource TYPE, so all seven registered sections and every future section are covered "+
+			"at zero additional policy cost (EXT-07)")
+
+	assert.Nil(t, compiled.Target.ResourceExact,
+		"an enumerated admin_section:<id> would leave an eighth section uncovered — the exact gap EXT-07 closes")
+	assert.NotContains(t, s.DSLText, "admin_section:",
+		"no literal section id may appear in the DSL — the scoping is by type")
+
+	assert.Equal(t, []string{"read", "write"}, compiled.Target.ActionList,
+		"§10.4: `read` to reach a section, `write` for a mutation within it")
+}
+
+// --- Attribute-reference coverage ---
+
+// phase02SeedNames is the complete set of seed policies plan 02-07 adds. Every
+// attribute reference in each of them is resolved against a registered
+// provider's declared schema below.
+var phase02SeedNames = []string{
+	"seed:profile-tier-floor-anonymous",
+	"seed:profile-tier-floor-guest",
+	"seed:profile-reachable",
+	"seed:viewer-property-public-read",
+	"seed:viewer-property-private-read",
+	"seed:viewer-property-admin-read",
+	"seed:viewer-property-restricted-visible-to",
+	"seed:viewer-property-restricted-excluded",
+	"seed:profile-public-read-property",
+	"seed:admin-section-access",
+}
+
+// TestEveryAttributeAnewSeedReferencesIsSuppliedByARegisteredProvider is the
+// mechanical guard against the whole class of defect cross-AI review found on
+// this plan.
+//
+// A policy naming an attribute NOTHING supplies denies forever, silently: the
+// key is simply absent from the bag, and a missing key evaluates FALSE for
+// every operator (dsl/evaluator.go). No behavioural test can distinguish that
+// from a policy that is correctly denying — the visible symptom is a bare
+// profile, which §8.5.1.1 records as the symptom that provokes the forbidden
+// repair of dropping term B. So the reference set is checked against the
+// providers' DECLARED schemas rather than assumed.
+//
+// The schemas come from the REAL providers, not from a transcription: a
+// transcribed expectation would go stale in the safe-looking direction the day
+// a provider drops a key.
+func TestEveryAttributeAnewSeedReferencesIsSuppliedByARegisteredProvider(t *testing.T) {
+	t.Parallel()
+
+	// The providers BuildABACStack registers that this plan's seeds read.
+	supplied := map[string]map[string]types.AttrType{
+		"viewer":   attribute.NewViewerTierProvider().Schema().Attributes,
+		"player":   attribute.NewPlayerAttributeProvider(nil).Schema().Attributes,
+		"property": attribute.NewPropertyProvider(nil, nil, nil).Schema().Attributes,
+	}
+
+	for _, name := range phase02SeedNames {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			parsed := parseSeed(t, requireSeedPolicy(t, name))
+			if parsed.Conditions == nil {
+				return
+			}
+
+			for _, ref := range collectAttrRefs(parsed.Conditions) {
+				// A reference is `<principal|resource>.<namespace>.<key>`;
+				// collectAttrRefs reports namespace="principal"|"resource" and
+				// key="<namespace>.<key>".
+				namespace, key, ok := strings.Cut(ref.key, ".")
+				require.True(t, ok,
+					"%s references %s.%s, which names no attribute namespace",
+					name, ref.namespace, ref.key)
+
+				attrs, known := supplied[namespace]
+				require.True(t, known,
+					"%s references %s.%s.%s, but no provider in this plan's set supplies the %q "+
+						"namespace — the attribute would be absent from the bag and the policy would "+
+						"deny forever, silently",
+					name, ref.namespace, namespace, key, namespace)
+
+				_, declared := attrs[key]
+				assert.True(t, declared,
+					"%s references %s.%s.%s, which the real %s provider does NOT declare. "+
+						"A missing key evaluates FALSE for every operator, so this policy can only "+
+						"ever deny — with no error and no failing behavioural test. Supplied keys: %v",
+					name, ref.namespace, namespace, key, namespace, sortedAttrKeys(attrs))
+			}
+		})
+	}
+}
+
+func sortedAttrKeys(m map[string]types.AttrType) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
