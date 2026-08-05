@@ -399,8 +399,29 @@ var _ = Describe("Seed Policy Behavior", func() {
 			Expect(decision.Effect()).To(Equal(types.EffectAllow))
 		})
 
-		It("S3: denies reading a public property on a different-location parent", func() {
+		// S3 asserted the PRE-WIDENING posture: a public property on a
+		// different-location CHARACTER was denied. v0.13 phase 2 (PROFILE-11,
+		// 02-CONTEXT.md D-10/D-11) deliberately reverses that.
+		// seed:profile-public-read-property permits it, and the grid-path
+		// consequence is INTENDED: `public` means public on the grid as well as
+		// the web, and the colocation restriction was the anomaly. Plan 02-10's
+		// audit exists to find rows that were relying on colocation as de-facto
+		// privacy, and the fix for any such row is to change THAT ROW's
+		// `visibility`, never to narrow the policy.
+		It("S3: allows reading a public property on a different-location CHARACTER (PROFILE-11 widening, D-10/D-11)", func() {
 			propID := insertProperty("character", targetID, "bio", "secret", "public", nil, nil, nil)
+			decision := evalAccess("character:"+charID1.String(), "read", "property:"+propID.String())
+			Expect(decision.Effect()).To(Equal(types.EffectAllow))
+		})
+
+		// The paired control that keeps S3 from reading as "public is now
+		// readable from anywhere, full stop". seed:profile-public-read-property
+		// is guarded on parent_type == "character", so a public property on a
+		// different-location LOCATION parent is STILL denied — only
+		// seed:property-public-read can reach it, and that one is still
+		// colocation-gated. Drop the parent_type guard and this goes RED.
+		It("S3b: still denies reading a public property on a different-location LOCATION (the widening's parent_type guard)", func() {
+			propID := insertProperty("location", locID2, "greeting", "secret", "public", nil, nil, nil)
 			decision := evalAccess("character:"+charID1.String(), "read", "property:"+propID.String())
 			Expect(decision.Effect()).To(Equal(types.EffectDefaultDeny))
 		})
