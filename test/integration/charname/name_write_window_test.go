@@ -39,13 +39,38 @@ import (
 // CREATE UNIQUE INDEX. That order is the migration's load-bearing property —
 // Postgres treats NULLs as distinct for uniqueness, so an index created over an
 // unbackfilled nullable column succeeds while enforcing nothing.
+//
+// # Why one transaction
+//
+// Both statements run in a SINGLE transaction, which is what goose already does
+// for 000056 in production: goose wraps each migration in a transaction by
+// default and 000056 carries no NO TRANSACTION annotation. Executing them on
+// separate connections would model a migration this repository does not have —
+// and would leave the fixture half-migrated when the index fails, with
+// normalized_name permanently NOT NULL for the rest of the spec. Rolling back
+// is what lets each spec assert the schema is left at 000055 rather than
+// half-constrained, which is the claim this whole file exists to prove.
+//
+// The migration header's refusal to "merge the backfill and the constraint into
+// one transaction" is a different question — that is about 000055's unbounded
+// backfill holding ACCESS EXCLUSIVE, not about 000056's own two statements.
 func applyUniqueIndexMigration(ctx context.Context, pool *pgxpool.Pool) (notNullErr, indexErr error) {
-	if _, err := pool.Exec(ctx,
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err, nil
+	}
+	// Rollback is a no-op once the tx has committed.
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx,
 		`ALTER TABLE characters ALTER COLUMN normalized_name SET NOT NULL`); err != nil {
 		return err, nil
 	}
-	if _, err := pool.Exec(ctx,
+	if _, err := tx.Exec(ctx,
 		`CREATE UNIQUE INDEX characters_normalized_name_key ON characters (normalized_name)`); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -134,7 +159,12 @@ var _ = Describe("The 000055 -> 000056 write window fails loudly, never silently
 		// violation uses; the SQLSTATE is the stable half.
 		Expect(indexErr.Error()).To(ContainSubstring("23505"))
 		Expect(indexErr.Error()).To(ContainSubstring("characters_normalized_name_key"))
+
+		// The schema is left at 000055, not half-constrained. The SET NOT NULL
+		// SUCCEEDED here, so this holds only because the failing index rolls the
+		// whole migration back — exactly as goose does in production.
 		Expect(uniqueIndexExists(ctx, pool)).To(BeFalse())
+		Expect(normalizedNameIsNullable(ctx, pool)).To(BeTrue())
 	})
 })
 
