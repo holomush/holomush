@@ -47,6 +47,14 @@ type characterNameEnv struct {
 	gate *charname.Gate
 	repo characterRenamer
 
+	// gameID is the world game id this database resolved at boot, read from
+	// holomush_system_info.game_id — never invented here. The outbox relay
+	// leases on it (internal/world/postgres/outbox_lease.go filters
+	// `WHERE game_id = $1`, and the feed-counter generation check does the
+	// same), so an envelope written under any other value commits, allocates a
+	// feed position, and is then delivered to nothing.
+	gameID string
+
 	// db is a database/sql handle on the same database. It exists because
 	// BackfillCharacterIdentity takes a database/sql executor — its only other
 	// caller is the goose Go migration, which runs on a *sql.Tx — so the
@@ -128,12 +136,68 @@ func defaultCharacterNameEnvFactory(ctx context.Context) (*characterNameEnv, fun
 		return nil, nil, oops.With("command", "character name").Wrap(err)
 	}
 
+	gameID, err := resolveWorldGameID(ctx, settings)
+	if err != nil {
+		teardown()
+		return nil, nil, err
+	}
+
 	return &characterNameEnv{
-		pool: pool,
-		gate: gate,
-		repo: worldpostgres.NewCharacterRepository(pool),
-		db:   db,
+		pool:   pool,
+		gate:   gate,
+		repo:   worldpostgres.NewCharacterRepository(pool),
+		db:     db,
+		gameID: gameID,
 	}, teardown, nil
+}
+
+// worldGameIDKey is the holomush_system_info key the world game id lives under.
+// internal/store.InitGameID writes it at boot; this reads it.
+const worldGameIDKey = "game_id"
+
+// resolveWorldGameID reads the database's own WORLD-FEED game id and FAILS if
+// there is not one.
+//
+// # Not to be confused with cmd_audit.go's resolveGameID
+//
+// That one resolves the game id used to build an AUDIT DLQ subject, and it
+// deliberately returns "" when nothing is configured so the caller can fall
+// back to the legacy single-game `internal.main.audit.dlq` shape. Reusing it
+// here would import that empty-string fallback into the world feed, where an
+// unresolved id is not a legacy shape but a silently undeliverable envelope.
+// The two ids also have different sources in general — the event-bus game id
+// defaults to the literal "main" (cmd/holomush/core.go), which is precisely the
+// value that made this command write orphaned envelopes.
+//
+// It deliberately calls GetSystemInfo rather than InitGameID. InitGameID
+// GENERATES and persists a fresh ULID when the key is absent, which is right at
+// server boot and wrong here twice over: minting a world identity as a side
+// effect of renaming a character is a surprising write for an operator tool,
+// and a database with no game id has never booted a server, so it has no world
+// feed for this envelope to join. Refusing is the honest answer.
+//
+// There is no fallback and there must not be one. A literal default — "main",
+// the empty string, anything — reproduces the exact defect this replaces: the
+// character row commits, the CLI prints success, and the envelope is filtered
+// out by the relay's game-id predicate and delivered to nothing. A wrong id is
+// strictly worse than a refusal, because only the refusal is visible.
+func resolveWorldGameID(ctx context.Context, settings *store.PostgresEventStore) (string, error) {
+	gameID, err := settings.GetSystemInfo(ctx, worldGameIDKey)
+	if err != nil {
+		return "", oops.Code("CHARACTER_NAME_CLI_GAME_ID_UNRESOLVED").
+			With("command", "character name").
+			With("key", worldGameIDKey).
+			Hint("this database has no world game id; it has never been booted by a holomush server, " +
+				"so a rename here would write an envelope no relay can deliver").
+			Wrap(err)
+	}
+	if gameID == "" {
+		return "", oops.Code("CHARACTER_NAME_CLI_GAME_ID_UNRESOLVED").
+			With("command", "character name").
+			With("key", worldGameIDKey).
+			Errorf("holomush_system_info.%s is present but empty", worldGameIDKey)
+	}
+	return gameID, nil
 }
 
 // NewCharacterCmd returns the `holomush character` parent command.
@@ -338,7 +402,10 @@ refuses is never written and the command exits non-zero.`,
 					With("submitted_name", args[1]).Wrap(err)
 			}
 
-			if _, err := env.repo.Rename(ctx, characterID, admitted, 0, characterRenameIntent(characterID)); err != nil {
+			if _, err := env.repo.Rename(
+				ctx, characterID, admitted, 0,
+				characterRenameIntent(env.gameID, characterID),
+			); err != nil {
 				return oops.With("character_id", characterID.String()).Wrap(err)
 			}
 
@@ -362,9 +429,13 @@ refuses is never written and the command exits non-zero.`,
 // inside its own transaction, so this command cannot produce a name change the
 // world feed never saw. The actor is "operator" rather than "system" so an
 // audit reader can tell a console rename from an automated one.
-func characterRenameIntent(characterID ulid.ULID) wmodel.EnvelopeIntent {
+//
+// gameID is RESOLVED and passed in — see resolveGameID. It must never be a
+// literal: atomicity with the row buys nothing if the envelope lands under an
+// id the relay does not lease.
+func characterRenameIntent(gameID string, characterID ulid.ULID) wmodel.EnvelopeIntent {
 	return wmodel.NewEnvelopeIntent(wmodel.IntentParams{
-		GameID:        "main",
+		GameID:        gameID,
 		Kind:          "character_updated",
 		SchemaVersion: 1,
 		Actor:         "operator",

@@ -38,6 +38,16 @@ type characterNameCLIEnv struct {
 	connStr string
 	pool    *pgxpool.Pool
 	ctx     context.Context //nolint:containedctx // one per spec, torn down in DeferCleanup
+
+	// gameID is the database's OWN resolved world game id, seeded the way a
+	// booted server leaves it: internal/store.InitGameID stores a fresh ULID
+	// under holomush_system_info.game_id when the key is absent
+	// (internal/store/postgres.go). It is deliberately a ULID and deliberately
+	// NOT any memorable literal — an envelope written under an invented id is
+	// filtered out by the outbox relay's `WHERE game_id = $1` and is never
+	// delivered, and a test that seeded a guessable value could not tell the
+	// difference.
+	gameID string
 }
 
 // newCharacterNameCLIEnv brings up a fresh database with the whole migration
@@ -57,7 +67,13 @@ func newCharacterNameCLIEnv(t testing.TB) *characterNameCLIEnv {
 
 	GinkgoT().Setenv("DATABASE_URL", connStr)
 
-	return &characterNameCLIEnv{connStr: connStr, pool: pool, ctx: ctx}
+	gameID := ulid.Make().String()
+	_, err = pool.Exec(ctx,
+		`INSERT INTO holomush_system_info (key, value) VALUES ('game_id', $1)
+		 ON CONFLICT (key) DO UPDATE SET value = $1`, gameID)
+	Expect(err).NotTo(HaveOccurred())
+
+	return &characterNameCLIEnv{connStr: connStr, pool: pool, ctx: ctx, gameID: gameID}
 }
 
 // seedCharacter inserts a player and character by direct SQL, supplying the
@@ -97,6 +113,30 @@ func (e *characterNameCLIEnv) outboxRowCount(id ulid.ULID) int {
 	return n
 }
 
+// outboxGameIDs returns the game_id of every outbox envelope naming the given
+// aggregate.
+//
+// This is the column the relay leases on — internal/world/postgres/outbox_lease.go
+// filters `WHERE game_id = $1`, and the feed-counter generation check does the
+// same — so an envelope carrying the wrong id is committed, counted, and never
+// delivered to anything.
+func (e *characterNameCLIEnv) outboxGameIDs(id ulid.ULID) []string {
+	GinkgoHelper()
+	rows, err := e.pool.Query(e.ctx,
+		`SELECT game_id FROM outbox WHERE aggregate_id = $1 ORDER BY feed_position`, id.String())
+	Expect(err).NotTo(HaveOccurred())
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var gameID string
+		Expect(rows.Scan(&gameID)).To(Succeed())
+		out = append(out, gameID)
+	}
+	Expect(rows.Err()).NotTo(HaveOccurred())
+	return out
+}
+
 // runHolomush drives the production command tree and returns its error plus
 // everything it printed.
 func runHolomush(args ...string) (string, error) {
@@ -130,6 +170,15 @@ var _ = Describe("holomush character name (operator resolution CLI)", func() {
 			// the envelope inside its own transaction.
 			Expect(env.outboxRowCount(charID)).To(Equal(before+1),
 				"the operator rename must commit an outbox envelope alongside the row")
+
+			// ...and under the database's OWN game id. An envelope-atomic write
+			// under a phantom id satisfies INV-WORLD-4 structurally and defeats
+			// it in practice: the row commits, the CLI prints success, and the
+			// relay — which leases `WHERE game_id = $1` — never sees it. The
+			// envelope is never published, never pruned, and it allocates a
+			// stray world_feed_counter row for a game that does not exist.
+			Expect(env.outboxGameIDs(charID)).To(ConsistOf(env.gameID),
+				"the rename envelope must carry the resolved world game id, not an invented literal")
 		})
 
 		It("refuses a replacement the gate rejects, exits non-zero, and writes nothing", func() {

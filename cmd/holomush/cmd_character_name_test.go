@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -204,4 +205,51 @@ func TestDuplicateReportSaysNothingIsWrongWhenThereAreNoCollisions(t *testing.T)
 	assert.Contains(t, got, "No character-name collisions found")
 	assert.NotContains(t, got, "NORMALIZED-NAME")
 	assert.NotContains(t, got, "SKELETON")
+}
+
+// TestCharacterRenameIntentCarriesTheSuppliedGameID pins CR-01's fix at the
+// unit level.
+//
+// The load-bearing proof is the integration assertion on the committed outbox
+// row's game_id; this is the cheap guard that fails in the untagged lane the
+// moment the value stops being threaded through.
+func TestCharacterRenameIntentCarriesTheSuppliedGameID(t *testing.T) {
+	characterID := ulid.Make()
+	resolved := ulid.Make().String()
+
+	intent := characterRenameIntent(resolved, characterID)
+
+	assert.Equal(t, resolved, intent.GameID,
+		"the envelope must carry the resolved world game id — the outbox relay leases on it")
+	assert.Equal(t, characterID, intent.AggregateID)
+	assert.Equal(t, "operator", intent.Actor)
+
+	// Paired control: a DIFFERENT resolved id produces a different envelope, so
+	// the assertion above cannot pass against a hardcoded literal that happens
+	// to match.
+	other := characterRenameIntent(ulid.Make().String(), characterID)
+	assert.NotEqual(t, intent.GameID, other.GameID)
+}
+
+// TestCharacterNameCommandHardcodesNoGameID is the regression guard for the
+// exact defect: `GameID: "main"`.
+//
+// A source scan rather than a behavioural test, because the failure mode is a
+// future edit reintroducing a literal at a call site this package's tests do
+// not reach. The value must always arrive from resolveWorldGameID.
+func TestCharacterNameCommandHardcodesNoGameID(t *testing.T) {
+	body, err := os.ReadFile("cmd_character_name.go")
+	require.NoError(t, err)
+
+	for _, line := range strings.Split(string(body), "\n") {
+		code := strings.TrimSpace(line)
+		if strings.HasPrefix(code, "//") {
+			continue // the doc comments explain the defect and name the literal
+		}
+		if !strings.Contains(code, "GameID:") {
+			continue
+		}
+		assert.Contains(t, code, "gameID",
+			"GameID must be assigned from the resolved value, never a literal: %q", code)
+	}
 }
