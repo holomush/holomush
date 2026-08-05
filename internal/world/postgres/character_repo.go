@@ -31,7 +31,14 @@ type CharacterRepository struct {
 }
 
 // NewCharacterRepository creates a new PostgreSQL character repository.
+// Panics if pool is nil: a nil pool is a programmer error at wiring time, not
+// a recoverable runtime condition. This matches NewBindingRepository and
+// NewReapingGuard, whose doc comments already name this repository as following
+// the pattern.
 func NewCharacterRepository(pool *pgxpool.Pool) *CharacterRepository {
+	if pool == nil {
+		panic("NewCharacterRepository: pool must not be nil")
+	}
 	return &CharacterRepository{pool: pool, outbox: NewOutboxStore(pool)}
 }
 
