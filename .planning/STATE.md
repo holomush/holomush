@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: abac-schema-vocabulary
 status: executing
-stopped_at: Completed 02-09-PLAN.md
-last_updated: "2026-08-05T03:40:06.872Z"
+stopped_at: Completed 02-12-PLAN.md
+last_updated: "2026-08-05T04:49:57.945Z"
 last_activity: 2026-08-04
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 23
+  completed_plans: 24
   percent: 29
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 (abac-schema-vocabulary) — EXECUTING
-Plan: 11 of 13
+Plan: 12 of 13
 Status: Ready to execute
-Progress: [█████████░] 88% (1/6 phases)
+Progress: [█████████░] 92% (1/6 phases)
 Last activity: 2026-08-04 — Phase 02 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -237,6 +237,7 @@ no action needed.
 | Phase 02 P07 | 118min | 4 tasks | 9 files |
 | Phase 02 P08 | 20min | 3 tasks | 3 files |
 | Phase 02 P09 | 95min | 3 tasks | 9 files |
+| Phase 02 P12 | ~200min | 3 tasks | 45 files |
 
 ## Accumulated Context
 
@@ -470,6 +471,10 @@ the next milestone yet.
 - [Phase ?]: 02-09: section.ValidateAtBoot is step 1 of BootstrapSubsystem.Prepare (before the orphan check, no DB needed) — without the call site D-09 would have been satisfied by a unit test only and a zero-valued descriptor would ship
 - [Phase ?]: 02-09: error codes are inline oops.Code literals (adminauth precedent) rather than exported constants, forced by the plan's line-ordering criterion; taxonomy documented on AssertSectionAccess for Phase 4/6
 - [Phase ?]: 02-09: ADMIN_SECTION_EVALUATION_FAILED added under Rule 2 (§8.10 infra failure must not be flattened into a denial) but is UNTESTED — the suite uses only the real engine; Phase 4 owns the seam
+- [Phase ?]: 02-12: migration 000055's Down is a real revert (ClearCharacterIdentity), not an error-returning stub — an erroring Down makes every version below 55 unreachable and wedged 15 in-tree specs
+- [Phase ?]: 02-12: Go migrations are invisible to the .sql-only embed glob, so internal/store/go_migration_census.go merges them into the version helpers — without it the adopt gate seeds a goose ledger with a hole at 55
+- [Phase ?]: 02-12: the UNIQUE index is isolated with direct INSERTs, not through CharacterService.Create — the ExistsByNormalizedName pre-check and 02-06's advisory lock both sit above it and are present in either schema
+- [Phase ?]: 02-12: INV-WORLD-4's 'exactly TWO sanctioned out-of-world writers' is now false (the operator rename CLI is a third); the registry text amendment is owned by plan 02-11
 
 ### Pending Todos
 
@@ -517,11 +522,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-05T03:39:56.875Z
+Last session: 2026-08-05T04:49:57.931Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02-09-PLAN.md
+Stopped at: Completed 02-12-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
