@@ -578,6 +578,102 @@ race with a deterministic reproduction, which is precisely the case
 
 **Commit:** `8e98127d3`.
 
+## Code-review fixes: CR-01 and WR-01
+
+`gsd-code-reviewer` found two defects that this plan's own tests could not
+catch. Both are fixed with a RED-then-GREEN proof; the rest of the review is
+being tracked separately.
+
+### CR-01 (CRITICAL) — the rename CLI wrote its envelope under a phantom game id
+
+`characterRenameIntent` hardcoded `GameID: "main"`. Nothing in this system uses
+that as a **world** game id: the live value is resolved at boot by
+`store.InitGameID`, which returns `holomush_system_info.game_id` and
+auto-generates a fresh ULID when absent, and `--game-id` defaults to `""`. The
+`"main"` literal in `cmd/holomush/core.go` is the **event-bus** game id — a
+different thing, and conflating the two is what produced the bug.
+
+**Why critical rather than cosmetic.** The outbox relay leases on the column
+(`internal/world/postgres/outbox_lease.go` filters `WHERE game_id = $1`, and the
+feed-counter generation check does the same). So the envelope committed,
+allocated a feed position and a stray `world_feed_counter` row for a game that
+does not exist, and was then delivered to nothing — while the character row
+landed and the CLI printed `renamed … to "…"`. Amending `INV-WORLD-4` from TWO
+to THREE sanctioned writers **specifically to cover this command** left it
+conformant structurally and defeated in practice.
+
+**Why the tests missed it.** The unit test drove a fake renamer, and the
+integration spec asserted only that an outbox row EXISTED — never which game it
+belonged to. Presence was necessary and nowhere near sufficient.
+
+**Fix.** The id is read at command start and the command **refuses** when it is
+absent. `GetSystemInfo`, deliberately **not** `InitGameID`: minting a world
+identity as a side effect of renaming a character is a surprising write for an
+operator tool, and a database with no game id has never booted a server, so it
+has no feed for the envelope to join. There is no fallback and there must not be
+one — a wrong id is strictly worse than a refusal, because only the refusal is
+visible. Named `resolveWorldGameID` to avoid `cmd_audit.go`'s `resolveGameID`,
+whose deliberate `""`-on-absent fallback serves the legacy audit-DLQ subject
+shape and would re-import the very defect being removed.
+
+**Proof.** The integration spec now seeds the database's own resolved game id (a
+ULID, as a booted server leaves it) and asserts the committed row carries it:
+
+```
+task test:int -- ./cmd/holomush/ -ginkgo.focus='renames a character through the real command tree'
+```
+
+**Exit 201** before the fix, naming the defect exactly:
+
+```
+[FAILED] the rename envelope must carry the resolved world game id, not an invented literal
+Expected <[]string | len:1>: ["main"]
+to consist of <[]string | len:1>: ["01KZ9TVXAZ900W18Z4EM1G3Y07"]
+```
+
+**Exit 0** after. Two unit guards back it: one pins the propagation with a
+paired control, and a source scan rejects any future `GameID:` literal in the
+command.
+
+### WR-01 — guest creation reported a corpus outage as name exhaustion
+
+`acquireUniqueName` discarded every `Gate.Admit` refusal and retried. That is
+right for a **per-candidate** verdict — a block-list hit or a skeleton collision,
+which the next generated name can clear — but `Gate.Admit` also returns two
+refusals that are properties of the **corpus** and reject every candidate
+identically: `NAME_SKELETON_LOOKUP_FAILED` (the corpus query failed) and
+`NAME_SKELETON_UNVERIFIABLE` (the fail-closed window between `000054` and
+`000055` this plan itself documents). Under either, all ten attempts burned and
+the caller got `GUEST_NAME_EXHAUSTED` — "unable to find unique guest name" —
+with the real error discarded and **nothing logged**, pointing an operator at
+the name generator when the cause was the database. The sibling
+`ExistsByNormalizedName` error two lines below was already surfaced, so the
+asymmetry was clearly unintentional.
+
+**Fix.** Corpus faults abort the loop immediately and carry the gate's own code
+out — `errutil.AssertErrorCode` and `oops` resolve the deepest chain code
+(#4902), so the operator sees the real cause rather than a generic wrapper.
+Per-candidate refusals still retry and still exhaust with the existing
+caller-visible contract, but are logged at debug and the last refusal's code is
+attached to `GUEST_NAME_EXHAUSTED`, previously a bare count.
+
+**Proof.** Both regressions run RED against the pre-fix loop (**exit 201** — the
+corpus cases on the single-attempt mock expectation, the control on the missing
+`last_refusal_code` context) and GREEN after. The control —
+`TestGuestServiceStillReportsGenuineNameExhaustion` — is what keeps the fix from
+having been "abort on every refusal".
+
+### Gates
+
+| Check | Result |
+|---|---|
+| `task test` | **exit 0** |
+| `task lint` | **exit 0** |
+| `task fmt:check` | **exit 0** |
+| `task test:int` (full) | **exit 0** — 11,475 tests, 7 skipped, 159.7s |
+
+**Commits:** `1eea13ef6` (CR-01), `45057d779` (WR-01).
+
 ## Self-Check: PASSED
 
 All eleven created artifacts exist on disk. All three commits (`7c71a8903`,
