@@ -37,9 +37,9 @@ type GuestNamer interface {
 // genesis envelope atomically (the compile-level fence, 05-15). Only the
 // name-uniqueness read remains.
 type GuestCharacterRepository interface {
-	// ExistsByNormalizedName is the transitional §6.1.1 uniqueness pre-check;
-	// see CharRepoAdapter.ExistsByNormalizedName for why the NULL branch exists
-	// and when it is removed. excluding is nil on every creation path.
+	// ExistsByNormalizedName is the §6.1.1 uniqueness pre-check — a UX
+	// affordance, not the guarantee, which is migration 000056's UNIQUE index.
+	// excluding is nil on every creation path.
 	ExistsByNormalizedName(ctx context.Context, key string, excluding *ulid.ULID) (bool, error)
 }
 

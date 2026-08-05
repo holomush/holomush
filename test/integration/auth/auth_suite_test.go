@@ -344,11 +344,9 @@ func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character,
 	return err
 }
 
-// ExistsByNormalizedName carries the SAME transitional predicate every other
-// site carries; see setup.CharRepoAdapter.ExistsByNormalizedName for why the
-// NULL branch exists.
-//
-// REMOVE with migration 000056; see plan 02-12.
+// ExistsByNormalizedName carries the SAME predicate every other site carries;
+// see setup.CharRepoAdapter.ExistsByNormalizedName. The transitional NULL branch
+// was removed with migration 000056.
 func (a *authCharRepoAdapter) ExistsByNormalizedName(ctx context.Context, key string, excluding *ulid.ULID) (bool, error) {
 	var excludingArg *string
 	if excluding != nil {
@@ -360,8 +358,7 @@ func (a *authCharRepoAdapter) ExistsByNormalizedName(ctx context.Context, key st
 		ctx,
 		`SELECT EXISTS(
 			SELECT 1 FROM characters
-			WHERE (normalized_name = $1
-			       OR (normalized_name IS NULL AND LOWER(name) = LOWER($1)))
+			WHERE normalized_name = $1
 			  AND ($2::text IS NULL OR id::text <> $2)
 		)`, key, excludingArg,
 	).Scan(&exists)

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/internal/world/wmodel"
@@ -342,9 +343,11 @@ func createTestCharacter(ctx context.Context, t *testing.T, name string) ulid.UL
 
 	// Create the character
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO characters (id, player_id, name, location_id, created_at)
-		VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
-	`, charID.String(), playerID.String(), name, locationID.String())
+		INSERT INTO characters (id, player_id, name, location_id, created_at,
+		                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, $5, $6, $7)
+	`, append([]any{charID.String(), playerID.String(), name, locationID.String()},
+		chartest.Columns(name)...)...)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

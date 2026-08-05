@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -69,9 +70,13 @@ func seedCharacter(t *testing.T, ctx context.Context, pool *pgxpool.Pool) ulid.U
 	require.NoError(t, err)
 
 	characterID := idgen.New()
+	// Unique per fixture row: characters.normalized_name is UNIQUE as of 000056.
+	heroName := "Hero " + characterID.String()[20:]
 	_, err = pool.Exec(ctx,
-		`INSERT INTO characters (id, player_id, name) VALUES ($1, $2, $3)`,
-		characterID.String(), playerID.String(), "Hero")
+		`INSERT INTO characters (id, player_id, name, normalized_name, name_skeleton, name_skeleton_unicode_version)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		append([]any{characterID.String(), playerID.String(), heroName},
+			chartest.Columns(heroName)...)...)
 	require.NoError(t, err)
 	return characterID
 }

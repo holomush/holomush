@@ -16,6 +16,13 @@ import (
 	"github.com/holomush/holomush/internal/store"
 )
 
+// These specs stage the schema at version 20 (runMigrations(ctx, pool, 20)),
+// which is BEFORE migration 000054 adds characters.normalized_name /
+// name_skeleton / name_skeleton_unicode_version. Their direct-SQL character
+// INSERTs therefore do NOT supply the identity columns, and must not: at
+// version 20 those columns do not exist, and 000056's NOT NULL + UNIQUE
+// constraints are not in force. This is the one deliberate exception to the
+// rule that every character fixture goes through internal/testsupport/chartest.
 var _ = Describe("RoleStore", func() {
 	Describe("PlayerHasRole", func() {
 		It("returns true for player with admin character", func() {

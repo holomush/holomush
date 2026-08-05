@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 )
@@ -51,10 +52,14 @@ func createCascadeTestCharacter(ctx context.Context, t *testing.T, locationID ul
 	require.NoError(t, err)
 
 	charID := ulid.Make()
+	// Unique per row: characters.normalized_name is UNIQUE as of 000056.
+	charName := "Cascade Test Char " + charID.String()[20:]
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO characters (id, player_id, name, location_id, created_at)
-		VALUES ($1, $2, 'Cascade Test Char', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
-	`, charID.String(), playerID.String(), locationID.String())
+		INSERT INTO characters (id, player_id, name, location_id, created_at,
+		                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, $5, $6, $7)
+	`, append([]any{charID.String(), playerID.String(), charName, locationID.String()},
+		chartest.Columns(charName)...)...)
 	require.NoError(t, err)
 	return charID
 }

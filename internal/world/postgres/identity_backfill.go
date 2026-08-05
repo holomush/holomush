@@ -165,6 +165,42 @@ func BackfillCharacterIdentity(ctx context.Context, db BackfillExecutor) ([]Iden
 	return append(normalizedSets, skeletonSets...), nil
 }
 
+// ClearCharacterIdentity sets the three DERIVED identity columns back to NULL
+// for every characters row. It is the exact inverse of
+// BackfillCharacterIdentity and exists so migration 000055 has a real Down.
+//
+// # Why this is a genuine revert rather than an irreversible step
+//
+// Nothing is lost. characters.name is never read or written here, and the three
+// columns are pure functions of it — a subsequent Up recomputes byte-identical
+// values. Restoring the all-NULL state is precisely the shape the schema has at
+// version 54, which is what a rollback past 55 is asking for.
+//
+// An error-returning Down would have been the wrong call, and not merely
+// stylistically: goose rolls migrations down in version order, so a Down that
+// refuses makes EVERY version below 55 unreachable — including 000054's own
+// Down, which drops these columns. It would also wedge any spec that stages an
+// older schema to exercise an earlier migration.
+//
+// It lives here, beside the backfill, for the same reason the backfill does:
+// test/meta/world_sql_fence_test.go's Go scan exempts only this directory and
+// has no marker path for .go files, so the statement cannot live in the
+// migration that calls it.
+func ClearCharacterIdentity(ctx context.Context, db BackfillExecutor) error {
+	if _, err := db.ExecContext(ctx, `
+		UPDATE characters
+		SET normalized_name = NULL,
+		    name_skeleton = NULL,
+		    name_skeleton_unicode_version = NULL
+		WHERE normalized_name IS NOT NULL
+		   OR name_skeleton IS NOT NULL
+		   OR name_skeleton_unicode_version IS NOT NULL
+	`); err != nil {
+		return oops.Code("CHARACTER_IDENTITY_CLEAR_FAILED").Wrap(err)
+	}
+	return nil
+}
+
 // collectIdentityCollisions groups characters by one identity column and
 // returns every group of two or more.
 func collectIdentityCollisions(ctx context.Context, db BackfillExecutor, kind IdentityCollisionKind) ([]IdentityCollisionSet, error) {

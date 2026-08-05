@@ -137,28 +137,41 @@ var _ = Describe("Character-name confusable rejection against real Postgres", fu
 		cancel()
 	})
 
-	Describe("A stock database is not a verifiable corpus (D-30 sequencing constraint)", func() {
-		It("refuses every name until the pre-existing rows carry skeletons, then admits them", func() {
-			// This is the D-30 sequencing constraint observed against REAL data
-			// rather than argued. Migration 000001_baseline.sql seeds a
-			// bootstrap character, so a freshly migrated database ALWAYS has a
-			// row with a NULL skeleton — the gate cannot adjudicate against it
-			// and must not report "no collision".
+	Describe("Migration 000055 leaves a stock database verifiable (D-30 sequencing constraint)", func() {
+		It("carries no NULL skeleton on a freshly migrated database, and therefore admits an ordinary name", func() {
+			// The D-30 sequencing constraint, observed against REAL data rather
+			// than argued — and this spec's verdict INVERTED when migration
+			// 000055 landed.
+			//
+			// Migration 000001_baseline.sql seeds a bootstrap character
+			// ('TestChar') with no skeleton, so before 000055 a freshly migrated
+			// database ALWAYS carried a NULL-skeleton row and charname.Gate
+			// correctly refused to adjudicate against it (the fixture stand-in
+			// backfillSkeletons existed for exactly that reason). 000055 now
+			// backfills that row as part of the chain, so the corpus a stock
+			// database hands the gate is whole.
+			//
+			// The fail-closed behaviour this spec used to demonstrate is NOT
+			// lost: it moved to "Fail-closed against a newly inserted
+			// unbackfilled row" below, which is the durable hazard — an
+			// interrupted post-Unicode-upgrade recompute — rather than the
+			// transient repo-state artifact this one pinned.
 			var unbackfilled int
 			Expect(pool.QueryRow(ctx,
 				`SELECT count(*) FROM characters WHERE name_skeleton IS NULL`).
 				Scan(&unbackfilled)).To(Succeed())
-			Expect(unbackfilled).To(BeNumerically(">", 0),
-				"a stock migrated database carries at least the bootstrap character row")
+			Expect(unbackfilled).To(Equal(0),
+				"migration 000055 backfills every pre-existing row, bootstrap character included")
 
 			_, _, err := gate.Check(ctx, "Brenna")
-			Expect(err).To(HaveOccurred())
-			Expect(codeOf(err)).To(Equal("NAME_SKELETON_UNVERIFIABLE"))
+			Expect(err).NotTo(HaveOccurred(),
+				"a stock migrated corpus is verifiable, so an ordinary name is admitted with no fixture repair")
 
-			Expect(backfillSkeletons()).To(Equal(unbackfilled))
-
-			_, _, err = gate.Check(ctx, "Brenna")
-			Expect(err).NotTo(HaveOccurred(), "the same name is admitted once the corpus is verifiable")
+			// Paired control on the same fixture: the gate is genuinely
+			// adjudicating rather than passing everything, so the admission
+			// above cannot be vacuous.
+			_, _, err = gate.Check(ctx, seededName)
+			Expect(err).To(HaveOccurred(), "the seeded name still collides with itself")
 		})
 	})
 
@@ -233,9 +246,15 @@ var _ = Describe("Character-name confusable rejection against real Postgres", fu
 			_, _, err := gate.Check(ctx, "Brenna")
 			Expect(err).NotTo(HaveOccurred(), "a fully populated corpus admits the name")
 
+			// normalized_name is supplied because migration 000056 makes it NOT
+			// NULL; name_skeleton is deliberately left NULL, which is the
+			// interrupted-recompute shape — a row that HAS a uniqueness key but
+			// no confusable skeleton. name_skeleton stays nullable precisely so
+			// a post-Unicode-upgrade recompute can be expressed.
 			unbackfilledID := idgen.New()
-			_, err = pool.Exec(ctx, `INSERT INTO characters (id, name) VALUES ($1, $2)`,
-				unbackfilledID.String(), "Cordelia")
+			_, err = pool.Exec(ctx,
+				`INSERT INTO characters (id, name, normalized_name) VALUES ($1, $2, $3)`,
+				unbackfilledID.String(), "Cordelia", "cordelia")
 			Expect(err).NotTo(HaveOccurred())
 
 			_, _, err = gate.Check(ctx, "Brenna")

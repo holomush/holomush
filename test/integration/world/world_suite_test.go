@@ -34,6 +34,7 @@ import (
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/presence"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/internal/world/wmodel"
@@ -393,9 +394,10 @@ func createTestCharacterID() ulid.ULID {
 
 	// Create character
 	_, err = env.pool.Exec(ctx, `
-		INSERT INTO characters (id, player_id, name, location_id)
-		VALUES ($1, $2, $3, $4)`,
-		charID.String(), playerID.String(), "TestChar_"+charID.String()[:8], locID.String())
+		INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		append([]any{charID.String(), playerID.String(), "TestChar_" + charID.String()[20:], locID.String()},
+			chartest.Columns("TestChar_"+charID.String()[20:])...)...)
 	Expect(err).NotTo(HaveOccurred(), "failed to create character")
 
 	return charID

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	"github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -32,10 +33,16 @@ func seedBindingTestData(ctx context.Context, t *testing.T) (playerID, character
 	`, playerID, "binding_test_user_"+playerID)
 	require.NoError(t, err)
 
+	// The name is unique per fixture row: characters.normalized_name is UNIQUE
+	// as of migration 000056, so a fixed literal would collide across specs.
+	bindingCharName := "BindingTestChar" + charULID.String()[20:]
+
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO characters (id, player_id, name, created_at)
-		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
-	`, characterID, playerID, "BindingTestChar"+charULID.String()[:6])
+		INSERT INTO characters (id, player_id, name, created_at,
+		                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, $4, $5, $6)
+	`, append([]any{characterID, playerID, bindingCharName},
+		chartest.Columns(bindingCharName)...)...)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

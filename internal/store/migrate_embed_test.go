@@ -16,7 +16,12 @@ import (
 // directory listing: deriving it from the same source the test walks would make
 // the assertion tautological and blind to a migration file that went missing.
 // Bump it in the same change that adds a migration.
-const expectedMigrationCount = 45
+//
+// This counts EMBEDDED `.sql` files only. //go:embed migrations/*.sql globs
+// `.sql`, so registered Go migrations (000055) are absent from this number
+// while being present in migrate_integration_test.go's
+// expectedAppliedMigrationRows, which counts what goose actually applied.
+const expectedMigrationCount = 46
 
 // TestMigrationsFSContainsSingleFileGooseMigrationsWithBothAnnotations pins the
 // post-goose corpus shape. goose parses one file per version carrying both

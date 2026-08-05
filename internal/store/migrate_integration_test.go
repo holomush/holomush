@@ -28,7 +28,7 @@ import (
 // internal/store/migrations. Bump it in the same change that adds a migration —
 // the FullCycle spec below asserts Up() lands exactly here, so a new migration
 // fails this spec until the constant follows it.
-const latestMigrationVersion = 54
+const latestMigrationVersion = 56
 
 // Bookkeeping shape of goose's ledger after a fresh-database Up().
 //
@@ -38,10 +38,15 @@ const latestMigrationVersion = 54
 // it is why a bare `count(*) == 44` is WRONG against a correct database.
 //
 // The migration corpus has gaps (versions 21–29 are unused), so the highest
-// version is 54 while only 45 migrations exist. Bump these together with
+// version is 56 while only 47 migrations exist. Bump these together with
 // latestMigrationVersion when a migration is added.
+//
+// 47 is 46 embedded `.sql` files plus the ONE registered Go migration (000055).
+// A Go migration is not embedded — //go:embed migrations/*.sql globs .sql only —
+// so it is counted here and in the goose ledger but not in
+// migrate_embed_test.go's expectedMigrationCount.
 const (
-	expectedAppliedMigrationRows = 45
+	expectedAppliedMigrationRows = 47
 	gooseBootstrapRows           = 1
 	expectedGooseLedgerRows      = expectedAppliedMigrationRows + gooseBootstrapRows
 )

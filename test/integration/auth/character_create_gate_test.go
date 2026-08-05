@@ -120,9 +120,8 @@ func newGateTestEnv(t *testing.T, blockPatterns []string) *gateTestEnv {
 }
 
 // gateGuestCharRepo is the auth.GuestCharacterRepository the guest path reads
-// through. It carries the SAME transitional predicate every other site carries.
-//
-// REMOVE the NULL branch with migration 000056; see plan 02-12.
+// through. It carries the SAME predicate every other site carries; the
+// transitional NULL branch was removed with migration 000056.
 type gateGuestCharRepo struct{ pool *pgxpool.Pool }
 
 func (r *gateGuestCharRepo) ExistsByNormalizedName(ctx context.Context, key string, excluding *ulid.ULID) (bool, error) {
@@ -134,8 +133,7 @@ func (r *gateGuestCharRepo) ExistsByNormalizedName(ctx context.Context, key stri
 	var exists bool
 	err := r.pool.QueryRow(ctx, `SELECT EXISTS(
 		SELECT 1 FROM characters
-		WHERE (normalized_name = $1
-		       OR (normalized_name IS NULL AND LOWER(name) = LOWER($1)))
+		WHERE normalized_name = $1
 		  AND ($2::text IS NULL OR id::text <> $2)
 	)`, key, excludingArg).Scan(&exists)
 	return exists, err

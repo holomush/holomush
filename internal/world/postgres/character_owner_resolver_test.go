@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 )
 
@@ -38,9 +39,10 @@ func insertPlayerWithCharacters(t *testing.T, pool *pgxpool.Pool, names ...strin
 	for _, name := range names {
 		charID := ulid.Make()
 		_, err := pool.Exec(ctx, `
-			INSERT INTO characters (id, player_id, name)
-			VALUES ($1, $2, $3)`,
-			charID.String(), playerID.String(), name+"_"+charID.String())
+			INSERT INTO characters (id, player_id, name, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			append([]any{charID.String(), playerID.String(), name + "_" + charID.String()},
+				chartest.Columns(name+"_"+charID.String())...)...)
 		require.NoError(t, err)
 		charIDs = append(charIDs, charID)
 	}
@@ -52,9 +54,10 @@ func insertOrphanCharacter(t *testing.T, pool *pgxpool.Pool, name string) ulid.U
 	t.Helper()
 	charID := ulid.Make()
 	_, err := pool.Exec(context.Background(), `
-		INSERT INTO characters (id, player_id, name)
-		VALUES ($1, NULL, $2)`,
-		charID.String(), name+"_"+charID.String())
+		INSERT INTO characters (id, player_id, name, normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, NULL, $2, $3, $4, $5)`,
+		append([]any{charID.String(), name + "_" + charID.String()},
+			chartest.Columns(name+"_"+charID.String())...)...)
 	require.NoError(t, err)
 	return charID
 }

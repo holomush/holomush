@@ -31,8 +31,42 @@ func backfillDB(t *testing.T) *sql.DB {
 	return db
 }
 
+// stagePreConstraintSchema puts characters back into its post-000055,
+// pre-000056 shape for the duration of one test, and restores it afterwards.
+//
+// BackfillCharacterIdentity's entire subject is the shape that exists BEFORE
+// migration 000056 constrains the column: rows whose identity columns are NULL,
+// and rows that collide on the key 000056 makes unique. Neither is insertable
+// against the fully migrated schema, so a spec exercising the backfill has to
+// stage the schema the migration chain actually hands it.
+//
+// Call it FIRST in a test, before any seedRawCharacter: t.Cleanup runs LIFO, so
+// registering the restore first makes it run last — after every fixture row has
+// been deleted, which is what lets the UNIQUE index be recreated.
+func stagePreConstraintSchema(ctx context.Context, t *testing.T) {
+	t.Helper()
+	_, err := testPool.Exec(ctx, `DROP INDEX IF EXISTS characters_normalized_name_key`)
+	require.NoError(t, err)
+	_, err = testPool.Exec(ctx, `ALTER TABLE characters ALTER COLUMN normalized_name DROP NOT NULL`)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		restoreCtx := context.Background()
+		if _, cerr := testPool.Exec(restoreCtx,
+			`ALTER TABLE characters ALTER COLUMN normalized_name SET NOT NULL`); cerr != nil {
+			t.Errorf("restoring migration 000056's NOT NULL failed — a fixture row was left behind: %v", cerr)
+		}
+		if _, cerr := testPool.Exec(restoreCtx,
+			`CREATE UNIQUE INDEX IF NOT EXISTS characters_normalized_name_key ON characters (normalized_name)`); cerr != nil {
+			t.Errorf("restoring migration 000056's UNIQUE index failed — a colliding fixture row was left behind: %v", cerr)
+		}
+	})
+}
+
 // seedRawCharacter inserts a character by direct SQL with NO identity columns —
 // the pre-backfill shape every row in a stock database has.
+//
+// Requires stagePreConstraintSchema to have run first in the same test.
 func seedRawCharacter(ctx context.Context, t *testing.T, name string) ulid.ULID {
 	t.Helper()
 	playerID := createTestPlayer(ctx, t)
@@ -50,6 +84,7 @@ func seedRawCharacter(ctx context.Context, t *testing.T, name string) ulid.ULID 
 
 func TestBackfillCharacterIdentityComputesTheThreeDerivedColumnsAndWritesNoName(t *testing.T) {
 	ctx := context.Background()
+	stagePreConstraintSchema(ctx, t)
 	name := charFixtureName("backfill subject")
 	id := seedRawCharacter(ctx, t, name)
 
@@ -71,6 +106,7 @@ func TestBackfillCharacterIdentityComputesTheThreeDerivedColumnsAndWritesNoName(
 
 func TestBackfillCharacterIdentityIsIdempotent(t *testing.T) {
 	ctx := context.Background()
+	stagePreConstraintSchema(ctx, t)
 	id := seedRawCharacter(ctx, t, charFixtureName("idempotent"))
 	db := backfillDB(t)
 
@@ -89,6 +125,7 @@ func TestBackfillCharacterIdentityIsIdempotent(t *testing.T) {
 
 func TestBackfillCharacterIdentityReportsNormalizedNameCollisions(t *testing.T) {
 	ctx := context.Background()
+	stagePreConstraintSchema(ctx, t)
 	base := charFixtureName("collider")
 	first := seedRawCharacter(ctx, t, base)
 	second := seedRawCharacter(ctx, t, upperASCII(base))
@@ -114,6 +151,7 @@ func TestBackfillCharacterIdentityReportsNormalizedNameCollisions(t *testing.T) 
 // straight over it.
 func TestBackfillCharacterIdentityReportsSkeletonCollisionsWithDifferentNormalizedNames(t *testing.T) {
 	ctx := context.Background()
+	stagePreConstraintSchema(ctx, t)
 	latinName, cyrillicName := confusablePair(t)
 	latin := seedRawCharacter(ctx, t, latinName)
 	cyrillic := seedRawCharacter(ctx, t, cyrillicName)
@@ -134,6 +172,7 @@ func TestBackfillCharacterIdentityReportsSkeletonCollisionsWithDifferentNormaliz
 
 func TestBackfillCharacterIdentityRunsNoGateAndRejectsNothing(t *testing.T) {
 	ctx := context.Background()
+	stagePreConstraintSchema(ctx, t)
 	// A name the gate WOULD refuse today (it collides with a seeded skeleton)
 	// must still be backfilled: these are names already admitted under the old
 	// rules, and per D-17 the backfill detects and reports, never resolves.

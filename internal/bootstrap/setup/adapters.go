@@ -74,18 +74,12 @@ func NewCharRepoAdapter(pool *pgxpool.Pool, charRepo *worldpostgres.CharacterRep
 // ExistsByNormalizedName reports whether any character holds the given §6.1.1
 // uniqueness key, optionally excluding one character's own row.
 //
-// The predicate is TRANSITIONAL and its NULL branch is deliberate:
-//
-//	normalized_name = $1 OR (normalized_name IS NULL AND LOWER(name) = LOWER($1))
-//
-// Cutting straight to `normalized_name = $1` here would make every pre-existing
-// row invisible to this check for a whole wave — the backfill is migration
-// 000055 and the UNIQUE index 000056, both in plan 02-12, while the LOWER(name)
-// safety net is removed here. In that window a duplicate would be caught by
-// NOTHING, in a commit that deploys green and whose tests all pass because
-// every fixture writes the column.
-//
-// REMOVE with migration 000056; see plan 02-12.
+// The predicate is a plain equality on the uniqueness key. It carried a
+// transitional `OR (normalized_name IS NULL AND ...)` branch for one wave, while
+// pre-existing rows were still unbackfilled; migration 000055 backfilled every
+// row and 000056 made the column NOT NULL and UNIQUE, so that branch is now
+// dead — and a case-folding comparison over a column that permits any script is
+// exactly the ASCII-folding weakness the §6.1.1 key exists to close.
 //
 // excluding is the B-18 self-exclusion channel: 01-SPEC.md:702-706 settles that
 // a rename whose uniqueness key matches the current one but whose display form
@@ -106,8 +100,7 @@ func (a *CharRepoAdapter) ExistsByNormalizedName(ctx context.Context, key string
 		ctx,
 		`SELECT EXISTS(
 			SELECT 1 FROM characters
-			WHERE (normalized_name = $1
-			       OR (normalized_name IS NULL AND LOWER(name) = LOWER($1)))
+			WHERE normalized_name = $1
 			  AND ($2::text IS NULL OR id::text <> $2)
 		)`,
 		key, excludingArg,

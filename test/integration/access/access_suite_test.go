@@ -327,3 +327,17 @@ func jsonNullableStringSlice(s []string) ([]byte, error) {
 	}
 	return json.Marshal(s)
 }
+
+// uniqueCharFixtureName suffixes a fixture's display name with part of the
+// character id that will carry it.
+//
+// Migration 000056 makes characters.normalized_name UNIQUE, so two fixture rows
+// sharing a literal display name now collide where they previously did not. It
+// is deterministic, so a call site may compute the name and its identity
+// columns in two separate expressions and get a matching pair.
+func uniqueCharFixtureName(base string, id ulid.ULID) string {
+	// The SUFFIX, never a prefix: a ULID string is 10 characters of timestamp
+	// followed by 16 of randomness, so a prefix slice is identical for every id
+	// minted in the same millisecond.
+	return base + " " + id.String()[20:]
+}

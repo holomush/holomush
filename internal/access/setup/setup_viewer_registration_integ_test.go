@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -117,8 +118,10 @@ func TestBuildABACStackResolvesViewerRolesForAnAdminPlayer(t *testing.T) {
 		VALUES ($1, $2, 'hash')`, playerID.String(), "admin_"+playerID.String())
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `
-		INSERT INTO characters (id, player_id, name)
-		VALUES ($1, $2, $3)`, charID.String(), playerID.String(), "Admin_"+charID.String())
+		INSERT INTO characters (id, player_id, name, normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		append([]any{charID.String(), playerID.String(), "Admin_" + charID.String()},
+			chartest.Columns("Admin_"+charID.String())...)...)
 	require.NoError(t, err)
 	require.NoError(t, store.NewPostgresRoleStore(pool).AddRole(ctx, charID.String(), access.RoleAdmin))
 
@@ -161,9 +164,10 @@ func TestBuildABACStackResolvesDerivedOwnerPlayerIDThroughTheRealStack(t *testin
 	require.NoError(t, err)
 	// Exactly ONE character for this player — see the doc comment above.
 	_, err = pool.Exec(ctx, `
-		INSERT INTO characters (id, player_id, name, location_id)
-		VALUES ($1, $2, $3, $4)`,
-		charID.String(), playerID.String(), "Owner_"+charID.String(), locID.String())
+		INSERT INTO characters (id, player_id, name, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		append([]any{charID.String(), playerID.String(), "Owner_" + charID.String(), locID.String()},
+			chartest.Columns("Owner_"+charID.String())...)...)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `
 		INSERT INTO entity_properties (id, parent_type, parent_id, name, value, owner, visibility)

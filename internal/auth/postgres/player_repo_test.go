@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 )
 
 func TestPlayerRepository_Create(t *testing.T) {
@@ -540,9 +541,13 @@ func TestPlayerRepository_DeleteGuestPlayer_CascadesBindings(t *testing.T) {
 		_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, guestID.String())
 	})
 
+	// Unique per fixture row: characters.normalized_name is UNIQUE as of 000056.
+	guestCharName := "Guest Char " + charID.String()[20:]
 	_, err = testPool.Exec(ctx,
-		`INSERT INTO characters (id, player_id, name) VALUES ($1, $2, $3)`,
-		charID.String(), guestID.String(), "Guest Char")
+		`INSERT INTO characters (id, player_id, name, normalized_name, name_skeleton, name_skeleton_unicode_version)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		append([]any{charID.String(), guestID.String(), guestCharName},
+			chartest.Columns(guestCharName)...)...)
 	require.NoError(t, err)
 
 	_, err = testPool.Exec(ctx,

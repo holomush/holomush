@@ -34,6 +34,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	"github.com/holomush/holomush/internal/totp"
 	adminv1 "github.com/holomush/holomush/pkg/proto/holomush/admin/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/admin/v1/adminv1connect"
@@ -323,9 +324,9 @@ func setupAdminAuthEnv(t *testing.T) *adminAuthEnv {
 		{daveCharID, playerD.String(), "Dave"},
 	} {
 		_, err = seedPool.Exec(seedCtx, `
-			INSERT INTO characters (id, player_id, name)
-			VALUES ($1, $2, $3)`,
-			row.id, row.playerID, row.name)
+			INSERT INTO characters (id, player_id, name, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			append([]any{row.id, row.playerID, row.name}, chartest.Columns(row.name)...)...)
 		Expect(err).NotTo(HaveOccurred(), "INSERT character %s", row.name)
 	}
 

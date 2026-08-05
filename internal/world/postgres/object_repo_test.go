@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/testsupport/chartest"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -97,9 +98,11 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		`, playerID.String(), "player_update_"+playerID.String())
 		require.NoError(t, err)
 		_, err = testPool.Exec(ctx, `
-			INSERT INTO characters (id, player_id, name, location_id, created_at)
-			VALUES ($1, $2, 'UpdateOwnerChar', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
-		`, charID.String(), playerID.String(), locationID.String())
+			INSERT INTO characters (id, player_id, name, location_id, created_at,
+			                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, $5, $6, $7)
+		`, append([]any{charID.String(), playerID.String(), uniqueCharName("UpdateOwnerChar", charID), locationID.String()},
+			chartest.Columns(uniqueCharName("UpdateOwnerChar", charID))...)...)
 		require.NoError(t, err)
 
 		obj, err := world.NewObjectWithID(ulid.Make(), "Object For Owner Test", world.InLocation(locationID))
@@ -137,9 +140,11 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		`, playerID.String(), "player_held_"+playerID.String())
 		require.NoError(t, err)
 		_, err = testPool.Exec(ctx, `
-			INSERT INTO characters (id, player_id, name, location_id, created_at)
-			VALUES ($1, $2, 'HolderChar', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
-		`, charID.String(), playerID.String(), locationID.String())
+			INSERT INTO characters (id, player_id, name, location_id, created_at,
+			                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, $5, $6, $7)
+		`, append([]any{charID.String(), playerID.String(), uniqueCharName("HolderChar", charID), locationID.String()},
+			chartest.Columns(uniqueCharName("HolderChar", charID))...)...)
 		require.NoError(t, err)
 
 		obj, err := world.NewObjectWithID(ulid.Make(), "Object To Hold", world.InLocation(locationID))
@@ -349,9 +354,11 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	// Create a test character
 	characterID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO characters (id, player_id, name, location_id, created_at)
-		VALUES ($1, $2, 'Test Character', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
-	`, characterID.String(), playerID.String(), locationID.String())
+		INSERT INTO characters (id, player_id, name, location_id, created_at,
+		                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, $5, $6, $7)
+	`, append([]any{characterID.String(), playerID.String(), uniqueCharName("Test Character", characterID), locationID.String()},
+		chartest.Columns(uniqueCharName("Test Character", characterID))...)...)
 	require.NoError(t, err)
 	defer func() {
 		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, characterID.String())
@@ -403,9 +410,11 @@ func TestObjectRepository_ListHeldBy_OrderingWithMultipleObjects(t *testing.T) {
 	// Create a test character
 	characterID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO characters (id, player_id, name, location_id, created_at)
-		VALUES ($1, $2, 'Inventory Test Character', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
-	`, characterID.String(), playerID.String(), locationID.String())
+		INSERT INTO characters (id, player_id, name, location_id, created_at,
+		                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+		VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, $5, $6, $7)
+	`, append([]any{characterID.String(), playerID.String(), uniqueCharName("Inventory Test Character", characterID), locationID.String()},
+		chartest.Columns(uniqueCharName("Inventory Test Character", characterID))...)...)
 	require.NoError(t, err)
 	defer func() {
 		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, characterID.String())
@@ -643,9 +652,11 @@ func TestObjectRepository_Move(t *testing.T) {
 		// Create a test character
 		characterID := ulid.Make()
 		_, err = testPool.Exec(ctx, `
-			INSERT INTO characters (id, player_id, name, location_id, created_at)
-			VALUES ($1, $2, 'Move Test Character', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
-		`, characterID.String(), playerID.String(), loc1ID.String())
+			INSERT INTO characters (id, player_id, name, location_id, created_at,
+			                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, $5, $6, $7)
+		`, append([]any{characterID.String(), playerID.String(), uniqueCharName("Move Test Character", characterID), loc1ID.String()},
+			chartest.Columns(uniqueCharName("Move Test Character", characterID))...)...)
 		require.NoError(t, err)
 		defer func() {
 			_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, characterID.String())
@@ -822,9 +833,11 @@ func TestObjectRepository_Move(t *testing.T) {
 		`, playerID.String(), "player_multi_"+playerID.String())
 		require.NoError(t, err)
 		_, err = testPool.Exec(ctx, `
-			INSERT INTO characters (id, player_id, name, location_id, created_at)
-			VALUES ($1, $2, 'MultiTestChar', $3, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT)
-		`, charID.String(), playerID.String(), loc1ID.String())
+			INSERT INTO characters (id, player_id, name, location_id, created_at,
+			                        normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, (EXTRACT(EPOCH FROM NOW()) * 1e9)::BIGINT, $5, $6, $7)
+		`, append([]any{charID.String(), playerID.String(), uniqueCharName("MultiTestChar", charID), loc1ID.String()},
+			chartest.Columns(uniqueCharName("MultiTestChar", charID))...)...)
 		require.NoError(t, err)
 		defer func() {
 			_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charID.String())
