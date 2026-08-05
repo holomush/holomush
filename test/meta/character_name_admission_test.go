@@ -158,6 +158,12 @@ type admissionFuncFacts struct {
 	HasAdmittedParam bool
 	// ReturnsAdmitted reports whether any RESULT names charname.Admitted (rule C).
 	ReturnsAdmitted bool
+	// IsMethod reports whether the declaration has a receiver. Rule D is a
+	// census of METHODS: the package's guardSkeleton helper also takes a token,
+	// but it READS the skeleton to serialize the write and writes nothing
+	// itself, so it is not a name-admitting method. Rules A and E still cover
+	// it — they key on functions that write characters.name, receiver or not.
+	IsMethod bool
 	// SQLLiterals are the string literals appearing anywhere in the body.
 	SQLLiterals []string
 	// CalledFuncs are the names of functions called anywhere in the body.
@@ -217,7 +223,11 @@ func scanGoForAdmissionFacts(t *testing.T, filename string, src []byte) []admiss
 		if !ok {
 			continue
 		}
-		facts := admissionFuncFacts{Key: funcDeclKey(fn), File: filename}
+		facts := admissionFuncFacts{
+			Key:      funcDeclKey(fn),
+			File:     filename,
+			IsMethod: fn.Recv != nil && len(fn.Recv.List) > 0,
+		}
 
 		if fn.Type.Params != nil {
 			for _, p := range fn.Type.Params.List {
@@ -424,7 +434,7 @@ func TestTheSetOfNameAdmittingWriterBoundaryMethodsEqualsTheExpectedSet(t *testi
 
 	var derived []string
 	for _, f := range facts {
-		if f.HasAdmittedParam {
+		if f.HasAdmittedParam && f.IsMethod {
 			derived = append(derived, f.Key)
 		}
 	}

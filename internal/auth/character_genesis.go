@@ -10,6 +10,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/wmodel"
 )
@@ -40,8 +41,13 @@ const (
 // injected at composition roots ONLY — the auth-side narrow repo interfaces
 // deliberately no longer expose Create, so no production package can insert a
 // character except through this service (the compile-level fence, 05-15).
+//
+// Its name parameter is a charname.Admitted, not a string: the token's sole
+// constructor is (*charname.Gate).Admit, so the compile-level fence now says
+// more than "only this service inserts a character" — it says every character
+// inserted anywhere ran the full name-admission decision.
 type CharacterWriter interface {
-	Create(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error)
+	Create(ctx context.Context, char *world.Character, name charname.Admitted) (*wmodel.MutationDelta, error)
 }
 
 // GenesisTransactor is the re-entrant transaction seam (05-14). It MUST be the
@@ -159,11 +165,19 @@ type characterGenesisPayload struct {
 // any step rolls the whole creation back; with an ambient transaction already in
 // ctx it enrolls (no second Begin), so an outer rollback removes the character,
 // the binding, and the envelope together.
-func (s *CharacterGenesisService) Create(ctx context.Context, char *world.Character, bindReason string) error {
+//
+// name is the admission token. The genesis payload's name is read from IT, not
+// from char.Name, so the envelope and the stored row can never disagree about
+// what the character is called.
+func (s *CharacterGenesisService) Create(ctx context.Context, char *world.Character, name charname.Admitted, bindReason string) error {
 	if char == nil {
 		return oops.Code("CHARACTER_GENESIS_FAILED").Errorf("character is required")
 	}
-	intent, err := s.buildIntent(char)
+	if name.IsZero() {
+		return oops.Code("CHARACTER_NAME_NOT_ADMITTED").
+			Errorf("character name was not admitted by the name gate")
+	}
+	intent, err := s.buildIntent(char, name.Display())
 	if err != nil {
 		return err
 	}
@@ -175,7 +189,7 @@ func (s *CharacterGenesisService) Create(ctx context.Context, char *world.Charac
 		if gErr := s.guard.EnsureNotReaping(txCtx, char.PlayerID); gErr != nil {
 			return oops.Wrap(gErr)
 		}
-		delta, wErr := s.writer.Create(txCtx, char)
+		delta, wErr := s.writer.Create(txCtx, char, name)
 		if wErr != nil {
 			return oops.Code("CHARACTER_GENESIS_FAILED").
 				With("character_id", char.ID.String()).Wrap(wErr)
@@ -200,11 +214,11 @@ func (s *CharacterGenesisService) Create(ctx context.Context, char *world.Charac
 // (the already-authorized, committed fact that caused the genesis). The intent
 // deliberately omits epoch/feed_position/manifest — the OutboxWriter owns those
 // (round-3 blocker #1).
-func (s *CharacterGenesisService) buildIntent(char *world.Character) (wmodel.EnvelopeIntent, error) {
+func (s *CharacterGenesisService) buildIntent(char *world.Character, displayName string) (wmodel.EnvelopeIntent, error) {
 	p := characterGenesisPayload{
 		CharacterID: char.ID.String(),
 		PlayerID:    char.PlayerID.String(),
-		Name:        char.Name,
+		Name:        displayName,
 	}
 	if char.LocationID != nil {
 		loc := char.LocationID.String()

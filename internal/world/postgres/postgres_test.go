@@ -22,6 +22,12 @@ var testPool *pgxpool.Pool
 // testCleanup is called to terminate the container after tests.
 var testCleanup func()
 
+// testConnStr is the container's connection string. It exists so a spec can
+// open a database/sql handle — BackfillCharacterIdentity's only production
+// caller is a goose Go migration running on a *sql.Tx, so driving it through
+// the pgx pool would exercise a shape the migration never uses.
+var testConnStr string
+
 // TestMain sets up a PostgreSQL testcontainer for integration tests.
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -52,6 +58,7 @@ func TestMain(m *testing.M) {
 	}
 
 	testPool = pool
+	testConnStr = pgEnv.ConnStr
 	testCleanup = func() {
 		pool.Close()
 		_ = pgEnv.Terminate(ctx)

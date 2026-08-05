@@ -8,6 +8,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
@@ -198,10 +199,32 @@ type CharacterRepository interface {
 	CharacterReader
 
 	// Create persists a new character.
-	Create(ctx context.Context, char *Character) (*wmodel.MutationDelta, error)
+	//
+	// name is the ADMISSION TOKEN, not a string: charname.Admitted's sole
+	// constructor is (*charname.Gate).Admit, so a create that did not run the
+	// full name-admission decision is not expressible here. char.Name is
+	// deliberately NOT read for the insert — the four identity columns all come
+	// from the token — and is refreshed from it on success.
+	Create(ctx context.Context, char *Character, name charname.Admitted) (*wmodel.MutationDelta, error)
 
-	// Update modifies an existing character.
+	// Update modifies an existing character. It does NOT write characters.name.
+	//
+	// The name is unwritable here on purpose: a generic updater that also
+	// carried the name was an ungated admission path reachable by any caller
+	// holding the repository, and it wrote a name whose normalized_name went
+	// stale. Route a name change through Rename.
 	Update(ctx context.Context, char *Character) (*wmodel.MutationDelta, error)
+
+	// Rename writes a character's display name and its three derived identity
+	// columns in ONE statement, with a version-predicated CAS (MODEL-03).
+	//
+	// It is the ONLY name write besides Create, and its name parameter is the
+	// admission token, so Phase 3's RenameCharacter cannot reach the column
+	// without running the gate. intent is the envelope the write emits in its
+	// own transaction, so a caller outside the world service — plan 02-12's
+	// operator CLI — cannot produce a name change the world feed never saw
+	// (INV-WORLD-4).
+	Rename(ctx context.Context, id ulid.ULID, name charname.Admitted, expectedVersion int, intent wmodel.EnvelopeIntent) (*wmodel.MutationDelta, error)
 
 	// Delete removes a character by ID.
 	// expectedVersion is the optimistic-concurrency guard (accepted and ignored

@@ -12,6 +12,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/pgnanos"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/wmodel"
@@ -20,11 +21,18 @@ import (
 // CharacterRepository implements world.CharacterRepository using PostgreSQL.
 type CharacterRepository struct {
 	pool *pgxpool.Pool
+
+	// outbox lets Rename write its envelope in its OWN transaction rather than
+	// trusting every caller to emit one. It is built from the same pool in the
+	// constructor — OutboxStore lives in this package, so this costs no new
+	// import edge and no wiring change at any of the three production sites
+	// that build a CharacterRepository.
+	outbox *OutboxStore
 }
 
 // NewCharacterRepository creates a new PostgreSQL character repository.
 func NewCharacterRepository(pool *pgxpool.Pool) *CharacterRepository {
-	return &CharacterRepository{pool: pool}
+	return &CharacterRepository{pool: pool, outbox: NewOutboxStore(pool)}
 }
 
 // Get retrieves a character by ID.
@@ -44,28 +52,85 @@ func (r *CharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world.Cha
 }
 
 // Create persists a new character.
-// Callers must validate the character before calling this method.
-// Uses querierFromCtx so callers may compose this within a transaction; the
-// struct's Version is refreshed to the DB-assigned initial version (1) so a
-// reused struct does not later carry a stale version and spuriously conflict
-// (finding 12).
-func (r *CharacterRepository) Create(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
-	var newVersion int
-	err := querierFromCtx(ctx, r.pool).QueryRow(ctx, `
-		INSERT INTO characters (id, player_id, name, description, location_id, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING version
-	`, char.ID.String(), char.PlayerID.String(), char.Name, char.Description,
-		ulidToStringPtr(char.LocationID), pgnanos.From(char.CreatedAt)).Scan(&newVersion)
-	if err != nil {
-		return nil, oops.Code("CHARACTER_CREATE_FAILED").With("id", char.ID.String()).Wrap(err)
+//
+// # The name comes from the token, never from char.Name
+//
+// name is a charname.Admitted, whose sole constructor is (*charname.Gate).Admit.
+// The INSERT binds characters.name, normalized_name, name_skeleton and
+// name_skeleton_unicode_version from it and does NOT read char.Name — so a
+// caller that mutated the struct after admission cannot slip an unadmitted
+// string past the gate. char.Name is REFRESHED from the token on success,
+// mirroring the existing char.Version refresh, so a reused struct carries the
+// stored display form.
+//
+// All four identity columns travel in ONE statement (census rule B): a name
+// write that left normalized_name stale would silently defeat the UNIQUE index
+// migration 000056 creates over that column — the constraint would hold while
+// the data it constrains was wrong.
+//
+// The write serializes on the skeleton first (guardSkeleton, D-30 part 2), so
+// two concurrent creates of differently-normalized names sharing one skeleton
+// cannot both land.
+//
+// Uses the ambient transaction when there is one, so callers may compose this
+// within their own; the struct's Version is refreshed to the DB-assigned
+// initial version (1) so a reused struct does not later carry a stale version
+// and spuriously conflict (finding 12).
+func (r *CharacterRepository) Create(ctx context.Context, char *world.Character, name charname.Admitted) (*wmodel.MutationDelta, error) {
+	if name.IsZero() {
+		return nil, oops.Code("CHARACTER_NAME_NOT_ADMITTED").
+			With("id", char.ID.String()).
+			Errorf("character name was not admitted by the name gate")
 	}
-	char.Version = newVersion
-	return primaryDeltaVersioned(wmodel.AggregateCharacter, char.ID, false, 0, newVersion), nil
+
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		if err := guardSkeleton(txCtx, tx, name, nil); err != nil {
+			return err
+		}
+
+		var newVersion int
+		err := tx.QueryRow(txCtx, `
+			INSERT INTO characters (
+				id, player_id, name, description, location_id, created_at,
+				normalized_name, name_skeleton, name_skeleton_unicode_version
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			RETURNING version
+		`, char.ID.String(), char.PlayerID.String(), name.Display(), char.Description,
+			ulidToStringPtr(char.LocationID), pgnanos.From(char.CreatedAt),
+			name.Key(), name.Skeleton(), name.UnicodeVersion()).Scan(&newVersion)
+		if err != nil {
+			return oops.Code("CHARACTER_CREATE_FAILED").With("id", char.ID.String()).Wrap(err)
+		}
+
+		char.Name = name.Display()
+		char.Version = newVersion
+		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, char.ID, false, 0, newVersion)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return delta, nil
 }
 
 // Update modifies an existing character with a version-predicated CAS (MODEL-03).
 // Callers must validate the character before calling this method.
+//
+// # characters.name is NOT writable through Update
+//
+// The statement writes description, location_id and the version bump only. It
+// used to write name as well, and that was how an ungated, identity-incoherent
+// name write survived into this phase: any caller holding the repository could
+// set a display name without the gate, and the write left normalized_name,
+// name_skeleton and name_skeleton_unicode_version stale. Route a name change
+// through Rename, whose name parameter is an admission token.
+//
+// Dropping name is behaviour-preserving for the only production caller —
+// world.Service.UpdateCharacterDescription reads the character, sets
+// Description, and round-trips the just-read name back.
 //
 // When char.Version > 0 the UPDATE's WHERE clause matches both id and version, so
 // a stale writer affects zero rows; a locked follow-up read on the same connection
@@ -76,11 +141,11 @@ func (r *CharacterRepository) Create(ctx context.Context, char *world.Character)
 // committed value (finding 12).
 func (r *CharacterRepository) Update(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
 	query := `
-		UPDATE characters SET name = $2, description = $3, location_id = $4, version = version + 1
+		UPDATE characters SET description = $2, location_id = $3, version = version + 1
 		WHERE id = $1`
-	args := []any{char.ID.String(), char.Name, char.Description, ulidToStringPtr(char.LocationID)}
+	args := []any{char.ID.String(), char.Description, ulidToStringPtr(char.LocationID)}
 	if char.Version > 0 {
-		query += ` AND version = $5`
+		query += ` AND version = $4`
 		args = append(args, char.Version)
 	}
 	query += ` RETURNING version`
@@ -101,6 +166,90 @@ func (r *CharacterRepository) Update(ctx context.Context, char *world.Character)
 		}
 		char.Version = newVersion
 		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, char.ID, false, newVersion-1, newVersion)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return delta, nil
+}
+
+// Rename writes a character's display name and its three derived identity
+// columns in ONE statement, with a version-predicated CAS (MODEL-03).
+//
+// It is shaped on UpdateLocation: one version-predicated statement,
+// classifyCASZeroRow for the zero-row case, primaryDeltaVersioned for the delta,
+// and the expectedVersion == 0 means unversioned convention.
+//
+// # Why the envelope is written HERE and not by the caller
+//
+// INV-WORLD-4 requires every writer outside the in-world write executor to emit
+// its envelope ATOMICALLY with the write. Plan 02-12's operator resolution CLI
+// calls Rename from cmd/holomush; a Rename that only returned a MutationDelta
+// for its caller to emit would leave that CLI able to write a name change the
+// world feed never saw. Writing the envelope inside this method's own
+// transaction makes the property hold for EVERY caller, including one that
+// discards the returned delta.
+//
+// The consequence is a rule callers must honour: Rename MUST NOT be routed
+// through worldMutator.mutate(). mutate() writes an envelope of its own from
+// the returned delta, so routing Rename through it would emit TWO envelopes for
+// one rename and break the exactly-one-envelope-per-command property. Phase 3's
+// RenameCharacter calls this method directly and supplies the intent.
+//
+// # Self-exclusion
+//
+// The skeleton guard excludes this character's own row (B-18), so
+// 01-SPEC.md:702-706's settled case-variant rename — Alaric -> ALARIC, whose
+// skeleton is identical to its own — is admitted rather than refused forever.
+func (r *CharacterRepository) Rename(
+	ctx context.Context,
+	id ulid.ULID,
+	name charname.Admitted,
+	expectedVersion int,
+	intent wmodel.EnvelopeIntent,
+) (*wmodel.MutationDelta, error) {
+	if name.IsZero() {
+		return nil, oops.Code("CHARACTER_NAME_NOT_ADMITTED").
+			With("id", id.String()).
+			Errorf("character name was not admitted by the name gate")
+	}
+
+	query := `
+		UPDATE characters
+		SET name = $2, normalized_name = $3, name_skeleton = $4,
+		    name_skeleton_unicode_version = $5, version = version + 1
+		WHERE id = $1`
+	args := []any{id.String(), name.Display(), name.Key(), name.Skeleton(), name.UnicodeVersion()}
+	if expectedVersion > 0 {
+		query += ` AND version = $6`
+		args = append(args, expectedVersion)
+	}
+	query += ` RETURNING version`
+
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		if err := guardSkeleton(txCtx, tx, name, &id); err != nil {
+			return err
+		}
+
+		var newVersion int
+		err := tx.QueryRow(txCtx, query, args...).Scan(&newVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return classifyCASZeroRow(txCtx, tx,
+				`SELECT version FROM characters WHERE id = $1 FOR UPDATE`,
+				id,
+				oops.Code("CHARACTER_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound))
+		}
+		if err != nil {
+			return oops.Code("CHARACTER_RENAME_FAILED").With("id", id.String()).Wrap(err)
+		}
+
+		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, id, false, newVersion-1, newVersion)
+		if _, wErr := r.outbox.WriteIntent(txCtx, intent, delta); wErr != nil {
+			return oops.Code("CHARACTER_RENAME_ENVELOPE_FAILED").With("id", id.String()).Wrap(wErr)
+		}
 		return nil
 	})
 	if txErr != nil {
