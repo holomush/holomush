@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
-current_phase_name: abac-schema-vocabulary
-status: verifying
+current_phase_name: ABAC & Schema Vocabulary
+status: planning
 stopped_at: Completed 02-11-PLAN.md — phase 02 closeout; abac-reviewer gate OUTSTANDING
-last_updated: "2026-08-05T20:16:23.589Z"
-last_activity: 2026-08-04
-last_activity_desc: Phase 02 execution started
+last_updated: "2026-08-06T16:15:55.519Z"
+last_activity: 2026-08-06
+last_activity_desc: Phase 01.1 complete, transitioned to Phase 02
 progress:
   total_phases: 7
   completed_phases: 3
@@ -33,11 +33,11 @@ complete character identity surface (creation, management, public profiles with 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 02 (abac-schema-vocabulary) — EXECUTING
-Plan: 13 of 13
-Status: Phase complete — ready for verification
+Phase: 02 — ABAC & Schema Vocabulary
+Plan: Not started
+Status: Ready to plan
 Progress: [██████████] 100% (1/6 phases)
-Last activity: 2026-08-04 — Phase 02 execution started
+Last activity: 2026-08-06 — Phase 01.1 complete, transitioned to Phase 02
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -109,7 +109,7 @@ no action needed.
 
 **Velocity:**
 
-- Total plans completed: 66
+- Total plans completed: 69
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -124,6 +124,7 @@ no action needed.
 | 05 | 16 | - | - |
 | 06 | 5 | - | - |
 | 07 | 11 | - | - |
+| 01.1 | 7 | - | - |
 
 **Recent Trend:**
 

@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 6
 waived_count: 0
-fixed_count: 6
-total_count: 12
-last_updated: 2026-08-05T04:50:04.129Z
+fixed_count: 7
+total_count: 13
+last_updated: 2026-08-06T16:14:12.518Z
 ---
 
 # Broken Windows Ledger
@@ -23,10 +23,11 @@ last_updated: 2026-08-05T04:50:04.129Z
 | 6 | 01.1 | unrun-verify | internal/store/migrations_sessions_location_index_integration_test.go |  | reads migrations/000053_sessions_location_index.up.sql by path; red until plan 02 | fixed |  | 2026-08-02T23:37:38.463Z | 2026-08-03T12:09:34.924Z |
 | 7 | 01.1 | deviation | internal/store/migrate_adopt.go |  | adopt seeded-probe filters version_id>0: a read-only verb creating goose's bootstrap row must not disable the cutover | fixed |  | 2026-08-03T01:03:53.873Z | 2026-08-03T12:21:31.623Z |
 | 8 | 01.1 | deviation | .claude/skills/new-migration/SKILL.md |  | new-migration skill taught TIMESTAMPTZ (contradicting INV-STORE-1); corrected to BIGINT epoch-ns as a Rule 2 deviation not named in the plan | fixed |  | 2026-08-03T02:13:07.263Z | 2026-08-03T12:21:31.696Z |
-| 9 | 01.1 | unrun-verify | site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md |  | D-16 pre-deploy rehearsal and D-18 surgical rollback are WRITTEN but never EXECUTED against restored sandbox data — a rehearsal nobody has run is a hypothesis, not a control | open |  | 2026-08-03T02:13:07.324Z |  |
+| 9 | 01.1 | unrun-verify | site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md |  | D-16 pre-deploy rehearsal and D-18 surgical rollback are WRITTEN but never EXECUTED against restored sandbox data — a rehearsal nobody has run is a hypothesis, not a control | fixed |  | 2026-08-03T02:13:07.324Z | 2026-08-06T16:14:12.518Z |
 | 10 | 02 | stub | cmd/holomush/core.go |  | 02-05 declares the block-list transport (grpcSubsystemConfig.BlockList / BootstrapSubsystemConfig.BlockList) but constructs no charname.Gate; until 02-06 consumes Matcher() at the three composition roots, no production create path evaluates the block list | fixed |  | 2026-08-05T00:02:10.144Z | 2026-08-05T01:45:32.455Z |
 | 11 | 02 | deviation | internal/store/role_store_integration_test.go |  | 02-13 Rule 1 fix: colliding player usernames from an 8-char ULID prefix; caught only by the plan-level integration sweep because no per-task verify covers ./internal/store/ | open |  | 2026-08-05T00:29:54.787Z |  |
 | 12 | 02 | deviation | .planning/phases/02-abac-schema-vocabulary/02-12-SUMMARY.md |  | INV-WORLD-4's 'exactly TWO sanctioned out-of-world writers' text is false until plan 02-11 amends it to three | open |  | 2026-08-05T04:50:04.129Z |  |
+| 13 | 01.1 | unrun-verify | site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md |  | D-18 surgical rollback is WRITTEN but never EXECUTED against restored sandbox data — a rollback nobody has run is a hypothesis, not a control. Split out of #9, whose D-16 half was executed and passed 2026-08-03 (snapshot k8895de81ae827d94862d54a5c9b5b19f: side A version=53/1 row/dirty=false; adopt recorded_version=53 seeded_versions=44; checks a/b/c green incl. ZERO core drift across 353 columns). D-18 remains the unexercised half. | open |  | 2026-08-06T16:13:50.936Z |  |
 
 ````json
 [
@@ -133,10 +134,10 @@ last_updated: 2026-08-05T04:50:04.129Z
     "file": "site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md",
     "line": null,
     "description": "D-16 pre-deploy rehearsal and D-18 surgical rollback are WRITTEN but never EXECUTED against restored sandbox data — a rehearsal nobody has run is a hypothesis, not a control",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-03T02:13:07.324Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-06T16:14:12.518Z"
   },
   {
     "id": 10,
@@ -172,6 +173,18 @@ last_updated: 2026-08-05T04:50:04.129Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-05T04:50:04.129Z",
+    "resolved_at": null
+  },
+  {
+    "id": 13,
+    "kind": "unrun-verify",
+    "phase": "01.1",
+    "file": "site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md",
+    "line": null,
+    "description": "D-18 surgical rollback is WRITTEN but never EXECUTED against restored sandbox data — a rollback nobody has run is a hypothesis, not a control. Split out of #9, whose D-16 half was executed and passed 2026-08-03 (snapshot k8895de81ae827d94862d54a5c9b5b19f: side A version=53/1 row/dirty=false; adopt recorded_version=53 seeded_versions=44; checks a/b/c green incl. ZERO core drift across 353 columns). D-18 remains the unexercised half.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-06T16:13:50.936Z",
     "resolved_at": null
   }
 ]
