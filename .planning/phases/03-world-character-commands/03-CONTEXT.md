@@ -62,6 +62,34 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   transaction — they are the reactor's job (D-36). Rejected: pulling the session
   store into a `world.Service` mutation transaction.
 
+  **CORRECTION (2026-08-06, from 03-RESEARCH.md — the decision stands, its cited
+  precedent was wrong).** The narrow-write *intent* is intact, but
+  `CharacterRepository.Rename` is **NOT** the precedent to copy and the
+  "MUST NOT route through `worldMutator.mutate`" rule recorded for Rename is
+  **Rename-specific — it MUST NOT be generalized to Retire.**
+
+  `TestWorldEnvelopeCensusMatchesServiceMutatingMethods`
+  (`test/meta/world_envelope_census_test.go:187-207`) is a **set-equality** check
+  in BOTH directions between `world.WriteCommands()` and the `go/ast` set of
+  `*Service` methods in `internal/world/service.go` whose body contains the
+  selector `s.mutator` (detector: `serviceMutatingMethods` :115-141 →
+  `bodyReferencesSelector(fn.Body, recvName, "mutator")` :136). Success criterion 4
+  requires census rows, so **`RetireCharacter`/`UnretireCharacter` MUST be
+  `*Service` methods in `service.go` that route through `s.mutator`.** A registered
+  descriptor whose method does not reference `s.mutator` fails the census, and a
+  method that does reference it without a descriptor fails it too.
+
+  The Rename shape would not even compile from `Service`: `Service.characterRepo`
+  is a read-only `CharacterReader` (`internal/world/service.go:101`).
+
+  **The correct precedent is `Service.UpdateCharacterPreferences`
+  (`internal/world/service.go:856-890`)** — it satisfies every property D-33 wants
+  simultaneously: a `*Service` method, a narrow single-concern write, routed
+  through `s.mutator`, reading `char.Version` as the CAS guard, surfacing
+  `ErrConcurrentEdit` → `CodeConcurrentEdit` (success criterion 3), and owning its
+  own taxonomy kind `kindCharacterPreferencesUpdate` (`internal/world/mutator.go:99`)
+  — which is exactly the D-32 two-distinct-kinds shape.
+
 - **D-34:** When the retiring character is the player's `players.default_character_id`,
   retire **clears that pointer in the same transaction**. The FK is
   `ON DELETE SET NULL`, so it self-heals only on hard delete; a soft retire would
@@ -81,15 +109,29 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   would have mirrored `internal/auth/auth_service.go:248-256`'s eviction fanout)
   because it is the seam every future lifecycle consumer plugs into and cannot be
   bypassed by a new caller of the domain command.
-  **Accepted consequences, stated explicitly:** `SubsystemID` 18→19 and its 5-site
-  compile cascade (const block END, stringer regeneration, `productionSubsystems`
-  named params, two fixed-size `stubSubsystem` arrays, `core_topo_order_test`
-  `require.Len`); at-least-once JetStream redelivery, so the handler MUST be
+  **Accepted consequences, stated explicitly:** `SubsystemID` 18→19 and its
+  compile cascade; at-least-once JetStream redelivery, so the handler MUST be
   idempotent; retirement becomes eventually consistent.
-  **Grounding:** the durable-consumer pattern already exists and is shared —
+  **Grounding:** the durable-consumer pattern already exists —
   `internal/eventbus/audit/projection.go:108-129` creates its consumer via
-  `createConsumerWithRetry`, documented as "shared by newProjection (host audit)
-  and PluginConsumerManager.Add". Only the subsystem wiring is new.
+  `createConsumerWithRetry`.
+
+  **CORRECTION (2026-08-06, from 03-RESEARCH.md) — two claims above were false:**
+
+  1. **"5-site compile cascade" is wrong — it is 13 sites across 5 files.** It
+     includes two *fixed-size* `[18]stubSubsystem` array declarations, three
+     separate `18` length assertions, two real-constructor lists, and an **exact
+     ordered 18-element pinned start sequence** (`core_topo_order_test.go:194-213`)
+     into which each new ID must be inserted at a topologically-correct position.
+     The current count is **18**, verified from the const block. Grep the sites;
+     do not trust this number either (memory `e2nxxx9v5d`).
+
+  2. **`createConsumerWithRetry` is NOT reachable as shared substrate.** It is
+     **unexported** (`internal/eventbus/audit/projection.go:167`) and both
+     production callers are inside `package audit` (`projection.go:109`,
+     `plugin_consumer.go:194`). Its doc comment's "shared by" means shared
+     *within that package*. "Only the subsystem wiring is new" was therefore
+     false. Resolved by **D-46**.
   — **Reversibility:** costly — a registered lifecycle subsystem with a durable
   JetStream consumer name; removing it strands the consumer.
 
@@ -115,6 +157,31 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   `EmitSessionEnded`, session teardown, then the move. Scenes, channels, and any
   future pages/stories consumers are explicitly NOT in v1 and are iterated on later.
 
+  **CORRECTION (2026-08-06, from 03-RESEARCH.md):** the CONTEXT's earlier count of
+  **four** existing leave-fanouts is wrong — there are **eight** `EmitLeave` call
+  sites across seven flows. `command_handler.go:268`, `command_handler.go:330`, and
+  `auth_handlers.go:716` were missed. Survey all eight before deciding what the
+  reactor reuses versus duplicates.
+
+- **D-46 (2026-08-06, maintainer decision — resolves the D-36 correction):**
+  `createConsumerWithRetry` and its `consumerCreateBackoffs` table **move to a
+  neutral shared package** (e.g. `internal/eventbus/consumer`), and the two
+  existing audit callers (`projection.go:109`, `plugin_consumer.go:194`) are
+  updated to use it. This makes D-36's "shared substrate" claim actually true.
+  Rejected: **exporting in place** (a character-retirement reactor importing
+  `internal/eventbus/audit` is a layering inversion — retirement is not audit, and
+  it invites every future non-audit consumer to do the same); **duplicating the
+  ~20-line helper** (two retry implementations that drift, and the backoff
+  schedule is exactly the operational constant that must not diverge);
+  **no retry** (loses the bounded-retry resilience the audit projector
+  deliberately has, on a subsystem whose silent failure stops retirement fanout
+  entirely).
+  Consequence to honor: this phase touches `package audit` and its tests. Preserve
+  each caller's existing error wrapping — the host wraps with
+  `AUDIT_CONSUMER_CREATE_FAILED` via `wrapConsumerCreateError`, the plugin path
+  with `AUDIT_PLUGIN_CONSUMER_CREATE_FAILED` via `wrapPluginConsumerCreateError`
+  (`projection.go:162-166`). The move MUST NOT change either code.
+
 ### Authorization
 
 - **D-39:** IDENT-04's "their **own** character" is enforced in **ABAC policy, not
@@ -139,6 +206,40 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   — moves to the backlog item with rename. Sketch 004's `Rename…` affordance is
   therefore **not** live in v0.13, and sketch 009's finding #5 ("names are
   reserved, not permanent") is **false for v0.13** and must be corrected.
+
+- **D-45 (2026-08-06, maintainer decision — closes the gap D-38 flagged):** the
+  retirement reactor authorizes its `MoveCharacter` call with a **seeded `system:`
+  string subject plus a new ABAC seed permit** for `principal is system` ×
+  `resource is character`. Precedent to copy: `"system:bootstrap"` +
+  `seed:system-bootstrap-world` / `seed:system-bootstrap-exits`
+  (`internal/access/policy/seed.go:206-217`).
+
+  **Why this was a real gap, not a formality.** The only `principal is system`
+  permits that exist today are `resource is location` (`seed.go:209`) and
+  `resource is exit` (`seed.go:215`). ABAC is default-deny, so absent a new seed
+  the reactor's move is **denied** and success criterion 2 cannot pass.
+
+  **Rejected: the `access.WithSystemSubject` bypass.** That route works —
+  `internal/access/policy/engine.go:91-105` returns `EffectSystemBypass` and skips
+  policy evaluation entirely — and has a live precedent at
+  `internal/grpc/location_follow.go:197`. It was rejected because it puts a brand-new
+  subsystem *outside* the default-deny chokepoint and grants it unchecked
+  world-write authority. Also rejected: bypass-now-seed-later (leaves an ABAC hole
+  that later phases inherit).
+
+  **Mechanics to honor.** The bypass at `engine.go:92-93` requires **both**
+  `req.Subject == "system"` (the bare literal) **and** `access.IsSystemContext(ctx)`;
+  a bare `"system"` subject WITHOUT the context marker is a hard
+  `SYSTEM_SUBJECT_REJECTED` error (the S1 defense). The seeded route deliberately
+  does neither — it uses a *prefixed* subject (e.g. `"system:retirement"`, which is
+  not `"system"`) so evaluation proceeds through normal policy, exactly as
+  `"system:bootstrap"` does. Do NOT stamp `WithSystemSubject` on the reactor's
+  context.
+
+  Consequence to honor: this phase adds an ABAC seed, so the **`abac-reviewer` gate
+  fires before push** (`/holomush-dev:review-abac`). Keep the permit as narrow as
+  the DSL allows; a blanket `action in ["read","write"]` on every character
+  resource is the ceiling, not the target.
 
 ### The `idle` state
 
@@ -217,6 +318,25 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   default in a memory-configured test harness will silently lose unflushed writes.
   This is the **first use of JetStream KV in the codebase**; there is no in-repo
   precedent to copy, only the stream config above.
+
+  **CORRECTION (2026-08-06, from 03-RESEARCH.md) — the decision stands, the stated
+  hazard is INVERTED.** Setting `Storage` explicitly is still right, but NOT for
+  the reason recorded above. In nats.go v1.52.0 (the pinned version),
+  `FileStorage StorageType = iota` (`stream_config.go:610-611`) — so **`FileStorage`
+  is the ZERO VALUE.** A bucket that omits `Storage` is therefore file-backed
+  *everywhere*, including in tests. The real hazard is the mirror image of the one
+  recorded: **file-backed KV residue leaking into a `MemoryStorage` test harness**,
+  not silently-lost unflushed writes in a memory-configured one.
+
+  Two consequences for the plan:
+  - The new subsystem needs a `…WithStorage` seam (mirroring the eventbus
+    subsystem's `NewSubsystemWithStorage` test override) so tests can force
+    `MemoryStorage`.
+  - The API is `js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{…})`;
+    read the pinned config fields from `kv.go:210-275` rather than from memory.
+
+  Also corrected: the CONTEXT cites `subsystem.go:214-222` as `resolveStoreDir` —
+  **:214 is the call site**; the function itself is at **:490-501**.
 
   **The flusher is its OWN subsystem — NOT part of the D-36 retirement reactor.**
   `last_active_at` is a general-purpose character attribute that retirement merely
