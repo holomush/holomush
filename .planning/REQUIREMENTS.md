@@ -104,7 +104,10 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       `world.Service.UpdateCharacterDescription` (`internal/world/service.go:799-836`). This is a
       *column*, not a `profile.*` property row, and is distinct from the profile prose fields above.
 
-- [ ] **IDENT-03**: A player can **rename** their own character.
+- [ ] **IDENT-03**: A player can **rename** their own character. **Deferred out of v0.13 on
+      2026-08-06** to backlog Phase 999.20 (linked to 999.6 Rostering): renaming cannot be specified
+      until the identity model gains an approval dimension, which does not exist. Rationale:
+      `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-44.
 - [ ] **IDENT-04**: A player can **soft-retire** their own character; the character leaves active play,
       its record and name are preserved, and the operation is reversible.
 
@@ -327,7 +330,7 @@ Which phases cover which requirements. Filled during roadmap creation.
 |-------|------|--------------|
 | 1 | Portal SPEC | 10 (PORTAL-01..10) |
 | 2 | ABAC & Schema Vocabulary | 6 (IDENT-06..09, PROFILE-11, EXT-07) |
-| 3 | World Character Commands | 3 (IDENT-03, IDENT-04, IDENT-10) |
+| 3 | World Character Commands | 2 (IDENT-04, IDENT-10) — IDENT-03 deferred to 999.20 on 2026-08-06 |
 | 4 | Shared Facade Helpers & `CharacterAccessService` | 7 (IDENT-02, IDENT-02a, PROFILE-03/04/05/10, EXT-06) |
 | 5 | Character Identity UI & Public Profiles | 12 (IDENT-01, IDENT-05, PROFILE-01/02/06/07/08/09/10a/12, EXT-05, EXT-08) |
 | 6 | Admin Portal Shell & Character Administration | 12 (ADMIN-01..08, EXT-01..04) |
@@ -347,7 +350,7 @@ Which phases cover which requirements. Filled during roadmap creation.
 | IDENT-01 | Phase 5 | Pending |
 | IDENT-02 | Phase 4 | Pending |
 | IDENT-02a | Phase 4 | Pending |
-| IDENT-03 | Phase 3 | Pending |
+| IDENT-03 | Backlog 999.20 | Pending |
 | IDENT-04 | Phase 3 | Pending |
 | IDENT-05 | Phase 5 | Pending |
 | IDENT-06 | Phase 2 | Pending |
