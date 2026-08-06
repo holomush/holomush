@@ -81,7 +81,7 @@ home, with both designed to absorb the deferred portal surfaces without rework.
 
 - [x] **Phase 1: Portal SPEC** — settle every shape decision whose cost explodes after code exists, and discharge PROJECT.md's Out-of-Scope precondition — completed 2026-08-01 (6/6 plans; `01-SPEC.md`, 16 sections; 9 amendments applied; 4 issues opened)
 - [ ] **Phase 2: ABAC & Schema Vocabulary** — admin-section + public-profile policy, name normalization + unique index, character lifecycle column
-- [ ] **Phase 3: World Character Commands** — domain-layer `RenameCharacter` + soft `RetireCharacter`, version-guarded and outbox-emitting
+- [ ] **Phase 3: World Character Commands** — domain-layer soft `RetireCharacter`/`UnretireCharacter` + the retirement reactor, version-guarded and outbox-emitting (`RenameCharacter` moved to 999.20, 2026-08-06)
 - [ ] **Phase 4: Shared Facade Helpers & `CharacterAccessService`** — one guest/ownership gate; character read/write BFF with privacy enforced by absence
 - [ ] **Phase 5: Character Identity UI & Public Profiles** — creation identity card, multi-alt management, public profile page, per-field visibility
 - [ ] **Phase 6: Admin Portal Shell & Character Administration** — ABAC-gated `/admin`, character administration, six deferred sections registered and denied-after-gate
@@ -99,9 +99,10 @@ before UI** (Phases 3 → 4 → 5) mirrors the shipped scenes path exactly. **Ad
 because it consumes the most and because `internal/web/` contains **zero `RoleAdmin` references today** —
 a net-new trust boundary with no existing test suite that would notice if it were wrong.
 
-Phase 3 is *planning*-parallelizable with Phase 2, but its `Rename` MUST NOT land before Phase 2's
-unique index (adding a second writer to a live check-then-insert race), and its `Retire` needs Phase 2's
-lifecycle column.
+Phase 3 is *planning*-parallelizable with Phase 2, and its `Retire` needs Phase 2's lifecycle column.
+(The former `Rename` ordering constraint — MUST NOT land before Phase 2's unique index, since it adds a
+writer to a live check-then-insert race — moves with `Rename` to Phase 999.20; Phase 2's index has since
+shipped, so it is satisfied either way.)
 
 **Scheduling note (not a dependency):** `WebCheckSessionResponse.roles` (ADMIN-08) can be pulled into
 Phase 4's proto work to avoid a second `web.proto` regeneration cycle in Phase 6. Likewise, Phase 4
@@ -236,13 +237,15 @@ Plans:
 
 ### Phase 3: World Character Commands
 
-**Goal**: `world.Service` gains `RenameCharacter` and soft `RetireCharacter` at the domain layer, both version-guarded and emitting through the transactional outbox in-transaction, with the `writeCommands` census row and taxonomy kind landed in the same change.
-**Depends on**: Phase 1 (SPEC). Planning parallelizes with Phase 2; execution requires Phase 2's normalized-name unique index before `Rename` and its lifecycle column before `Retire`.
-**Requirements**: IDENT-03, IDENT-04, IDENT-10
+**Scope narrowed (2026-08-06):** `RenameCharacter` was **removed from this phase and from the v0.13 milestone** and moved to the backlog as **Phase 999.20**, linked to Phase 999.6 (Character Rostering & Transfer). Reason: rename cannot be specified until the character identity model gains an **approval dimension**, which does not exist — `characters.status` is `active|retired|idle` only, so the intended "rename permitted only before a character is approved for play" rule has no state to read. Designing that dimension touches bound `INV-WORLD-5`, 01-SPEC §4.4, PORTAL-04, character creation's initial state, and an approving actor (an admin surface, Phase 6), which is milestone-scale. Retire has **no** dependency on approval and stays. Full rationale: `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-44.
+
+**Goal**: `world.Service` gains a soft `RetireCharacter` / `UnretireCharacter` pair at the domain layer, version-guarded and emitting through the transactional outbox in-transaction, plus the host-side reactor that makes a retired character actually leave active play, with the `writeCommands` census rows and taxonomy kinds landed in the same change.
+**Depends on**: Phase 1 (SPEC). Planning parallelizes with Phase 2; execution requires Phase 2's lifecycle column before `Retire`.
+**Requirements**: IDENT-04, IDENT-10
 **Success Criteria** (what must be TRUE):
 
-1. A player can rename their own character through the domain layer: the new name passes Phase 2's normalization and block-list policy, the write is version-guarded, and a `character.renamed` event carrying `{id, old_name, new_name}` reaches the outbox in the same transaction as the state change.
-2. A retired character leaves active play with its record intact and **its name still reserved**, and the retirement is reversible — retire, idle-out, and purge stay three distinct operations, and the irreversible `DeleteCharacter` path (which cascades `entity_properties` and emits a tombstone) is untouched by the retire flow.
+1. A retired character leaves active play with its record intact and **its name still reserved**, and the retirement is reversible — retire, idle-out, and purge stay three distinct operations, and the irreversible `DeleteCharacter` path (which cascades `entity_properties` and emits a tombstone) is untouched by the retire flow.
+2. Retirement is *observably* effective, not merely recorded: a host reactor consuming `character_retired` ends the character's live sessions, notifies the location it left, and moves it to the configured starting location.
 3. A stale `expected_version` on any new character mutation is rejected with the typed `WORLD_CONCURRENT_EDIT` signal rather than silently overwriting — v0.12's existing two-replica resilience harness, pointed at the new commands, passes.
 4. The `writeCommands` census and the mutation taxonomy list the new commands in the same change that introduces them; the census meta-test fails if either is missing.
 
@@ -250,7 +253,7 @@ Plans:
 **UI hint**: no
 **Research flag**: `--research-phase` recommended — the `writeCommands` census bijection semantics (`internal/world/mutator.go:78-100`) are genuinely unverified, and this repo has a documented history of plans failing on unverified seam assumptions.
 
-**Sketch findings** (must be answered in this phase): **Where `last_active_at` is written** — session-store create is the seam; it MUST NOT be the lease-refresh path (`internal/session/session.go:485` `RefreshConnection`), which would make every character a hot write every lease interval. **Can admins rename at all?** §9.3's admin census has update/retire/unretire and no rename — if admins cannot, sketch 004's `Rename…` affordance is a dead end and the locked row must say so; if they can, that is a census addition. Source: `.planning/sketches/002-*/README.md`, `004-*/README.md`. **Rename is load-bearing for 009-A** — sketch 009 corrected "names are permanent" (FALSE; IDENT-03 ships rename) and the create UI's chosen shape depends on it; if rename slips or is gated, revisit 009. **Roster:** a non-`active` lifecycle MUST suppress the shipped session badge (`Active`/`Offline`), which is a *different vocabulary* from `characters.status`. Player self-retire is **not** specified — every retire path sketched is `AdminRetireCharacter`.
+**Sketch findings**: **Where `last_active_at` is written** — **still OPEN**, deliberately undecided in discussion (03-CONTEXT.md D-42); the seam MUST NOT be the lease-refresh path (`internal/session/session.go:485` `RefreshConnection`), and any listener-based writer needs a granularity throttle in the `UPDATE` predicate. A planner MUST NOT invent an answer. **Can admins rename at all?** — deferred to Phase 999.20 with rename; sketch 004's `Rename…` affordance is **not** live in v0.13. **Sketch 009-A depended on rename existing** — that dependency is now unmet; sketch 009 finding #5 ("names are reserved, not permanent") is **false for v0.13** and the creation copy must be corrected. **Roster:** a non-`active` lifecycle MUST suppress the shipped session badge (`Active`/`Offline`), which is a *different vocabulary* from `characters.status` — note the split is already structural (session status lives on the session row, `internal/session/session.go:21`), so this is a rendering concern, not a missing column. Player self-retire is **not** specified — every retire path sketched is `AdminRetireCharacter`. Source: `.planning/sketches/002-*/README.md`, `004-*/README.md`.
 
 Plans:
 
@@ -646,6 +649,57 @@ test` cycle for wins (caching, scoping, parallelism). Aim: tighter edit→check 
 day emitted "No lefthook config" warnings on every commit)
 **Requirements:** TBD
 **Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.20: Character Rename & the Approval Dimension (BACKLOG)
+
+**Goal:** Give the character identity model an **approval dimension**, then land
+`world.Service.RenameCharacter` on top of it — renaming permitted only while a character
+is not yet approved for play, with the core name immutable afterwards.
+**Source:** removed from v0.13 Phase 3 on 2026-08-06 during `/gsd-discuss-phase 3`; full
+rationale and evidence in `.planning/phases/03-world-character-commands/03-CONTEXT.md`
+(D-44, plus the deferred-ideas section).
+**Related:** Phase 999.6 (Character Rostering & Transfer) — rostering is defined in
+REQUIREMENTS v2 as "a distinct transition *out of* retired, which is why retire must not
+release the name", so the approval axis and the rostering transition must be designed
+together, not separately.
+**Requirements:** IDENT-03 (moved out of v0.13); the rename half of IDENT-10.
+**Plans:** 0 plans
+
+Design inputs this item MUST carry:
+
+- **The approval dimension does not exist.** `characters.status` is `active|retired|idle`
+  only (`000054_character_identity_and_lifecycle.sql`). "Rename only before approval" has
+  no state to read; the honest substitute — "has this character ever emitted a comm
+  payload" — means querying the audit log to authorize a write.
+- **Two naming frictions.** `rostered` collides with 999.6's reserved meaning, and
+  `retired` is a lifecycle value 01-SPEC §4.4 deliberately keeps distinct from `purge` —
+  do not merge the approval axis into the lifecycle axis. Separately, a `session_status`
+  column on `characters` would **duplicate** an existing one: session status already lives
+  on the session row (`internal/session/session.go:21`).
+- **Blast radius.** Bound `INV-WORLD-5` (closed vocabulary + exhaustive-switch), 01-SPEC
+  §4.4, PORTAL-04, character creation's initial state, and an approving actor (an admin
+  surface, so it interacts with Phase 6).
+- **The substrate is already built.** `CharacterRepository.Rename`
+  (`internal/world/postgres/character_repo.go:212`) is version-guarded, runs `guardSkeleton`
+  with self-exclusion, and writes its outbox envelope inside its own transaction. Its doc
+  comment carries the rule: it MUST NOT be routed through `worldMutator.mutate()` (two
+  envelopes for one rename). No `character_renamed` taxonomy kind exists yet — the shipped
+  operator CLI emits rename as `character_updated`; reconcile rather than duplicate.
+- **`INV-WORLD-6` must be resolved here.** Its text claims a name becomes claimable again
+  only via a tombstone-emitting hard delete over exactly two paths, but rename frees the
+  old `normalized_name` — and the shipped operator CLI already does so in production. Its
+  binding test never exercises rename. Options recorded in 03-CONTEXT.md: narrow it to
+  lifecycle transitions, widen the enumeration, or add a former-names reservation table
+  (which closes identity inheritance while still permitting rename).
+- **Read `01-SPEC.md` §5 first** — the name-capture surface inventory, six frozen sites vs
+  five live ones, is what makes any rename argument checkable.
+- **UI consequences.** Sketch 004's `Rename…` affordance and sketch 009's "names are
+  reserved, not permanent" copy both assume rename ships; both are false for v0.13 and
+  become true again only with this item.
 
 Plans:
 

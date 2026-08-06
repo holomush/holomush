@@ -6,7 +6,7 @@ current_phase: 02
 current_phase_name: ABAC & Schema Vocabulary
 status: planning
 stopped_at: Completed 02-11-PLAN.md — phase 02 closeout; abac-reviewer gate OUTSTANDING
-last_updated: "2026-08-06T16:15:55.519Z"
+last_updated: "2026-08-06T20:50:05.950Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 01.1 complete, transitioned to Phase 02
 progress:
@@ -521,6 +521,7 @@ None yet.
 - Phase 01.1 edited: criterion 1 row-count corrected post-research: 'goose_db_version with 44 rows' -> '44 rows at version_id > 0 plus goose's version-0 bootstrap row (45 total)'. goose inserts a version-0 row at table creation (RESEARCH.md:875-877, verified by execution against postgres:18-alpine), so the prior assertion failed against a correct database.
 - Phase 01.1 edited: criterion 3 amended post-research (maintainer decision): 'up/down/status/version/force parity' -> 'up/down/status/version parity, force REMOVED with docs+tests'. goose commits body and version row in one transaction (provider_run.go:213-219), so the dirty state force repairs cannot arise; force has no analogue and no purpose (RESEARCH.md:777).
 - Phase 2 edited: criterion 4 split: public-properties half stays Phase 2, in-world-description half deferred to Phase 4 as its criterion 6 (D-29)
+- Phase 3 edited: scope narrowed: RenameCharacter removed from phase and milestone, moved to backlog 999.20 (linked to 999.6); goal, depends-on, requirements (IDENT-03 dropped), success criteria 1-2, and sketch-findings all amended; rationale in 03-CONTEXT.md D-44
 
 ## Deferred Items
 
