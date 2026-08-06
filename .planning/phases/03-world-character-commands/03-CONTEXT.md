@@ -16,6 +16,13 @@ in-transaction — plus the host-side reactor that makes "a retired character le
 active play" actually true, and the `writeCommands` census rows and taxonomy kinds
 in the same change.
 
+The phase also closes Phase 2's deferred `last_active_at` write seam (D-24) with a
+**separate, general-purpose** character-activity subsystem (D-42). It is listed here
+because D-24 assigned the seam to this phase, **not** because it belongs to
+retirement — retirement merely reads the attribute. Treat the two subsystems as
+independent work: they share no code and their only relationship is landing in the
+same phase.
+
 **`RenameCharacter` is NOT in this phase and NOT in this milestone.** See D-44. The
 phase goal, success criterion 1, and requirements IDENT-03 (and the rename half of
 IDENT-10) move to the backlog linked to Phase 999.6 Character Rostering & Transfer.
@@ -183,35 +190,57 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   — **Reversibility:** reversible — this is a scope decision recorded in ROADMAP
   and REQUIREMENTS; nothing is built or unbuilt by it.
 
-### OPEN — not decided, do not assume
+### The `last_active_at` write seam
 
-- **D-42 (OPEN): the `last_active_at` write seam is unresolved.** Discussion
-  established the shape but was interrupted by the INV-WORLD-6 finding and never
-  concluded. What IS established:
-  - Phase 2 shipped the column plus `world.Character.LastActiveAt`
-    (`internal/world/character.go:38`) and the `NeverActive` sentinel
-    (`internal/world/lifecycle.go:32`). Everything reads it; **nothing writes it**.
-  - D-24 (Phase 2) says the write seam is Phase 3's, and the sketch finding forbids
-    hooking `internal/session/session.go:485` `RefreshConnection` (a hot write per
-    lease interval).
-  - The preferred shape is an **event listener** covering session start/end AND
-    character-generated activity (poses, DMs), because every event already carries
-    an `Actor` whose kind is `character` — the same subscription shape the audit
-    projector uses.
-  - **Research consensus on the required mitigation:** throttle by granularity or
-    the listener recreates the hot-write problem at higher volume than
-    `RefreshConnection` would. Tideways, Plausible and Chatwoot all write only when
-    the stored value is already older than a threshold (5 min – 1 hr). The throttle
-    belongs in the `UPDATE` predicate (`… WHERE id = $1 AND last_active_at < $2`) —
-    one statement, no read-modify-write, naturally idempotent under redelivery.
-  - **Unresolved and blocking:** the threshold value; and whether the writer is a
-    fourth **out-of-world writer** under INV-WORLD-4 (which currently enumerates
-    exactly THREE and was already amended once, TWO→THREE, in 02-12) or is routed
-    through `world.Service` — the latter emitting an envelope per activity, which
-    is event amplification.
+- **D-42: `last_active_at` is written through a NATS JetStream KV buffer with a
+  periodic flush, in its OWN general-purpose subsystem.** Resolved 2026-08-06.
 
-  **A planner MUST NOT invent an answer here.** Resolve it before planning any task
-  that writes this column.
+  **Why a buffer rather than a throttled direct `UPDATE`.** Both shapes are
+  correct; the direct form (`UPDATE … WHERE id = $1 AND last_active_at < $2`) is
+  bounded by the throttle window, not by event volume, so at this scale Postgres
+  load was never the deciding factor. The buffer wins because the **emit path never
+  touches Postgres at all**, which is a latency property on the hot path and leaves
+  real headroom. Do not re-argue this on DB-load grounds.
+
+  **The listener** covers session start/end AND character-generated activity —
+  every event already carries an `Actor` whose kind is `character`, so a broad
+  subscription gives "this character did something" directly. Same subscription
+  shape the audit projector uses. It MUST NOT hook
+  `internal/session/session.go:485` `RefreshConnection` (a hot write per lease
+  interval — the sketch finding and D-24 both forbid it).
+
+  **The KV bucket MUST set `Storage: jetstream.FileStorage` explicitly.** A KV
+  bucket carries its own storage config and does **not** inherit the stream's.
+  Production already runs file-backed JetStream — `internal/eventbus/subsystem.go:63-65`
+  ("FileStorage is the default; tests override via NewSubsystemWithStorage") with a
+  resolved `StoreDir` at `:214-222` — but that is the *stream*. A bucket left at the
+  default in a memory-configured test harness will silently lose unflushed writes.
+  This is the **first use of JetStream KV in the codebase**; there is no in-repo
+  precedent to copy, only the stream config above.
+
+  **The flusher is its OWN subsystem — NOT part of the D-36 retirement reactor.**
+  `last_active_at` is a general-purpose character attribute that retirement merely
+  *happens* to read; co-locating them would couple a shared concern to one consumer.
+  Consequence to honor: **Phase 3 adds TWO subsystems, `SubsystemID` 18→20, i.e.
+  two separate 5-site compile cascades** (const-block END, stringer regeneration,
+  `productionSubsystems` named params, the fixed-size `stubSubsystem` arrays,
+  `core_topo_order_test` `require.Len`). Grep the count; do not trust a plan's
+  arithmetic (memory `e2nxxx9v5d`).
+
+  **The flusher is a fourth out-of-world writer under INV-WORLD-4** (which
+  enumerates exactly THREE and was already amended TWO→THREE in 02-12). Amend the
+  enumeration deliberately, in the same change, exactly as 02-12 did — "what was
+  false was the enumeration and not the guarantee". The deeper question this raises
+  — whether the world-writer fence should distinguish world-state writers from
+  operational ones at all — is filed as a separate todo and is NOT Phase 3's to
+  answer.
+  — **Reversibility:** costly — a registered subsystem, a durable KV bucket, and an
+  amended bound invariant.
+
+  **Left to the planner** (values, not design): the throttle window (research
+  precedent is 5 min – 1 hr; 5 min is a reasonable default), the flush interval, and
+  the bucket name. Readers needing real-time accuracy must consult KV, not the
+  column — the column lags by up to one flush interval by construction.
 
 ### Claude's Discretion
 
