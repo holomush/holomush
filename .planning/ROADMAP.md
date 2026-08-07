@@ -235,12 +235,83 @@ Plans:
 - [x] 02-13-PLAN.md — Row-identity resolution: player-scoped roles, PropertyProvider player-keyed peers, provider registration
 - [x] 02-11-PLAN.md — SPEC amendments, validation map, abac-reviewer routing, phase gate
 
+### Phase 02.1: Background-Job Authorization Model
+
+**Why this exists (inserted 2026-08-07):** Phase 3's retirement reactor surfaced a platform gap
+rather than creating one. A host subsystem that consumes an event and then performs a world write
+has no honest way to authorize itself today. Three candidate answers were examined and all three
+fail: a synthetic `system:retirement` principal cannot be narrowed, because `parseEntityType`
+(`internal/access/policy/engine.go:542-548`) matches on the prefix only, so any permit written for
+it also grants `system:bootstrap`; borrowing the originating actor off the envelope
+(`Envelope.Actor`, set from the same `subjectID` that passed `checkAccess` —
+`internal/world/service.go:1079`) is wrong on the merits, because a player authorized to retire
+their own character was never authorized to end sessions, emit to a location, or move a character;
+and `access.WithSystemSubject` (`internal/access/context.go:12`) is a total bypass
+(`engine.go:91-105`) that puts every future background consumer outside the default-deny
+chokepoint. Full derivation: `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-45.
+
+**Goal**: Background jobs — event-driven reactors, flushers, and any future host subsystem that
+acts on the world — get a first-class ABAC identity **plus per-execution attributes the policy
+engine can test**, so a job's authority is scoped to the work it is currently performing rather
+than granted as a blanket capability or borrowed from the human whose command triggered it.
+**Depends on**: Phase 2 (ABAC vocabulary, attribute-provider substrate, schema registry)
+**Requirements**: TBD — no existing requirement ID covers background-job authorization; mint one
+during `/gsd-discuss-phase 02.1` rather than stretching an IDENT-* id to fit.
+**Blocks**: Phase 3 (its retirement reactor consumes this model)
+
+**Substrate already verified (2026-08-07), so this is composition, not invention:**
+
+- **Per-execution attributes already have a carrier.** `types.NewAccessRequest(subject, action,
+  resource, attrs)` (`internal/access/policy/types/types.go:143`) takes per-call attributes,
+  reserved-key-validates them (`:153-159`), deep-clones them (`:160-166`), and the engine overlays
+  them onto `bags.Action` (`engine.go:258-265`) where the DSL reads them as `action.*`. Its own
+  doc calls nil "the common case for callers **without** per-call context to supply". The
+  mechanism exists and is unused on the world path.
+- **The blocker is one signature.** `world.Service.checkAccess` hardcodes `nil` for attrs
+  (`internal/world/service.go:214`), so no world write can carry execution context to policy
+  today. This is the load-bearing change, and it is on a shared path with existing callers.
+- **The provider shape has a 15-line template.** `PluginProvider`
+  (`internal/access/policy/attribute/plugin_provider.go:36-58`) is a non-character principal
+  provider gated on a registry — `Namespace()`, `ResolveSubject` returning `nil, nil` for
+  non-matching refs, `ResolveResource` returning `nil, nil`, and `Schema()`.
+- **Instance-scoping is what this buys.** With both halves, policy can express *"this job may
+  write only the aggregate whose event it is currently handling"* — narrower than any static
+  grant list can be, and the concrete reason a grants-only design was rejected.
+
+**Success Criteria** (what must be TRUE):
+
+1. A background job authorizes its world writes under **its own identity** — not a borrowed
+   human actor's, and not an ABAC bypass. `access.WithSystemSubject` appears on no reactor or
+   flusher path.
+2. Authority is scoped by **per-execution runtime attributes**, not static grants alone: policy
+   can express "this job may write only the aggregate whose event it is currently handling", and
+   a test proves the same job is DENIED against a different aggregate.
+3. `world.Service`'s access path carries per-call attributes end-to-end — a world write reaches
+   the DSL as `action.*`, replacing the hardcoded `nil` at `service.go:214`, with every existing
+   `checkAccess` caller still compiling and behaving unchanged.
+4. The model is documented as the path every future background consumer takes, and existing
+   `WithSystemSubject` call sites are enumerated (migrating them MAY be deferred; leaving them
+   undocumented MUST NOT be).
+5. `abac-reviewer` returns READY on the new principal type, its provider, its schema, and its
+   seeds.
+
+**UI hint**: no
+**Research flag**: `--research-phase` recommended — the per-call-attribute path has never been
+exercised from a world write, and the reserved-key interaction (`IsReservedActionKey`) plus
+`warnOnMissingSeedCoverage` / `RegisteredNamespaces()` coupling are unverified seams.
+
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 02.1 to break down)
+
 ### Phase 3: World Character Commands
 
 **Scope narrowed (2026-08-06):** `RenameCharacter` was **removed from this phase and from the v0.13 milestone** and moved to the backlog as **Phase 999.20**, linked to Phase 999.6 (Character Rostering & Transfer). Reason: rename cannot be specified until the character identity model gains an **approval dimension**, which does not exist — `characters.status` is `active|retired|idle` only, so the intended "rename permitted only before a character is approved for play" rule has no state to read. Designing that dimension touches bound `INV-WORLD-5`, 01-SPEC §4.4, PORTAL-04, character creation's initial state, and an approving actor (an admin surface, Phase 6), which is milestone-scale. Retire has **no** dependency on approval and stays. Full rationale: `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-44.
 
 **Goal**: `world.Service` gains a soft `RetireCharacter` / `UnretireCharacter` pair at the domain layer, version-guarded and emitting through the transactional outbox in-transaction, plus the host-side reactor that makes a retired character actually leave active play, with the `writeCommands` census rows and taxonomy kinds landed in the same change.
-**Depends on**: Phase 1 (SPEC). Planning parallelizes with Phase 2; execution requires Phase 2's lifecycle column before `Retire`.
+**Depends on**: Phase 1 (SPEC), **Phase 02.1 (Background-Job Authorization Model)**. Planning parallelizes with Phase 2; execution requires Phase 2's lifecycle column before `Retire`, and the retirement reactor requires 02.1's job-identity model before it can authorize its `MoveCharacter` call at all (see 03-CONTEXT.md D-45, superseded 2026-08-07).
 **Requirements**: IDENT-04, IDENT-10
 **Also lands here**: the `last_active_at` write seam Phase 2 deferred (D-24) — a *separate*, general-purpose character-activity subsystem, unrelated to retirement beyond sharing this phase. Phase 3 therefore adds **two** subsystems (`SubsystemID` 18→20, two 5-site compile cascades).
 **Success Criteria** (what must be TRUE):
@@ -681,28 +752,34 @@ Design inputs this item MUST carry:
   only (`000054_character_identity_and_lifecycle.sql`). "Rename only before approval" has
   no state to read; the honest substitute — "has this character ever emitted a comm
   payload" — means querying the audit log to authorize a write.
+
 - **Two naming frictions.** `rostered` collides with 999.6's reserved meaning, and
   `retired` is a lifecycle value 01-SPEC §4.4 deliberately keeps distinct from `purge` —
   do not merge the approval axis into the lifecycle axis. Separately, a `session_status`
   column on `characters` would **duplicate** an existing one: session status already lives
   on the session row (`internal/session/session.go:21`).
+
 - **Blast radius.** Bound `INV-WORLD-5` (closed vocabulary + exhaustive-switch), 01-SPEC
   §4.4, PORTAL-04, character creation's initial state, and an approving actor (an admin
   surface, so it interacts with Phase 6).
+
 - **The substrate is already built.** `CharacterRepository.Rename`
   (`internal/world/postgres/character_repo.go:212`) is version-guarded, runs `guardSkeleton`
   with self-exclusion, and writes its outbox envelope inside its own transaction. Its doc
   comment carries the rule: it MUST NOT be routed through `worldMutator.mutate()` (two
   envelopes for one rename). No `character_renamed` taxonomy kind exists yet — the shipped
   operator CLI emits rename as `character_updated`; reconcile rather than duplicate.
+
 - **`INV-WORLD-6` must be resolved here.** Its text claims a name becomes claimable again
   only via a tombstone-emitting hard delete over exactly two paths, but rename frees the
   old `normalized_name` — and the shipped operator CLI already does so in production. Its
   binding test never exercises rename. Options recorded in 03-CONTEXT.md: narrow it to
   lifecycle transitions, widen the enumeration, or add a former-names reservation table
   (which closes identity inheritance while still permitting rename).
+
 - **Read `01-SPEC.md` §5 first** — the name-capture surface inventory, six frozen sites vs
   five live ones, is what makes any rename argument checkable.
+
 - **UI consequences.** Sketch 004's `Rename…` affordance and sketch 009's "names are
   reserved, not permanent" copy both assume rename ships; both are false for v0.13 and
   become true again only with this item.

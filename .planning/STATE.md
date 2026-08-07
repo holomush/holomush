@@ -6,15 +6,15 @@ current_phase: 02
 current_phase_name: ABAC & Schema Vocabulary
 status: planning
 stopped_at: Completed 02-11-PLAN.md — phase 02 closeout; abac-reviewer gate OUTSTANDING
-last_updated: "2026-08-06T21:08:32.334Z"
+last_updated: "2026-08-07T19:32:48.795Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 01.1 complete, transitioned to Phase 02
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 3
-  total_plans: 26
+  total_plans: 31
   completed_plans: 26
-  percent: 43
+  percent: 38
 ---
 
 # Project State
@@ -523,6 +523,8 @@ None yet.
 - Phase 2 edited: criterion 4 split: public-properties half stays Phase 2, in-world-description half deferred to Phase 4 as its criterion 6 (D-29)
 - Phase 3 edited: scope narrowed: RenameCharacter removed from phase and milestone, moved to backlog 999.20 (linked to 999.6); goal, depends-on, requirements (IDENT-03 dropped), success criteria 1-2, and sketch-findings all amended; rationale in 03-CONTEXT.md D-44
 - Phase 3 edited: D-42 resolved: last_active_at lands here via NATS JetStream KV buffer + periodic flush in its OWN general-purpose subsystem (not the retirement reactor); added success criterion 5; phase now adds two subsystems (18->20)
+- Phase 02.1 inserted: Background-Job Authorization Model inserted after Phase 2; Phase 3's reactor blocked on it. Three candidate authz models examined and rejected (synthetic system: principal unnarrowable per engine.go:542-548; envelope-actor propagation over-grants; WithSystemSubject bypasses the chokepoint).
+- Phase 3 edited: edited fields: depends_on (added Phase 02.1 — retirement reactor cannot authorize MoveCharacter without the job-identity model; D-45 superseded)
 
 ## Deferred Items
 

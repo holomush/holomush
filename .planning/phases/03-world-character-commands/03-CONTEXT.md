@@ -207,12 +207,17 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   therefore **not** live in v0.13, and sketch 009's finding #5 ("names are
   reserved, not permanent") is **false for v0.13** and must be corrected.
 
-- **D-45 (2026-08-06, maintainer decision — closes the gap D-38 flagged):** the
+- **D-45 — SUPERSEDED 2026-08-07 by D-47. The decision below is recorded because it was
+  reached, acted on, and withdrawn; it MUST NOT be silently re-derived.** Its premise —
+  that the reactor needs a *synthetic principal* whose authority is described by static
+  policy — was wrong. See D-47 for what replaced it and why. The struck text follows.
+
+- ~~**D-45 (2026-08-06, maintainer decision — closes the gap D-38 flagged):** the
   retirement reactor authorizes its `MoveCharacter` call with a **seeded `system:`
   string subject plus a new ABAC seed permit** for `principal is system` ×
   `resource is character`. Precedent to copy: `"system:bootstrap"` +
   `seed:system-bootstrap-world` / `seed:system-bootstrap-exits`
-  (`internal/access/policy/seed.go:206-217`).
+  (`internal/access/policy/seed.go:206-217`).~~
 
   **Why this was a real gap, not a formality.** The only `principal is system`
   permits that exist today are `resource is location` (`seed.go:209`) and
@@ -240,6 +245,49 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   fires before push** (`/holomush-dev:review-abac`). Keep the permit as narrow as
   the DSL allows; a blanket `action in ["read","write"]` on every character
   resource is the ceiling, not the target.
+
+- **D-47 (2026-08-07, maintainer decision — SUPERSEDES D-45):** the reactor's
+  authorization is **not Phase 3's to solve**. It is deferred to a new
+  **Phase 02.1 — Background-Job Authorization Model**, which Phase 3 now depends on.
+
+  **Why D-45 was wrong.** It asked "what should we call this principal?" and then
+  designed static policy vocabulary to describe the answer. That conflates **ABAC
+  policy definition** with **the runtime state policy evaluates against**. The correct
+  question is what attributes the job carries *while it is executing*. Three candidates
+  were examined against the tree and all three fail:
+
+  1. **Synthetic `system:retirement` principal (D-45's answer) — unnarrowable.**
+     `parseEntityType` (`internal/access/policy/engine.go:542-548`) returns the prefix
+     only, so `principal is system` matches `system:bootstrap` identically. Any permit
+     written for the reactor also grants the setting-bootstrapper. A `when { principal.id
+     == "retirement" }` guard *does* work mechanically (`resolver.go:197-198` stamps
+     `bags.Subject["id"]` provider-independently; `evaluator.go:406,434`) — but it
+     conditions authorization on an **identity string**, which is the same shoe-horn one
+     level up: rename the subject and the permit silently stops matching.
+  2. **Borrow the originating actor off the envelope — over-grants.** The envelope does
+     carry it (`Envelope.Actor`, set from the same `subjectID` that passed `checkAccess`,
+     `service.go:1079`; the whole envelope is serialized into `Event.Payload`,
+     `outbox/wire.go:147,176-177`). But a player authorized to *retire their own
+     character* was never authorized to end sessions, emit to a location, or move a
+     character. Propagating either over-grants or fails — neither is correct.
+  3. **`access.WithSystemSubject` — outside the chokepoint.** It works
+     (`engine.go:91-105` → `EffectSystemBypass`) and `wire.go:175-176`'s
+     "already-authorized, already-committed facts" contract arguably endorses it, but it
+     puts every future background consumer outside default-deny.
+
+  **What Phase 02.1 builds instead:** a first-class job identity **plus per-execution
+  attributes the policy engine can test**. The carrier already exists and is unused on
+  this path — `types.NewAccessRequest(subject, action, resource, attrs)`
+  (`types/types.go:143`) overlays per-call attrs onto `bags.Action` (`engine.go:258-265`),
+  reachable in the DSL as `action.*`. The load-bearing blocker is that
+  `world.Service.checkAccess` hardcodes `nil` (`service.go:214`). Together they make
+  **instance-scoped** authority expressible — *"this job may write only the aggregate
+  whose event it is currently handling"* — which no static grant list can express, and
+  which is the concrete reason a grants-only design was rejected.
+
+  **Consequence for Phase 3:** the ABAC seed work leaves this phase entirely. The 5 plans
+  produced on 2026-08-06 predate this decision and MUST be reconciled against it before
+  execution — 03-01's seed tasks and 03-04's authorization path are the affected surfaces.
 
 ### The `idle` state
 
