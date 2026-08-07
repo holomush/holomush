@@ -251,7 +251,7 @@ Plans:
 4. The `writeCommands` census and the mutation taxonomy list the new commands in the same change that introduces them; the census meta-test fails if either is missing.
 5. `characters.last_active_at` is actually written — Phase 2 shipped the column and every read path, but nothing writes it. A character's activity updates it without a per-event database write, and `INV-WORLD-4`'s writer enumeration is amended in the same change that adds the writer.
 
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: no
 **Research flag**: `--research-phase` recommended — the `writeCommands` census bijection semantics (`internal/world/mutator.go:78-100`) are genuinely unverified, and this repo has a documented history of plans failing on unverified seam assumptions.
 
@@ -259,7 +259,11 @@ Plans:
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 3`)
+- [ ] 03-01-PLAN.md — Retire/Unretire domain commands: two taxonomy kinds, two census rows, `CharacterRepository.SetStatus` CAS, the D-34 default-character clear, and the two ABAC seeds (wave 1)
+- [ ] 03-02-PLAN.md — Shared substrate: the D-46 consumer-retry relocation, two new `SubsystemID`s, both subsystem types, and the full 13-site composition cascade landed once (wave 1)
+- [ ] 03-03-PLAN.md — IDENT-10 proof: a two-replica stale-version rejection `Describe` in the existing resilience harness, plus envelope atomicity and feed ordering under concurrency (wave 2)
+- [ ] 03-04-PLAN.md — Retirement reactor effects: end sessions, notify the old location, move to the starting location — idempotent under redelivery (wave 2)
+- [ ] 03-05-PLAN.md — `last_active_at` flush: the writer-boundary update, the periodic drain, and the `INV-WORLD-4` THREE→FOUR enumeration amendment (wave 2)
 
 ### Phase 4: Shared Facade Helpers & `CharacterAccessService`
 
