@@ -248,6 +248,22 @@ cannot be dropped as "nice to have" during planning.
 - [ ] **EXT-08**: Deferred surfaces get a **named empty slot, not a dead affordance** — specifically, no
       "message this character" button on the profile until web DMs (`qve.17`) exist.
 
+### Authorization model (AUTHZ)
+
+Minted 2026-08-08 during `/gsd-discuss-phase 02.1` (maintainer-authorized). The family covers the
+world caller model (Phase 02.1) and the background-job authorization model (Phase 02.2).
+
+- [ ] **AUTHZ-01**: Every public `world.Service` command takes a **typed caller value** carrying
+      the subject and its execution context together — no bare `subjectID string` parameter and no
+      overload/variadic escape hatch — and `checkAccess` forwards that context to
+      `types.NewAccessRequest` (deleting the hardcoded `nil` at `internal/world/service.go:214`),
+      so a world write can be conditioned on `action.*` attributes in the policy DSL.
+
+- [ ] **AUTHZ-02**: Background jobs act under a **first-class `job:` principal** with
+      liveness-gated attributes and per-execution provenance (`action.job.*`), so a job's
+      authority is scoped to the work it is currently performing — a job that grows an undeclared
+      write path or derives the wrong resource is **denied**, not granted blanket capability.
+
 ---
 
 ## v2 Requirements
@@ -388,3 +404,5 @@ Which phases cover which requirements. Filled during roadmap creation.
 | EXT-06 | Phase 4 | Pending |
 | EXT-07 | Phase 2 | Pending |
 | EXT-08 | Phase 5 | Pending |
+| AUTHZ-01 | Phase 02.1 | Pending |
+| AUTHZ-02 | Phase 02.2 | Pending |

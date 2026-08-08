@@ -6,7 +6,7 @@ current_phase: 02
 current_phase_name: ABAC & Schema Vocabulary
 status: executing
 stopped_at: Phase 02.2 context gathered; Phase 02.1 World Caller Model split out
-last_updated: "2026-08-08T13:01:09.784Z"
+last_updated: "2026-08-08T14:38:14.663Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 01.1 complete, transitioned to Phase 02
 progress:
@@ -525,6 +525,8 @@ None yet.
 - Phase 3 edited: D-42 resolved: last_active_at lands here via NATS JetStream KV buffer + periodic flush in its OWN general-purpose subsystem (not the retirement reactor); added success criterion 5; phase now adds two subsystems (18->20)
 - Phase 02.1 inserted: Background-Job Authorization Model inserted after Phase 2; Phase 3's reactor blocked on it. Three candidate authz models examined and rejected (synthetic system: principal unnarrowable per engine.go:542-548; envelope-actor propagation over-grants; WithSystemSubject bypasses the chokepoint).
 - Phase 3 edited: edited fields: depends_on (added Phase 02.1 — retirement reactor cannot authorize MoveCharacter without the job-identity model; D-45 superseded)
+- Phase 02.1 edited: edited fields: requirements (AUTHZ-01 minted), shape (JobCaller deferred to 02.2 per D-62)
+- Phase 02.2 edited: edited fields: requirements (AUTHZ-02 minted)
 
 ## Deferred Items
 

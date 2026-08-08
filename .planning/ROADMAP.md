@@ -254,13 +254,16 @@ cannot be supplied half-way. `checkAccess` forwards that context to `types.NewAc
 replacing the hardcoded `nil`.
 **Depends on**: Phase 2 (ABAC vocabulary, attribute-provider substrate)
 **Blocks**: Phase 02.2 (the job model needs this carrier), and transitively Phase 3
-**Requirements**: TBD — mint during `/gsd-discuss-phase 02.1`; no existing requirement ID covers
-the world caller model.
+**Requirements**: AUTHZ-01 (minted 2026-08-08 during `/gsd-discuss-phase 02.1`)
 
 **Shape (decided 2026-08-07, `02.2-CONTEXT.md` D-56/D-57):** typed constructors, not a bare struct
 — `world.HumanCaller(subjectID)`, `world.JobCaller(name, provenance)`, `world.SystemCaller()` —
 so invalid combinations (a human carrying job provenance, a job with no provenance) are
 unrepresentable, and the `job.`-namespaced attribute keys are produced in exactly one place.
+*(Amended 2026-08-08, `02.1-CONTEXT.md` D-62: `JobCaller` itself lands in Phase 02.2 once its
+provenance vocabulary settles; 02.1 ships `HumanCaller`/`SystemCaller` plus the caller type's
+internal attribute channel, so adding `JobCaller` later is purely additive — no signature churn,
+no `checkAccess` change.)*
 
 **Verified blast radius (2026-08-07 — grep-confirmed, do not re-estimate from method count):**
 
@@ -327,8 +330,7 @@ engine can test**, so a job's authority is scoped to the work it is currently pe
 than granted as a blanket capability or borrowed from the human whose command triggered it.
 **Depends on**: Phase 2 (ABAC vocabulary, attribute-provider substrate, schema registry),
 **Phase 02.1 (World Caller Model)** — `JobCaller` is the carrier this phase's attributes ride on.
-**Requirements**: TBD — no existing requirement ID covers background-job authorization; mint one
-rather than stretching an IDENT-* id to fit.
+**Requirements**: AUTHZ-02 (minted 2026-08-08 during `/gsd-discuss-phase 02.1`)
 **Blocks**: Phase 3 (its retirement reactor consumes this model)
 
 **Substrate already verified (2026-08-07), so this is composition, not invention:**
