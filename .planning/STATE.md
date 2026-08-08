@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02.1
 current_phase_name: world-caller-model
 status: executing
-stopped_at: Completed 02.1-01-PLAN.md
-last_updated: "2026-08-08T21:43:11.212Z"
+stopped_at: Completed 02.1-02-PLAN.md (atomic flip)
+last_updated: "2026-08-08T22:23:31.873Z"
 last_activity: 2026-08-08
 last_activity_desc: Phase 02.1 execution started
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 35
-  completed_plans: 27
+  completed_plans: 28
   percent: 33
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02.1 (world-caller-model) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
-Progress: [████████░░] 77% (1/6 phases)
+Progress: [████████░░] 80% (1/6 phases)
 Last activity: 2026-08-08 — Phase 02.1 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -242,6 +242,7 @@ no action needed.
 | Phase 02 P10 | 63min | 6 tasks | 5 files |
 | Phase 02 P11 | 105m | 3 tasks | 5 files |
 | Phase 02.1 P01 | 3h | 2 tasks | 35 files |
+| Phase 02.1 P02 | ~2h | 3 tasks | 42 files |
 
 ## Accumulated Context
 
@@ -488,6 +489,8 @@ the next milestone yet.
 - [Phase ?]: 02-RESEARCH.md's stale schema section deliberately NOT rewritten — a dated research record is annotated, never rewritten
 - [Phase ?]: world.Caller is opaque: unexported fields, two constructors, no exported accessor; the zero value fails closed at checkAccess rather than being blocked at construction
 - [Phase ?]: caller_test.go is package world_test + export_test.go bridge — an in-package test cannot build a real policy.Engine because policy/attribute imports internal/world
+- [Phase ?]: 02.1-02: the committed decl codemod rules and census probe were position-blind (NAME admits '_'); the grouped-declaration split exposed 8 build-breaking re-run hunks. Fixed at the rule with an nthChild:2 positional fence, not with ignores:.
+- [Phase ?]: 02.1-02: system:bootstrap (4 sites) and cascade_delete_test's bare "system" (3 sites) map to HumanCaller, never SystemCaller — the S1 gate is exact string equality, so the system constructor would create total ABAC bypasses.
 
 ### Pending Todos
 
@@ -544,11 +547,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-08T21:43:11.199Z
+Last session: 2026-08-08T22:23:25.686Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02.1-01-PLAN.md
+Stopped at: Completed 02.1-02-PLAN.md (atomic flip)
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.

@@ -303,7 +303,7 @@ no `checkAccess` change.)*
 a bare subject without the marker is a hard `SYSTEM_SUBJECT_REJECTED`), so a caller *value* must
 influence the *context*. That seam is unverified.
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 
@@ -311,7 +311,7 @@ Plans:
   `GetLocation`/`GetExitsByLocation` slice end-to-end (proves criteria 2 and 4); plus the committed
   ast-grep codemod rules (D-63).
 
-- [ ] 02.1-02-PLAN.md — The atomic flip: the remaining 21 command signatures, all six redeclaring
+- [x] 02.1-02-PLAN.md — The atomic flip: the remaining 21 command signatures, all six redeclaring
   interfaces, the 31 production call sites, the `internal/property` chain (D-66), and the codemod
   over the test tier; gated on `task test` **and** `task test:int`.
 
