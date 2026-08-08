@@ -571,10 +571,19 @@ converted to native-git equivalents or dropped.
   (`.golangci.yaml:130`) flag unused params; nolint suppresses by linter name,
   not by individual revive rule. Plans introducing a temporary unused-parameter
   state for staged refactors MUST suppress both: `//nolint:unparam,revive // …`.
-- `task test:int` does NOT accept `--` package args — its package list is
-  hard-coded in `Taskfile.yaml:93-111`. Plans saying `task test:int --
-  ./test/integration/foo/...` are wrong; `task test:int:focus` is the only
-  narrowed variant and it's pinned to `./test/integration/plugin`.
+- `task test:int` **DOES** accept `--` package args. `Taskfile.yaml:289`
+  interpolates `{{.CLI_ARGS | default "./..."}}`, so
+  `task test:int -- ./test/integration/access/...` scopes the run and a bare
+  `task test:int` falls back to `./...`. `task test:int:focus` is a *different*
+  tool — a Ginkgo `-ginkgo.focus=` filter pinned to `./test/integration/plugin`
+  with `-race` hardcoded — not the only narrowing path.
+  > **Corrected 2026-08-08.** This entry previously asserted the opposite and
+  > cited `Taskfile.yaml:93-111`, which is no longer the `test:int` body. The
+  > stale claim survived long enough to re-seed the same defect into a plan, a
+  > planner prompt, and a VALIDATION.md in one session, and to produce a
+  > direct codex-vs-pi contradiction during cross-AI review of Phase 02.1.
+  > **Verify a tooling claim in this file against `Taskfile.yaml` before acting
+  > on it** — line-number citations here drift as the Taskfile moves.
 - **Mocking style varies by package**: `internal/web/` uses hand-rolled struct
   mocks (`mockCoreClient` in `internal/web/handler_test.go:36`); `internal/grpc/`
   uses mockery `EXPECT()` for repos like
