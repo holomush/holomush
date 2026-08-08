@@ -263,6 +263,11 @@ func newProbeService(t *testing.T, dsl string, loc *world.Location) *world.Servi
 // The attribute-carrying caller is built by same-package composite literal on
 // purpose: no production code, exported or unexported, may inject attributes
 // before Phase 02.2 defines the vocabulary (D-62).
+//
+// This is the ATTRIBUTE-FORWARDING half of INV-WORLD-8; the parameter-shape half
+// is pinned structurally by test/meta/world_caller_census_test.go.
+//
+// Verifies: INV-WORLD-8
 func TestWorldServiceCallerAttributesReachActionBag(t *testing.T) {
 	const dsl = `permit(principal is character, action in ["read"], resource is location) ` +
 		`when { action.` + tracerProbeKey + ` == "expected" };`
