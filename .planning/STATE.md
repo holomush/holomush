@@ -5,8 +5,8 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: ABAC & Schema Vocabulary
 status: executing
-stopped_at: Phase 02.2 context gathered; Phase 02.1 World Caller Model split out
-last_updated: "2026-08-08T14:38:14.663Z"
+stopped_at: Phase 02.1 context gathered
+last_updated: "2026-08-08T14:40:37.528Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 01.1 complete, transitioned to Phase 02
 progress:
@@ -540,11 +540,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-08T00:16:14.711Z
+Last session: 2026-08-08T14:40:37.515Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Phase 02.2 context gathered; Phase 02.1 World Caller Model split out
+Stopped at: Phase 02.1 context gathered
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
@@ -558,7 +558,7 @@ docs-only pull requests, which `paths-ignore` routes to a lane that uploads no c
 Archived — Phase 8: all 9 plans executed, CoreServer 1891 → 657 LoC and plugin Manager 1876 → 702;
 shipped as PR #4832 with follow-ups #4828, #4829, #4830, #4831.
 Stopped at: Completed 09-19-PLAN.md — phase 09 final plan; all 21 plans executed
-Resume file: .planning/phases/02.2-background-job-authorization-model/02.2-CONTEXT.md
+Resume file: .planning/phases/02.1-world-caller-model/02.1-CONTEXT.md
 
 ## Operator Next Steps
 
