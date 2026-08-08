@@ -310,9 +310,11 @@ Plans:
 - [ ] 02.1-01-PLAN.md — Tracer: `world.Caller` type + constructors, the `checkAccess` seam, and the
   `GetLocation`/`GetExitsByLocation` slice end-to-end (proves criteria 2 and 4); plus the committed
   ast-grep codemod rules (D-63).
+
 - [ ] 02.1-02-PLAN.md — The atomic flip: the remaining 21 command signatures, all six redeclaring
   interfaces, the 31 production call sites, the `internal/property` chain (D-66), and the codemod
   over the test tier; gated on `task test` **and** `task test:int`.
+
 - [ ] 02.1-03-PLAN.md — `INV-WORLD-8` census binding + registry entry + `INV-WORLD` scope amendment
   (D-65/D-67/D-68), then the `abac-reviewer` READY gate and `task pr-prep`.
 

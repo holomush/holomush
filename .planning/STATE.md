@@ -6,13 +6,13 @@ current_phase: 02
 current_phase_name: ABAC & Schema Vocabulary
 status: executing
 stopped_at: Phase 02.1 context gathered
-last_updated: "2026-08-08T14:40:37.528Z"
+last_updated: "2026-08-08T16:02:04.300Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 01.1 complete, transitioned to Phase 02
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 32
+  total_plans: 35
   completed_plans: 26
   percent: 33
 ---
@@ -527,6 +527,7 @@ None yet.
 - Phase 3 edited: edited fields: depends_on (added Phase 02.1 — retirement reactor cannot authorize MoveCharacter without the job-identity model; D-45 superseded)
 - Phase 02.1 edited: edited fields: requirements (AUTHZ-01 minted), shape (JobCaller deferred to 02.2 per D-62)
 - Phase 02.2 edited: edited fields: requirements (AUTHZ-02 minted)
+- Phase 02.1 blast-radius numbers superseded by measurement: ROADMAP §02.1's 'Verified blast radius (grep-confirmed, do not re-estimate)' block is WRONG in four load-bearing ways; 02.1-RESEARCH.md §'Verified Blast Radius — corrections' (2026-08-08, rg+ast-grep reproducible) supersedes it and is authoritative for planning: 23 public Service methods not 21 (checkAccess appears 23x, 1:1); 5 interfaces + 1 callback type + 3 supporting signatures not 3 (command/types.go has 15 not '9+'; hostfunc.WorldService, property.WorldMutator, property.EntityMutator, property.Definition.Set were unnamed); NO mockery regeneration is needed (no generated mock carries subjectID) — the real work is ~106 hand-rolled test-double method declarations across 13 files; 31 arg-2 production call sites not 47, and ~332 true test sites not 347 (two codemod classes, not one rule). Also: CONTEXT.md D-65 cites internal/world/world_envelope_census_test.go; the census test actually lives at test/meta/world_envelope_census_test.go. NOTE: no gsd-tools verb exists to rewrite an existing ROADMAP phase section (phase verbs are uat-passed/next-decimal/add/add-batch/insert/remove/complete/list-plans; roadmap verbs are analyze/get-phase/update-plan-progress/annotate-dependencies/validate/upgrade), so the stale prose is recorded as superseded here rather than hand-edited.
 
 ## Deferred Items
 
