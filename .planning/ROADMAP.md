@@ -303,7 +303,7 @@ no `checkAccess` change.)*
 a bare subject without the marker is a hard `SYSTEM_SUBJECT_REJECTED`), so a caller *value* must
 influence the *context*. That seam is unverified.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 
@@ -315,7 +315,7 @@ Plans:
   interfaces, the 31 production call sites, the `internal/property` chain (D-66), and the codemod
   over the test tier; gated on `task test` **and** `task test:int`.
 
-- [ ] 02.1-03-PLAN.md — `INV-WORLD-8` census binding + registry entry + `INV-WORLD` scope amendment
+- [x] 02.1-03-PLAN.md — `INV-WORLD-8` census binding + registry entry + `INV-WORLD` scope amendment
   (D-65/D-67/D-68), then the `abac-reviewer` READY gate and `task pr-prep`.
 
 ### Phase 02.2: Background Job Authorization Model (INSERTED)

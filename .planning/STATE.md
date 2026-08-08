@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 02.1
-current_phase_name: world-caller-model
-status: verifying
+current_phase: 02.2
+current_phase_name: Background Job Authorization Model
+status: planning
 stopped_at: Completed 02.1-03-PLAN.md
-last_updated: "2026-08-08T23:12:03.804Z"
+last_updated: "2026-08-08T23:49:02.035Z"
 last_activity: 2026-08-08
 last_activity_desc: Phase 02.1 execution started
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 35
-  completed_plans: 28
-  percent: 33
+  completed_plans: 29
+  percent: 44
 ---
 
 # Project State
@@ -33,11 +33,11 @@ complete character identity surface (creation, management, public profiles with 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 02.1 (world-caller-model) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 02.2 — Background Job Authorization Model
+Plan: Not started
+Status: Ready to plan
 Progress: [████████░░] 80% (1/6 phases)
-Last activity: 2026-08-08 — Phase 02.1 execution started
+Last activity: 2026-08-08 — Phase 02.1 complete, transitioned to Phase 02.2
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -109,7 +109,7 @@ no action needed.
 
 **Velocity:**
 
-- Total plans completed: 69
+- Total plans completed: 72
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -125,6 +125,7 @@ no action needed.
 | 06 | 5 | - | - |
 | 07 | 11 | - | - |
 | 01.1 | 7 | - | - |
+| 02.1 | 3 | - | - |
 
 **Recent Trend:**
 
