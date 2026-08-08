@@ -108,6 +108,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       2026-08-06** to backlog Phase 999.20 (linked to 999.6 Rostering): renaming cannot be specified
       until the identity model gains an approval dimension, which does not exist. Rationale:
       `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-44.
+
 - [ ] **IDENT-04**: A character can be **soft-retired** (admin-driven in v0.13; player self-retire
       deferred beyond v0.13); the character leaves active play, its record and name are preserved, and
       the operation is reversible.
@@ -253,7 +254,7 @@ cannot be dropped as "nice to have" during planning.
 Minted 2026-08-08 during `/gsd-discuss-phase 02.1` (maintainer-authorized). The family covers the
 world caller model (Phase 02.1) and the background-job authorization model (Phase 02.2).
 
-- [ ] **AUTHZ-01**: Every public `world.Service` command takes a **typed caller value** carrying
+- [x] **AUTHZ-01**: Every public `world.Service` command takes a **typed caller value** carrying
       the subject and its execution context together — no bare `subjectID string` parameter and no
       overload/variadic escape hatch — and `checkAccess` forwards that context to
       `types.NewAccessRequest` (deleting the hardcoded `nil` at `internal/world/service.go:214`),
