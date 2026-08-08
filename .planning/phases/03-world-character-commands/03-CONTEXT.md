@@ -97,7 +97,7 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   `internal/web/auth_handlers.go`) reading a pointer to a retired character.
   Consequence to honor: retire now writes the `players` row too.
 
-- **D-35:** ~~Rename is status-agnostic.~~ **SUPERSEDED by D-44** — rename leaves
+- **D-35 [informational]:** ~~Rename is status-agnostic.~~ **SUPERSEDED by D-44** — rename leaves
   the milestone, so this decision has no subject. Recorded because it was reached
   and then withdrawn; it must not be silently re-derived.
 
@@ -200,15 +200,15 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   where a player may retire their own character but only an admin may un-retire.
   (A `rename` action is withdrawn with D-44.)
 
-- **D-41:** ~~Admins may rename; §9.3's census gains `AdminRenameCharacter`.~~
+- **D-41 [informational]:** ~~Admins may rename; §9.3's census gains `AdminRenameCharacter`.~~
   **DEFERRED with D-44.** The question — *"Does the admin portal expose rename?"*,
   open in sketch 009's table and flagged by the ROADMAP as must-answer-in-this-phase
   — moves to the backlog item with rename. Sketch 004's `Rename…` affordance is
   therefore **not** live in v0.13, and sketch 009's finding #5 ("names are
   reserved, not permanent") is **false for v0.13** and must be corrected.
 
-- **D-45 — SUPERSEDED 2026-08-07 by D-47. The decision below is recorded because it was
-  reached, acted on, and withdrawn; it MUST NOT be silently re-derived.** Its premise —
+- **D-45:** SUPERSEDED 2026-08-07 by D-47. The decision below is recorded because it was
+  reached, acted on, and withdrawn; it MUST NOT be silently re-derived. Its premise —
   that the reactor needs a *synthetic principal* whose authority is described by static
   policy — was wrong. See D-47 for what replaced it and why. The struck text follows.
 
@@ -350,8 +350,8 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
 
 ### The `last_active_at` write seam
 
-- **D-42: `last_active_at` is written through a NATS JetStream KV buffer with a
-  periodic flush, in its OWN general-purpose subsystem.** Resolved 2026-08-06.
+- **D-42:** `last_active_at` is written through a NATS JetStream KV buffer with a
+  periodic flush, in its OWN general-purpose subsystem. Resolved 2026-08-06.
 
   **Why a buffer rather than a throttled direct `UPDATE`.** Both shapes are
   correct; the direct form (`UPDATE … WHERE id = $1 AND last_active_at < $2`) is

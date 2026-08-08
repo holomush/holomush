@@ -1053,6 +1053,12 @@ character."* The code cannot settle which is true — no RPC exists for either y
 nothing and discharges IDENT-04's literal wording; withholding it means IDENT-04 closes on an
 admin-only path, which contradicts the requirement text. **Flag for user confirmation.** `[ASSUMED]`
 
+> **RESOLVED 2026-08-07 (user decision at plan time): ADMIN-ONLY retire for v0.13 — the
+> recommendation above is superseded; no player self-retire seed ships, and IDENT-04's requirement
+> text was reworded (maintainer-authorized) to "admin-driven in v0.13; player self-retire deferred
+> beyond v0.13", so the contradiction the recommendation feared no longer exists. See Open
+> Questions Q1 and 03-04's review_disposition U1.**
+
 ---
 
 ## 9. Don't Hand-Roll
@@ -1454,15 +1460,20 @@ external-mode-specific behavior. Applying that rule:
 
 ## Open Questions
 
-1. **Does v0.13 expose player self-retire, or admin-only?**
+1. **Does v0.13 expose player self-retire, or admin-only?** **(RESOLVED 2026-08-07: admin-only retire
+   for v0.13 — user decision at plan time; player self-retire deferred beyond v0.13.** No player
+   self-retire seed ships; IDENT-04 reworded accordingly in REQUIREMENTS.md; D-40's player-retires half
+   superseded, its action split stands. Consumed by 03-04.)
    - What we know: IDENT-04 says "A player can soft-retire **their own** character." Every sketch cited
      in CONTEXT shows `AdminRetireCharacter` / `AdminUnretireCharacter`. `seed:admin-full-access` covers
      admins for free.
    - What's unclear: whether a player-facing RPC ships in v0.13 at all (Phase 5/6 territory).
-   - Recommendation: ship **both** seeds; the domain command is identical either way. Confirm with the
-     user during `/gsd-plan-phase`.
+   - Recommendation: ~~ship **both** seeds; the domain command is identical either way. Confirm with the
+     user during `/gsd-plan-phase`.~~ Superseded by the resolution above.
 
 2. **Does INV-WORLD-4's "each emitting its envelope atomically" clause survive the flusher?**
+   **(RESOLVED — consumed by 03-05 Task 3: exemption clause per the recommendation; the ratified A2
+   wording is recorded in 03-05's assumption_delta_decision block.)**
    - What we know: the flusher writes `characters.last_active_at` and emits nothing.
    - What's unclear: whether the clean amendment is an exemption clause or a scope narrowing.
    - Recommendation: minimal honest amendment (exemption clause, explicitly naming the writer and why),
@@ -1471,20 +1482,26 @@ external-mode-specific behavior. Applying that rule:
 3. **~~Where does `createConsumerWithRetry` live after this phase?~~ SETTLED by D-46** (2026-08-06,
    after this question was first raised): it moves to a neutral shared package (e.g.
    `internal/eventbus/consumer`) with `consumerCreateBackoffs`; both audit callers migrate;
-   error codes preserved. **The residual question is WHO lands it** — see question 7.
+   error codes preserved. **The residual question is WHO lands it** — see question 7. **(RESOLVED —
+   the landing owner is settled by 03-02 Task 1's consume-or-create interlock branch.)**
 
-4. **Which package hosts the flusher's writer-boundary call?**
+4. **Which package hosts the flusher's writer-boundary call?** **(RESOLVED — consumed by 03-05
+   Task 1: exported free function `UpdateCharacterLastActive` in `internal/world/postgres`, injected
+   as a named function type from `cmd/holomush`.)**
    - What we know: `UPDATE characters` must live in `internal/world/postgres`; the flusher's package
      will not be on the composition allowlist.
    - Recommendation: exported free function in `internal/world/postgres` (precedent:
      `BackfillCharacterIdentity`), injected as an interface from `cmd/holomush`.
 
-5. **Where in the pinned topological order do the two new subsystems land?**
+5. **Where in the pinned topological order do the two new subsystems land?** **(RESOLVED — consumed
+   by 03-02 Task 3: derive from the observed test-failure diff, never hand-place.)**
    - What we know: `topoSort` tie-breaks by `SubsystemID` value; new IDs sort last within their tier.
    - Recommendation: derive it by running the test once and reading the failure diff, not by hand.
 
 6. **What per-execution context does the timer-driven `last_active_at` flusher present?** (02.2-CONTEXT
-   open question 1 — reserved; **MUST NOT be invented by a Phase 3 planner**.)
+   open question 1 — reserved; **MUST NOT be invented by a Phase 3 planner**.) **(DEFERRED — deliberate
+   cross-phase interlock §0.4-3: 03-05 consumes 02.2's landed answer or ships without job-registry
+   participation and records the question open in its SUMMARY.)**
    - What we know: the D-54 provenance triple assumes a triggering event; the flusher has none. The
      flusher's own write crosses no ABAC chokepoint (direct writer-boundary call, §0.4-3), so nothing
      breaks functionally if it stays outside the job model — but 02.2 criterion 4's universality claim
@@ -1495,11 +1512,16 @@ external-mode-specific behavior. Applying that rule:
      that consumes whichever answer lands.
 
 7. **Who lands the D-46 relocation — 02.2 (which needs the stamp site for its fixture) or Phase 3
-   (whose CONTEXT owns the decision)?** (§0.4-1)
+   (whose CONTEXT owns the decision)?** (§0.4-1) **(DEFERRED — deliberate cross-phase interlock:
+   03-02 Task 1 carries the "if already landed by 02.2, consume it" branch and records which branch
+   fired in its SUMMARY.)**
    - Recommendation: resolve when the first of the two phases is planned; Phase 3's plan should carry
      an "if already landed by 02.2, consume it" branch.
 
 8. **Which phase ships the real `job:retirement` seed + registry registration?** (§0.4-2, A9)
+   **(DEFERRED — deliberate cross-phase interlock: 03-04 Task 2 ships the grant in 02.2's landed
+   vocabulary iff 02.2's fixture-only scope left it unshipped; the abac-reviewer gate fires either
+   way. NOTE the human retire/unretire surface itself is settled — admin-only per Q1's resolution.)**
    - What we know: 02.2 is fixture-only by decision (D-52); D-47's "seed work leaves this phase
      entirely" sentence was written about the struck `system:` seed, not about job seeds.
    - Recommendation: Phase 3 ships its consumers' seeds against 02.2's landed vocabulary; confirm
@@ -1508,6 +1530,7 @@ external-mode-specific behavior. Applying that rule:
 9. **(Not Phase 3's, but blocks its mental model)** `SystemCaller()` vs the S1 defense — a caller
    *value* must influence the *context* (`engine.go:92-101` requires both the bare subject AND
    `IsSystemContext(ctx)`). Owned by 02.1's research flag; Phase 3 never uses `SystemCaller`.
+   **(DEFERRED — owned by Phase 02.1; no Phase 3 plan touches `SystemCaller`.)**
 
 ---
 

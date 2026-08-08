@@ -266,10 +266,12 @@ unrepresentable, and the `job.`-namespaced attribute keys are produced in exactl
 
 - **21 public `Service` methods** take `(ctx context.Context, subjectID string, …)` — a uniform
   slot on every one, so the change is symmetric rather than per-command.
+
 - **47 production call sites** across 12 files; **347 test call sites** across 13 files.
 - **3+ interfaces redeclare the signatures** and must move in lockstep:
   `internal/world/mutator.go` (11 methods), `internal/command/types.go` (9+),
   `internal/grpc/server.go` (2) — plus mockery regeneration for their mocks.
+
 - `subjectID` is positional arg 2 on all 21 methods, so the test-site migration is a structural
   codemod (`ast-grep`), not 347 judgment calls.
 
@@ -277,14 +279,18 @@ unrepresentable, and the `job.`-namespaced attribute keys are produced in exactl
 
 1. No public `world.Service` command takes a bare `subjectID string`; every one takes a typed
    caller value, and there is no overload or variadic escape hatch that preserves the old shape.
+
 2. `checkAccess` passes the caller's execution context to `types.NewAccessRequest` — the
    hardcoded `nil` at `service.go:214` is gone — and a world write can reach the DSL as `action.*`.
+
 3. Behavior is unchanged for every existing caller: the 47 production sites migrate to
    `HumanCaller`/`SystemCaller` with identical authorization outcomes, proven by the existing
    suites passing without assertion changes.
+
 4. `internal/grpc/location_follow.go:197` — the **single** production `access.WithSystemSubject`
    call site — is migrated to an explicit `SystemCaller`, so the ambient context marker is no
    longer how a system operation is declared at the world boundary.
+
 5. `abac-reviewer` returns READY: the refactor changes how the subject and its context reach the
    engine, which is an access-control surface even though no policy text changes.
 
@@ -332,16 +338,19 @@ rather than stretching an IDENT-* id to fit.
   reserved-key-validates them (`:153-159`), deep-clones them (`:160-166`), and the engine overlays
   them onto `bags.Action` (`engine.go:252-265`) where the DSL reads them as `action.*`. Reaching it
   from a world write is **Phase 02.1's** job, not this phase's.
+
 - **Instance-scoping is expressible — proven, not assumed.** `Comparison.Left`/`Right` are both
   `*Expr` and `Expr` may be an `AttrRef` (`internal/access/policy/dsl/ast.go:145-150,208-222`), and
   16+ shipped seeds already compare across bags (`seed.go:41,47,113,131`). So
   `when { action.job.trigger_subject == resource.id }` parses and evaluates. This is the concrete
   reason a grants-only design was rejected — no static grant list can express it.
+
 - **The provider shape has a 15-line template.** `PluginProvider`
   (`internal/access/policy/attribute/plugin_provider.go:36-58`) is a non-character principal
   provider gated on a registry — `Namespace()`, `ResolveSubject` returning `nil, nil` for
   non-matching refs, `ResolveResource` returning `nil, nil`, and `Schema()`. An unknown plugin
   resolving to `nil, nil` is what makes it fail closed; the job provider copies that property.
+
 - **`action` is the strictest namespace in the compiler — and registering it is load-bearing.**
   `validateAttributes` (`internal/access/policy/compiler.go:149-170`) skips unregistered
   namespaces, warns on an undeclared key in a registered namespace, but **hard-errors** for
@@ -354,15 +363,19 @@ rather than stretching an IDENT-* id to fit.
 1. A background job authorizes its world writes under **its own identity** — not a borrowed
    human actor's, and not an ABAC bypass. `access.WithSystemSubject` appears on no reactor or
    flusher path.
+
 2. Authority is scoped by **per-execution runtime attributes**, not static grants alone: policy
    can express "this job may write only the aggregate whose event it is currently handling", and
    a test proves the same job is DENIED against a different aggregate.
+
 3. The `action` namespace is registered in the schema registry with **every** key it must carry —
    the job provenance triple, the already-shipped `dispatch_location`, and the resolver-owned
    `name` — so a typo'd `action.*` reference is a compile-time failure rather than a silent
    default-deny, and no shipped seed regresses.
+
 4. The model is documented as the path every future background consumer takes, and existing
    `WithSystemSubject` call sites are enumerated (migration itself belongs to Phase 02.1).
+
 5. `abac-reviewer` returns READY on the new principal type, its provider, its schema, and its
    seeds.
 
@@ -395,19 +408,30 @@ Plans:
 4. The `writeCommands` census and the mutation taxonomy list the new commands in the same change that introduces them; the census meta-test fails if either is missing.
 5. `characters.last_active_at` is actually written — Phase 2 shipped the column and every read path, but nothing writes it. A character's activity updates it without a per-event database write, and `INV-WORLD-4`'s writer enumeration is amended in the same change that adds the writer.
 
-**Plans**: 5 plans
+**Plans**: 6 plans
 **UI hint**: no
 **Research flag**: `--research-phase` recommended — the `writeCommands` census bijection semantics (`internal/world/mutator.go:78-100`) are genuinely unverified, and this repo has a documented history of plans failing on unverified seam assumptions.
 
 **Sketch findings**: **Where `last_active_at` is written** — **resolved 2026-08-06** (03-CONTEXT.md D-42): an event listener over session start/end plus character activity, buffered in a **NATS JetStream KV** bucket (which MUST set `Storage: FileStorage` explicitly — buckets do not inherit the stream's config) and flushed periodically to the column by its **own general-purpose subsystem**, separate from the retirement reactor. The seam MUST NOT be the lease-refresh path (`internal/session/session.go:485` `RefreshConnection`). The flusher is a fourth out-of-world writer and amends `INV-WORLD-4`'s enumeration in the same change. **Can admins rename at all?** — deferred to Phase 999.20 with rename; sketch 004's `Rename…` affordance is **not** live in v0.13. **Sketch 009-A depended on rename existing** — that dependency is now unmet; sketch 009 finding #5 ("names are reserved, not permanent") is **false for v0.13** and the creation copy must be corrected. **Roster:** a non-`active` lifecycle MUST suppress the shipped session badge (`Active`/`Offline`), which is a *different vocabulary* from `characters.status` — note the split is already structural (session status lives on the session row, `internal/session/session.go:21`), so this is a rendering concern, not a missing column. Player self-retire is **not** specified — every retire path sketched is `AdminRetireCharacter`. Source: `.planning/sketches/002-*/README.md`, `004-*/README.md`.
 
 Plans:
+**Wave 1**
 
-- [ ] 03-01-PLAN.md — Retire/Unretire domain commands: two taxonomy kinds, two census rows, `CharacterRepository.SetStatus` CAS, the D-34 default-character clear, and the two ABAC seeds (wave 1)
-- [ ] 03-02-PLAN.md — Shared substrate: the D-46 consumer-retry relocation, two new `SubsystemID`s, both subsystem types, and the full 13-site composition cascade landed once (wave 1)
-- [ ] 03-03-PLAN.md — IDENT-10 proof: a two-replica stale-version rejection `Describe` in the existing resilience harness, plus envelope atomicity and feed ordering under concurrency (wave 2)
-- [ ] 03-04-PLAN.md — Retirement reactor effects: end sessions, notify the old location, move to the starting location — idempotent under redelivery (wave 2)
-- [ ] 03-05-PLAN.md — `last_active_at` flush: the writer-boundary update, the periodic drain, and the `INV-WORLD-4` THREE→FOUR enumeration amendment (wave 2)
+- [ ] 03-01-PLAN.md — Retire/Unretire domain commands (caller-shaped): tracer through `mutate()`, two taxonomy kinds + census rows, `CharacterRepository.SetStatus` CAS, the D-34 default-character clear (wave 1)
+- [ ] 03-02-PLAN.md — Shared substrate: the D-46 consumer-retry relocation, two subsystem skeletons (`internal/retirement`, `internal/charactivity`), and the full 13-site `SubsystemID` 18→20 cascade landed once (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-03-PLAN.md — IDENT-10 proof: two-replica stale-version rejection `Describe` in the resilience harness, retire row+envelope atomicity, name-reservation assertion, INV-WORLD-6 defect filed (wave 2)
+- [ ] 03-04-PLAN.md — Retirement reactor: sessions-only fanout idempotent under redelivery, `JobCaller` authorization per 02.2's landed model, admin-only retire/unretire surface (user decision 2026-08-07; no player self-retire seed) + conditional `job:retirement` grant (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-05-PLAN.md — `last_active_at`: writer-boundary flush function, KV listener/flusher subsystem with revision-conditional deletes, the `INV-WORLD-4` THREE→FOUR enumeration amendment, and the `WithCharacterActivity` harness option + charactivity suite (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 03-06-PLAN.md — Full-stack retirement proof: `WithOutboxRelay`/`WithRetirementReactor` harness StartOptions and the `test/integration/retirement/` suite (fanout, feed order, redelivery idempotency, instance-scope DENY) (wave 4)
 
 ### Phase 4: Shared Facade Helpers & `CharacterAccessService`
 

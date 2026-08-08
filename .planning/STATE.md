@@ -4,15 +4,15 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02
 current_phase_name: ABAC & Schema Vocabulary
-status: planning
+status: executing
 stopped_at: Phase 02.2 context gathered; Phase 02.1 World Caller Model split out
-last_updated: "2026-08-08T00:16:14.729Z"
+last_updated: "2026-08-08T13:01:09.784Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 01.1 complete, transitioned to Phase 02
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 31
+  total_plans: 32
   completed_plans: 26
   percent: 33
 ---
@@ -35,7 +35,7 @@ complete character identity surface (creation, management, public profiles with 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02 — ABAC & Schema Vocabulary
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Progress: [██████████] 100% (1/6 phases)
 Last activity: 2026-08-06 — Phase 01.1 complete, transitioned to Phase 02
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
