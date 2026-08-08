@@ -36,6 +36,11 @@ severity: hint
 rule:
   kind: parameter_declaration
   all:
+    # POSITIONAL FENCE (added 02.1-02) — see world-caller-decl.yml for the full
+    # rationale. The subject is ALWAYS parameter 2; without this clause the rule
+    # matches a blank-named `string` parameter at any position once a grouped
+    # declaration has been split by the migration.
+    - nthChild: 2
     - has: {field: name, pattern: $NAME}
     - has: {field: type, regex: '^string$'}
     - not: {regex: ','}

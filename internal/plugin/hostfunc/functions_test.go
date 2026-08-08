@@ -42,39 +42,39 @@ func (m *mockWorldMutatorForConstructorTest) GetLocation(_ context.Context, _ wo
 	return nil, nil
 }
 
-func (m *mockWorldMutatorForConstructorTest) GetCharacter(_ context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+func (m *mockWorldMutatorForConstructorTest) GetCharacter(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Character, error) {
 	return nil, nil
 }
 
-func (m *mockWorldMutatorForConstructorTest) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+func (m *mockWorldMutatorForConstructorTest) GetCharactersByLocation(_ context.Context, _ world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	return nil, nil
 }
 
-func (m *mockWorldMutatorForConstructorTest) GetObject(_ context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+func (m *mockWorldMutatorForConstructorTest) GetObject(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Object, error) {
 	return nil, nil
 }
 
-func (m *mockWorldMutatorForConstructorTest) CreateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *mockWorldMutatorForConstructorTest) CreateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (m *mockWorldMutatorForConstructorTest) CreateExit(_ context.Context, _ string, _ *world.Exit) error {
+func (m *mockWorldMutatorForConstructorTest) CreateExit(_ context.Context, _ world.Caller, _ *world.Exit) error {
 	return nil
 }
 
-func (m *mockWorldMutatorForConstructorTest) CreateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *mockWorldMutatorForConstructorTest) CreateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (m *mockWorldMutatorForConstructorTest) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *mockWorldMutatorForConstructorTest) UpdateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (m *mockWorldMutatorForConstructorTest) UpdateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *mockWorldMutatorForConstructorTest) UpdateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (m *mockWorldMutatorForConstructorTest) FindLocationByName(_ context.Context, _, _ string) (*world.Location, error) {
+func (m *mockWorldMutatorForConstructorTest) FindLocationByName(_ context.Context, _ world.Caller, _ string) (*world.Location, error) {
 	return nil, nil
 }
 

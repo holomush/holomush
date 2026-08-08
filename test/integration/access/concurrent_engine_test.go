@@ -211,7 +211,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func(idx int) {
 					defer GinkgoRecover()
 					defer wg.Done()
-					_, err := svc.GetExit(ctx, subjectID, ulid.Make())
+					_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), ulid.Make())
 					errs[goroutines+idx] = err
 				}(i)
 			}
@@ -221,7 +221,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func(idx int) {
 					defer GinkgoRecover()
 					defer wg.Done()
-					_, err := svc.GetObject(ctx, subjectID, ulid.Make())
+					_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), ulid.Make())
 					errs[2*goroutines+idx] = err
 				}(i)
 			}
@@ -431,7 +431,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
-					_, err := svc.GetExit(ctx, subjectID, ulid.Make())
+					_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), ulid.Make())
 					if err != nil {
 						Expect(errors.Is(err, world.ErrAccessEvaluationFailed)).To(BeTrue())
 						totalFailures.Add(1)
@@ -446,7 +446,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
-					_, err := svc.GetObject(ctx, subjectID, ulid.Make())
+					_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), ulid.Make())
 					if err != nil {
 						Expect(errors.Is(err, world.ErrAccessEvaluationFailed)).To(BeTrue())
 						totalFailures.Add(1)

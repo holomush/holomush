@@ -59,7 +59,7 @@ func (s *GRPCServer) GetCharacter(ctx context.Context, req *worldv1.GetCharacter
 	}
 
 	subjectID := access.CharacterSubject(req.GetSubjectId())
-	char, err := s.svc.GetCharacter(ctx, subjectID, charID)
+	char, err := s.svc.GetCharacter(ctx, HumanCaller(subjectID), charID)
 	if err != nil {
 		return nil, mapWorldError(err)
 	}
@@ -77,7 +77,7 @@ func (s *GRPCServer) ListCharactersAtLocation(ctx context.Context, req *worldv1.
 	}
 
 	subjectID := access.CharacterSubject(req.GetSubjectId())
-	chars, err := s.svc.GetCharactersByLocation(ctx, subjectID, locID, ListOptions{})
+	chars, err := s.svc.GetCharactersByLocation(ctx, HumanCaller(subjectID), locID, ListOptions{})
 	if err != nil {
 		return nil, mapWorldError(err)
 	}

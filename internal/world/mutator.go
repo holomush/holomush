@@ -17,8 +17,12 @@ import (
 // This interface represents the full set of authorized world operations
 // available to plugins that need to modify world state.
 //
-// All methods accept a subjectID parameter for ABAC authorization.
-// Plugins use "plugin:<name>" as their subject ID (via access.PluginSubject).
+// All methods accept a Caller value carrying the execution identity for ABAC
+// authorization. Construct it with world.HumanCaller (which wraps an
+// already-built subject string verbatim) or world.SystemCaller (for
+// server-internal operations on behalf of no character). Plugins pass
+// world.HumanCaller(access.PluginSubject(name)), so their ABAC subject is
+// still "plugin:<name>".
 type Mutator interface {
 	// Read operations (from Service)
 
@@ -26,35 +30,35 @@ type Mutator interface {
 	GetLocation(ctx context.Context, subjectID Caller, id ulid.ULID) (*Location, error)
 
 	// GetCharacter retrieves a character by ID after checking read authorization.
-	GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*Character, error)
+	GetCharacter(ctx context.Context, subjectID Caller, id ulid.ULID) (*Character, error)
 
 	// GetCharactersByLocation retrieves characters at a location with pagination
 	// after checking read authorization.
-	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error)
+	GetCharactersByLocation(ctx context.Context, subjectID Caller, locationID ulid.ULID, opts ListOptions) ([]*Character, error)
 
 	// GetObject retrieves an object by ID after checking read authorization.
-	GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*Object, error)
+	GetObject(ctx context.Context, subjectID Caller, id ulid.ULID) (*Object, error)
 
 	// Write operations
 
 	// CreateLocation creates a new location after checking write authorization.
-	CreateLocation(ctx context.Context, subjectID string, loc *Location) error
+	CreateLocation(ctx context.Context, subjectID Caller, loc *Location) error
 
 	// CreateExit creates a new exit between locations after checking write authorization.
-	CreateExit(ctx context.Context, subjectID string, exit *Exit) error
+	CreateExit(ctx context.Context, subjectID Caller, exit *Exit) error
 
 	// CreateObject creates a new object with the given containment after checking write authorization.
-	CreateObject(ctx context.Context, subjectID string, obj *Object) error
+	CreateObject(ctx context.Context, subjectID Caller, obj *Object) error
 
 	// UpdateLocation updates an existing location after checking write authorization.
-	UpdateLocation(ctx context.Context, subjectID string, loc *Location) error
+	UpdateLocation(ctx context.Context, subjectID Caller, loc *Location) error
 
 	// UpdateObject updates an existing object after checking write authorization.
-	UpdateObject(ctx context.Context, subjectID string, obj *Object) error
+	UpdateObject(ctx context.Context, subjectID Caller, obj *Object) error
 
 	// FindLocationByName searches for a location by name after checking read authorization.
 	// Returns ErrNotFound if no location matches.
-	FindLocationByName(ctx context.Context, subjectID, name string) (*Location, error)
+	FindLocationByName(ctx context.Context, subjectID Caller, name string) (*Location, error)
 }
 
 // Compile-time check that Service implements Mutator.

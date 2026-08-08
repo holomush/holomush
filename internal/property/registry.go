@@ -47,15 +47,15 @@ type WorldQuerier interface {
 
 // WorldMutator provides write access for property updates.
 type WorldMutator interface {
-	UpdateLocation(ctx context.Context, subjectID string, loc *world.Location) error
-	UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error
+	UpdateLocation(ctx context.Context, subjectID world.Caller, loc *world.Location) error
+	UpdateObject(ctx context.Context, subjectID world.Caller, obj *world.Object) error
 }
 
 // Definition defines behavior for a settable property.
 type Definition interface {
 	Validate(entityType string) error
 	Get(ctx context.Context, querier WorldQuerier, entityType string, entityID ulid.ULID) (string, error)
-	Set(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityType string, entityID ulid.ULID, value string) error
+	Set(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID world.Caller, entityType string, entityID ulid.ULID, value string) error
 }
 
 // Entry ties a property name to its definition.

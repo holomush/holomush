@@ -27,61 +27,61 @@ type fakeMutator struct {
 	// findLocationByName results
 	findLocationResult *world.Location
 	findLocationErr    error
-	lastFindSubject    string // subject passed to FindLocationByName
+	lastFindSubject    world.Caller // caller passed to FindLocationByName (world.Caller has no accessor by design, D-62)
 
 	// createLocation results
 	createLocationErr    error
-	lastCreateLocSubject string // subject passed to CreateLocation
+	lastCreateLocSubject world.Caller // caller passed to CreateLocation
 
 	// createExit results
 	createExitErr         error
-	lastCreateExitSubject string // subject passed to CreateExit
+	lastCreateExitSubject world.Caller // caller passed to CreateExit
 
 	// createObject results
 	createObjectErr      error
-	lastCreateObjSubject string // subject passed to CreateObject
+	lastCreateObjSubject world.Caller // caller passed to CreateObject
 }
 
 func (f *fakeMutator) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	return nil, nil
 }
 
-func (f *fakeMutator) GetCharacter(_ context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+func (f *fakeMutator) GetCharacter(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Character, error) {
 	return nil, nil
 }
 
-func (f *fakeMutator) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+func (f *fakeMutator) GetCharactersByLocation(_ context.Context, _ world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	return nil, nil
 }
 
-func (f *fakeMutator) GetObject(_ context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+func (f *fakeMutator) GetObject(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Object, error) {
 	return nil, nil
 }
 
-func (f *fakeMutator) CreateLocation(_ context.Context, subjectID string, _ *world.Location) error {
+func (f *fakeMutator) CreateLocation(_ context.Context, subjectID world.Caller, _ *world.Location) error {
 	f.lastCreateLocSubject = subjectID
 	return f.createLocationErr
 }
 
-func (f *fakeMutator) CreateExit(_ context.Context, subjectID string, _ *world.Exit) error {
+func (f *fakeMutator) CreateExit(_ context.Context, subjectID world.Caller, _ *world.Exit) error {
 	f.lastCreateExitSubject = subjectID
 	return f.createExitErr
 }
 
-func (f *fakeMutator) CreateObject(_ context.Context, subjectID string, _ *world.Object) error {
+func (f *fakeMutator) CreateObject(_ context.Context, subjectID world.Caller, _ *world.Object) error {
 	f.lastCreateObjSubject = subjectID
 	return f.createObjectErr
 }
 
-func (f *fakeMutator) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (f *fakeMutator) UpdateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (f *fakeMutator) UpdateObject(_ context.Context, _ string, _ *world.Object) error {
+func (f *fakeMutator) UpdateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (f *fakeMutator) FindLocationByName(_ context.Context, subjectID, _ string) (*world.Location, error) {
+func (f *fakeMutator) FindLocationByName(_ context.Context, subjectID world.Caller, _ string) (*world.Location, error) {
 	f.lastFindSubject = subjectID
 	return f.findLocationResult, f.findLocationErr
 }
@@ -510,7 +510,7 @@ func TestWorldServerFindLocationReturnsMatchedLocationAndStampsSubject(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, loc.ID.String(), resp.GetId())
 	assert.Equal(t, loc.Name, resp.GetName())
-	assert.Equal(t, "plugin:core-scenes", m.lastFindSubject,
+	assert.Equal(t, world.HumanCaller("plugin:core-scenes"), m.lastFindSubject,
 		"FindLocation must stamp the plugin subject via access.PluginSubject")
 }
 
@@ -583,7 +583,7 @@ func TestWorldMutationServerCreateLocationWritesLocationAndStampsSubject(t *test
 	require.NoError(t, err)
 	assert.NotEmpty(t, resp.GetId())
 	assert.Equal(t, loc.Name, resp.GetName())
-	assert.Equal(t, "plugin:core-scenes", m.lastCreateLocSubject,
+	assert.Equal(t, world.HumanCaller("plugin:core-scenes"), m.lastCreateLocSubject,
 		"CreateLocation must stamp the plugin subject via access.PluginSubject")
 }
 
@@ -625,7 +625,7 @@ func TestWorldMutationServerCreateExitWritesExitAndStampsSubject(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, resp.GetId())
 	assert.Equal(t, "north", resp.GetName())
-	assert.Equal(t, "plugin:core-scenes", m.lastCreateExitSubject,
+	assert.Equal(t, world.HumanCaller("plugin:core-scenes"), m.lastCreateExitSubject,
 		"CreateExit must stamp the plugin subject via access.PluginSubject")
 }
 
@@ -655,7 +655,7 @@ func TestWorldMutationServerCreateObjectWritesObjectAndStampsSubject(t *testing.
 	require.NoError(t, err)
 	assert.NotEmpty(t, resp.GetId())
 	assert.Equal(t, "Sword", resp.GetName())
-	assert.Equal(t, "plugin:core-scenes", m.lastCreateObjSubject,
+	assert.Equal(t, world.HumanCaller("plugin:core-scenes"), m.lastCreateObjSubject,
 		"CreateObject must stamp the plugin subject via access.PluginSubject")
 }
 

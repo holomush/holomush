@@ -50,7 +50,7 @@ type recordingCharacterMutator struct {
 	mu            sync.Mutex
 	lastEntityID  ulid.ULID
 	lastValue     string
-	lastSubjectID string
+	lastSubjectID world.Caller
 	called        bool
 }
 
@@ -60,7 +60,7 @@ func (m *recordingCharacterMutator) GetName(context.Context, property.WorldQueri
 	return "", nil
 }
 
-func (m *recordingCharacterMutator) SetName(context.Context, property.WorldQuerier, property.WorldMutator, string, ulid.ULID, string) error {
+func (m *recordingCharacterMutator) SetName(context.Context, property.WorldQuerier, property.WorldMutator, world.Caller, ulid.ULID, string) error {
 	return nil
 }
 
@@ -68,7 +68,7 @@ func (m *recordingCharacterMutator) GetDescription(context.Context, property.Wor
 	return "", nil
 }
 
-func (m *recordingCharacterMutator) SetDescription(_ context.Context, _ property.WorldQuerier, _ property.WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
+func (m *recordingCharacterMutator) SetDescription(_ context.Context, _ property.WorldQuerier, _ property.WorldMutator, subjectID world.Caller, entityID ulid.ULID, value string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.called = true

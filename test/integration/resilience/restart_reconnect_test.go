@@ -81,7 +81,7 @@ var _ = Describe("Restart and reconnect", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "svcB.GetLocation")
 		const preRestartName = "written-before-restart"
 		loc.Name = preRestartName
-		Expect(svcB.UpdateLocation(ctx, subj, loc)).To(Succeed(), "pre-restart write must commit")
+		Expect(svcB.UpdateLocation(ctx, world.HumanCaller(subj), loc)).To(Succeed(), "pre-restart write must commit")
 
 		// "Kill" replica B. Server.Stop is idempotent (plugin-only teardown; the
 		// shared DB + broker are owned by env / replica A cleanup), so the later

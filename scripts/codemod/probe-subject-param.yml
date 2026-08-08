@@ -40,6 +40,15 @@ severity: hint
 rule:
   kind: parameter_declaration
   all:
+    # POSITIONAL FENCE (added 02.1-02). Same root cause as the declaration rules:
+    # the NAME constraint below admits `_`, so without this clause the probe also
+    # counts the blank-named `name string` parameter of FindLocationByName. That
+    # parameter is legitimately a string and MUST stay one. Pre-flip it hid inside
+    # a grouped `_, _ string` node; the migration splits that node, so post-flip
+    # the probe read 16 (8 façades + 8 name parameters) instead of the pinned 8.
+    # The subject is ALWAYS parameter 2 — measuring that position is what the
+    # probe claims to do.
+    - nthChild: 2
     - has: {field: name, pattern: $NAME}
     - has: {field: type, regex: '^string$'}
     - inside:

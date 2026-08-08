@@ -224,7 +224,7 @@ func (s *worldServer) FindLocation(ctx context.Context, req *hostv1.FindLocation
 		return nil, status.Errorf(codes.Unimplemented, "world lookup not supported")
 	}
 	subject := access.PluginSubject(s.pluginName)
-	loc, err := mutator.FindLocationByName(ctx, subject, req.GetName())
+	loc, err := mutator.FindLocationByName(ctx, world.HumanCaller(subject), req.GetName())
 	if err != nil {
 		if errors.Is(err, world.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "not found")
@@ -285,7 +285,7 @@ func (s *worldMutationServer) CreateLocation(ctx context.Context, req *hostv1.Cr
 		Type:        locType,
 	}
 	subject := access.PluginSubject(s.pluginName)
-	if err := mutator.CreateLocation(ctx, subject, loc); err != nil {
+	if err := mutator.CreateLocation(ctx, world.HumanCaller(subject), loc); err != nil {
 		errutil.LogErrorContext(ctx, "world.create_location failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}
@@ -327,7 +327,7 @@ func (s *worldMutationServer) CreateExit(ctx context.Context, req *hostv1.Create
 		ReturnName:     req.GetReturnName(),
 	}
 	subject := access.PluginSubject(s.pluginName)
-	if err := mutator.CreateExit(ctx, subject, exit); err != nil {
+	if err := mutator.CreateExit(ctx, world.HumanCaller(subject), exit); err != nil {
 		errutil.LogErrorContext(ctx, "world.create_exit failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}
@@ -382,7 +382,7 @@ func (s *worldMutationServer) CreateObject(ctx context.Context, req *hostv1.Crea
 	obj.Description = req.GetDescription()
 
 	subject := access.PluginSubject(s.pluginName)
-	if err := mutator.CreateObject(ctx, subject, obj); err != nil {
+	if err := mutator.CreateObject(ctx, world.HumanCaller(subject), obj); err != nil {
 		errutil.LogErrorContext(ctx, "world.create_object failed", err, "plugin", s.pluginName)
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}

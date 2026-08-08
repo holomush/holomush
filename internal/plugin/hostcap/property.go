@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 	hostv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/host/v1"
 )
@@ -81,7 +82,7 @@ func (s *propertyServer) SetProperty(ctx context.Context, req *hostv1.SetPropert
 		return nil, status.Errorf(codes.Unimplemented, "property service not supported")
 	}
 	subjectID := access.PluginSubject(s.pluginName)
-	if err := def.Set(ctx, querier, s.host.WorldMutator(), subjectID, req.GetEntityType(), entityID, req.GetValue()); err != nil {
+	if err := def.Set(ctx, querier, s.host.WorldMutator(), world.HumanCaller(subjectID), req.GetEntityType(), entityID, req.GetValue()); err != nil {
 		errutil.LogErrorContext(ctx, "property.set failed", err, "plugin", s.pluginName, "property", req.GetProperty())
 		return nil, status.Errorf(codes.Internal, "internal error")
 	}

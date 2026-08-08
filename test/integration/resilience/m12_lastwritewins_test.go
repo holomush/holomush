@@ -144,7 +144,7 @@ var _ = Describe("M12 last-write-wins closed by the version guard", Ordered, fun
 		// A commits a rename using A's copy → the CAS matches (version == read)
 		// and the stored version advances by one.
 		locA.Name = committedName
-		Expect(svcA.UpdateLocation(ctx, subjA, locA)).
+		Expect(svcA.UpdateLocation(ctx, world.HumanCaller(subjA), locA)).
 			To(Succeed(), "A's rename must commit (its read version still matches)")
 
 		// B commits a description change using B's STALE copy — whose version now
@@ -152,7 +152,7 @@ var _ = Describe("M12 last-write-wins closed by the version guard", Ordered, fun
 		// zero-row classifier surfaces the typed conflict. B's write is REJECTED,
 		// NOT silently applied: A's committed rename is not clobbered.
 		locB.Description = committedDesc
-		errB := svcB.UpdateLocation(ctx, subjB, locB)
+		errB := svcB.UpdateLocation(ctx, world.HumanCaller(subjB), locB)
 		Expect(errB).To(HaveOccurred(), "B's stale write MUST be rejected — this is the guard closing M12")
 		Expect(errB).To(MatchError(world.ErrConcurrentEdit),
 			"B's stale write must surface the typed conflict")
@@ -286,7 +286,7 @@ var _ = Describe("M12 last-write-wins closed by the version guard", Ordered, fun
 					return
 				}
 				loc.Name = renameTo
-				errB = svcB.UpdateLocation(ctx, subjB, loc)
+				errB = svcB.UpdateLocation(ctx, world.HumanCaller(subjB), loc)
 			}()
 			close(start)
 			wg.Wait()
@@ -349,12 +349,12 @@ var _ = Describe("M12 last-write-wins closed by the version guard", Ordered, fun
 		// conflict too, not only locations).
 		obj, err := world.NewObjectWithID(ulid.Make(), "orb", world.InLocation(locID))
 		Expect(err).NotTo(HaveOccurred(), "construct object")
-		Expect(svcA.CreateObject(ctx, subjA, obj)).To(Succeed(), "create shared object")
+		Expect(svcA.CreateObject(ctx, world.HumanCaller(subjA), obj)).To(Succeed(), "create shared object")
 		objID := obj.ID
 
-		objA, err := svcA.GetObject(ctx, subjA, objID)
+		objA, err := svcA.GetObject(ctx, world.HumanCaller(subjA), objID)
 		Expect(err).NotTo(HaveOccurred(), "svcA.GetObject")
-		objB, err := svcB.GetObject(ctx, subjB, objID)
+		objB, err := svcB.GetObject(ctx, world.HumanCaller(subjB), objID)
 		Expect(err).NotTo(HaveOccurred(), "svcB.GetObject")
 		Expect(objA.Version).To(Equal(objB.Version), "both copies hold the SAME read version")
 
@@ -363,11 +363,11 @@ var _ = Describe("M12 last-write-wins closed by the version guard", Ordered, fun
 
 		// A commits a rename → the stored version advances.
 		objA.Name = renamed
-		Expect(svcA.UpdateObject(ctx, subjA, objA)).To(Succeed(), "A's object rename must commit")
+		Expect(svcA.UpdateObject(ctx, world.HumanCaller(subjA), objA)).To(Succeed(), "A's object rename must commit")
 
 		// B commits a description change on its STALE copy → rejected.
 		objB.Description = rejectedDesc
-		errB := svcB.UpdateObject(ctx, subjB, objB)
+		errB := svcB.UpdateObject(ctx, world.HumanCaller(subjB), objB)
 		Expect(errB).To(HaveOccurred(), "B's stale object write MUST be rejected")
 		Expect(errB).To(MatchError(world.ErrConcurrentEdit), "object stale write surfaces the typed conflict")
 		oopsErr, ok := oops.AsOops(errB)

@@ -13,6 +13,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/world"
 )
 
 // ErrInvalidEntityType indicates the entity type is empty or invalid.
@@ -25,9 +27,9 @@ var ErrDuplicateEntityMutator = errors.New("entity mutator already registered")
 type EntityMutator interface {
 	EntityType() string
 	GetName(ctx context.Context, querier WorldQuerier, entityID ulid.ULID) (string, error)
-	SetName(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error
+	SetName(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID world.Caller, entityID ulid.ULID, value string) error
 	GetDescription(ctx context.Context, querier WorldQuerier, entityID ulid.ULID) (string, error)
-	SetDescription(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error
+	SetDescription(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID world.Caller, entityID ulid.ULID, value string) error
 }
 
 // EntityMutatorRegistry manages entity mutators.
@@ -133,7 +135,7 @@ func (locationEntityMutator) GetName(ctx context.Context, querier WorldQuerier, 
 	return loc.Name, nil
 }
 
-func (locationEntityMutator) SetName(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
+func (locationEntityMutator) SetName(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID world.Caller, entityID ulid.ULID, value string) error {
 	loc, err := querier.GetLocation(ctx, entityID)
 	if err != nil {
 		return fmt.Errorf("get location: %w", err)
@@ -153,7 +155,7 @@ func (locationEntityMutator) GetDescription(ctx context.Context, querier WorldQu
 	return loc.Description, nil
 }
 
-func (locationEntityMutator) SetDescription(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
+func (locationEntityMutator) SetDescription(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID world.Caller, entityID ulid.ULID, value string) error {
 	loc, err := querier.GetLocation(ctx, entityID)
 	if err != nil {
 		return fmt.Errorf("get location: %w", err)
@@ -179,7 +181,7 @@ func (objectEntityMutator) GetName(ctx context.Context, querier WorldQuerier, en
 	return obj.Name, nil
 }
 
-func (objectEntityMutator) SetName(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
+func (objectEntityMutator) SetName(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID world.Caller, entityID ulid.ULID, value string) error {
 	obj, err := querier.GetObject(ctx, entityID)
 	if err != nil {
 		return fmt.Errorf("get object: %w", err)
@@ -199,7 +201,7 @@ func (objectEntityMutator) GetDescription(ctx context.Context, querier WorldQuer
 	return obj.Description, nil
 }
 
-func (objectEntityMutator) SetDescription(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
+func (objectEntityMutator) SetDescription(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID world.Caller, entityID ulid.ULID, value string) error {
 	obj, err := querier.GetObject(ctx, entityID)
 	if err != nil {
 		return fmt.Errorf("get object: %w", err)

@@ -233,7 +233,7 @@ var _ = Describe("INV-WORLD-6: retirement preserves the name reservation", func(
 			"retirement MUST NOT release the name — a freed name inherits every display name already denormalized into immutable payloads")
 
 		By("the irreversible world.Service.DeleteCharacter DOES release it")
-		Expect(env.worldService.DeleteCharacter(ctx, adminSubject, retiredID)).To(Succeed())
+		Expect(env.worldService.DeleteCharacter(ctx, world.HumanCaller(adminSubject), retiredID)).To(Succeed())
 		Expect(reclaim("Persistent Name")).NotTo(HaveOccurred(),
 			"the sanctioned hard delete MUST release the name — this is the paired half that pins the boundary")
 

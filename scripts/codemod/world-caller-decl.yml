@@ -47,6 +47,16 @@ ignores:
 rule:
   kind: parameter_declaration
   all:
+    # POSITIONAL FENCE (added 02.1-02). The subject is ALWAYS parameter 2 on a
+    # world command. Without this clause the rule matches a blank-named `string`
+    # parameter at ANY position, because the NAME constraint below admits `_`.
+    # Pre-flip that was masked: `FindLocationByName(ctx, _, _ string)` is ONE
+    # grouped parameter_declaration excluded by `not: {regex: ','}`. Migrating the
+    # grouped form SPLITS it into `_ world.Caller, _ string`, newly exposing the
+    # trailing `name string` parameter — which the rule then rewrote to
+    # `_ world.Caller`, breaking the build and violating the D-63 re-run contract
+    # at 8 sites. Measured 2026-08-08 on the post-flip tree.
+    - nthChild: 2
     - has: {field: name, pattern: $NAME}
     - has: {field: type, regex: '^string$'}
     - not: {regex: ','}

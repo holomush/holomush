@@ -8,6 +8,8 @@ import (
 	"fmt"
 
 	"github.com/oklog/ulid/v2"
+
+	"github.com/holomush/holomush/internal/world"
 )
 
 type nameDefinition struct{}
@@ -31,7 +33,7 @@ func (nameDefinition) Get(ctx context.Context, querier WorldQuerier, entityType 
 	return val, nil
 }
 
-func (nameDefinition) Set(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID, entityType string, entityID ulid.ULID, value string) error {
+func (nameDefinition) Set(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID world.Caller, entityType string, entityID ulid.ULID, value string) error {
 	entityMutator, ok := SharedEntityMutatorRegistry().Lookup(entityType)
 	if !ok {
 		return fmt.Errorf("entity mutator not found for type: %s", entityType)

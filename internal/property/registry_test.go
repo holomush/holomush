@@ -10,6 +10,8 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/world"
 )
 
 type testDefinition struct {
@@ -26,7 +28,7 @@ func (d testDefinition) Get(_ context.Context, _ WorldQuerier, _ string, _ ulid.
 	return d.getValue, nil
 }
 
-func (d testDefinition) Set(_ context.Context, _ WorldQuerier, _ WorldMutator, _ string, _ string, _ ulid.ULID, _ string) error {
+func (d testDefinition) Set(_ context.Context, _ WorldQuerier, _ WorldMutator, _ world.Caller, _ string, _ ulid.ULID, _ string) error {
 	return d.setErr
 }
 

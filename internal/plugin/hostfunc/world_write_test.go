@@ -32,7 +32,7 @@ type mockWorldMutatorService struct {
 	createObjectErr      error
 	updateLocationErr    error
 	updateObjectErr      error
-	findLocationByNameFn func(ctx context.Context, subjectID, name string) (*world.Location, error)
+	findLocationByNameFn func(ctx context.Context, subjectID world.Caller, name string) (*world.Location, error)
 }
 
 // WorldService read methods
@@ -43,21 +43,21 @@ func (m *mockWorldMutatorService) GetLocation(_ context.Context, _ world.Caller,
 	return m.location, nil
 }
 
-func (m *mockWorldMutatorService) GetCharacter(_ context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+func (m *mockWorldMutatorService) GetCharacter(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Character, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.character, nil
 }
 
-func (m *mockWorldMutatorService) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+func (m *mockWorldMutatorService) GetCharactersByLocation(_ context.Context, _ world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.characters, nil
 }
 
-func (m *mockWorldMutatorService) GetObject(_ context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+func (m *mockWorldMutatorService) GetObject(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Object, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -65,42 +65,42 @@ func (m *mockWorldMutatorService) GetObject(_ context.Context, _ string, _ ulid.
 }
 
 // WorldMutator write methods
-func (m *mockWorldMutatorService) CreateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *mockWorldMutatorService) CreateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	if m.createLocationErr != nil {
 		return m.createLocationErr
 	}
 	return nil
 }
 
-func (m *mockWorldMutatorService) CreateExit(_ context.Context, _ string, _ *world.Exit) error {
+func (m *mockWorldMutatorService) CreateExit(_ context.Context, _ world.Caller, _ *world.Exit) error {
 	if m.createExitErr != nil {
 		return m.createExitErr
 	}
 	return nil
 }
 
-func (m *mockWorldMutatorService) CreateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *mockWorldMutatorService) CreateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	if m.createObjectErr != nil {
 		return m.createObjectErr
 	}
 	return nil
 }
 
-func (m *mockWorldMutatorService) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *mockWorldMutatorService) UpdateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	if m.updateLocationErr != nil {
 		return m.updateLocationErr
 	}
 	return nil
 }
 
-func (m *mockWorldMutatorService) UpdateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *mockWorldMutatorService) UpdateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	if m.updateObjectErr != nil {
 		return m.updateObjectErr
 	}
 	return nil
 }
 
-func (m *mockWorldMutatorService) FindLocationByName(ctx context.Context, subjectID, name string) (*world.Location, error) {
+func (m *mockWorldMutatorService) FindLocationByName(ctx context.Context, subjectID world.Caller, name string) (*world.Location, error) {
 	if m.findLocationByNameFn != nil {
 		return m.findLocationByNameFn(ctx, subjectID, name)
 	}
@@ -468,7 +468,7 @@ func TestFindLocationFnSuccess(t *testing.T) {
 		Type:        world.LocationTypePersistent,
 	}
 	mutator := &mockWorldMutatorService{
-		findLocationByNameFn: func(_ context.Context, _, name string) (*world.Location, error) {
+		findLocationByNameFn: func(_ context.Context, _ world.Caller, name string) (*world.Location, error) {
 			if name == "Town Square" {
 				return loc, nil
 			}
@@ -498,7 +498,7 @@ func TestFindLocationFnSuccess(t *testing.T) {
 
 func TestFindLocationFnNotFound(t *testing.T) {
 	mutator := &mockWorldMutatorService{
-		findLocationByNameFn: func(_ context.Context, _, _ string) (*world.Location, error) {
+		findLocationByNameFn: func(_ context.Context, _ world.Caller, _ string) (*world.Location, error) {
 			return nil, world.ErrNotFound
 		},
 	}
@@ -520,7 +520,7 @@ func TestFindLocationFnNotFound(t *testing.T) {
 
 func TestFindLocationFnServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
-		findLocationByNameFn: func(_ context.Context, _, _ string) (*world.Location, error) {
+		findLocationByNameFn: func(_ context.Context, _ world.Caller, _ string) (*world.Location, error) {
 			return nil, errors.New("database connection timeout with stack trace")
 		},
 	}
@@ -840,9 +840,9 @@ func TestGetPropertyFnServiceError(t *testing.T) {
 
 func TestWorldWriteFunctionsSubjectIDFormat(t *testing.T) {
 	// Verify that subject ID is formatted correctly as "plugin:<name>"
-	var capturedSubjectID string
+	var capturedSubjectID world.Caller
 	mutator := &mockWorldMutatorService{
-		findLocationByNameFn: func(_ context.Context, subjectID, _ string) (*world.Location, error) {
+		findLocationByNameFn: func(_ context.Context, subjectID world.Caller, _ string) (*world.Location, error) {
 			capturedSubjectID = subjectID
 			return nil, world.ErrNotFound
 		},
@@ -856,7 +856,7 @@ func TestWorldWriteFunctionsSubjectIDFormat(t *testing.T) {
 
 	_ = L.DoString(`result, err = holomush.find_location("Test")`)
 
-	assert.Equal(t, "plugin:my-building-plugin", capturedSubjectID)
+	assert.Equal(t, world.HumanCaller("plugin:my-building-plugin"), capturedSubjectID)
 }
 
 // mockWorldServiceWithExpectations provides finer-grained control for testing.
@@ -872,7 +872,7 @@ func (m *mockWorldServiceWithExpectations) GetLocation(ctx context.Context, subj
 	return args.Get(0).(*world.Location), args.Error(1)
 }
 
-func (m *mockWorldServiceWithExpectations) GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*world.Character, error) {
+func (m *mockWorldServiceWithExpectations) GetCharacter(ctx context.Context, subjectID world.Caller, id ulid.ULID) (*world.Character, error) {
 	args := m.Called(ctx, subjectID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -880,7 +880,7 @@ func (m *mockWorldServiceWithExpectations) GetCharacter(ctx context.Context, sub
 	return args.Get(0).(*world.Character), args.Error(1)
 }
 
-func (m *mockWorldServiceWithExpectations) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error) {
+func (m *mockWorldServiceWithExpectations) GetCharactersByLocation(ctx context.Context, subjectID world.Caller, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error) {
 	args := m.Called(ctx, subjectID, locationID, opts)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -888,7 +888,7 @@ func (m *mockWorldServiceWithExpectations) GetCharactersByLocation(ctx context.C
 	return args.Get(0).([]*world.Character), args.Error(1)
 }
 
-func (m *mockWorldServiceWithExpectations) GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*world.Object, error) {
+func (m *mockWorldServiceWithExpectations) GetObject(ctx context.Context, subjectID world.Caller, id ulid.ULID) (*world.Object, error) {
 	args := m.Called(ctx, subjectID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -896,32 +896,32 @@ func (m *mockWorldServiceWithExpectations) GetObject(ctx context.Context, subjec
 	return args.Get(0).(*world.Object), args.Error(1)
 }
 
-func (m *mockWorldServiceWithExpectations) CreateLocation(ctx context.Context, subjectID string, loc *world.Location) error {
+func (m *mockWorldServiceWithExpectations) CreateLocation(ctx context.Context, subjectID world.Caller, loc *world.Location) error {
 	args := m.Called(ctx, subjectID, loc)
 	return args.Error(0)
 }
 
-func (m *mockWorldServiceWithExpectations) CreateExit(ctx context.Context, subjectID string, exit *world.Exit) error {
+func (m *mockWorldServiceWithExpectations) CreateExit(ctx context.Context, subjectID world.Caller, exit *world.Exit) error {
 	args := m.Called(ctx, subjectID, exit)
 	return args.Error(0)
 }
 
-func (m *mockWorldServiceWithExpectations) CreateObject(ctx context.Context, subjectID string, obj *world.Object) error {
+func (m *mockWorldServiceWithExpectations) CreateObject(ctx context.Context, subjectID world.Caller, obj *world.Object) error {
 	args := m.Called(ctx, subjectID, obj)
 	return args.Error(0)
 }
 
-func (m *mockWorldServiceWithExpectations) UpdateLocation(ctx context.Context, subjectID string, loc *world.Location) error {
+func (m *mockWorldServiceWithExpectations) UpdateLocation(ctx context.Context, subjectID world.Caller, loc *world.Location) error {
 	args := m.Called(ctx, subjectID, loc)
 	return args.Error(0)
 }
 
-func (m *mockWorldServiceWithExpectations) UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error {
+func (m *mockWorldServiceWithExpectations) UpdateObject(ctx context.Context, subjectID world.Caller, obj *world.Object) error {
 	args := m.Called(ctx, subjectID, obj)
 	return args.Error(0)
 }
 
-func (m *mockWorldServiceWithExpectations) FindLocationByName(ctx context.Context, subjectID, name string) (*world.Location, error) {
+func (m *mockWorldServiceWithExpectations) FindLocationByName(ctx context.Context, subjectID world.Caller, name string) (*world.Location, error) {
 	args := m.Called(ctx, subjectID, name)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)

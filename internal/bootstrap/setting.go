@@ -27,9 +27,9 @@ var _ plugins.BootstrapPlugin = (*SettingBootstrapper)(nil)
 
 // worldSeeder abstracts world.Service for testability.
 type worldSeeder interface {
-	CreateLocation(ctx context.Context, subjectID string, loc *world.Location) error
-	CreateExit(ctx context.Context, subjectID string, exit *world.Exit) error
-	FindLocationByName(ctx context.Context, subjectID, name string) (*world.Location, error)
+	CreateLocation(ctx context.Context, subjectID world.Caller, loc *world.Location) error
+	CreateExit(ctx context.Context, subjectID world.Caller, exit *world.Exit) error
+	FindLocationByName(ctx context.Context, subjectID world.Caller, name string) (*world.Location, error)
 }
 
 // SettingBootstrapper seeds world content from a setting plugin manifest.
@@ -131,7 +131,7 @@ func (b *SettingBootstrapper) Bootstrap(ctx context.Context, manifest *plugins.M
 
 	// Step 3b: resolve and record starting location from manifest.
 	if manifest.Setting.StartingLocation != "" && b.worldService != nil {
-		loc, findErr := b.worldService.FindLocationByName(ctx, "system:bootstrap", manifest.Setting.StartingLocation)
+		loc, findErr := b.worldService.FindLocationByName(ctx, world.HumanCaller("system:bootstrap"), manifest.Setting.StartingLocation)
 		if findErr != nil {
 			return oops.Code("SETTING_BOOTSTRAP_FAILED").
 				With("starting_location", manifest.Setting.StartingLocation).
@@ -269,11 +269,11 @@ func (b *SettingBootstrapper) seedWorld(ctx context.Context, manifest *plugins.M
 				loc.ID = id
 			}
 
-			if err := b.worldService.CreateLocation(ctx, "system:bootstrap", loc); err != nil {
+			if err := b.worldService.CreateLocation(ctx, world.HumanCaller("system:bootstrap"), loc); err != nil {
 				if isAlreadyExists(err) {
 					b.logger.DebugContext(ctx, "location already exists, skipping", "name", s.Name)
 					// Still need the ID for exit resolution — look it up.
-					existing, findErr := b.worldService.FindLocationByName(ctx, "system:bootstrap", s.Name)
+					existing, findErr := b.worldService.FindLocationByName(ctx, world.HumanCaller("system:bootstrap"), s.Name)
 					if findErr != nil {
 						return oops.Code("SETTING_BOOTSTRAP_FAILED").
 							With("location", s.Name).
@@ -328,7 +328,7 @@ func (b *SettingBootstrapper) seedWorld(ctx context.Context, manifest *plugins.M
 				Visibility:     world.VisibilityAll,
 			}
 
-			if err := b.worldService.CreateExit(ctx, "system:bootstrap", exit); err != nil {
+			if err := b.worldService.CreateExit(ctx, world.HumanCaller("system:bootstrap"), exit); err != nil {
 				if isAlreadyExists(err) {
 					b.logger.DebugContext(ctx, "exit already exists, skipping", "name", s.Name)
 					continue

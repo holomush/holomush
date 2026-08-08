@@ -283,11 +283,11 @@ func (s *Service) GetLocation(ctx context.Context, subjectID Caller, id ulid.ULI
 // CreateLocation creates a new location after checking write authorization.
 // The location ID is generated if not set.
 // Returns a ValidationError if the name or description is invalid.
-func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Location) error {
+func (s *Service) CreateLocation(ctx context.Context, subjectID Caller, loc *Location) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Errorf("location repository not configured")
 	}
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", access.LocationResource("*"), prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", access.LocationResource("*"), prefixLocation); err != nil {
 		return err
 	}
 	if loc == nil {
@@ -307,7 +307,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err != nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "build location create payload %s", loc.ID)
 	}
-	intent := s.buildIntent(kindLocationCreated, wmodel.AggregateLocation, loc.ID, subjectID, payload)
+	intent := s.buildIntent(kindLocationCreated, wmodel.AggregateLocation, loc.ID, subjectID.subject, payload)
 	if _, err := s.mutator.createLocation(ctx, intent, loc); err != nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "create location %s", loc.ID)
 	}
@@ -316,7 +316,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 
 // UpdateLocation updates an existing location after checking write authorization.
 // Returns a ValidationError if the name or description is invalid.
-func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Location) error {
+func (s *Service) UpdateLocation(ctx context.Context, subjectID Caller, loc *Location) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_UPDATE_FAILED").Errorf("location repository not configured")
 	}
@@ -324,7 +324,7 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 		return oops.Code("LOCATION_INVALID").Errorf("location is nil")
 	}
 	resource := access.LocationResource(loc.ID.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixLocation); err != nil {
 		return err
 	}
 	if err := loc.Validate(); err != nil {
@@ -337,7 +337,7 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err != nil {
 		return oops.Code("LOCATION_UPDATE_FAILED").Wrapf(err, "build location update payload %s", loc.ID)
 	}
-	intent := s.buildIntent(kindLocationUpdated, wmodel.AggregateLocation, loc.ID, subjectID, payload)
+	intent := s.buildIntent(kindLocationUpdated, wmodel.AggregateLocation, loc.ID, subjectID.subject, payload)
 	if _, err := s.mutator.updateLocation(ctx, intent, loc); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("id", loc.ID.String()).Wrap(err)
@@ -370,7 +370,7 @@ func (s *Service) buildIntent(kind string, aggType wmodel.AggregateType, aggID u
 // DeleteLocation deletes a location and its properties after checking delete authorization.
 // Both deletions occur in the same database transaction per spec (05-storage-audit.md §110-119).
 // Returns an error if PropertyRepo or Transactor are not configured.
-func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.ULID) error {
+func (s *Service) DeleteLocation(ctx context.Context, subjectID Caller, id ulid.ULID) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("location repository not configured")
 	}
@@ -381,7 +381,7 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
 	resource := access.LocationResource(id.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "delete", resource, prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixLocation); err != nil {
 		return err
 	}
 	if s.mutator == nil {
@@ -391,7 +391,7 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	if err != nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "build location tombstone payload %s", id)
 	}
-	intent := s.buildIntent(kindLocationDeleted, wmodel.AggregateLocation, id, subjectID, payload)
+	intent := s.buildIntent(kindLocationDeleted, wmodel.AggregateLocation, id, subjectID.subject, payload)
 	// The delete + its property cascade + the tombstone envelope commit in ONE
 	// transaction via the mutate() seam; the envelope manifest carries the
 	// DB-cascaded exits from the repo delta (INV-WORLD-2 parity).
@@ -405,12 +405,12 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 }
 
 // GetExit retrieves an exit by ID after checking read authorization.
-func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (*Exit, error) {
+func (s *Service) GetExit(ctx context.Context, subjectID Caller, id ulid.ULID) (*Exit, error) {
 	if s.exitRepo == nil {
 		return nil, oops.Code("EXIT_GET_FAILED").Errorf("exit repository not configured")
 	}
 	resource := access.ExitResource(id.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixExit); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixExit); err != nil {
 		return nil, err
 	}
 	exit, err := s.exitRepo.Get(ctx, id)
@@ -429,11 +429,11 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 // Returns a ValidationError if the id, name, aliases, visibility, lock type,
 // lock data, or visible_to are invalid.
 // Returns ErrSelfReferentialExit if from and to locations are the same.
-func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) error {
+func (s *Service) CreateExit(ctx context.Context, subjectID Caller, exit *Exit) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_CREATE_FAILED").Errorf("exit repository not configured")
 	}
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", access.ExitResource("*"), prefixExit); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", access.ExitResource("*"), prefixExit); err != nil {
 		return err
 	}
 	if exit == nil {
@@ -453,7 +453,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err != nil {
 		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "build exit create payload %s", exit.ID)
 	}
-	intent := s.buildIntent(kindExitCreated, wmodel.AggregateExit, exit.ID, subjectID, payload)
+	intent := s.buildIntent(kindExitCreated, wmodel.AggregateExit, exit.ID, subjectID.subject, payload)
 	if _, err := s.mutator.createExit(ctx, intent, exit); err != nil {
 		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "create exit %s", exit.ID)
 	}
@@ -465,7 +465,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 // Returns a ValidationError if the id, name, aliases, visibility, lock type,
 // lock data, or visible_to are invalid.
 // Returns ErrSelfReferentialExit if from and to locations are the same.
-func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) error {
+func (s *Service) UpdateExit(ctx context.Context, subjectID Caller, exit *Exit) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_UPDATE_FAILED").Errorf("exit repository not configured")
 	}
@@ -473,7 +473,7 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 		return oops.Code("EXIT_INVALID").Errorf("exit is nil")
 	}
 	resource := access.ExitResource(exit.ID.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixExit); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixExit); err != nil {
 		return err
 	}
 	if err := exit.Validate(); err != nil {
@@ -486,7 +486,7 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err != nil {
 		return oops.Code("EXIT_UPDATE_FAILED").Wrapf(err, "build exit update payload %s", exit.ID)
 	}
-	intent := s.buildIntent(kindExitUpdated, wmodel.AggregateExit, exit.ID, subjectID, payload)
+	intent := s.buildIntent(kindExitUpdated, wmodel.AggregateExit, exit.ID, subjectID.subject, payload)
 	if _, err := s.mutator.updateExit(ctx, intent, exit); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("id", exit.ID.String()).Wrap(err)
@@ -503,12 +503,12 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 // For bidirectional exits, the return exit is deleted atomically.
 // Non-severe cleanup issues (return not found) are logged but don't fail the operation.
 // Severe cleanup issues (find/delete errors) cause a full rollback - the operation fails.
-func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID) error {
+func (s *Service) DeleteExit(ctx context.Context, subjectID Caller, id ulid.ULID) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_DELETE_FAILED").Errorf("exit repository not configured")
 	}
 	resource := access.ExitResource(id.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "delete", resource, prefixExit); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixExit); err != nil {
 		return err
 	}
 	if s.mutator == nil {
@@ -518,7 +518,7 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	if err != nil {
 		return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "build exit tombstone payload %s", id)
 	}
-	intent := s.buildIntent(kindExitDeleted, wmodel.AggregateExit, id, subjectID, payload)
+	intent := s.buildIntent(kindExitDeleted, wmodel.AggregateExit, id, subjectID.subject, payload)
 	// The delete (incl. the atomic bidirectional reverse-exit cascade) and its
 	// single tombstone envelope commit in ONE transaction via mutate(); the envelope
 	// manifest carries the reverse exit from the repo delta. A non-severe cleanup
@@ -567,12 +567,12 @@ func (s *Service) GetExitsByLocation(ctx context.Context, subjectID Caller, loca
 }
 
 // GetObject retrieves an object by ID after checking read authorization.
-func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*Object, error) {
+func (s *Service) GetObject(ctx context.Context, subjectID Caller, id ulid.ULID) (*Object, error) {
 	if s.objectRepo == nil {
 		return nil, oops.Code("OBJECT_GET_FAILED").Errorf("object repository not configured")
 	}
 	resource := access.ObjectResource(id.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixObject); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixObject); err != nil {
 		return nil, err
 	}
 	obj, err := s.objectRepo.Get(ctx, id)
@@ -588,11 +588,11 @@ func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID)
 // CreateObject creates a new object after checking write authorization.
 // The object ID is generated if not set.
 // Returns a ValidationError if the name or description is invalid.
-func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Object) error {
+func (s *Service) CreateObject(ctx context.Context, subjectID Caller, obj *Object) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Errorf("object repository not configured")
 	}
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", access.ObjectResource("*"), prefixObject); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", access.ObjectResource("*"), prefixObject); err != nil {
 		return err
 	}
 	if obj == nil {
@@ -615,7 +615,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if err != nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "build object create payload %s", obj.ID)
 	}
-	intent := s.buildIntent(kindObjectCreated, wmodel.AggregateObject, obj.ID, subjectID, payload)
+	intent := s.buildIntent(kindObjectCreated, wmodel.AggregateObject, obj.ID, subjectID.subject, payload)
 	if _, err := s.mutator.createObject(ctx, intent, obj); err != nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "create object %s", obj.ID)
 	}
@@ -624,7 +624,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 
 // UpdateObject updates an existing object after checking write authorization.
 // Returns a ValidationError if the name or description is invalid.
-func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Object) error {
+func (s *Service) UpdateObject(ctx context.Context, subjectID Caller, obj *Object) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_UPDATE_FAILED").Errorf("object repository not configured")
 	}
@@ -632,7 +632,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 		return oops.Code("OBJECT_INVALID").Errorf("object is nil")
 	}
 	resource := access.ObjectResource(obj.ID.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixObject); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixObject); err != nil {
 		return err
 	}
 	if err := obj.Validate(); err != nil {
@@ -648,7 +648,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	if err != nil {
 		return oops.Code("OBJECT_UPDATE_FAILED").Wrapf(err, "build object update payload %s", obj.ID)
 	}
-	intent := s.buildIntent(kindObjectUpdated, wmodel.AggregateObject, obj.ID, subjectID, payload)
+	intent := s.buildIntent(kindObjectUpdated, wmodel.AggregateObject, obj.ID, subjectID.subject, payload)
 	if _, err := s.mutator.updateObject(ctx, intent, obj); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("id", obj.ID.String()).Wrap(err)
@@ -664,7 +664,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 // DeleteObject deletes an object and its properties after checking delete authorization.
 // Both deletions occur in the same database transaction per spec (05-storage-audit.md §110-119).
 // Returns an error if PropertyRepo or Transactor are not configured.
-func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.ULID) error {
+func (s *Service) DeleteObject(ctx context.Context, subjectID Caller, id ulid.ULID) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("object repository not configured")
 	}
@@ -675,7 +675,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
 	resource := access.ObjectResource(id.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "delete", resource, prefixObject); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixObject); err != nil {
 		return err
 	}
 	if s.mutator == nil {
@@ -685,7 +685,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	if err != nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "build object tombstone payload %s", id)
 	}
-	intent := s.buildIntent(kindObjectDeleted, wmodel.AggregateObject, id, subjectID, payload)
+	intent := s.buildIntent(kindObjectDeleted, wmodel.AggregateObject, id, subjectID.subject, payload)
 	// The delete + its property cascade + the tombstone envelope commit in ONE
 	// transaction via the mutate() seam.
 	if _, err := s.mutator.deleteObject(ctx, intent, id); err != nil {
@@ -704,12 +704,12 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 // via the write executor's same-tx outbox (05-10) — INV-WORLD-4. The object is read
 // first so the new-values-only payload can carry the source containment; a failed or
 // no-op move (missing object, version conflict) writes no envelope.
-func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
+func (s *Service) MoveObject(ctx context.Context, subjectID Caller, id ulid.ULID, to Containment) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
 	}
 	resource := access.ObjectResource(id.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixObject); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixObject); err != nil {
 		return err
 	}
 	if err := to.Validate(); err != nil {
@@ -733,7 +733,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	if err != nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "build object move payload %s", id)
 	}
-	intent := s.buildIntent(kindObjectMoved, wmodel.AggregateObject, id, subjectID, payload)
+	intent := s.buildIntent(kindObjectMoved, wmodel.AggregateObject, id, subjectID.subject, payload)
 	if _, err := s.mutator.moveObject(ctx, intent, id, to); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("id", id.String()).Wrap(err)
@@ -750,7 +750,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 // DeleteCharacter deletes a character and its properties after checking delete authorization.
 // Both deletions occur in the same database transaction per spec (05-storage-audit.md §110-119).
 // Returns an error if PropertyRepo or Transactor are not configured.
-func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
+func (s *Service) DeleteCharacter(ctx context.Context, subjectID Caller, id ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("character repository not configured")
 	}
@@ -761,7 +761,7 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
 	resource := access.CharacterResource(id.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "delete", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixCharacter); err != nil {
 		return err
 	}
 	if s.mutator == nil {
@@ -774,7 +774,7 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	// The delete + its property cascade + the single character_deleted tombstone
 	// envelope commit in ONE transaction via the mutate() seam. The tombstone kind
 	// is the SAME kind the guest CharacterReapingService reuses (05-16/D-06).
-	intent := s.buildIntent(kindCharacterDeleted, wmodel.AggregateCharacter, id, subjectID, payload)
+	intent := s.buildIntent(kindCharacterDeleted, wmodel.AggregateCharacter, id, subjectID.subject, payload)
 	if _, err := s.mutator.deleteCharacter(ctx, intent, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
@@ -785,12 +785,12 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 }
 
 // GetCharacter retrieves a character by ID after checking read authorization.
-func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*Character, error) {
+func (s *Service) GetCharacter(ctx context.Context, subjectID Caller, id ulid.ULID) (*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_GET_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.CharacterResource(id.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixCharacter); err != nil {
 		return nil, err
 	}
 	char, err := s.characterRepo.Get(ctx, id)
@@ -804,12 +804,12 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 }
 
 // UpdateCharacterDescription sets a character's description after checking write authorization.
-func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID string, characterID ulid.ULID, description string) error {
+func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID Caller, characterID ulid.ULID, description string) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_UPDATE_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.CharacterResource(characterID.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixCharacter); err != nil {
 		return err
 	}
 	char, err := s.characterRepo.Get(ctx, characterID)
@@ -830,7 +830,7 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID stri
 	// Route the guarded character update + its one character_updated envelope
 	// through the same-tx outbox seam. char carries the read Version (05-04) as the
 	// CAS guard so a concurrent conflicting write surfaces WORLD_CONCURRENT_EDIT.
-	intent := s.buildIntent(kindCharacterUpdated, wmodel.AggregateCharacter, characterID, subjectID, payload)
+	intent := s.buildIntent(kindCharacterUpdated, wmodel.AggregateCharacter, characterID, subjectID.subject, payload)
 	if _, err := s.mutator.updateCharacter(ctx, intent, char); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("character_id", characterID.String()).Wrap(err)
@@ -938,12 +938,12 @@ func (s *Service) buildPreferencesIntent(characterID ulid.ULID, prefs []byte) (w
 // resource="location:<id>" with action="list_characters" per ADR #76 (Compound Resource Decomposition,
 // see docs/specs/2026-02-05-full-abac-design.md §7.3).
 // Error codes use LOCATION_* prefix (not CHARACTER_*) because the gated resource is the location.
-func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
+func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID Caller, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.LocationResource(locationID.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "list_characters", resource, prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, prefixLocation); err != nil {
 		return nil, err
 	}
 	chars, err := s.characterRepo.GetByLocation(ctx, locationID, opts)
@@ -958,12 +958,12 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 // read surface (ListSceneParticipants) is KEPT.
 
 // ListSceneParticipants lists all participants in a scene after checking read authorization.
-func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, sceneID ulid.ULID) ([]SceneParticipant, error) {
+func (s *Service) ListSceneParticipants(ctx context.Context, subjectID Caller, sceneID ulid.ULID) ([]SceneParticipant, error) {
 	if s.sceneRepo == nil {
 		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Errorf("scene repository not configured")
 	}
 	resource := access.SceneResource(sceneID.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixScene); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixScene); err != nil {
 		return nil, err
 	}
 	participants, err := s.sceneRepo.ListParticipants(ctx, sceneID)
@@ -990,12 +990,12 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 // command failure: the move and its envelope are already durable, so the hook error
 // is logged + counted and MoveCharacter returns SUCCESS (the session's derived
 // location may lag until re-sync — see MovementHook).
-func (s *Service) MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error {
+func (s *Service) MoveCharacter(ctx context.Context, subjectID Caller, characterID, toLocationID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.CharacterResource(characterID.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixCharacter); err != nil {
 		return err
 	}
 
@@ -1026,7 +1026,7 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 
 	// Build the intent-level, new-values-only envelope intent (no manifest, no
 	// epoch/feed_position — those are the writer's to allocate).
-	intent, err := s.buildMoveIntent(char, subjectID, characterID, toLocationID)
+	intent, err := s.buildMoveIntent(char, subjectID.subject, characterID, toLocationID)
 	if err != nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "build move intent for character %s", characterID)
 	}
@@ -1100,12 +1100,12 @@ func (s *Service) buildMoveIntent(char *Character, subjectID string, characterID
 
 // FindLocationByName searches for a location by name after checking read authorization.
 // Returns ErrNotFound if no location matches.
-func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string) (*Location, error) {
+func (s *Service) FindLocationByName(ctx context.Context, subjectID Caller, name string) (*Location, error) {
 	if s.locationRepo == nil {
 		return nil, oops.Code("LOCATION_FIND_FAILED").Errorf("location repository not configured")
 	}
 	// Check read authorization for location wildcard (searching locations)
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", access.LocationResource("*"), prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "read", access.LocationResource("*"), prefixLocation); err != nil {
 		return nil, err
 	}
 	loc, err := s.locationRepo.FindByName(ctx, name)
@@ -1119,12 +1119,12 @@ func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string
 }
 
 // GetObjectsByLocation returns objects at a location after checking read authorization.
-func (s *Service) GetObjectsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*Object, error) {
+func (s *Service) GetObjectsByLocation(ctx context.Context, subjectID Caller, locationID ulid.ULID) ([]*Object, error) {
 	if s.objectRepo == nil {
 		return nil, oops.Code("OBJECT_QUERY_FAILED").Errorf("object repository not configured")
 	}
 	resource := access.LocationResource(locationID.String())
-	if err := s.checkAccess(ctx, HumanCaller(subjectID), "list_objects", resource, prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "list_objects", resource, prefixLocation); err != nil {
 		return nil, err
 	}
 	objs, err := s.objectRepo.ListAtLocation(ctx, locationID)
@@ -1149,7 +1149,7 @@ func (s *Service) GetObjectsByLocation(ctx context.Context, subjectID string, lo
 // Infra failures MUST be visible to callers; silently masking them as
 // "no visible properties" would create ghost-data scenarios. Per
 // holomush-72ou design spec INV-2 + INV-2b.
-func (s *Service) ListPropertiesByParent(ctx context.Context, subjectID, parentType string, parentID ulid.ULID) ([]*EntityProperty, error) {
+func (s *Service) ListPropertiesByParent(ctx context.Context, subjectID Caller, parentType string, parentID ulid.ULID) ([]*EntityProperty, error) {
 	if s.propertyRepo == nil {
 		return nil, oops.Code("PROPERTY_QUERY_FAILED").Errorf("property repository not configured")
 	}
@@ -1160,7 +1160,7 @@ func (s *Service) ListPropertiesByParent(ctx context.Context, subjectID, parentT
 	visible := make([]*EntityProperty, 0, len(all))
 	for _, prop := range all {
 		resource := access.PropertyResource(prop.ID.String())
-		checkErr := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixProperty)
+		checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixProperty)
 		switch {
 		case checkErr == nil:
 			visible = append(visible, prop)

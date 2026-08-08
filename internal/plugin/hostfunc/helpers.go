@@ -16,6 +16,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/world"
 )
 
 // pushError pushes nil followed by an error string to the Lua stack and returns 2.
@@ -101,11 +102,14 @@ func (f *Functions) withQueryContext(
 // The world service must implement WorldMutator, which is enforced at construction time
 // via WithWorldService, so this function assumes f.worldMutator is set.
 //
-// The subjectID for ABAC is constructed as "plugin:<pluginName>".
+// The callback receives a world.Caller built once here from
+// access.PluginSubject(pluginName), so the resulting ABAC subject is still
+// "plugin:<pluginName>". The callback passes that value straight through to the
+// world command and never re-derives or re-wraps it.
 func (f *Functions) withMutatorContext(
 	L *lua.LState,
 	funcName, pluginName string,
-	fn func(ctx context.Context, mutator WorldMutator, subjectID string, adapter *WorldQuerierAdapter) int,
+	fn func(ctx context.Context, mutator WorldMutator, subjectID world.Caller, adapter *WorldQuerierAdapter) int,
 ) int {
 	if f.worldMutator == nil {
 		return pushMutatorUnavailable(L, funcName, pluginName)
@@ -118,7 +122,7 @@ func (f *Functions) withMutatorContext(
 	ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 	defer cancel()
 
-	subjectID := access.PluginSubject(pluginName)
+	subjectID := world.HumanCaller(access.PluginSubject(pluginName))
 	adapter := NewWorldQuerierAdapter(f.worldMutator, pluginName)
 	return fn(ctx, f.worldMutator, subjectID, adapter)
 }

@@ -259,7 +259,7 @@ func TestWorldService_CreateLocation(t *testing.T) {
 			return l.Name == "New Room" && !l.ID.IsZero()
 		})).Return(delta, nil)
 
-		err := svc.CreateLocation(ctx, subjectID, loc)
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.NoError(t, err)
 		assert.False(t, loc.ID.IsZero(), "ID should be generated")
 
@@ -305,7 +305,7 @@ func TestWorldService_CreateLocation(t *testing.T) {
 			return l.ID == existingID
 		})).Return(nil, nil)
 
-		err := svc.CreateLocation(ctx, subjectID, loc)
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.NoError(t, err)
 		assert.Equal(t, existingID, loc.ID, "pre-set ID should be preserved")
 		assert.Equal(t, existingID, outbox.lastIntent.AggregateID)
@@ -323,7 +323,7 @@ func TestWorldService_CreateLocation(t *testing.T) {
 
 		loc := &world.Location{Name: "New Room"}
 
-		err := svc.CreateLocation(ctx, subjectID, loc)
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockRepo.AssertNotCalled(t, "Create")
 		assert.Equal(t, 0, outbox.calls, "a denied command emits nothing")
@@ -351,7 +351,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		engine.Grant(subjectID, "write", "location:"+locID.String())
 		mockRepo.EXPECT().Update(ctx, loc).Return(delta, nil)
 
-		err := svc.UpdateLocation(ctx, subjectID, loc)
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, outbox.calls, "exactly one location_updated envelope")
@@ -373,7 +373,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 
 		loc := &world.Location{ID: locID, Name: "Updated Room"}
 
-		err := svc.UpdateLocation(ctx, subjectID, loc)
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockRepo.AssertNotCalled(t, "Update")
 		assert.Equal(t, 0, outbox.calls)
@@ -394,7 +394,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		engine.Grant(subjectID, "write", "location:"+locID.String())
 		mockRepo.EXPECT().Update(ctx, loc).Return(nil, world.ErrNotFound)
 
-		err := svc.UpdateLocation(ctx, subjectID, loc)
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
@@ -419,7 +419,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		conflict := oops.Code(world.CodeConcurrentEdit).Wrap(world.ErrConcurrentEdit)
 		mockRepo.EXPECT().Update(ctx, loc).Return(nil, conflict)
 
-		err := svc.UpdateLocation(ctx, subjectID, loc)
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
 		// D-02: the conflict propagates unchanged — the top-level code stays
@@ -453,7 +453,7 @@ func TestWorldService_UpdateCharacterDescription(t *testing.T) {
 			return c.Version == 5 && c.Description == "a new description"
 		})).Return(nil, nil)
 
-		err := svc.UpdateCharacterDescription(ctx, subjectID, charID, "a new description")
+		err := svc.UpdateCharacterDescription(ctx, world.HumanCaller(subjectID), charID, "a new description")
 		require.NoError(t, err)
 		require.Equal(t, 1, outbox.calls, "an update emits exactly one character_updated envelope")
 		assert.Equal(t, "character_updated", outbox.lastIntent.Kind)
@@ -478,7 +478,7 @@ func TestWorldService_UpdateCharacterDescription(t *testing.T) {
 			return c.Version == 5
 		})).Return(nil, conflict)
 
-		err := svc.UpdateCharacterDescription(ctx, subjectID, charID, "a new description")
+		err := svc.UpdateCharacterDescription(ctx, world.HumanCaller(subjectID), charID, "a new description")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
 		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
@@ -515,7 +515,7 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(delta, nil)
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, outbox.calls, "a delete emits exactly one tombstone envelope, not one per cascaded row")
@@ -536,7 +536,7 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 			Engine:       engine,
 		}, outbox))
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockRepo.AssertNotCalled(t, "Delete")
 		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
@@ -555,7 +555,7 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 			Engine:       engine,
 		}, outbox))
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
@@ -581,7 +581,7 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 		assert.Equal(t, 0, outbox.calls, "a rolled-back delete writes no envelope")
@@ -607,7 +607,7 @@ func TestWorldService_GetExit(t *testing.T) {
 		engine.Grant(subjectID, "read", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Get(ctx, exitID).Return(expectedExit, nil)
 
-		exit, err := svc.GetExit(ctx, subjectID, exitID)
+		exit, err := svc.GetExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedExit, exit)
 	})
@@ -621,7 +621,7 @@ func TestWorldService_GetExit(t *testing.T) {
 			Engine:   engine,
 		})
 
-		exit, err := svc.GetExit(ctx, subjectID, exitID)
+		exit, err := svc.GetExit(ctx, world.HumanCaller(subjectID), exitID)
 		assert.Nil(t, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockExitRepo.AssertNotCalled(t, "Get")
@@ -657,7 +657,7 @@ func TestWorldService_CreateExit(t *testing.T) {
 			return e.Name == "north" && !e.ID.IsZero()
 		})).Return(delta, nil)
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.NoError(t, err)
 		assert.False(t, exit.ID.IsZero(), "ID should be generated")
 
@@ -691,7 +691,7 @@ func TestWorldService_CreateExit(t *testing.T) {
 
 		exit := &world.Exit{Name: "north"}
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockExitRepo.AssertNotCalled(t, "Create")
 		assert.Equal(t, 0, outbox.calls)
@@ -719,7 +719,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Update(ctx, exit).Return(delta, nil)
 
-		err := svc.UpdateExit(ctx, subjectID, exit)
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, outbox.calls, "exactly one exit_updated envelope")
@@ -740,7 +740,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
-		err := svc.UpdateExit(ctx, subjectID, exit)
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockExitRepo.AssertNotCalled(t, "Update")
 		assert.Equal(t, 0, outbox.calls)
@@ -761,7 +761,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil, errors.New("db error"))
 
-		err := svc.UpdateExit(ctx, subjectID, exit)
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 		assert.Equal(t, 0, outbox.calls)
@@ -782,7 +782,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil, world.ErrNotFound)
 
-		err := svc.UpdateExit(ctx, subjectID, exit)
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
@@ -817,7 +817,7 @@ func TestWorldService_DeleteExit(t *testing.T) {
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(delta, nil)
 
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, outbox.calls, "a bidirectional delete emits one tombstone envelope, not one per exit")
@@ -836,7 +836,7 @@ func TestWorldService_DeleteExit(t *testing.T) {
 			Engine:   engine,
 		}, outbox))
 
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockExitRepo.AssertNotCalled(t, "Delete")
 		assert.Equal(t, 0, outbox.calls)
@@ -852,7 +852,7 @@ func TestWorldService_DeleteExit(t *testing.T) {
 			Engine:   engine,
 		}, outbox))
 
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
@@ -888,7 +888,7 @@ func TestWorldService_DeleteExit(t *testing.T) {
 		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(delta, cleanupResult)
 
 		// Should succeed since primary delete worked, AND still emit the tombstone.
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		assert.NoError(t, err)
 		require.Equal(t, 1, outbox.calls, "a non-severe cleanup still commits + emits the tombstone")
 		assert.Equal(t, "exit_deleted", outbox.lastIntent.Kind)
@@ -914,7 +914,7 @@ func TestWorldService_GetObject(t *testing.T) {
 		engine.Grant(subjectID, "read", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(expectedObj, nil)
 
-		obj, err := svc.GetObject(ctx, subjectID, objID)
+		obj, err := svc.GetObject(ctx, world.HumanCaller(subjectID), objID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedObj, obj)
 	})
@@ -928,7 +928,7 @@ func TestWorldService_GetObject(t *testing.T) {
 			Engine:     engine,
 		})
 
-		obj, err := svc.GetObject(ctx, subjectID, objID)
+		obj, err := svc.GetObject(ctx, world.HumanCaller(subjectID), objID)
 		assert.Nil(t, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockObjRepo.AssertNotCalled(t, "Get")
@@ -959,7 +959,7 @@ func TestWorldService_CreateObject(t *testing.T) {
 			return o.Name == "sword" && !o.ID.IsZero()
 		})).Return(delta, nil)
 
-		err = svc.CreateObject(ctx, subjectID, obj)
+		err = svc.CreateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.NoError(t, err)
 		assert.False(t, obj.ID.IsZero(), "ID should be generated")
 
@@ -991,7 +991,7 @@ func TestWorldService_CreateObject(t *testing.T) {
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
 
-		err = svc.CreateObject(ctx, subjectID, obj)
+		err = svc.CreateObject(ctx, world.HumanCaller(subjectID), obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockObjRepo.AssertNotCalled(t, "Create")
 		assert.Equal(t, 0, outbox.calls)
@@ -1021,7 +1021,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(delta, nil)
 
-		err = svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, outbox.calls, "exactly one object_updated envelope")
@@ -1043,7 +1043,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
 
-		err = svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockObjRepo.AssertNotCalled(t, "Update")
 		assert.Equal(t, 0, outbox.calls)
@@ -1067,7 +1067,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		conflict := oops.Code(world.CodeConcurrentEdit).Wrap(world.ErrConcurrentEdit)
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil, conflict)
 
-		err = svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
 		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
@@ -1090,7 +1090,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil, errors.New("db error"))
 
-		err = svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 		assert.Equal(t, 0, outbox.calls)
@@ -1112,7 +1112,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil, world.ErrNotFound)
 
-		err = svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
@@ -1142,7 +1142,7 @@ func TestWorldService_DeleteObject(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockObjRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(delta, nil)
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, outbox.calls, "exactly one object_deleted tombstone envelope")
@@ -1163,7 +1163,7 @@ func TestWorldService_DeleteObject(t *testing.T) {
 			Engine:       engine,
 		}, outbox))
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockObjRepo.AssertNotCalled(t, "Delete")
 		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
@@ -1182,7 +1182,7 @@ func TestWorldService_DeleteObject(t *testing.T) {
 			Engine:       engine,
 		}, outbox))
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
@@ -1220,7 +1220,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to, mock.Anything).Return(delta, nil)
 
-		err = svc.MoveObject(ctx, subjectID, objID, to)
+		err = svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, to)
 		require.NoError(t, err)
 
 		// Exactly one object_moved envelope reflecting the containment change.
@@ -1258,7 +1258,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 
 		to := world.Containment{LocationID: &locationID}
 
-		err := svc.MoveObject(ctx, subjectID, objID, to)
+		err := svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, to)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		assert.Equal(t, 0, outbox.calls)
 	})
@@ -1278,7 +1278,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 
-		err := svc.MoveObject(ctx, subjectID, objID, to)
+		err := svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, to)
 		assert.ErrorIs(t, err, world.ErrInvalidContainment)
 		assert.Equal(t, 0, outbox.calls)
 	})
@@ -1303,7 +1303,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to, mock.Anything).Return(nil, errors.New("db error"))
 
-		err = svc.MoveObject(ctx, subjectID, objID, to)
+		err = svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, to)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 		assert.Equal(t, 0, outbox.calls)
@@ -1318,7 +1318,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 
 		to := world.Containment{LocationID: &locationID}
 
-		err := svc.MoveObject(ctx, subjectID, objID, to)
+		err := svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, to)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "object repository not configured")
 	})
@@ -1355,7 +1355,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
 		mockSceneRepo.EXPECT().ListParticipants(ctx, sceneID).Return(expected, nil)
 
-		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		participants, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		require.NoError(t, err)
 		assert.Equal(t, expected, participants)
 	})
@@ -1369,7 +1369,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 			Engine:    engine,
 		})
 
-		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		participants, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		assert.Nil(t, participants)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockSceneRepo.AssertNotCalled(t, "ListParticipants")
@@ -1384,7 +1384,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 			Engine:    engine,
 		})
 
-		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		participants, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		assert.Nil(t, participants)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
@@ -1404,7 +1404,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 			Engine:    engine,
 		})
 
-		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		participants, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		assert.Nil(t, participants)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -1422,7 +1422,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 			Engine:    engine,
 		})
 
-		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		participants, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		assert.Nil(t, participants)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
@@ -1456,7 +1456,7 @@ func TestWorldService_CreateLocationValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "location:*")
 
-		err := svc.CreateLocation(ctx, subjectID, loc)
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -1485,7 +1485,7 @@ func TestWorldService_CreateLocationValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "location:*")
 
-		err := svc.CreateLocation(ctx, subjectID, loc)
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -1517,7 +1517,7 @@ func TestWorldService_CreateExitValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:*")
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -1545,7 +1545,7 @@ func TestWorldService_CreateObjectValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:*")
 
-		err := svc.CreateObject(ctx, subjectID, obj)
+		err := svc.CreateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -1568,7 +1568,7 @@ func TestWorldService_CreateObjectValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:*")
 
-		err := svc.CreateObject(ctx, subjectID, obj)
+		err := svc.CreateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidContainment)
 	})
@@ -1621,7 +1621,7 @@ func TestWorldService_CreateLocationErrorPropagation(t *testing.T) {
 		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.CreateLocation(ctx, subjectID, loc)
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 	})
@@ -1644,7 +1644,7 @@ func TestWorldService_GetExitErrorPropagation(t *testing.T) {
 		engine.Grant(subjectID, "read", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Get(ctx, exitID).Return(nil, errors.New("db error"))
 
-		exit, err := svc.GetExit(ctx, subjectID, exitID)
+		exit, err := svc.GetExit(ctx, world.HumanCaller(subjectID), exitID)
 		assert.Nil(t, exit)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
@@ -1676,7 +1676,7 @@ func TestWorldService_CreateExitErrorPropagation(t *testing.T) {
 		engine.Grant(subjectID, "write", "exit:*")
 		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 	})
@@ -1699,7 +1699,7 @@ func TestWorldService_GetObjectErrorPropagation(t *testing.T) {
 		engine.Grant(subjectID, "read", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(nil, errors.New("db error"))
 
-		obj, err := svc.GetObject(ctx, subjectID, objID)
+		obj, err := svc.GetObject(ctx, world.HumanCaller(subjectID), objID)
 		assert.Nil(t, obj)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
@@ -1726,7 +1726,7 @@ func TestWorldService_CreateObjectErrorPropagation(t *testing.T) {
 		engine.Grant(subjectID, "write", "object:*")
 		mockObjRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
-		err = svc.CreateObject(ctx, subjectID, obj)
+		err = svc.CreateObject(ctx, world.HumanCaller(subjectID), obj)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 	})
@@ -1751,7 +1751,7 @@ func TestWorldService_ListSceneParticipantsErrorPropagation(t *testing.T) {
 		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
 		mockSceneRepo.EXPECT().ListParticipants(ctx, sceneID).Return(nil, errors.New("db error"))
 
-		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		participants, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		assert.Nil(t, participants)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
@@ -1789,7 +1789,7 @@ func TestWorldService_DeleteExitSevereCleanup(t *testing.T) {
 		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, cleanupResult)
 
 		// Severe error means the entire operation was rolled back - return error
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "delete exit")
 	})
@@ -1820,7 +1820,7 @@ func TestWorldService_DeleteExitSevereCleanup(t *testing.T) {
 		mockExitRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, cleanupResult)
 
 		// Severe error means the entire operation was rolled back - return error
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "delete exit")
 	})
@@ -1961,7 +1961,7 @@ func TestWorldService_UpdateLocationValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "location:"+locID.String())
 
-		err := svc.UpdateLocation(ctx, subjectID, loc)
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -1986,7 +1986,7 @@ func TestWorldService_UpdateLocationValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "location:"+locID.String())
 
-		err := svc.UpdateLocation(ctx, subjectID, loc)
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidLocationType)
 	})
@@ -2013,7 +2013,7 @@ func TestWorldService_UpdateExitValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
-		err := svc.UpdateExit(ctx, subjectID, exit)
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -2038,7 +2038,7 @@ func TestWorldService_UpdateExitValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
-		err := svc.UpdateExit(ctx, subjectID, exit)
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidVisibility)
 	})
@@ -2062,7 +2062,7 @@ func TestWorldService_UpdateExitValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
-		err := svc.UpdateExit(ctx, subjectID, exit)
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidLockType)
 	})
@@ -2089,7 +2089,7 @@ func TestWorldService_UpdateObjectValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 
-		err := svc.UpdateObject(ctx, subjectID, obj)
+		err := svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -2113,7 +2113,7 @@ func TestWorldService_UpdateObjectValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 
-		err := svc.UpdateObject(ctx, subjectID, obj)
+		err := svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidContainment)
 	})
@@ -2141,7 +2141,7 @@ func TestWorldService_CreateLocationTypeValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "location:*")
 
-		err := svc.CreateLocation(ctx, subjectID, loc)
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidLocationType)
 	})
@@ -2171,7 +2171,7 @@ func TestWorldService_CreateExitVisibilityValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:*")
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidVisibility)
 	})
@@ -2196,7 +2196,7 @@ func TestWorldService_CreateExitVisibilityValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:*")
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidLockType)
 	})
@@ -2222,7 +2222,7 @@ func TestWorldService_CreateExitVisibilityValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:*")
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -2251,7 +2251,7 @@ func TestWorldService_CreateExitVisibilityValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:*")
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -2285,7 +2285,7 @@ func TestWorldService_UpdateExitLockDataValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
-		err := svc.UpdateExit(ctx, subjectID, exit)
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -2312,7 +2312,7 @@ func TestWorldService_UpdateExitLockDataValidation(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
-		err := svc.UpdateExit(ctx, subjectID, exit)
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.Error(t, err)
 
 		var validationErr *world.ValidationError
@@ -2348,7 +2348,7 @@ func TestWorldService_CreateExitValidationBypass(t *testing.T) {
 		engine.Grant(subjectID, "write", "exit:*")
 		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.NoError(t, err, "unlocked exit with invalid lock type should succeed")
 	})
 
@@ -2374,7 +2374,7 @@ func TestWorldService_CreateExitValidationBypass(t *testing.T) {
 		engine.Grant(subjectID, "write", "exit:*")
 		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
-		err := svc.CreateExit(ctx, subjectID, exit)
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 		require.NoError(t, err, "non-list visibility with invalid visible_to should succeed")
 	})
 }
@@ -2416,7 +2416,7 @@ func TestWorldService_CreateLocation_NilInput(t *testing.T) {
 
 	engine.Grant(subjectID, "write", "location:*")
 
-	err := svc.CreateLocation(ctx, subjectID, nil)
+	err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 }
@@ -2433,7 +2433,7 @@ func TestWorldService_UpdateLocation_NilInput(t *testing.T) {
 	})
 
 	// Note: nil check happens before access check since we need the ID to build resource string
-	err := svc.UpdateLocation(ctx, subjectID, nil)
+	err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 }
@@ -2451,7 +2451,7 @@ func TestWorldService_CreateExit_NilInput(t *testing.T) {
 
 	engine.Grant(subjectID, "write", "exit:*")
 
-	err := svc.CreateExit(ctx, subjectID, nil)
+	err := svc.CreateExit(ctx, world.HumanCaller(subjectID), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 }
@@ -2469,7 +2469,7 @@ func TestWorldService_CreateObject_NilInput(t *testing.T) {
 
 	engine.Grant(subjectID, "write", "object:*")
 
-	err := svc.CreateObject(ctx, subjectID, nil)
+	err := svc.CreateObject(ctx, world.HumanCaller(subjectID), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 }
@@ -2486,7 +2486,7 @@ func TestWorldService_UpdateExit_NilInput(t *testing.T) {
 	})
 
 	// Note: nil check happens before access check since we need the ID to build resource string
-	err := svc.UpdateExit(ctx, subjectID, nil)
+	err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 }
@@ -2503,7 +2503,7 @@ func TestWorldService_UpdateObject_NilInput(t *testing.T) {
 	})
 
 	// Note: nil check happens before access check since we need the ID to build resource string
-	err := svc.UpdateObject(ctx, subjectID, nil)
+	err := svc.UpdateObject(ctx, world.HumanCaller(subjectID), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 }
@@ -2528,19 +2528,19 @@ func TestWorldService_NilLocationRepo(t *testing.T) {
 	})
 
 	t.Run("CreateLocation returns error", func(t *testing.T) {
-		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test"})
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), &world.Location{Name: "Test"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("UpdateLocation returns error", func(t *testing.T) {
-		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test"})
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), &world.Location{ID: locID, Name: "Test"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("DeleteLocation returns error", func(t *testing.T) {
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
@@ -2558,25 +2558,25 @@ func TestWorldService_NilExitRepo(t *testing.T) {
 	})
 
 	t.Run("GetExit returns error", func(t *testing.T) {
-		_, err := svc.GetExit(ctx, subjectID, exitID)
+		_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("CreateExit returns error", func(t *testing.T) {
-		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north"})
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), &world.Exit{Name: "north"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("UpdateExit returns error", func(t *testing.T) {
-		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north"})
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), &world.Exit{ID: exitID, Name: "north"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("DeleteExit returns error", func(t *testing.T) {
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
@@ -2594,25 +2594,25 @@ func TestWorldService_NilObjectRepo(t *testing.T) {
 	})
 
 	t.Run("GetObject returns error", func(t *testing.T) {
-		_, err := svc.GetObject(ctx, subjectID, objID)
+		_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("CreateObject returns error", func(t *testing.T) {
-		err := svc.CreateObject(ctx, subjectID, &world.Object{Name: "item"})
+		err := svc.CreateObject(ctx, world.HumanCaller(subjectID), &world.Object{Name: "item"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("UpdateObject returns error", func(t *testing.T) {
-		err := svc.UpdateObject(ctx, subjectID, &world.Object{ID: objID, Name: "item"})
+		err := svc.UpdateObject(ctx, world.HumanCaller(subjectID), &world.Object{ID: objID, Name: "item"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("DeleteObject returns error", func(t *testing.T) {
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
@@ -2630,7 +2630,7 @@ func TestWorldService_NilSceneRepo(t *testing.T) {
 	})
 
 	t.Run("ListSceneParticipants returns error", func(t *testing.T) {
-		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		_, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
@@ -2703,7 +2703,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			Engine:       engine,
 		})
 
-		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), &world.Location{Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Create")
@@ -2720,7 +2720,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "location:*")
 
-		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "", Type: world.LocationTypePersistent})
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), &world.Location{Name: "", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_INVALID")
 	})
@@ -2737,7 +2737,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), &world.Location{Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_CREATE_FAILED")
 	})
@@ -2751,7 +2751,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			Engine:       engine,
 		})
 
-		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Update")
@@ -2768,7 +2768,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "location:"+locID.String())
 
-		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "", Type: world.LocationTypePersistent})
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), &world.Location{ID: locID, Name: "", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_INVALID")
 	})
@@ -2785,7 +2785,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		engine.Grant(subjectID, "write", "location:"+locID.String())
 		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_UPDATE_FAILED")
 	})
@@ -2803,7 +2803,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			Transactor:   tx,
 		})
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Delete")
@@ -2828,7 +2828,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, world.ErrNotFound)
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
 	})
@@ -2851,7 +2851,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_DELETE_FAILED")
 	})
@@ -2881,7 +2881,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			Engine:       engine,
 		})
 
-		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
+		err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), &world.Location{Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -2897,7 +2897,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			Engine:       engine,
 		})
 
-		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
+		err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -2917,7 +2917,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			Transactor:   tx,
 		})
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -2945,7 +2945,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine.Grant(subjectID, "read", "exit:"+exitID.String())
 		mockRepo.EXPECT().Get(ctx, exitID).Return(nil, world.ErrNotFound)
 
-		_, err := svc.GetExit(ctx, subjectID, exitID)
+		_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
 	})
@@ -2959,7 +2959,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 			Engine:   engine,
 		})
 
-		_, err := svc.GetExit(ctx, subjectID, exitID)
+		_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Get")
@@ -2977,7 +2977,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine.Grant(subjectID, "read", "exit:"+exitID.String())
 		mockRepo.EXPECT().Get(ctx, exitID).Return(nil, errors.New("db error"))
 
-		_, err := svc.GetExit(ctx, subjectID, exitID)
+		_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_GET_FAILED")
 	})
@@ -2991,7 +2991,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 			Engine:   engine,
 		})
 
-		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Create")
@@ -3008,7 +3008,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:*")
 
-		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "", FromLocationID: fromLocID, ToLocationID: toLocID})
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), &world.Exit{Name: "", FromLocationID: fromLocID, ToLocationID: toLocID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_INVALID")
 	})
@@ -3025,7 +3025,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine.Grant(subjectID, "write", "exit:*")
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_CREATE_FAILED")
 	})
@@ -3039,7 +3039,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 			Engine:   engine,
 		})
 
-		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Update")
@@ -3056,7 +3056,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
-		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: ""})
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), &world.Exit{ID: exitID, Name: ""})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_INVALID")
 	})
@@ -3073,7 +3073,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_UPDATE_FAILED")
 	})
@@ -3087,7 +3087,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 			Engine:   engine,
 		})
 
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Delete")
@@ -3105,7 +3105,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, world.ErrNotFound)
 
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
 	})
@@ -3122,7 +3122,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_DELETE_FAILED")
 	})
@@ -3136,7 +3136,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 			Engine:   engine,
 		})
 
-		_, err := svc.GetExit(ctx, subjectID, exitID)
+		_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -3152,7 +3152,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 			Engine:   engine,
 		})
 
-		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
+		err := svc.CreateExit(ctx, world.HumanCaller(subjectID), &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -3168,7 +3168,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 			Engine:   engine,
 		})
 
-		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
+		err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -3184,7 +3184,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 			Engine:   engine,
 		})
 
-		err := svc.DeleteExit(ctx, subjectID, exitID)
+		err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
 		mockRepo.AssertNotCalled(t, "Delete")
@@ -3210,7 +3210,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		engine.Grant(subjectID, "read", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(nil, world.ErrNotFound)
 
-		_, err := svc.GetObject(ctx, subjectID, objID)
+		_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
@@ -3224,7 +3224,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 			Engine:     engine,
 		})
 
-		_, err := svc.GetObject(ctx, subjectID, objID)
+		_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Get")
@@ -3242,7 +3242,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		engine.Grant(subjectID, "read", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(nil, errors.New("db error"))
 
-		_, err := svc.GetObject(ctx, subjectID, objID)
+		_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_GET_FAILED")
 	})
@@ -3258,7 +3258,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
-		err = svc.CreateObject(ctx, subjectID, obj)
+		err = svc.CreateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Create")
@@ -3283,7 +3283,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
-		err = svc.CreateObject(ctx, subjectID, obj)
+		err = svc.CreateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_CREATE_FAILED")
 	})
@@ -3299,7 +3299,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
-		err = svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Update")
@@ -3324,7 +3324,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
-		err = svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_UPDATE_FAILED")
 	})
@@ -3343,7 +3343,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 			OutboxWriter: &mockOutboxWriter{},
 		})
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Delete")
@@ -3368,7 +3368,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, world.ErrNotFound)
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
@@ -3391,7 +3391,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_DELETE_FAILED")
 	})
@@ -3405,7 +3405,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 			Engine:     engine,
 		})
 
-		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		err := svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Get")
@@ -3423,7 +3423,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 
-		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{})
+		err := svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, world.Containment{})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_INVALID")
 	})
@@ -3440,7 +3440,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(nil, world.ErrNotFound)
 
-		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		err := svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
@@ -3462,7 +3462,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything, mock.Anything).Return(nil, world.ErrNotFound)
 
-		err = svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		err = svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
@@ -3484,7 +3484,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
 
-		err = svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		err = svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_MOVE_FAILED")
 	})
@@ -3498,7 +3498,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 			Engine:     engine,
 		})
 
-		_, err := svc.GetObject(ctx, subjectID, objID)
+		_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -3516,7 +3516,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
-		err = svc.CreateObject(ctx, subjectID, obj)
+		err = svc.CreateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -3534,7 +3534,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
-		err = svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -3555,7 +3555,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 			OutboxWriter: &mockOutboxWriter{},
 		})
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -3572,7 +3572,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 			Engine:     engine,
 		})
 
-		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		err := svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -3595,7 +3595,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 			Engine:    engine,
 		})
 
-		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		_, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "ListParticipants")
@@ -3613,7 +3613,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
 		mockRepo.EXPECT().ListParticipants(ctx, sceneID).Return(nil, world.ErrNotFound)
 
-		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		_, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
 	})
@@ -3630,7 +3630,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
 		mockRepo.EXPECT().ListParticipants(ctx, sceneID).Return(nil, errors.New("db error"))
 
-		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		_, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_LIST_PARTICIPANTS_FAILED")
 	})
@@ -3644,7 +3644,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 			Engine:    engine,
 		})
 
-		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		_, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -3676,7 +3676,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 		engine.Grant(subjectID, "read", "character:"+charID.String())
 		mockRepo.EXPECT().Get(ctx, charID).Return(expectedChar, nil)
 
-		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		char, err := svc.GetCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedChar, char)
 	})
@@ -3690,7 +3690,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 			Engine:        engine,
 		})
 
-		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		char, err := svc.GetCharacter(ctx, world.HumanCaller(subjectID), charID)
 		assert.Nil(t, char)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
@@ -3705,7 +3705,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 			Engine:        engine,
 		})
 
-		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		char, err := svc.GetCharacter(ctx, world.HumanCaller(subjectID), charID)
 		assert.Nil(t, char)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
@@ -3719,7 +3719,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 			Engine: engine,
 		})
 
-		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		char, err := svc.GetCharacter(ctx, world.HumanCaller(subjectID), charID)
 		assert.Nil(t, char)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_GET_FAILED")
@@ -3737,7 +3737,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 		engine.Grant(subjectID, "read", "character:"+charID.String())
 		mockRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
 
-		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		char, err := svc.GetCharacter(ctx, world.HumanCaller(subjectID), charID)
 		assert.Nil(t, char)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
@@ -3756,7 +3756,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 		engine.Grant(subjectID, "read", "character:"+charID.String())
 		mockRepo.EXPECT().Get(ctx, charID).Return(nil, dbErr)
 
-		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		char, err := svc.GetCharacter(ctx, world.HumanCaller(subjectID), charID)
 		assert.Nil(t, char)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_GET_FAILED")
@@ -3784,7 +3784,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		engine.Grant(subjectID, "list_characters", "location:"+locationID.String())
 		mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(expectedChars, nil)
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+		chars, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, world.ListOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, expectedChars, chars)
 	})
@@ -3798,7 +3798,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 			Engine:        engine,
 		})
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+		chars, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
@@ -3813,7 +3813,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 			Engine:        engine,
 		})
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+		chars, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
@@ -3829,7 +3829,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 			Engine:        engine,
 		})
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+		chars, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
@@ -3847,7 +3847,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 			Engine: engine,
 		})
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+		chars, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_QUERY_FAILED")
@@ -3866,7 +3866,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		engine.Grant(subjectID, "list_characters", "location:"+locationID.String())
 		mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(nil, dbErr)
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+		chars, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_QUERY_FAILED")
@@ -3884,7 +3884,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		engine.Grant(subjectID, "list_characters", "location:"+locationID.String())
 		mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return([]*world.Character{}, nil)
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+		chars, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, world.ListOptions{})
 		require.NoError(t, err)
 		assert.Empty(t, chars)
 	})
@@ -3904,7 +3904,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		engine.Grant(subjectID, "list_characters", "location:"+locationID.String())
 		mockRepo.EXPECT().GetByLocation(ctx, locationID, opts).Return(expectedChars, nil)
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, opts)
+		chars, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, opts)
 		require.NoError(t, err)
 		assert.Equal(t, expectedChars, chars)
 	})
@@ -3934,7 +3934,7 @@ func TestWorldService_GetCharactersByLocation_UsesDecomposedResource(t *testing.
 
 	mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(expectedChars, nil)
 
-	_, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+	_, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, world.ListOptions{})
 	require.NoError(t, err)
 
 	// Verify ADR #76 decomposition: action=list_characters, resource=location:<id> (not location:<id>:characters)
@@ -3968,7 +3968,7 @@ func TestWorldService_GetCharactersByLocation_VerifiesAccessRequest(t *testing.T
 
 	mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(expectedChars, nil)
 
-	_, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+	_, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(subjectID), locationID, world.ListOptions{})
 	require.NoError(t, err)
 
 	// Verify AccessRequest fields
@@ -4015,7 +4015,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		// The character's read version is threaded as the CAS guard.
 		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, 3).Return(delta, nil)
 
-		require.NoError(t, svc.MoveCharacter(ctx, subjectID, charID, toLocID))
+		require.NoError(t, svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID))
 
 		// Exactly one envelope was written, finalized from the returned delta, and
 		// carrying the new-values-only move intent.
@@ -4053,7 +4053,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
 		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, mock.Anything).Return(&wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateCharacter, ID: charID}}, nil)
 
-		require.NoError(t, svc.MoveCharacter(ctx, subjectID, charID, toLocID))
+		require.NoError(t, svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID))
 
 		require.Equal(t, 1, outbox.calls)
 		var payload struct {
@@ -4074,7 +4074,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
 
-		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		err := svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
@@ -4093,7 +4093,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, dbErr)
 
-		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		err := svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
 		assert.Contains(t, err.Error(), "get character")
@@ -4114,7 +4114,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(nil, world.ErrNotFound)
 
-		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		err := svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
@@ -4128,7 +4128,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 
 		svc := newMoveSvc(t, engine, mockCharRepo, mockLocRepo, &mockOutboxWriter{})
 
-		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		err := svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
@@ -4147,7 +4147,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 			OutboxWriter:  &mockOutboxWriter{},
 		})
 
-		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		err := svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -4164,7 +4164,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 			OutboxWriter: &mockOutboxWriter{},
 		})
 
-		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		err := svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
 	})
@@ -4186,7 +4186,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
 
-		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		err := svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
 	})
@@ -4207,7 +4207,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
 		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, mock.Anything).Return(nil, dbErr)
 
-		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		err := svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
 		assert.Equal(t, 0, outbox.calls, "a failed guarded write rolls back with no envelope")
@@ -4233,7 +4233,7 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 		engine.Grant(subjectID, "read", "location:*")
 		mockRepo.EXPECT().FindByName(ctx, "Test Room").Return(expectedLoc, nil)
 
-		loc, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
+		loc, err := svc.FindLocationByName(ctx, world.HumanCaller(subjectID), "Test Room")
 		require.NoError(t, err)
 		assert.Equal(t, locID, loc.ID)
 		assert.Equal(t, "Test Room", loc.Name)
@@ -4248,7 +4248,7 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 			Engine:       engine,
 		})
 
-		_, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
+		_, err := svc.FindLocationByName(ctx, world.HumanCaller(subjectID), "Test Room")
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
 	})
@@ -4262,7 +4262,7 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 			Engine:       engine,
 		})
 
-		_, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
+		_, err := svc.FindLocationByName(ctx, world.HumanCaller(subjectID), "Test Room")
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -4280,7 +4280,7 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 		engine.Grant(subjectID, "read", "location:*")
 		mockRepo.EXPECT().FindByName(ctx, "Non-Existent").Return(nil, world.ErrNotFound)
 
-		_, err := svc.FindLocationByName(ctx, subjectID, "Non-Existent")
+		_, err := svc.FindLocationByName(ctx, world.HumanCaller(subjectID), "Non-Existent")
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
 	})
@@ -4292,7 +4292,7 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 			Engine: engine,
 		})
 
-		_, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
+		_, err := svc.FindLocationByName(ctx, world.HumanCaller(subjectID), "Test Room")
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_FIND_FAILED")
 	})
@@ -4321,7 +4321,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, nil)
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.NoError(t, err)
 		assert.True(t, tx.called, "expected InTransaction to be called")
 	})
@@ -4340,7 +4340,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			OutboxWriter:  &mockOutboxWriter{},
 		})
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
@@ -4360,7 +4360,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			OutboxWriter:  &mockOutboxWriter{},
 		})
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
@@ -4383,7 +4383,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			OutboxWriter:  &mockOutboxWriter{},
 		})
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -4403,7 +4403,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			OutboxWriter:  &mockOutboxWriter{},
 		})
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
 			"infrastructure failure should return ErrAccessEvaluationFailed")
@@ -4431,7 +4431,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, world.ErrNotFound)
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
 	})
@@ -4454,7 +4454,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_DELETE_FAILED")
 	})
@@ -4467,7 +4467,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			// CharacterRepo intentionally nil
 		})
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 		errutil.AssertErrorCode(t, err, "CHARACTER_DELETE_FAILED")
@@ -4497,7 +4497,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, nil)
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.NoError(t, err)
 		assert.True(t, tx.called, "expected InTransaction to be called")
 	})
@@ -4519,7 +4519,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(errors.New("db error"))
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_DELETE_FAILED")
 	})
@@ -4542,7 +4542,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_DELETE_FAILED")
 	})
@@ -4571,7 +4571,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockLocRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, nil)
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.NoError(t, err)
 		assert.True(t, tx.called, "expected InTransaction to be called")
 	})
@@ -4593,7 +4593,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(errors.New("db error"))
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_DELETE_FAILED")
 	})
@@ -4616,7 +4616,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockLocRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.DeleteLocation(ctx, subjectID, locID)
+		err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_DELETE_FAILED")
 	})
@@ -4645,7 +4645,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockObjRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, nil)
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.NoError(t, err)
 		assert.True(t, tx.called, "expected InTransaction to be called")
 	})
@@ -4667,7 +4667,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(errors.New("db error"))
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_DELETE_FAILED")
 	})
@@ -4690,7 +4690,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockObjRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, errors.New("db error"))
 
-		err := svc.DeleteObject(ctx, subjectID, objID)
+		err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_DELETE_FAILED")
 	})
@@ -4717,7 +4717,7 @@ func TestWorldService_DeleteLocation_PropertyDeleteFails(t *testing.T) {
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(errors.New("db error"))
 
-	err := svc.DeleteLocation(ctx, subjectID, locID)
+	err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "LOCATION_DELETE_FAILED")
 	assert.True(t, tx.called, "expected InTransaction to be called")
@@ -4744,7 +4744,7 @@ func TestWorldService_DeleteObject_PropertyDeleteFails(t *testing.T) {
 	engine.Grant(subjectID, "delete", "object:"+objID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(errors.New("db error"))
 
-	err := svc.DeleteObject(ctx, subjectID, objID)
+	err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "OBJECT_DELETE_FAILED")
 	assert.True(t, tx.called, "expected InTransaction to be called")
@@ -4771,7 +4771,7 @@ func TestWorldService_DeleteCharacter_PropertyDeleteFails(t *testing.T) {
 	engine.Grant(subjectID, "delete", "character:"+charID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(errors.New("db error"))
 
-	err := svc.DeleteCharacter(ctx, subjectID, charID)
+	err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CHARACTER_DELETE_FAILED")
 	assert.True(t, tx.called, "expected InTransaction to be called")
@@ -4794,7 +4794,7 @@ func TestWorldService_DeleteLocation_ErrorsWithPropertyRepoButNoTransactor(t *te
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
 
-	err := svc.DeleteLocation(ctx, subjectID, locID)
+	err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "LOCATION_DELETE_FAILED")
 	assert.Contains(t, err.Error(), "transactor required")
@@ -4817,7 +4817,7 @@ func TestWorldService_DeleteObject_ErrorsWithPropertyRepoButNoTransactor(t *test
 
 	engine.Grant(subjectID, "delete", "object:"+objID.String())
 
-	err := svc.DeleteObject(ctx, subjectID, objID)
+	err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "OBJECT_DELETE_FAILED")
 	assert.Contains(t, err.Error(), "transactor required")
@@ -4840,7 +4840,7 @@ func TestWorldService_DeleteCharacter_ErrorsWithPropertyRepoButNoTransactor(t *t
 
 	engine.Grant(subjectID, "delete", "character:"+charID.String())
 
-	err := svc.DeleteCharacter(ctx, subjectID, charID)
+	err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CHARACTER_DELETE_FAILED")
 	assert.Contains(t, err.Error(), "transactor required")
@@ -4868,7 +4868,7 @@ func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 	mockLocRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, nil)
 
-	err := svc.DeleteLocation(ctx, subjectID, locID)
+	err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 	require.NoError(t, err)
 	assert.True(t, tx.called, "expected InTransaction to be called")
 }
@@ -4895,7 +4895,7 @@ func TestWorldService_DeleteObject_UsesTransactor(t *testing.T) {
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 	mockObjRepo.EXPECT().Delete(mock.Anything, objID, mock.Anything).Return(nil, nil)
 
-	err := svc.DeleteObject(ctx, subjectID, objID)
+	err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 	require.NoError(t, err)
 	assert.True(t, tx.called, "expected InTransaction to be called")
 }
@@ -4922,7 +4922,7 @@ func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 	mockCharRepo.EXPECT().Delete(mock.Anything, charID, mock.Anything).Return(nil, nil)
 
-	err := svc.DeleteCharacter(ctx, subjectID, charID)
+	err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 	require.NoError(t, err)
 	assert.True(t, tx.called, "expected InTransaction to be called")
 }
@@ -4949,7 +4949,7 @@ func TestWorldService_DeleteLocation_TransactorRollsBackOnError(t *testing.T) {
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 	mockLocRepo.EXPECT().Delete(mock.Anything, locID, mock.Anything).Return(nil, errors.New("db error"))
 
-	err := svc.DeleteLocation(ctx, subjectID, locID)
+	err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 	require.Error(t, err)
 	assert.True(t, tx.called, "expected InTransaction to be called")
 }
@@ -5018,7 +5018,7 @@ func TestWorldService_CreateLocation_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
-	err := svc.CreateLocation(ctx, subjectID, loc)
+	err := svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 	require.NoError(t, err)
 
 	// Verify AccessRequest fields
@@ -5064,7 +5064,7 @@ func TestWorldService_MoveCharacter_VerifiesAccessRequest(t *testing.T) {
 	mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
 	mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID, mock.Anything).Return(nil, nil)
 
-	err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+	err := svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID)
 	require.NoError(t, err)
 
 	// Verify AccessRequest fields
@@ -5105,7 +5105,7 @@ func TestWorldService_CreateExit_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
-	err := svc.CreateExit(ctx, subjectID, exit)
+	err := svc.CreateExit(ctx, world.HumanCaller(subjectID), exit)
 	require.NoError(t, err)
 
 	// Verify AccessRequest fields
@@ -5137,7 +5137,7 @@ func TestWorldService_DeleteExit_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Delete(ctx, exitID, mock.Anything).Return(nil, nil)
 
-	err := svc.DeleteExit(ctx, subjectID, exitID)
+	err := svc.DeleteExit(ctx, world.HumanCaller(subjectID), exitID)
 	require.NoError(t, err)
 
 	// Verify AccessRequest fields
@@ -5175,7 +5175,7 @@ func TestWorldService_DeleteCharacter_VerifiesAccessRequest(t *testing.T) {
 	mockPropRepo.EXPECT().DeleteByParent(ctx, "character", charID).Return(nil)
 	mockCharRepo.EXPECT().Delete(ctx, charID, mock.Anything).Return(nil, nil)
 
-	err := svc.DeleteCharacter(ctx, subjectID, charID)
+	err := svc.DeleteCharacter(ctx, world.HumanCaller(subjectID), charID)
 	require.NoError(t, err)
 
 	// Verify AccessRequest fields
@@ -5210,7 +5210,7 @@ func TestWorldService_GetExit_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Get(ctx, exitID).Return(expectedExit, nil)
 
-	_, err := svc.GetExit(ctx, subjectID, exitID)
+	_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), exitID)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5250,7 +5250,7 @@ func TestWorldService_UpdateExit_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Update(ctx, exit).Return(nil, nil)
 
-	err := svc.UpdateExit(ctx, subjectID, exit)
+	err := svc.UpdateExit(ctx, world.HumanCaller(subjectID), exit)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5316,7 +5316,7 @@ func TestWorldService_GetObject_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Get(ctx, objID).Return(expectedObj, nil)
 
-	_, err := svc.GetObject(ctx, subjectID, objID)
+	_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), objID)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5349,7 +5349,7 @@ func TestWorldService_CreateObject_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil, nil)
 
-	err := svc.CreateObject(ctx, subjectID, obj)
+	err := svc.CreateObject(ctx, world.HumanCaller(subjectID), obj)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5383,7 +5383,7 @@ func TestWorldService_UpdateObject_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Update(ctx, obj).Return(nil, nil)
 
-	err := svc.UpdateObject(ctx, subjectID, obj)
+	err := svc.UpdateObject(ctx, world.HumanCaller(subjectID), obj)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5419,7 +5419,7 @@ func TestWorldService_DeleteObject_VerifiesAccessRequest(t *testing.T) {
 	mockPropRepo.EXPECT().DeleteByParent(ctx, "object", objID).Return(nil)
 	mockObjRepo.EXPECT().Delete(ctx, objID, mock.Anything).Return(nil, nil)
 
-	err := svc.DeleteObject(ctx, subjectID, objID)
+	err := svc.DeleteObject(ctx, world.HumanCaller(subjectID), objID)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5455,7 +5455,7 @@ func TestWorldService_MoveObject_VerifiesAccessRequest(t *testing.T) {
 	mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 	mockObjRepo.EXPECT().Move(ctx, objID, world.InLocation(toLocID), mock.Anything).Return(nil, nil)
 
-	err := svc.MoveObject(ctx, subjectID, objID, world.InLocation(toLocID))
+	err := svc.MoveObject(ctx, world.HumanCaller(subjectID), objID, world.InLocation(toLocID))
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5489,7 +5489,7 @@ func TestWorldService_ListSceneParticipants_VerifiesAccessRequest(t *testing.T) 
 
 	mockRepo.EXPECT().ListParticipants(ctx, sceneID).Return(expectedParticipants, nil)
 
-	_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+	_, err := svc.ListSceneParticipants(ctx, world.HumanCaller(subjectID), sceneID)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5527,7 +5527,7 @@ func TestWorldService_UpdateLocation_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Update(ctx, loc).Return(nil, nil)
 
-	err := svc.UpdateLocation(ctx, subjectID, loc)
+	err := svc.UpdateLocation(ctx, world.HumanCaller(subjectID), loc)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5563,7 +5563,7 @@ func TestWorldService_DeleteLocation_VerifiesAccessRequest(t *testing.T) {
 	mockPropRepo.EXPECT().DeleteByParent(ctx, "location", locID).Return(nil)
 	mockLocRepo.EXPECT().Delete(ctx, locID, mock.Anything).Return(nil, nil)
 
-	err := svc.DeleteLocation(ctx, subjectID, locID)
+	err := svc.DeleteLocation(ctx, world.HumanCaller(subjectID), locID)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5594,7 +5594,7 @@ func TestWorldService_FindLocationByName_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().FindByName(ctx, "Town Square").Return(expectedLoc, nil)
 
-	_, err := svc.FindLocationByName(ctx, subjectID, "Town Square")
+	_, err := svc.FindLocationByName(ctx, world.HumanCaller(subjectID), "Town Square")
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5628,7 +5628,7 @@ func TestWorldService_GetCharacter_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Get(ctx, charID).Return(expectedChar, nil)
 
-	_, err := svc.GetCharacter(ctx, subjectID, charID)
+	_, err := svc.GetCharacter(ctx, world.HumanCaller(subjectID), charID)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5710,7 +5710,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 					Description: "A test",
 					Type:        world.LocationTypePersistent,
 				}
-				return svc.CreateLocation(ctx, subjectID, loc)
+				return svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 			},
 			engineBehavior:    "error",
 			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
@@ -5733,7 +5733,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 					Description: "A test",
 					Type:        world.LocationTypePersistent,
 				}
-				return svc.CreateLocation(ctx, subjectID, loc)
+				return svc.CreateLocation(ctx, world.HumanCaller(subjectID), loc)
 			},
 			engineBehavior:    "deny",
 			expectedErrorCode: "LOCATION_ACCESS_DENIED",
@@ -5758,7 +5758,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 					Description: "Updated",
 					Type:        world.LocationTypePersistent,
 				}
-				return svc.UpdateLocation(ctx, subjectID, loc)
+				return svc.UpdateLocation(ctx, world.HumanCaller(subjectID), loc)
 			},
 			engineBehavior:    "error",
 			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
@@ -5783,7 +5783,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 					Description: "Updated",
 					Type:        world.LocationTypePersistent,
 				}
-				return svc.UpdateLocation(ctx, subjectID, loc)
+				return svc.UpdateLocation(ctx, world.HumanCaller(subjectID), loc)
 			},
 			engineBehavior:    "deny",
 			expectedErrorCode: "LOCATION_ACCESS_DENIED",
@@ -5806,7 +5806,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, locID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				return svc.DeleteLocation(ctx, subjectID, id)
+				return svc.DeleteLocation(ctx, world.HumanCaller(subjectID), id)
 			},
 			engineBehavior:    "error",
 			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
@@ -5829,7 +5829,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, locID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				return svc.DeleteLocation(ctx, subjectID, id)
+				return svc.DeleteLocation(ctx, world.HumanCaller(subjectID), id)
 			},
 			engineBehavior:    "deny",
 			expectedErrorCode: "LOCATION_ACCESS_DENIED",
@@ -5850,7 +5850,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, exitID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				_, err := svc.GetExit(ctx, subjectID, id)
+				_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), id)
 				return err
 			},
 			engineBehavior:    "error",
@@ -5870,7 +5870,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, exitID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				_, err := svc.GetExit(ctx, subjectID, id)
+				_, err := svc.GetExit(ctx, world.HumanCaller(subjectID), id)
 				return err
 			},
 			engineBehavior:    "deny",
@@ -5892,7 +5892,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, objID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				_, err := svc.GetObject(ctx, subjectID, id)
+				_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), id)
 				return err
 			},
 			engineBehavior:    "error",
@@ -5912,7 +5912,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, objID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				_, err := svc.GetObject(ctx, subjectID, id)
+				_, err := svc.GetObject(ctx, world.HumanCaller(subjectID), id)
 				return err
 			},
 			engineBehavior:    "deny",
@@ -5934,7 +5934,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
 				locID := ulid.Make()
 				to := world.InLocation(locID)
-				return svc.MoveObject(ctx, subjectID, id, to)
+				return svc.MoveObject(ctx, world.HumanCaller(subjectID), id, to)
 			},
 			engineBehavior:    "error",
 			expectedErrorCode: "OBJECT_ACCESS_EVALUATION_FAILED",
@@ -5955,7 +5955,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
 				locID := ulid.Make()
 				to := world.InLocation(locID)
-				return svc.MoveObject(ctx, subjectID, id, to)
+				return svc.MoveObject(ctx, world.HumanCaller(subjectID), id, to)
 			},
 			engineBehavior:    "deny",
 			expectedErrorCode: "OBJECT_ACCESS_DENIED",
@@ -5976,7 +5976,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, charID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				_, err := svc.GetCharacter(ctx, subjectID, id)
+				_, err := svc.GetCharacter(ctx, world.HumanCaller(subjectID), id)
 				return err
 			},
 			engineBehavior:    "error",
@@ -5996,7 +5996,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, charID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				_, err := svc.GetCharacter(ctx, subjectID, id)
+				_, err := svc.GetCharacter(ctx, world.HumanCaller(subjectID), id)
 				return err
 			},
 			engineBehavior:    "deny",
@@ -6017,7 +6017,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
 				locID := ulid.Make()
-				return svc.MoveCharacter(ctx, subjectID, id, locID)
+				return svc.MoveCharacter(ctx, world.HumanCaller(subjectID), id, locID)
 			},
 			engineBehavior:    "error",
 			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
@@ -6037,7 +6037,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
 				locID := ulid.Make()
-				return svc.MoveCharacter(ctx, subjectID, id, locID)
+				return svc.MoveCharacter(ctx, world.HumanCaller(subjectID), id, locID)
 			},
 			engineBehavior:    "deny",
 			expectedErrorCode: "CHARACTER_ACCESS_DENIED",
@@ -6121,7 +6121,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 					Name:        "Test Location",
 					Description: "A test location",
 				}
-				return svc.CreateLocation(ctx, "", loc) // Empty subject
+				return svc.CreateLocation(ctx, world.HumanCaller(""), loc) // Empty subject
 			},
 			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
 		},
@@ -6141,7 +6141,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 					Name:        "Updated Location",
 					Description: "An updated location",
 				}
-				return svc.UpdateLocation(ctx, "", loc) // Empty subject
+				return svc.UpdateLocation(ctx, world.HumanCaller(""), loc) // Empty subject
 			},
 			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
 		},
@@ -6163,7 +6163,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 					ToLocationID:   ulid.Make(),
 					Visibility:     world.VisibilityAll,
 				}
-				return svc.CreateExit(ctx, "", exit) // Empty subject
+				return svc.CreateExit(ctx, world.HumanCaller(""), exit) // Empty subject
 			},
 			expectedErrorCode: "EXIT_ACCESS_EVALUATION_FAILED",
 		},
@@ -6178,7 +6178,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 				})
 			},
 			invokeOperation: func(svc *world.Service) error {
-				_, err := svc.GetObject(ctx, "", objID) // Empty subject
+				_, err := svc.GetObject(ctx, world.HumanCaller(""), objID) // Empty subject
 				return err
 			},
 			expectedErrorCode: "OBJECT_ACCESS_EVALUATION_FAILED",
@@ -6196,7 +6196,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 				})
 			},
 			invokeOperation: func(svc *world.Service) error {
-				return svc.MoveCharacter(ctx, "", charID, locID) // Empty subject
+				return svc.MoveCharacter(ctx, world.HumanCaller(""), charID, locID) // Empty subject
 			},
 			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
 		},
@@ -6211,7 +6211,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 				})
 			},
 			invokeOperation: func(svc *world.Service) error {
-				_, err := svc.GetCharacter(ctx, "", charID) // Empty subject
+				_, err := svc.GetCharacter(ctx, world.HumanCaller(""), charID) // Empty subject
 				return err
 			},
 			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
@@ -6231,7 +6231,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 				})
 			},
 			invokeOperation: func(svc *world.Service) error {
-				return svc.DeleteLocation(ctx, "", locID) // Empty subject
+				return svc.DeleteLocation(ctx, world.HumanCaller(""), locID) // Empty subject
 			},
 			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
 		},
@@ -6249,7 +6249,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 			},
 			invokeOperation: func(svc *world.Service) error {
 				// Test with empty subject to trigger NewAccessRequest failure
-				_, err := svc.GetCharactersByLocation(ctx, "", locID, world.ListOptions{})
+				_, err := svc.GetCharactersByLocation(ctx, world.HumanCaller(""), locID, world.ListOptions{})
 				return err
 			},
 			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
@@ -6424,7 +6424,7 @@ func TestService_ListPropertiesByParent(t *testing.T) {
 				PropertyRepo: mockProp, Engine: mockEng,
 			})
 
-			got, err := svc.ListPropertiesByParent(context.Background(), "character:"+ulid.Make().String(), parentType, parentID)
+			got, err := svc.ListPropertiesByParent(context.Background(), world.HumanCaller("character:"+ulid.Make().String()), parentType, parentID)
 
 			// INV-1 pin: every resource passed to engine.Evaluate MUST
 			// be exactly "property:<ulid>" — not a parent-shaped composite

@@ -73,14 +73,23 @@ acceptance criterion as "`rg -c … returns 0`". Use `| wc -l` returns 0, or
 
 **Re-running the four rewrite rules against the post-flip tree MUST leave
 `git diff --exit-code` clean.** That empty diff is the mechanism by which a
-reviewer trusts several hundred unread hunks without reading each one. It only
-holds because of the three-clause `SUBJ` guard below.
+reviewer trusts several hundred unread hunks without reading each one. It holds
+because of the three-clause `SUBJ` guard (§ 1) **and** the `nthChild: 2`
+positional fence (§ 3) — the latter added in 02.1-02 after the bulk flip exposed
+8 build-breaking re-run hunks that no pre-flip measurement could have surfaced.
 
-**Standing remedy:** if a post-flip re-run produces ANY hunk, add that file to
-the rule's `ignores:` or spell the constructor inline at the call site. Never
-accept the double-wrap, and never hand-revert the hunk.
+**Standing remedy, in order of preference:**
 
-## The three load-bearing constraints
+1. If the hunk is a rule DEFECT — the rule is matching something it never meant
+   to — **fix the rule's constraints**. The rule is the committed review artifact
+   and must reproduce the diff; an `ignores:` entry that papers over a defect
+   blinds the rule to real targets in the same file. This is what § 3 records.
+2. Otherwise, if the whole file is a surface where a blind rewrite is wrong, add
+   it to the rule's `ignores:`, or spell the constructor inline at the call site.
+
+Never accept the double-wrap, and never hand-revert the hunk.
+
+## The four load-bearing constraints
 
 ### 1. `SUBJ` idempotency guard — three clauses, not one
 
@@ -161,7 +170,42 @@ path-glob ignore of either file would have destroyed those.
 > whose complement may grow, and the `RECV` blocklist is the one that stays true
 > if the allowlist is ever widened.
 
-### 3. Package-clause scoping — why there are two variants of each rule
+### 3. Positional fence (`nthChild: 2`) — added 02.1-02
+
+The two declaration rules and the probe carry `nthChild: 2` on the
+`parameter_declaration`. **It is load-bearing, and it was added only after the
+bulk flip exposed the defect it fixes.**
+
+The `NAME` constraint on all three is `^(subjectID|subject|_)$`, which admits the
+blank identifier. Without a positional clause the rule therefore matches a
+blank-named `string` parameter at **any** position inside a world command — most
+consequentially the `name string` parameter of `FindLocationByName`, which is
+legitimately a string and MUST stay one.
+
+Pre-flip that defect was **masked**, which is why Plan 01's measurements did not
+catch it: `FindLocationByName(ctx, _, _ string)` is a *single* grouped
+`parameter_declaration` node, excluded by `not: {regex: ','}`. Migrating the
+grouped form necessarily **splits** it into `_ world.Caller, _ string`, and the
+surviving trailing parameter is then newly visible to the rule.
+
+Measured on the post-flip tree (2026-08-08), before the fence was added:
+
+| Rule | Symptom |
+|---|---|
+| `world-caller-decl.yml` | rewrote `_ string` → `_ world.Caller` at **8** sites — a **build-breaking** rewrite, and a violation of the D-63 re-run contract |
+| `probe-subject-param.yml` | reported **16** (8 façades + the same 8 `name` parameters) instead of the pinned **8** |
+
+The fence narrows each rule to the position it always meant to measure. Verified
+against a two-direction fixture: all three pre-flip subject shapes at position 2
+(`subjectID string`, `subject string`, `_ string`) are still rewritten, and no
+position-3 parameter is touched.
+
+> **The pinned post-flip counts (4 rewrite rules → 0 hunks; probe → 8) are only
+> true with this clause.** A future reader who removes it will see the probe
+> report a count above 8 and misread legitimate `name` parameters as unmigrated
+> sites.
+
+### 4. Package-clause scoping — why there are two variants of each rule
 
 `internal/world/` mixes 22 `package world` files with 11 `package world_test`
 files and **no path glob separates them**, so `ignores:` cannot express the
@@ -291,7 +335,7 @@ ast-grep scan -r scripts/codemod/probe-subject-param.yml . | rg -c '┌─ '
 | When | Count |
 |---|---|
 | pre-flip | **185** sites across **24** files |
-| post-flip | **exactly 8** |
+| post-flip | **exactly 8** (requires the `nthChild: 2` fence — see § 3) |
 
 All eight post-flip sites must be the deliberately out-of-scope Lua-facing
 façades: `internal/plugin/hostfunc/cap_property.go:28,34`,

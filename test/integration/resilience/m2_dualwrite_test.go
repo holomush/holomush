@@ -115,7 +115,7 @@ var _ = Describe("M2 dual-write window closed by the transactional outbox", Orde
 		dest := replicaA.NewLocation(ctx)
 		before := outboxMoveCount(ctx)
 
-		Expect(svc.MoveCharacter(ctx, subj, charID, dest)).
+		Expect(svc.MoveCharacter(ctx, world.HumanCaller(subj), charID, dest)).
 			To(Succeed(), "a healthy-broker move must commit state + envelope in one transaction")
 
 		// The state change committed …
@@ -145,7 +145,7 @@ var _ = Describe("M2 dual-write window closed by the transactional outbox", Orde
 		// the relay's job (05-08).
 		pauseBroker(ctx, env)
 		moveCtx, moveCancel := context.WithTimeout(ctx, pausedMoveTimeout)
-		moveErr := svc.MoveCharacter(moveCtx, subj, charID, dest)
+		moveErr := svc.MoveCharacter(moveCtx, world.HumanCaller(subj), charID, dest)
 		moveCancel()
 		unpauseBroker(ctx, env)
 
@@ -209,7 +209,7 @@ var _ = Describe("M2 dual-write window closed by the transactional outbox", Orde
 		// the deleted D-03 emit path would have LOST the notification.
 		pauseBroker(ctx, env)
 		moveCtx, moveCancel := context.WithTimeout(ctx, pausedMoveTimeout)
-		moveErr := svc.MoveCharacter(moveCtx, subj, charID, dest)
+		moveErr := svc.MoveCharacter(moveCtx, world.HumanCaller(subj), charID, dest)
 		moveCancel()
 		Expect(moveErr).To(Succeed(), "the move commits despite the frozen broker (publish is decoupled to the relay)")
 
@@ -314,9 +314,9 @@ var _ = Describe("Per-aggregate concurrent-writer races surface the conflict", O
 		Expect(locA.Version).To(Equal(locB.Version), "both copies hold the SAME read version")
 
 		locA.Name = "loc-A-committed"
-		Expect(svcA.UpdateLocation(ctx, subjA, locA)).To(Succeed(), "A's write commits")
+		Expect(svcA.UpdateLocation(ctx, world.HumanCaller(subjA), locA)).To(Succeed(), "A's write commits")
 		locB.Description = "loc-B-rejected"
-		assertConflict(svcB.UpdateLocation(ctx, subjB, locB))
+		assertConflict(svcB.UpdateLocation(ctx, world.HumanCaller(subjB), locB))
 
 		reportVerdict("M2-VERDICT: per-aggregate-location: two-replica stale write rejected with WORLD_CONCURRENT_EDIT")
 	})
@@ -329,18 +329,18 @@ var _ = Describe("Per-aggregate concurrent-writer races surface the conflict", O
 		to := replicaA.NewLocation(ctx)
 		exit, err := world.NewExit(from, to, "north")
 		Expect(err).NotTo(HaveOccurred(), "construct exit")
-		Expect(svcA.CreateExit(ctx, subjA, exit)).To(Succeed(), "create shared exit")
+		Expect(svcA.CreateExit(ctx, world.HumanCaller(subjA), exit)).To(Succeed(), "create shared exit")
 
-		exitA, err := svcA.GetExit(ctx, subjA, exit.ID)
+		exitA, err := svcA.GetExit(ctx, world.HumanCaller(subjA), exit.ID)
 		Expect(err).NotTo(HaveOccurred(), "svcA.GetExit")
-		exitB, err := svcB.GetExit(ctx, subjB, exit.ID)
+		exitB, err := svcB.GetExit(ctx, world.HumanCaller(subjB), exit.ID)
 		Expect(err).NotTo(HaveOccurred(), "svcB.GetExit")
 		Expect(exitA.Version).To(Equal(exitB.Version), "both copies hold the SAME read version")
 
 		exitA.Name = "south"
-		Expect(svcA.UpdateExit(ctx, subjA, exitA)).To(Succeed(), "A's exit write commits")
+		Expect(svcA.UpdateExit(ctx, world.HumanCaller(subjA), exitA)).To(Succeed(), "A's exit write commits")
 		exitB.Name = "east"
-		assertConflict(svcB.UpdateExit(ctx, subjB, exitB))
+		assertConflict(svcB.UpdateExit(ctx, world.HumanCaller(subjB), exitB))
 
 		reportVerdict("M2-VERDICT: per-aggregate-exit: two-replica stale write rejected with WORLD_CONCURRENT_EDIT")
 	})
@@ -381,18 +381,18 @@ var _ = Describe("Per-aggregate concurrent-writer races surface the conflict", O
 		locID := replicaA.NewLocation(ctx)
 		obj, err := world.NewObjectWithID(ulid.Make(), "orb", world.InLocation(locID))
 		Expect(err).NotTo(HaveOccurred(), "construct object")
-		Expect(svcA.CreateObject(ctx, subjA, obj)).To(Succeed(), "create shared object")
+		Expect(svcA.CreateObject(ctx, world.HumanCaller(subjA), obj)).To(Succeed(), "create shared object")
 
-		objA, err := svcA.GetObject(ctx, subjA, obj.ID)
+		objA, err := svcA.GetObject(ctx, world.HumanCaller(subjA), obj.ID)
 		Expect(err).NotTo(HaveOccurred(), "svcA.GetObject")
-		objB, err := svcB.GetObject(ctx, subjB, obj.ID)
+		objB, err := svcB.GetObject(ctx, world.HumanCaller(subjB), obj.ID)
 		Expect(err).NotTo(HaveOccurred(), "svcB.GetObject")
 		Expect(objA.Version).To(Equal(objB.Version), "both copies hold the SAME read version")
 
 		objA.Name = "orb-A-renamed"
-		Expect(svcA.UpdateObject(ctx, subjA, objA)).To(Succeed(), "A's object write commits")
+		Expect(svcA.UpdateObject(ctx, world.HumanCaller(subjA), objA)).To(Succeed(), "A's object write commits")
 		objB.Description = "obj-B-rejected"
-		assertConflict(svcB.UpdateObject(ctx, subjB, objB))
+		assertConflict(svcB.UpdateObject(ctx, world.HumanCaller(subjB), objB))
 
 		reportVerdict("M2-VERDICT: per-aggregate-object: two-replica stale write rejected with WORLD_CONCURRENT_EDIT")
 	})

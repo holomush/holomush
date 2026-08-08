@@ -61,33 +61,39 @@ func (*noopWorldMutator) GetLocation(_ context.Context, _ world.Caller, _ ulid.U
 	return nil, nil
 }
 
-func (*noopWorldMutator) GetCharacter(_ context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+func (*noopWorldMutator) GetCharacter(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Character, error) {
 	return nil, nil
 }
 
-func (*noopWorldMutator) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+func (*noopWorldMutator) GetCharactersByLocation(_ context.Context, _ world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	return nil, nil
 }
 
-func (*noopWorldMutator) GetObject(_ context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+func (*noopWorldMutator) GetObject(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Object, error) {
 	return nil, nil
 }
 
-func (*noopWorldMutator) CreateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (*noopWorldMutator) CreateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (*noopWorldMutator) CreateExit(_ context.Context, _ string, _ *world.Exit) error { return nil }
-
-func (*noopWorldMutator) CreateObject(_ context.Context, _ string, _ *world.Object) error { return nil }
-
-func (*noopWorldMutator) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (*noopWorldMutator) CreateExit(_ context.Context, _ world.Caller, _ *world.Exit) error {
 	return nil
 }
 
-func (*noopWorldMutator) UpdateObject(_ context.Context, _ string, _ *world.Object) error { return nil }
+func (*noopWorldMutator) CreateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
+	return nil
+}
 
-func (*noopWorldMutator) FindLocationByName(_ context.Context, _, _ string) (*world.Location, error) {
+func (*noopWorldMutator) UpdateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
+	return nil
+}
+
+func (*noopWorldMutator) UpdateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
+	return nil
+}
+
+func (*noopWorldMutator) FindLocationByName(_ context.Context, _ world.Caller, _ string) (*world.Location, error) {
 	return nil, nil
 }
 
