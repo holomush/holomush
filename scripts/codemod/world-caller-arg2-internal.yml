@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# scripts/codemod/world-caller-arg2-internal.yml — rewrite argument 2 of a world
+# command call from a bare subject string to HumanCaller(<subject>), UNQUALIFIED,
+# in files declaring `package world`.
+#
+# Prerequisite: ast-grep 0.45.1 or later. It is NOT installed by `task setup`
+# and is NOT present in CI — this is a local developer step, never a CI gate.
+#
+# Preview:  ast-grep scan -r scripts/codemod/world-caller-arg2-internal.yml .
+# Apply:    ast-grep scan -r scripts/codemod/world-caller-arg2-internal.yml -U .
+#
+# IDEMPOTENT: re-running against the migrated tree yields an empty diff.
+#
+# WHY A SEPARATE FILE AND NOT `ignores:` — internal/world/ mixes 22 `package
+# world` files with 11 `package world_test` files and no path glob separates
+# them. The split is therefore structural: a `package_clause` scope under
+# `inside: {kind: source_file, stopBy: end}`. This variant asserts the clause;
+# world-caller-arg2.yml wraps the identical block in `not:`. Emitting the
+# `world.`-qualified spelling inside `package world` produces the
+# doubled-package-name failure this repo's plan-review notes catalogue.
+#
+# SUBJ guard is the same three clauses as world-caller-arg2.yml; see that file's
+# header for the per-clause rationale and the positive allowlist's future-shape
+# failure mode (an argument-2 expression spelled neither `subj`-ish nor a string
+# literal is SILENTLY SKIPPED — the compiler and probe-subject-param.yml are the
+# durable backstops, not the allowlist).
+#
+# `ignores: internal/world/caller_test.go` — that file is `package world` and its
+# criterion-2 proof builds a Caller by same-package composite literal. The
+# `not: kind: composite_literal` clause covers the literal written inline at the
+# call site; this path ignore covers it when the literal is bound to a local
+# first. The file is net-new and holds zero pre-flip sites, so ignoring it
+# suppresses no real work.
+#
+# STANDING REMEDY: if a post-flip re-run produces ANY hunk, add that file to this
+# rule's `ignores:` or spell the constructor inline at the call site. Never
+# accept the double-wrap, and never hand-revert the hunk.
+#
+# Reporting wrinkle: a rule whose top-level `rule:` carries
+# `inside: {kind: source_file}` makes ast-grep's rich report print the enclosing
+# file frame, so the output is verbose. Count hunks with `| rg -c '│\+'`.
+id: world-caller-arg2-internal
+language: go
+severity: hint
+ignores:
+  - internal/world/caller_test.go
+rule:
+  pattern: $RECV.$METHOD($CTX, $SUBJ, $$$REST)
+  inside:
+    kind: source_file
+    stopBy: end
+    has:
+      kind: package_clause
+      regex: '^package world$'
+constraints:
+  METHOD:
+    regex: '^(GetLocation|CreateLocation|UpdateLocation|DeleteLocation|GetExit|CreateExit|UpdateExit|DeleteExit|GetExitsByLocation|GetObject|CreateObject|UpdateObject|DeleteObject|MoveObject|DeleteCharacter|GetCharacter|UpdateCharacterDescription|GetCharactersByLocation|ListSceneParticipants|MoveCharacter|FindLocationByName|GetObjectsByLocation|ListPropertiesByParent)$'
+  SUBJ:
+    all:
+      - regex: '(?i)subj|^"'
+      - not:
+          regex: '(HumanCaller|SystemCaller)\('
+      - not:
+          kind: composite_literal
+  RECV:
+    not:
+      regex: '(\.EXPECT\(\)|^querier|^adapter|^repo|characterWriter)$'
+fix: '$RECV.$METHOD($CTX, HumanCaller($SUBJ), $$$REST)'

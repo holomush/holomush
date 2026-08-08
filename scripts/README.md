@@ -5,7 +5,8 @@
 
 # HoloMUSH Scripts
 
-Python utilities for HoloMUSH operators and contributors.
+Utilities for HoloMUSH operators and contributors — Python helpers, shell
+generators, and `ast-grep` codemod rules.
 
 ## bootstrap_seed_secrets.py
 
@@ -65,3 +66,30 @@ uv run ruff format .
 ```
 
 Tests use `monkeypatch` / `unittest.mock` — no real API calls or network access.
+
+## codemod/
+
+`ast-grep` rules that mechanise the `world.Service` bare-subject-string →
+`world.Caller` migration, plus a read-only census probe. Full documentation,
+including the per-rule `ignores:` table, the three load-bearing constraints, the
+hand-migrated surfaces, and the measured baselines, lives in
+[`codemod/README.md`](codemod/README.md).
+
+### Prerequisites
+
+- `ast-grep` 0.45.1+ (`ast-grep --version`) — **not** installed by `task setup`
+  and **not** present in CI. These rules are a local developer step, never a CI
+  gate.
+
+### Running
+
+```bash
+# Preview (dry run)
+ast-grep scan -r scripts/codemod/world-caller-arg2.yml .
+
+# Apply in place
+ast-grep scan -r scripts/codemod/world-caller-arg2.yml -U .
+
+# Read-only census — MUST NOT be run with -U
+ast-grep scan -r scripts/codemod/probe-subject-param.yml . | rg -c '┌─ '
+```

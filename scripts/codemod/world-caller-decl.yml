@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# scripts/codemod/world-caller-decl.yml — rewrite the bare subject-string
+# PARAMETER DECLARATION on a world command to `world.Caller`, in packages that
+# qualify the world package (everything EXCEPT `package world`).
+#
+# Prerequisite: ast-grep 0.45.1 or later. It is NOT installed by `task setup`
+# and is NOT present in CI — this is a local developer step, never a CI gate.
+#
+# Preview:  ast-grep scan -r scripts/codemod/world-caller-decl.yml .
+# Apply:    ast-grep scan -r scripts/codemod/world-caller-decl.yml -U .
+#
+# IDEMPOTENT BY CONSTRUCTION: after the flip the parameter's type text is
+# `world.Caller`, not `string`, so the `type` regex no longer matches and a
+# re-run is a no-op. No SUBJ-style idempotency guard is needed here.
+#
+# GROUPED-DECLARATION HAZARD (excluded, not discovered): a parameter_declaration
+# carrying two names and one type — `subjectID, name string` — matches a naive
+# `has: {field: name}` rule, and the fix DROPS the second name. Observed:
+# `FindLocationByName(ctx context.Context, subjectID, name string)` rewrote to
+# `FindLocationByName(ctx context.Context, subjectID world.Caller)`, silently
+# deleting a parameter. The `not: {regex: ','}` clause below excludes them.
+# Grouped declarations are HAND-MIGRATED. Enumerate the residual set with:
+#   ast-grep run -p 'subjectID, $X string' --lang go .
+# (21 grouped sites repo-wide on the pre-flip tree.)
+#
+# BLIND SPOT: an UNNAMED parameter is a parameter_declaration with NO `name`
+# field, so `has: {field: name}` cannot see it. A double declared
+# `GetLocation(context.Context, string, ulid.ULID)` is invisible to this rule.
+# Eight such declarations are known and hand-migrated — see
+# scripts/codemod/README.md § Hand-migrated surfaces.
+#
+# `ignores:` is ONLY the two out-of-scope Lua-facing façades. In particular
+# `internal/property/**` and `internal/world/mutator.go` MUST NOT be ignored
+# here: internal/property/entity_mutator_test.go's fakeVersionMutator methods
+# are required declaration targets, and mutator.go is a migrated interface.
+#
+# Counting: this rule carries a `fix:`, so ast-grep prints a unified diff rather
+# than the `┌─ ` frame. Count hunks with `| rg -c '│\+'`.
+id: world-caller-decl
+language: go
+severity: hint
+ignores:
+  - internal/plugin/hostfunc/cap_property*.go
+  - internal/plugin/hostfunc/cap_world_query*.go
+rule:
+  kind: parameter_declaration
+  all:
+    - has: {field: name, pattern: $NAME}
+    - has: {field: type, regex: '^string$'}
+    - not: {regex: ','}
+    - inside:
+        kind: parameter_list
+        inside:
+          any:
+            - kind: method_declaration
+            - kind: function_declaration
+            - kind: method_elem
+          has:
+            field: name
+            regex: '^(GetLocation|CreateLocation|UpdateLocation|DeleteLocation|GetExit|CreateExit|UpdateExit|DeleteExit|GetExitsByLocation|GetObject|CreateObject|UpdateObject|DeleteObject|MoveObject|DeleteCharacter|GetCharacter|UpdateCharacterDescription|GetCharactersByLocation|ListSceneParticipants|MoveCharacter|FindLocationByName|GetObjectsByLocation|ListPropertiesByParent)$'
+  not:
+    inside:
+      kind: source_file
+      stopBy: end
+      has:
+        kind: package_clause
+        regex: '^package world$'
+constraints:
+  NAME:
+    regex: '^(subjectID|subject|_)$'
+fix: '$NAME world.Caller'
