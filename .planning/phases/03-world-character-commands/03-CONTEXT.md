@@ -250,6 +250,15 @@ Requirements remaining in scope: **IDENT-04** (soft retire), **IDENT-10** (the
   authorization is **not Phase 3's to solve**. It is deferred to a new
   **Phase 02.1 — Background-Job Authorization Model**, which Phase 3 now depends on.
 
+  > **Renumbered later the same day (2026-08-07): the Background-Job Authorization
+  > Model is now Phase 02.2, not 02.1.** Its `/gsd-discuss-phase` session split the
+  > world *caller model* out ahead of it into a new **Phase 02.1 — World Caller
+  > Model**, because `world.Service`'s `subjectID string` argument cannot carry
+  > execution context at all and that defect predates background jobs. Phase 3 now
+  > depends on 02.2 directly and 02.1 transitively. See
+  > `.planning/phases/02.2-background-job-authorization-model/02.2-CONTEXT.md`
+  > D-56. Every "Phase 02.1" in the D-47 text below means **02.2**.
+
   **Why D-45 was wrong.** It asked "what should we call this principal?" and then
   designed static policy vocabulary to describe the answer. That conflates **ABAC
   policy definition** with **the runtime state policy evaluates against**. The correct

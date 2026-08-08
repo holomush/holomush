@@ -235,28 +235,94 @@ Plans:
 - [x] 02-13-PLAN.md — Row-identity resolution: player-scoped roles, PropertyProvider player-keyed peers, provider registration
 - [x] 02-11-PLAN.md — SPEC amendments, validation map, abac-reviewer routing, phase gate
 
-### Phase 02.1: Background-Job Authorization Model
+### Phase 02.1: World Caller Model (INSERTED)
 
-**Why this exists (inserted 2026-08-07):** Phase 3's retirement reactor surfaced a platform gap
-rather than creating one. A host subsystem that consumes an event and then performs a world write
-has no honest way to authorize itself today. Three candidate answers were examined and all three
-fail: a synthetic `system:retirement` principal cannot be narrowed, because `parseEntityType`
-(`internal/access/policy/engine.go:542-548`) matches on the prefix only, so any permit written for
-it also grants `system:bootstrap`; borrowing the originating actor off the envelope
-(`Envelope.Actor`, set from the same `subjectID` that passed `checkAccess` —
+**Why this exists (inserted 2026-08-07):** `world.Service` takes `subjectID string` and internally
+reconstructs a `types.AccessRequest{Subject, Action, Resource, Attributes}` with `Attributes`
+hardcoded `nil` (`internal/world/service.go:214`). The authorization layer has carried a per-call
+attribute channel since Phase 3b — `types.NewAccessRequest`'s 4th parameter
+(`internal/access/policy/types/types.go:143`), overlaid onto `bags.Action` and readable in the DSL
+as `action.*` (`engine.go:252-265`) — and the world API has no way to reach it. That is a
+pre-existing modeling defect in the caller argument, not a gap created by background jobs; jobs are
+simply the first caller that makes it visible. Threading it as a variadic option was rejected: an
+execution context that every call semantically has should not be optional. Full derivation:
+`.planning/phases/02.2-background-job-authorization-model/02.2-CONTEXT.md` D-56.
+
+**Goal**: `world.Service`'s 21 public commands take a typed caller value instead of a bare
+`subjectID string`, so caller identity and the execution context it acts under travel together and
+cannot be supplied half-way. `checkAccess` forwards that context to `types.NewAccessRequest`,
+replacing the hardcoded `nil`.
+**Depends on**: Phase 2 (ABAC vocabulary, attribute-provider substrate)
+**Blocks**: Phase 02.2 (the job model needs this carrier), and transitively Phase 3
+**Requirements**: TBD — mint during `/gsd-discuss-phase 02.1`; no existing requirement ID covers
+the world caller model.
+
+**Shape (decided 2026-08-07, `02.2-CONTEXT.md` D-56/D-57):** typed constructors, not a bare struct
+— `world.HumanCaller(subjectID)`, `world.JobCaller(name, provenance)`, `world.SystemCaller()` —
+so invalid combinations (a human carrying job provenance, a job with no provenance) are
+unrepresentable, and the `job.`-namespaced attribute keys are produced in exactly one place.
+
+**Verified blast radius (2026-08-07 — grep-confirmed, do not re-estimate from method count):**
+
+- **21 public `Service` methods** take `(ctx context.Context, subjectID string, …)` — a uniform
+  slot on every one, so the change is symmetric rather than per-command.
+- **47 production call sites** across 12 files; **347 test call sites** across 13 files.
+- **3+ interfaces redeclare the signatures** and must move in lockstep:
+  `internal/world/mutator.go` (11 methods), `internal/command/types.go` (9+),
+  `internal/grpc/server.go` (2) — plus mockery regeneration for their mocks.
+- `subjectID` is positional arg 2 on all 21 methods, so the test-site migration is a structural
+  codemod (`ast-grep`), not 347 judgment calls.
+
+**Success Criteria** (what must be TRUE):
+
+1. No public `world.Service` command takes a bare `subjectID string`; every one takes a typed
+   caller value, and there is no overload or variadic escape hatch that preserves the old shape.
+2. `checkAccess` passes the caller's execution context to `types.NewAccessRequest` — the
+   hardcoded `nil` at `service.go:214` is gone — and a world write can reach the DSL as `action.*`.
+3. Behavior is unchanged for every existing caller: the 47 production sites migrate to
+   `HumanCaller`/`SystemCaller` with identical authorization outcomes, proven by the existing
+   suites passing without assertion changes.
+4. `internal/grpc/location_follow.go:197` — the **single** production `access.WithSystemSubject`
+   call site — is migrated to an explicit `SystemCaller`, so the ambient context marker is no
+   longer how a system operation is declared at the world boundary.
+5. `abac-reviewer` returns READY: the refactor changes how the subject and its context reach the
+   engine, which is an access-control surface even though no policy text changes.
+
+**UI hint**: no
+**Research flag**: `--research-phase` recommended — `SystemCaller()` interacts with the S1 defense
+(`engine.go:92-101` requires **both** a bare `"system"` subject **and** `access.IsSystemContext(ctx)`;
+a bare subject without the marker is a hard `SYSTEM_SUBJECT_REJECTED`), so a caller *value* must
+influence the *context*. That seam is unverified.
+
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 02.1 to break down)
+
+### Phase 02.2: Background Job Authorization Model (INSERTED)
+
+**Why this exists (inserted 2026-08-07, renumbered from 02.1 the same day):** Phase 3's retirement
+reactor surfaced a platform gap rather than creating one. A host subsystem that consumes an event
+and then performs a world write has no honest way to authorize itself today. Three candidate
+answers were examined and all three fail: a synthetic `system:retirement` principal cannot be
+narrowed, because `parseEntityType` (`internal/access/policy/engine.go:542-548`) matches on the
+prefix only, so any permit written for it also grants `system:bootstrap`; borrowing the originating
+actor off the envelope (`Envelope.Actor`, set from the same `subjectID` that passed `checkAccess` —
 `internal/world/service.go:1079`) is wrong on the merits, because a player authorized to retire
 their own character was never authorized to end sessions, emit to a location, or move a character;
 and `access.WithSystemSubject` (`internal/access/context.go:12`) is a total bypass
 (`engine.go:91-105`) that puts every future background consumer outside the default-deny
-chokepoint. Full derivation: `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-45.
+chokepoint. Full derivation: `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-45/D-47.
 
 **Goal**: Background jobs — event-driven reactors, flushers, and any future host subsystem that
 acts on the world — get a first-class ABAC identity **plus per-execution attributes the policy
 engine can test**, so a job's authority is scoped to the work it is currently performing rather
 than granted as a blanket capability or borrowed from the human whose command triggered it.
-**Depends on**: Phase 2 (ABAC vocabulary, attribute-provider substrate, schema registry)
+**Depends on**: Phase 2 (ABAC vocabulary, attribute-provider substrate, schema registry),
+**Phase 02.1 (World Caller Model)** — `JobCaller` is the carrier this phase's attributes ride on.
 **Requirements**: TBD — no existing requirement ID covers background-job authorization; mint one
-during `/gsd-discuss-phase 02.1` rather than stretching an IDENT-* id to fit.
+rather than stretching an IDENT-* id to fit.
 **Blocks**: Phase 3 (its retirement reactor consumes this model)
 
 **Substrate already verified (2026-08-07), so this is composition, not invention:**
@@ -264,19 +330,24 @@ during `/gsd-discuss-phase 02.1` rather than stretching an IDENT-* id to fit.
 - **Per-execution attributes already have a carrier.** `types.NewAccessRequest(subject, action,
   resource, attrs)` (`internal/access/policy/types/types.go:143`) takes per-call attributes,
   reserved-key-validates them (`:153-159`), deep-clones them (`:160-166`), and the engine overlays
-  them onto `bags.Action` (`engine.go:258-265`) where the DSL reads them as `action.*`. Its own
-  doc calls nil "the common case for callers **without** per-call context to supply". The
-  mechanism exists and is unused on the world path.
-- **The blocker is one signature.** `world.Service.checkAccess` hardcodes `nil` for attrs
-  (`internal/world/service.go:214`), so no world write can carry execution context to policy
-  today. This is the load-bearing change, and it is on a shared path with existing callers.
+  them onto `bags.Action` (`engine.go:252-265`) where the DSL reads them as `action.*`. Reaching it
+  from a world write is **Phase 02.1's** job, not this phase's.
+- **Instance-scoping is expressible — proven, not assumed.** `Comparison.Left`/`Right` are both
+  `*Expr` and `Expr` may be an `AttrRef` (`internal/access/policy/dsl/ast.go:145-150,208-222`), and
+  16+ shipped seeds already compare across bags (`seed.go:41,47,113,131`). So
+  `when { action.job.trigger_subject == resource.id }` parses and evaluates. This is the concrete
+  reason a grants-only design was rejected — no static grant list can express it.
 - **The provider shape has a 15-line template.** `PluginProvider`
   (`internal/access/policy/attribute/plugin_provider.go:36-58`) is a non-character principal
   provider gated on a registry — `Namespace()`, `ResolveSubject` returning `nil, nil` for
-  non-matching refs, `ResolveResource` returning `nil, nil`, and `Schema()`.
-- **Instance-scoping is what this buys.** With both halves, policy can express *"this job may
-  write only the aggregate whose event it is currently handling"* — narrower than any static
-  grant list can be, and the concrete reason a grants-only design was rejected.
+  non-matching refs, `ResolveResource` returning `nil, nil`, and `Schema()`. An unknown plugin
+  resolving to `nil, nil` is what makes it fail closed; the job provider copies that property.
+- **`action` is the strictest namespace in the compiler — and registering it is load-bearing.**
+  `validateAttributes` (`internal/access/policy/compiler.go:149-170`) skips unregistered
+  namespaces, warns on an undeclared key in a registered namespace, but **hard-errors** for
+  `action` specifically. `seed.go:332` already ships `action.dispatch_location` with no `action`
+  namespace registered, so registering `action` without declaring that key in the same change
+  turns a shipped seed into a boot-time compile error.
 
 **Success Criteria** (what must be TRUE):
 
@@ -286,32 +357,34 @@ during `/gsd-discuss-phase 02.1` rather than stretching an IDENT-* id to fit.
 2. Authority is scoped by **per-execution runtime attributes**, not static grants alone: policy
    can express "this job may write only the aggregate whose event it is currently handling", and
    a test proves the same job is DENIED against a different aggregate.
-3. `world.Service`'s access path carries per-call attributes end-to-end — a world write reaches
-   the DSL as `action.*`, replacing the hardcoded `nil` at `service.go:214`, with every existing
-   `checkAccess` caller still compiling and behaving unchanged.
+3. The `action` namespace is registered in the schema registry with **every** key it must carry —
+   the job provenance triple, the already-shipped `dispatch_location`, and the resolver-owned
+   `name` — so a typo'd `action.*` reference is a compile-time failure rather than a silent
+   default-deny, and no shipped seed regresses.
 4. The model is documented as the path every future background consumer takes, and existing
-   `WithSystemSubject` call sites are enumerated (migrating them MAY be deferred; leaving them
-   undocumented MUST NOT be).
+   `WithSystemSubject` call sites are enumerated (migration itself belongs to Phase 02.1).
 5. `abac-reviewer` returns READY on the new principal type, its provider, its schema, and its
    seeds.
 
 **UI hint**: no
-**Research flag**: `--research-phase` recommended — the per-call-attribute path has never been
-exercised from a world write, and the reserved-key interaction (`IsReservedActionKey`) plus
-`warnOnMissingSeedCoverage` / `RegisteredNamespaces()` coupling are unverified seams.
+**Research flag**: `--research-phase` recommended — the reserved-key interaction
+(`IsReservedActionKey`) plus `warnOnMissingSeedCoverage` / `RegisteredNamespaces()` coupling are
+unverified seams, and timer-driven jobs (Phase 3's `last_active_at` flusher) carry no triggering
+event, so what they present as per-execution context is an open question that MUST NOT be invented
+by a planner.
 
 **Plans:** 0 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 02.1 to break down)
+- [ ] TBD (run /gsd-plan-phase 02.2 to break down)
 
 ### Phase 3: World Character Commands
 
 **Scope narrowed (2026-08-06):** `RenameCharacter` was **removed from this phase and from the v0.13 milestone** and moved to the backlog as **Phase 999.20**, linked to Phase 999.6 (Character Rostering & Transfer). Reason: rename cannot be specified until the character identity model gains an **approval dimension**, which does not exist — `characters.status` is `active|retired|idle` only, so the intended "rename permitted only before a character is approved for play" rule has no state to read. Designing that dimension touches bound `INV-WORLD-5`, 01-SPEC §4.4, PORTAL-04, character creation's initial state, and an approving actor (an admin surface, Phase 6), which is milestone-scale. Retire has **no** dependency on approval and stays. Full rationale: `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-44.
 
 **Goal**: `world.Service` gains a soft `RetireCharacter` / `UnretireCharacter` pair at the domain layer, version-guarded and emitting through the transactional outbox in-transaction, plus the host-side reactor that makes a retired character actually leave active play, with the `writeCommands` census rows and taxonomy kinds landed in the same change.
-**Depends on**: Phase 1 (SPEC), **Phase 02.1 (Background-Job Authorization Model)**. Planning parallelizes with Phase 2; execution requires Phase 2's lifecycle column before `Retire`, and the retirement reactor requires 02.1's job-identity model before it can authorize its `MoveCharacter` call at all (see 03-CONTEXT.md D-45, superseded 2026-08-07).
+**Depends on**: Phase 1 (SPEC), **Phase 02.2 (Background-Job Authorization Model)** and transitively **Phase 02.1 (World Caller Model)**. Planning parallelizes with Phase 2; execution requires Phase 2's lifecycle column before `Retire`, and the retirement reactor requires 02.2's job-identity model before it can authorize its `MoveCharacter` call at all (see 03-CONTEXT.md D-45, superseded 2026-08-07 by D-47; the job model was renumbered 02.1 → 02.2 on 2026-08-07 when the world caller model was split out ahead of it — see 02.2-CONTEXT.md D-56).
 **Requirements**: IDENT-04, IDENT-10
 **Also lands here**: the `last_active_at` write seam Phase 2 deferred (D-24) — a *separate*, general-purpose character-activity subsystem, unrelated to retirement beyond sharing this phase. Phase 3 therefore adds **two** subsystems (`SubsystemID` 18→20, two 5-site compile cascades).
 **Success Criteria** (what must be TRUE):
