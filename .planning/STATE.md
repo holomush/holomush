@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 02
-current_phase_name: ABAC & Schema Vocabulary
+current_phase: 02.1
+current_phase_name: world-caller-model
 status: executing
-stopped_at: Phase 02.1 context gathered
-last_updated: "2026-08-08T19:19:54.152Z"
-last_activity: 2026-08-06
-last_activity_desc: Phase 01.1 complete, transitioned to Phase 02
+stopped_at: Completed 02.1-01-PLAN.md
+last_updated: "2026-08-08T21:43:11.212Z"
+last_activity: 2026-08-08
+last_activity_desc: Phase 02.1 execution started
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 35
-  completed_plans: 26
+  completed_plans: 27
   percent: 33
 ---
 
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 02 — abac-schema-vocabulary
+**Current focus:** Phase 02.1 — world-caller-model
 complete character identity surface (creation, management, public profiles with privacy) and stand up the
 `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 02 — ABAC & Schema Vocabulary
-Plan: Not started
+Phase: 02.1 (world-caller-model) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Progress: [██████████] 100% (1/6 phases)
-Last activity: 2026-08-06 — Phase 01.1 complete, transitioned to Phase 02
+Progress: [████████░░] 77% (1/6 phases)
+Last activity: 2026-08-08 — Phase 02.1 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -241,6 +241,7 @@ no action needed.
 | Phase 02 P12 | ~200min | 3 tasks | 45 files |
 | Phase 02 P10 | 63min | 6 tasks | 5 files |
 | Phase 02 P11 | 105m | 3 tasks | 5 files |
+| Phase 02.1 P01 | 3h | 2 tasks | 35 files |
 
 ## Accumulated Context
 
@@ -485,6 +486,8 @@ the next milestone yet.
 - [Phase ?]: D-03's tier-floor count verified against seed.go (2 == 2) and 02-CONTEXT.md deliberately NOT edited — a check that self-heals is not a check
 - [Phase ?]: 01-SPEC §8.5.1.1 option 2 recorded REJECTED; D-01's five viewer twins are the settled shape
 - [Phase ?]: 02-RESEARCH.md's stale schema section deliberately NOT rewritten — a dated research record is annotated, never rewritten
+- [Phase ?]: world.Caller is opaque: unexported fields, two constructors, no exported accessor; the zero value fails closed at checkAccess rather than being blocked at construction
+- [Phase ?]: caller_test.go is package world_test + export_test.go bridge — an in-package test cannot build a real policy.Engine because policy/attribute imports internal/world
 
 ### Pending Todos
 
@@ -541,11 +544,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-08T14:40:37.515Z
+Last session: 2026-08-08T21:43:11.199Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Phase 02.1 context gathered
+Stopped at: Completed 02.1-01-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
@@ -559,7 +562,7 @@ docs-only pull requests, which `paths-ignore` routes to a lane that uploads no c
 Archived — Phase 8: all 9 plans executed, CoreServer 1891 → 657 LoC and plugin Manager 1876 → 702;
 shipped as PR #4832 with follow-ups #4828, #4829, #4830, #4831.
 Stopped at: Completed 09-19-PLAN.md — phase 09 final plan; all 21 plans executed
-Resume file: .planning/phases/02.1-world-caller-model/02.1-CONTEXT.md
+Resume file: None
 
 ## Operator Next Steps
 
