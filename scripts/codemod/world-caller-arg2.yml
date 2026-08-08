@@ -44,6 +44,14 @@
 # RECV blocklist — verified false positives that `ignores:` CANNOT express,
 # because each sits in a file that ALSO holds genuine migration targets:
 #   .EXPECT()      mockery expectation builders (5 sites)
+#
+# NOTE on internal/world/caller_test.go: Plan 01 landed it as `package world_test`
+# (NOT `package world` as originally planned) because policy.NewEngine needs a
+# concrete *attribute.Resolver and internal/access/policy/attribute imports
+# internal/world — so an in-package test file cannot build a real engine. It is
+# therefore scanned by THIS rule, not the -internal one, and is ignored here.
+# It holds an attribute-carrying Caller built via world.NewCallerWithAttrsForTest.
+#
 #   querier        internal/plugin/hostcap/world.go:143, hostfunc/world.go:119
 #   adapter        internal/plugin/hostfunc/adapter_test.go (6 sites)
 #   repo           internal/world/postgres/character_repo_test.go (6 sites)
@@ -56,6 +64,7 @@ language: go
 severity: hint
 ignores:
   - internal/grpc/location_follow.go
+  - internal/world/caller_test.go
   - internal/property/**
   - internal/plugin/hostfunc/world_write.go
   - internal/plugin/hostfunc/cap_property*.go

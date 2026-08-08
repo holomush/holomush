@@ -21,7 +21,7 @@ import (
 // compatibility but will be removed in a future version. All world services
 // must now implement WorldMutator (which embeds all WorldService methods).
 type WorldService interface {
-	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
+	GetLocation(ctx context.Context, subjectID world.Caller, id ulid.ULID) (*world.Location, error)
 	GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*world.Character, error)
 	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
 	GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*world.Object, error)
@@ -72,7 +72,7 @@ func (a *WorldQuerierAdapter) SubjectID() string {
 // Returns errors with code PLUGIN_QUERY_FAILED on failure.
 // See WorldQuerierAdapter documentation for defensive nil handling behavior.
 func (a *WorldQuerierAdapter) GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error) {
-	loc, err := a.service.GetLocation(ctx, a.SubjectID(), id)
+	loc, err := a.service.GetLocation(ctx, world.HumanCaller(a.SubjectID()), id)
 	if err != nil {
 		return nil, oops.Code("PLUGIN_QUERY_FAILED").
 			With("plugin", a.pluginName).

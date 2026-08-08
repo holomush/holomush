@@ -206,24 +206,32 @@ func KnownEntityPrefixes() []string {
 // Metrics: calls observability.RecordEngineFailure in all error paths. The
 // holomush_engine_failures_total counter uses a package-level Prometheus var
 // that is not exported; metric increments are verified by integration tests.
-func (s *Service) checkAccess(ctx context.Context, subject, action, resource string, prefix entityPrefix) error {
+func (s *Service) checkAccess(ctx context.Context, caller Caller, action, resource string, prefix entityPrefix) error {
 	metricKey := strings.ToLower(string(prefix)) + "_access_check"
 	failCode := string(prefix) + "_ACCESS_EVALUATION_FAILED"
 	denyCode := string(prefix) + "_ACCESS_DENIED"
 
-	req, reqErr := types.NewAccessRequest(subject, action, resource, nil)
+	subject := caller.subject
+
+	req, reqErr := types.NewAccessRequest(subject, action, resource, caller.attrs)
 	if reqErr != nil {
-		// Defensive: all call sites should use typed helpers
-		// (access.CharacterSubject, access.LocationResource, etc.) that panic on
-		// empty input, and action strings are hardcoded literals. Kept as defense
-		// in depth against future call sites that might bypass the typed helpers.
+		// LOAD-BEARING, not merely defensive. world.HumanCaller deliberately
+		// accepts an empty subject rather than panicking the way
+		// access.PluginSubject / CharacterSubject / PlayerSubject do, precisely
+		// so the fail-closed classification happens HERE: NewAccessRequest
+		// rejects the empty subject and this branch turns it into
+		// *_ACCESS_EVALUATION_FAILED. TestWorldService_MalformedAccessParams
+		// (internal/world/service_test.go:6079) is the assertion that pins it.
 		errutil.LogErrorContext(ctx, "invalid access request",
 			reqErr, "subject", subject, "action", action, "resource", resource)
 		observability.RecordEngineFailure(metricKey)
 		return oops.Code(failCode).
 			Wrap(errors.Join(ErrAccessEvaluationFailed, reqErr))
 	}
-	decision, err := s.engine.Evaluate(ctx, req)
+	// Evaluate against a DERIVED context: a SystemCaller stamps the S1 marker
+	// there and nowhere else, so it cannot outlive this decision and cannot
+	// reach the repositories or the outbox below.
+	decision, err := s.engine.Evaluate(caller.evalContext(ctx), req)
 	if err != nil {
 		errutil.LogErrorContext(ctx, "access evaluation failed",
 			err, "subject", subject, "action", action, "resource", resource)
@@ -254,7 +262,7 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource str
 }
 
 // GetLocation retrieves a location by ID after checking read authorization.
-func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*Location, error) {
+func (s *Service) GetLocation(ctx context.Context, subjectID Caller, id ulid.ULID) (*Location, error) {
 	if s.locationRepo == nil {
 		return nil, oops.Code("LOCATION_GET_FAILED").Errorf("location repository not configured")
 	}
@@ -279,7 +287,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Errorf("location repository not configured")
 	}
-	if err := s.checkAccess(ctx, subjectID, "write", access.LocationResource("*"), prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", access.LocationResource("*"), prefixLocation); err != nil {
 		return err
 	}
 	if loc == nil {
@@ -316,7 +324,7 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 		return oops.Code("LOCATION_INVALID").Errorf("location is nil")
 	}
 	resource := access.LocationResource(loc.ID.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixLocation); err != nil {
 		return err
 	}
 	if err := loc.Validate(); err != nil {
@@ -373,7 +381,7 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
 	resource := access.LocationResource(id.String())
-	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "delete", resource, prefixLocation); err != nil {
 		return err
 	}
 	if s.mutator == nil {
@@ -402,7 +410,7 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 		return nil, oops.Code("EXIT_GET_FAILED").Errorf("exit repository not configured")
 	}
 	resource := access.ExitResource(id.String())
-	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixExit); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixExit); err != nil {
 		return nil, err
 	}
 	exit, err := s.exitRepo.Get(ctx, id)
@@ -425,7 +433,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_CREATE_FAILED").Errorf("exit repository not configured")
 	}
-	if err := s.checkAccess(ctx, subjectID, "write", access.ExitResource("*"), prefixExit); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", access.ExitResource("*"), prefixExit); err != nil {
 		return err
 	}
 	if exit == nil {
@@ -465,7 +473,7 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 		return oops.Code("EXIT_INVALID").Errorf("exit is nil")
 	}
 	resource := access.ExitResource(exit.ID.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixExit); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixExit); err != nil {
 		return err
 	}
 	if err := exit.Validate(); err != nil {
@@ -500,7 +508,7 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 		return oops.Code("EXIT_DELETE_FAILED").Errorf("exit repository not configured")
 	}
 	resource := access.ExitResource(id.String())
-	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixExit); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "delete", resource, prefixExit); err != nil {
 		return err
 	}
 	if s.mutator == nil {
@@ -543,7 +551,7 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 }
 
 // GetExitsByLocation retrieves all exits from a location after checking read authorization.
-func (s *Service) GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*Exit, error) {
+func (s *Service) GetExitsByLocation(ctx context.Context, subjectID Caller, locationID ulid.ULID) ([]*Exit, error) {
 	if s.exitRepo == nil {
 		return nil, oops.Code("EXIT_LIST_FAILED").Errorf("exit repository not configured")
 	}
@@ -564,7 +572,7 @@ func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID)
 		return nil, oops.Code("OBJECT_GET_FAILED").Errorf("object repository not configured")
 	}
 	resource := access.ObjectResource(id.String())
-	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixObject); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixObject); err != nil {
 		return nil, err
 	}
 	obj, err := s.objectRepo.Get(ctx, id)
@@ -584,7 +592,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Errorf("object repository not configured")
 	}
-	if err := s.checkAccess(ctx, subjectID, "write", access.ObjectResource("*"), prefixObject); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", access.ObjectResource("*"), prefixObject); err != nil {
 		return err
 	}
 	if obj == nil {
@@ -624,7 +632,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 		return oops.Code("OBJECT_INVALID").Errorf("object is nil")
 	}
 	resource := access.ObjectResource(obj.ID.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixObject); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixObject); err != nil {
 		return err
 	}
 	if err := obj.Validate(); err != nil {
@@ -667,7 +675,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
 	resource := access.ObjectResource(id.String())
-	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixObject); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "delete", resource, prefixObject); err != nil {
 		return err
 	}
 	if s.mutator == nil {
@@ -701,7 +709,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
 	}
 	resource := access.ObjectResource(id.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixObject); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixObject); err != nil {
 		return err
 	}
 	if err := to.Validate(); err != nil {
@@ -753,7 +761,7 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
 	resource := access.CharacterResource(id.String())
-	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "delete", resource, prefixCharacter); err != nil {
 		return err
 	}
 	if s.mutator == nil {
@@ -782,7 +790,7 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 		return nil, oops.Code("CHARACTER_GET_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.CharacterResource(id.String())
-	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixCharacter); err != nil {
 		return nil, err
 	}
 	char, err := s.characterRepo.Get(ctx, id)
@@ -801,7 +809,7 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID stri
 		return oops.Code("CHARACTER_UPDATE_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.CharacterResource(characterID.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixCharacter); err != nil {
 		return err
 	}
 	char, err := s.characterRepo.Get(ctx, characterID)
@@ -935,7 +943,7 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.LocationResource(locationID.String())
-	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "list_characters", resource, prefixLocation); err != nil {
 		return nil, err
 	}
 	chars, err := s.characterRepo.GetByLocation(ctx, locationID, opts)
@@ -955,7 +963,7 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Errorf("scene repository not configured")
 	}
 	resource := access.SceneResource(sceneID.String())
-	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixScene); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixScene); err != nil {
 		return nil, err
 	}
 	participants, err := s.sceneRepo.ListParticipants(ctx, sceneID)
@@ -987,7 +995,7 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.CharacterResource(characterID.String())
-	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "write", resource, prefixCharacter); err != nil {
 		return err
 	}
 
@@ -1097,7 +1105,7 @@ func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string
 		return nil, oops.Code("LOCATION_FIND_FAILED").Errorf("location repository not configured")
 	}
 	// Check read authorization for location wildcard (searching locations)
-	if err := s.checkAccess(ctx, subjectID, "read", access.LocationResource("*"), prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "read", access.LocationResource("*"), prefixLocation); err != nil {
 		return nil, err
 	}
 	loc, err := s.locationRepo.FindByName(ctx, name)
@@ -1116,7 +1124,7 @@ func (s *Service) GetObjectsByLocation(ctx context.Context, subjectID string, lo
 		return nil, oops.Code("OBJECT_QUERY_FAILED").Errorf("object repository not configured")
 	}
 	resource := access.LocationResource(locationID.String())
-	if err := s.checkAccess(ctx, subjectID, "list_objects", resource, prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, HumanCaller(subjectID), "list_objects", resource, prefixLocation); err != nil {
 		return nil, err
 	}
 	objs, err := s.objectRepo.ListAtLocation(ctx, locationID)
@@ -1152,7 +1160,7 @@ func (s *Service) ListPropertiesByParent(ctx context.Context, subjectID, parentT
 	visible := make([]*EntityProperty, 0, len(all))
 	for _, prop := range all {
 		resource := access.PropertyResource(prop.ID.String())
-		checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixProperty)
+		checkErr := s.checkAccess(ctx, HumanCaller(subjectID), "read", resource, prefixProperty)
 		switch {
 		case checkErr == nil:
 			visible = append(visible, prop)

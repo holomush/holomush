@@ -49,7 +49,7 @@ type recordingWorldMutator struct {
 
 var _ hostfunc.WorldMutator = (*recordingWorldMutator)(nil)
 
-func (m *recordingWorldMutator) GetLocation(context.Context, string, ulid.ULID) (*world.Location, error) {
+func (m *recordingWorldMutator) GetLocation(context.Context, world.Caller, ulid.ULID) (*world.Location, error) {
 	return nil, world.ErrNotFound
 }
 

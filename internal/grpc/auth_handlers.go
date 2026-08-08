@@ -969,7 +969,7 @@ func (s *CoreServer) buildCharacterSummaries(ctx context.Context, playerID ulid.
 
 		if c.LocationID != nil && s.worldQuerier != nil {
 			subj := access.CharacterSubject(c.ID.String())
-			if loc, locErr := s.worldQuerier.GetLocation(ctx, subj, *c.LocationID); locErr == nil && loc != nil {
+			if loc, locErr := s.worldQuerier.GetLocation(ctx, world.HumanCaller(subj), *c.LocationID); locErr == nil && loc != nil {
 				summary.LastLocation = loc.Name
 			}
 		}

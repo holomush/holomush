@@ -65,7 +65,7 @@ func (fakePropertyWorldQuerier) GetObject(_ context.Context, _ ulid.ULID) (*worl
 // fakePropertyWorldMutator satisfies world.Mutator (= hostcap.WorldMutator) with no-op stubs.
 type fakePropertyWorldMutator struct{}
 
-func (fakePropertyWorldMutator) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (fakePropertyWorldMutator) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	return nil, nil
 }
 

@@ -96,7 +96,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 		engine.Grant(subjectID, "read", "location:"+locID.String())
 		mockRepo.EXPECT().Get(ctx, locID).Return(expectedLoc, nil)
 
-		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedLoc, loc)
 	})
@@ -110,7 +110,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 			Engine:       engine,
 		})
 
-		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		assert.Nil(t, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockRepo.AssertNotCalled(t, "Get")
@@ -126,7 +126,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 			Engine:       engine,
 		})
 
-		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		assert.Nil(t, loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
@@ -146,7 +146,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 			Engine:       engine,
 		})
 
-		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		assert.Nil(t, loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -167,7 +167,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 			Engine:       engine,
 		})
 
-		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		assert.Nil(t, loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -188,7 +188,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 			Engine:       engine,
 		})
 
-		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		assert.Nil(t, loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
@@ -219,7 +219,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 			Engine:       engine,
 		})
 
-		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		assert.Nil(t, loc)
 		require.Error(t, err)
 
@@ -1593,7 +1593,7 @@ func TestWorldService_GetLocationErrorPropagation(t *testing.T) {
 		engine.Grant(subjectID, "read", "location:"+locID.String())
 		mockRepo.EXPECT().Get(ctx, locID).Return(nil, errors.New("db error"))
 
-		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		assert.Nil(t, loc)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
@@ -1848,7 +1848,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		engine.Grant(subjectID, "read", "location:"+locationID.String())
 		mockExitRepo.EXPECT().ListFromLocation(ctx, locationID).Return(expectedExits, nil)
 
-		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		exits, err := svc.GetExitsByLocation(ctx, world.HumanCaller(subjectID), locationID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedExits, exits)
 	})
@@ -1862,7 +1862,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 			Engine:   engine,
 		})
 
-		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		exits, err := svc.GetExitsByLocation(ctx, world.HumanCaller(subjectID), locationID)
 		assert.Nil(t, exits)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
@@ -1878,7 +1878,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 			Engine:   engine,
 		})
 
-		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		exits, err := svc.GetExitsByLocation(ctx, world.HumanCaller(subjectID), locationID)
 		assert.Nil(t, exits)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
@@ -1893,7 +1893,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 			Engine: engine,
 		})
 
-		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		exits, err := svc.GetExitsByLocation(ctx, world.HumanCaller(subjectID), locationID)
 		assert.Nil(t, exits)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_LIST_FAILED")
@@ -1912,7 +1912,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		engine.Grant(subjectID, "read", "location:"+locationID.String())
 		mockExitRepo.EXPECT().ListFromLocation(ctx, locationID).Return(nil, dbErr)
 
-		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		exits, err := svc.GetExitsByLocation(ctx, world.HumanCaller(subjectID), locationID)
 		assert.Nil(t, exits)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_LIST_FAILED")
@@ -1930,7 +1930,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		engine.Grant(subjectID, "read", "location:"+locationID.String())
 		mockExitRepo.EXPECT().ListFromLocation(ctx, locationID).Return([]*world.Exit{}, nil)
 
-		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		exits, err := svc.GetExitsByLocation(ctx, world.HumanCaller(subjectID), locationID)
 		require.NoError(t, err)
 		assert.NotNil(t, exits, "should return empty slice, not nil")
 		assert.Empty(t, exits)
@@ -2522,7 +2522,7 @@ func TestWorldService_NilLocationRepo(t *testing.T) {
 	})
 
 	t.Run("GetLocation returns error", func(t *testing.T) {
-		_, err := svc.GetLocation(ctx, subjectID, locID)
+		_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
@@ -2657,7 +2657,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		engine.Grant(subjectID, "read", "location:"+locID.String())
 		mockRepo.EXPECT().Get(ctx, locID).Return(nil, world.ErrNotFound)
 
-		_, err := svc.GetLocation(ctx, subjectID, locID)
+		_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
 	})
@@ -2671,7 +2671,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			Engine:       engine,
 		})
 
-		_, err := svc.GetLocation(ctx, subjectID, locID)
+		_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
 		mockRepo.AssertNotCalled(t, "Get")
@@ -2689,7 +2689,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		engine.Grant(subjectID, "read", "location:"+locID.String())
 		mockRepo.EXPECT().Get(ctx, locID).Return(nil, errors.New("db connection failed"))
 
-		_, err := svc.GetLocation(ctx, subjectID, locID)
+		_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_GET_FAILED")
 	})
@@ -2865,7 +2865,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 			Engine:       engine,
 		})
 
-		_, err := svc.GetLocation(ctx, subjectID, locID)
+		_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
@@ -4981,7 +4981,7 @@ func TestWorldService_GetLocation_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().Get(ctx, locID).Return(expectedLoc, nil)
 
-	_, err := svc.GetLocation(ctx, subjectID, locID)
+	_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 	require.NoError(t, err)
 
 	// Verify AccessRequest fields
@@ -5282,7 +5282,7 @@ func TestWorldService_GetExitsByLocation_VerifiesAccessRequest(t *testing.T) {
 
 	mockRepo.EXPECT().ListFromLocation(ctx, locationID).Return(expectedExits, nil)
 
-	_, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+	_, err := svc.GetExitsByLocation(ctx, world.HumanCaller(subjectID), locationID)
 	require.NoError(t, err)
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
@@ -5666,7 +5666,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, locID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				_, err := svc.GetLocation(ctx, subjectID, id)
+				_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), id)
 				return err
 			},
 			engineBehavior:    "error",
@@ -5686,7 +5686,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 				return svc, locID
 			},
 			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
-				_, err := svc.GetLocation(ctx, subjectID, id)
+				_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), id)
 				return err
 			},
 			engineBehavior:    "deny",
@@ -6100,7 +6100,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 				})
 			},
 			invokeOperation: func(svc *world.Service) error {
-				_, err := svc.GetLocation(ctx, "", locID) // Empty subject
+				_, err := svc.GetLocation(ctx, world.HumanCaller(""), locID) // Empty subject
 				return err
 			},
 			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
@@ -6303,7 +6303,7 @@ func TestWorldService_GetLocation_AllowWithInfraPrefix(t *testing.T) {
 		Engine:       mockEngine,
 	})
 
-	loc, err := svc.GetLocation(ctx, subjectID, locID)
+	loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 	require.NoError(t, err, "allow decision must succeed even with infra: prefix policyID")
 	assert.Equal(t, expectedLoc, loc)
 }

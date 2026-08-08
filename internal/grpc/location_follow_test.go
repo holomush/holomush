@@ -48,11 +48,11 @@ type mockWorldQuerier struct {
 	exitsErr error
 }
 
-func (m *mockWorldQuerier) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *mockWorldQuerier) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	return m.location, m.locErr
 }
 
-func (m *mockWorldQuerier) GetExitsByLocation(_ context.Context, _ string, _ ulid.ULID) ([]*world.Exit, error) {
+func (m *mockWorldQuerier) GetExitsByLocation(_ context.Context, _ world.Caller, _ ulid.ULID) ([]*world.Exit, error) {
 	return m.exits, m.exitsErr
 }
 

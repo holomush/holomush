@@ -36,7 +36,7 @@ type mockWorldMutatorService struct {
 }
 
 // WorldService read methods
-func (m *mockWorldMutatorService) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *mockWorldMutatorService) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -864,7 +864,7 @@ type mockWorldServiceWithExpectations struct {
 	mock.Mock
 }
 
-func (m *mockWorldServiceWithExpectations) GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error) {
+func (m *mockWorldServiceWithExpectations) GetLocation(ctx context.Context, subjectID world.Caller, id ulid.ULID) (*world.Location, error) {
 	args := m.Called(ctx, subjectID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)

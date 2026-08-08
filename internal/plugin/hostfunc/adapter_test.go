@@ -28,10 +28,15 @@ type mockWorldService struct {
 
 	// Capture the subject ID passed to each method
 	capturedSubjectID string
+	// capturedCaller captures the migrated world.Caller argument. world.Caller
+	// exposes no accessor by design (D-62), so a Caller-typed method cannot
+	// render its subject into capturedSubjectID; assertions compare against
+	// world.HumanCaller(<same expected subject>) instead.
+	capturedCaller world.Caller
 }
 
-func (m *mockWorldService) GetLocation(_ context.Context, subjectID string, _ ulid.ULID) (*world.Location, error) {
-	m.capturedSubjectID = subjectID
+func (m *mockWorldService) GetLocation(_ context.Context, subjectID world.Caller, _ ulid.ULID) (*world.Location, error) {
+	m.capturedCaller = subjectID
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -111,7 +116,7 @@ func TestWorldQuerierAdapter_GetLocation(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedLoc, loc)
-		assert.Equal(t, "plugin:test-plugin", svc.capturedSubjectID)
+		assert.Equal(t, world.HumanCaller("plugin:test-plugin"), svc.capturedCaller)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {
@@ -346,7 +351,7 @@ func TestWorldQuerierAdapter_GetObject(t *testing.T) {
 // Methods block until the context is cancelled, then return context.DeadlineExceeded.
 type blockingMockWorldService struct{}
 
-func (m *blockingMockWorldService) GetLocation(ctx context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *blockingMockWorldService) GetLocation(ctx context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }

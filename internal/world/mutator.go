@@ -23,7 +23,7 @@ type Mutator interface {
 	// Read operations (from Service)
 
 	// GetLocation retrieves a location by ID after checking read authorization.
-	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*Location, error)
+	GetLocation(ctx context.Context, subjectID Caller, id ulid.ULID) (*Location, error)
 
 	// GetCharacter retrieves a character by ID after checking read authorization.
 	GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*Character, error)

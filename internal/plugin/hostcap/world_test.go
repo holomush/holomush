@@ -42,7 +42,7 @@ type fakeMutator struct {
 	lastCreateObjSubject string // subject passed to CreateObject
 }
 
-func (f *fakeMutator) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (f *fakeMutator) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	return nil, nil
 }
 

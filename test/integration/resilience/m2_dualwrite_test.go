@@ -307,9 +307,9 @@ var _ = Describe("Per-aggregate concurrent-writer races surface the conflict", O
 		DeferCleanup(cancel)
 
 		locID := replicaA.NewLocation(ctx)
-		locA, err := svcA.GetLocation(ctx, subjA, locID)
+		locA, err := svcA.GetLocation(ctx, world.HumanCaller(subjA), locID)
 		Expect(err).NotTo(HaveOccurred(), "svcA.GetLocation")
-		locB, err := svcB.GetLocation(ctx, subjB, locID)
+		locB, err := svcB.GetLocation(ctx, world.HumanCaller(subjB), locID)
 		Expect(err).NotTo(HaveOccurred(), "svcB.GetLocation")
 		Expect(locA.Version).To(Equal(locB.Version), "both copies hold the SAME read version")
 

@@ -37,10 +37,10 @@ type SystemBroadcaster interface {
 // depend only on the methods they actually use rather than the full world.Service.
 type WorldService interface {
 	// GetLocation retrieves a location by ID after checking read authorization.
-	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
+	GetLocation(ctx context.Context, subjectID world.Caller, id ulid.ULID) (*world.Location, error)
 
 	// GetExitsByLocation retrieves all exits from a location after checking read authorization.
-	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
+	GetExitsByLocation(ctx context.Context, subjectID world.Caller, locationID ulid.ULID) ([]*world.Exit, error)
 
 	// CreateExit creates a new exit after checking write authorization.
 	CreateExit(ctx context.Context, subjectID string, exit *world.Exit) error

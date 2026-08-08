@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	"github.com/holomush/holomush/internal/testsupport/natstest"
+	"github.com/holomush/holomush/internal/world"
 )
 
 const restartSpecTimeout = 3 * time.Minute
@@ -76,7 +77,7 @@ var _ = Describe("Restart and reconnect", Ordered, func() {
 		locID := replicaA.NewLocation(ctx)
 		svcB := newWorldService(replicaB)
 		const subj = "character:restart-writer"
-		loc, err := svcB.GetLocation(ctx, subj, locID)
+		loc, err := svcB.GetLocation(ctx, world.HumanCaller(subj), locID)
 		Expect(err).NotTo(HaveOccurred(), "svcB.GetLocation")
 		const preRestartName = "written-before-restart"
 		loc.Name = preRestartName

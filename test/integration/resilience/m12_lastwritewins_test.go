@@ -127,9 +127,9 @@ var _ = Describe("M12 last-write-wins closed by the version guard", Ordered, fun
 		// twice with explicit interleave control. repo.Get constructs a fresh
 		// struct per call (each with the stored version), so locA and locB are
 		// independent.
-		locA, err := svcA.GetLocation(ctx, subjA, locID)
+		locA, err := svcA.GetLocation(ctx, world.HumanCaller(subjA), locID)
 		Expect(err).NotTo(HaveOccurred(), "svcA.GetLocation")
-		locB, err := svcB.GetLocation(ctx, subjB, locID)
+		locB, err := svcB.GetLocation(ctx, world.HumanCaller(subjB), locID)
 		Expect(err).NotTo(HaveOccurred(), "svcB.GetLocation")
 
 		originalName := locB.Name
@@ -280,7 +280,7 @@ var _ = Describe("M12 last-write-wins closed by the version guard", Ordered, fun
 			go func() {
 				defer wg.Done()
 				<-start
-				loc, getErr := svcB.GetLocation(ctx, subjB, locID)
+				loc, getErr := svcB.GetLocation(ctx, world.HumanCaller(subjB), locID)
 				if getErr != nil {
 					errB = getErr
 					return

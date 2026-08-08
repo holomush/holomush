@@ -129,7 +129,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func(idx int) {
 					defer GinkgoRecover()
 					defer wg.Done()
-					_, err := svc.GetLocation(ctx, subjectID, locID)
+					_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 					errs[idx] = err
 				}(i)
 			}
@@ -159,7 +159,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func(idx int) {
 					defer GinkgoRecover()
 					defer wg.Done()
-					_, err := svc.GetLocation(ctx, subjectID, locID)
+					_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 					errs[idx] = err
 				}(i)
 			}
@@ -201,7 +201,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func(idx int) {
 					defer GinkgoRecover()
 					defer wg.Done()
-					_, err := svc.GetLocation(ctx, subjectID, ulid.Make())
+					_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), ulid.Make())
 					errs[idx] = err
 				}(i)
 			}
@@ -251,14 +251,14 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 
 			// First failCount calls should fail
 			for i := range failCount {
-				_, err := svc.GetLocation(ctx, subjectID, locID)
+				_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 				Expect(err).To(HaveOccurred(), fmt.Sprintf("call %d should fail", i+1))
 				Expect(errors.Is(err, world.ErrAccessEvaluationFailed)).To(BeTrue())
 			}
 
 			// Subsequent calls should succeed
 			for i := range 10 {
-				loc, err := svc.GetLocation(ctx, subjectID, locID)
+				loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("recovery call %d should succeed", i+1))
 				Expect(loc).To(Equal(expectedLoc))
 			}
@@ -292,7 +292,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
-					_, err := svc.GetLocation(ctx, subjectID, locID)
+					_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 					if err != nil {
 						failureCount.Add(1)
 					} else {
@@ -309,7 +309,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 
 			// Post-recovery: all subsequent calls should succeed
 			for i := range 20 {
-				loc, err := svc.GetLocation(ctx, subjectID, locID)
+				loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 				Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("post-recovery call %d should succeed", i+1))
 				Expect(loc).To(Equal(expectedLoc))
 			}
@@ -348,7 +348,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func(idx int) {
 					defer GinkgoRecover()
 					defer wg.Done()
-					loc, err := svc.GetLocation(ctx, subjectID, locID)
+					loc, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), locID)
 					results[idx] = result{loc: loc, err: err}
 				}(i)
 			}
@@ -416,7 +416,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
-					_, err := svc.GetLocation(ctx, subjectID, ulid.Make())
+					_, err := svc.GetLocation(ctx, world.HumanCaller(subjectID), ulid.Make())
 					if err != nil {
 						Expect(errors.Is(err, world.ErrAccessEvaluationFailed)).To(BeTrue())
 						totalFailures.Add(1)

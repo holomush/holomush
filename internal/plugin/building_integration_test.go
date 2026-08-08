@@ -62,7 +62,7 @@ type mockWorldMutator struct {
 	getLocationErr    error
 }
 
-func (m *mockWorldMutator) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *mockWorldMutator) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	return m.getLocationRet, m.getLocationErr
 }
 

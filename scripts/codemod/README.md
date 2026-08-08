@@ -198,11 +198,21 @@ constraints already handle.
 
 | Rule | `ignores:` | Why |
 |---|---|---|
-| `world-caller-arg2.yml` | `internal/grpc/location_follow.go`, `internal/property/**`, `internal/plugin/hostfunc/world_write.go`, `internal/plugin/hostfunc/cap_property*.go`, `internal/plugin/hostfunc/cap_world_query*.go` | Whole-file surfaces where a blind wrap is wrong: `location_follow.go` must become `SystemCaller()`; `internal/property/**` threads the caller unwrapped; `world_write.go`'s callbacks receive an already-typed caller from `withMutatorContext`; the two `cap_*` façades are out of scope for 02.1. |
-| `world-caller-arg2-internal.yml` | `internal/world/caller_test.go` | That file is `package world` and its criterion-2 proof builds a `Caller` by same-package composite literal. The `not: kind: composite_literal` clause covers the literal inline at the call site; this path ignore covers it when bound to a local first. The file is net-new and holds zero pre-flip sites, so ignoring it suppresses no real work. |
+| `world-caller-arg2.yml` | `internal/world/caller_test.go`, `internal/grpc/location_follow.go`, `internal/property/**`, `internal/plugin/hostfunc/world_write.go`, `internal/plugin/hostfunc/cap_property*.go`, `internal/plugin/hostfunc/cap_world_query*.go` | Whole-file surfaces where a blind wrap is wrong: `location_follow.go` must become `SystemCaller()`; `internal/property/**` threads the caller unwrapped; `world_write.go`'s callbacks receive an already-typed caller from `withMutatorContext`; the two `cap_*` façades are out of scope for 02.1. |
+| `world-caller-arg2-internal.yml` | `internal/world/caller_test.go` | **Inert, retained as belt-and-braces.** Plan 01 landed that file as `package world_test` (see the note below), so this rule's package-clause scope already excludes it. Kept so a future move back into `package world` cannot silently reintroduce the double-wrap. |
 | `world-caller-decl.yml` | `internal/plugin/hostfunc/cap_property*.go`, `internal/plugin/hostfunc/cap_world_query*.go` | **Only** the out-of-scope façades. |
 | `world-caller-decl-internal.yml` | (none) | The package-clause scope already restricts it. |
 | `probe-subject-param.yml` | (none) | Its residual `cap_*` output is the point. |
+
+> **Why `caller_test.go` is ignored on the EXTERNAL rule.** It was planned as
+> `package world` so its criterion-2 proof could build an attribute-carrying
+> `Caller` by same-package composite literal. That is impossible: `policy.NewEngine`
+> takes a concrete `*attribute.Resolver`, and `internal/access/policy/attribute`
+> imports `internal/world`, so an in-package test file importing it is
+> "import cycle not allowed in test". The file is therefore `package world_test`
+> (like `service_test.go`, which is exempt from the cycle) and reaches Caller's
+> unexported state through `internal/world/export_test.go`. It is consequently
+> scanned by `world-caller-arg2.yml`, which is where the live ignore sits.
 
 **Deliberately NOT ignored on the declaration rules**, because each holds real
 migration targets:

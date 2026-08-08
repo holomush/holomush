@@ -27,12 +27,12 @@
 # literal is SILENTLY SKIPPED — the compiler and probe-subject-param.yml are the
 # durable backstops, not the allowlist).
 #
-# `ignores: internal/world/caller_test.go` — that file is `package world` and its
-# criterion-2 proof builds a Caller by same-package composite literal. The
-# `not: kind: composite_literal` clause covers the literal written inline at the
-# call site; this path ignore covers it when the literal is bound to a local
-# first. The file is net-new and holds zero pre-flip sites, so ignoring it
-# suppresses no real work.
+# `ignores: internal/world/caller_test.go` — RETAINED AS BELT-AND-BRACES ONLY.
+# Plan 01 landed that file as `package world_test`, not `package world` (see
+# world-caller-arg2.yml's header for why), so this rule's package-clause scope
+# already excludes it and the ignore is inert here. The LIVE ignore for that file
+# lives on world-caller-arg2.yml. Both are kept so a future move of the file back
+# into `package world` cannot silently reintroduce the double-wrap.
 #
 # STANDING REMEDY: if a post-flip re-run produces ANY hunk, add that file to this
 # rule's `ignores:` or spell the constructor inline at the call site. Never

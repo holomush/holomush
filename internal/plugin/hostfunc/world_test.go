@@ -30,7 +30,7 @@ type mockWorldQuerier struct {
 }
 
 // WorldMutator read methods (with subjectID for ABAC)
-func (m *mockWorldQuerier) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *mockWorldQuerier) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -516,7 +516,7 @@ type contextAwareWorldQuerier struct {
 }
 
 // WorldMutator read methods (with subjectID for ABAC)
-func (m *contextAwareWorldQuerier) GetLocation(ctx context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *contextAwareWorldQuerier) GetLocation(ctx context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	if m.ctxChan != nil {
 		select {
 		case m.ctxChan <- ctx:

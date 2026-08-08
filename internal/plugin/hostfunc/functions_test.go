@@ -38,7 +38,7 @@ func TestWithWorldServiceAcceptsWorldMutator(t *testing.T) {
 // mockWorldMutatorForConstructorTest implements WorldMutator for testing constructor behavior.
 type mockWorldMutatorForConstructorTest struct{}
 
-func (m *mockWorldMutatorForConstructorTest) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *mockWorldMutatorForConstructorTest) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	return nil, nil
 }
 

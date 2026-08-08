@@ -127,8 +127,8 @@ func streamClosedFrame(msg string) *corev1.SubscribeResponse {
 // WorldQuerier provides read-only access to world model data for building
 // location_state payloads during event streaming. Satisfied by *world.Service.
 type WorldQuerier interface {
-	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
-	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
+	GetLocation(ctx context.Context, subjectID world.Caller, id ulid.ULID) (*world.Location, error)
+	GetExitsByLocation(ctx context.Context, subjectID world.Caller, locationID ulid.ULID) ([]*world.Exit, error)
 }
 
 // SessionStreamContributor collects plugin-contributed stream names for a session.

@@ -57,7 +57,7 @@ type noopWorldMutator struct{}
 
 var _ world.Mutator = (*noopWorldMutator)(nil)
 
-func (*noopWorldMutator) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (*noopWorldMutator) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	return nil, nil
 }
 

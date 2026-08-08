@@ -41,7 +41,7 @@ func (s *GRPCServer) GetLocation(ctx context.Context, req *worldv1.GetLocationRe
 	}
 
 	subjectID := access.CharacterSubject(req.GetSubjectId())
-	loc, err := s.svc.GetLocation(ctx, subjectID, locID)
+	loc, err := s.svc.GetLocation(ctx, HumanCaller(subjectID), locID)
 	if err != nil {
 		return nil, mapWorldError(err)
 	}
@@ -98,7 +98,7 @@ func (s *GRPCServer) ListExits(ctx context.Context, req *worldv1.ListExitsReques
 	}
 
 	subjectID := access.CharacterSubject(req.GetSubjectId())
-	exits, err := s.svc.GetExitsByLocation(ctx, subjectID, locID)
+	exits, err := s.svc.GetExitsByLocation(ctx, HumanCaller(subjectID), locID)
 	if err != nil {
 		return nil, mapWorldError(err)
 	}
