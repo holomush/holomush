@@ -1,8 +1,16 @@
 # Phase 3: World Character Commands — Research
 
-**Researched:** 2026-08-06
-**Domain:** Go domain-layer write commands (version-guarded CAS + transactional outbox), event-driven host subsystems, NATS JetStream KV, ABAC seeds, invariant-registry amendment
-**Confidence:** HIGH for in-repo seams (every claim below opened with `Read`/`rg` this session); HIGH for the nats.go KV API (read from the pinned module source in `GOMODCACHE`)
+**Researched:** 2026-08-06 · **Re-grounded:** 2026-08-07 against the Phase 02.1/02.2 split
+**Domain:** Go domain-layer write commands (version-guarded CAS + transactional outbox), event-driven host subsystems, NATS JetStream KV, background-job ABAC identity (Phase 02.2 model), invariant-registry amendment
+**Confidence:** HIGH for in-repo seams (every claim opened with `Read`/`rg` in-session; the 2026-08-07 pass re-verified the authorization-surface citations — intervening commits are docs-only, so the 2026-08-06 code citations stand); HIGH for the nats.go KV API (read from the pinned module source in `GOMODCACHE`); **LOW for the post-02.1 `world.Service` call shape — Phase 02.1 has NO artifacts yet; its design is pinned only in 02.2-CONTEXT.md D-56/D-57 (see §0)**
+
+> **Why this re-research run exists.** The 2026-08-06 research (and the 5 plans built on it) predate
+> the 2026-08-07 phase split: 03-CONTEXT D-45 (the `system:retirement` seed) was **SUPERSEDED by
+> D-47**, which deferred reactor authorization to a new phase — first numbered 02.1, then renumbered
+> **02.2 (Background-Job Authorization Model)** when a new **02.1 (World Caller Model)** was split
+> out ahead of it (02.2-CONTEXT D-56). Phase 3 now depends on both. §0 below is the delta; §5.5, §8,
+> §10, and the assumptions/open-questions sections are reworked; everything else carries forward
+> from 2026-08-06 and remains verified.
 
 > **Provenance convention in this file.** `[VERIFIED: path:line]` means the source-of-truth file was
 > opened this session and the quoted text is verbatim. `[REFUTED]` marks a CONTEXT.md code claim that
@@ -22,7 +30,7 @@
 - **D-35:** ~~Rename is status-agnostic.~~ **SUPERSEDED by D-44.**
 - **D-36:** The fanout is an **event-driven host subsystem** consuming `character_retired` off `events.*.character.>`, NOT a synchronous call from an out-of-Service application service. Accepted consequences: `SubsystemID` cascade; at-least-once JetStream redelivery, so the handler MUST be idempotent; retirement becomes eventually consistent.
 - **D-37:** A retired character lands at the **configured starting location** — the already-resolved `starting_location_id`. No new manifest key, no new schema.
-- **D-38:** The move runs **through `world.Service.MoveCharacter` as a system subject** (precedent: `"system:bootstrap"`), not a direct location write. Consequence: retirement emits two envelopes (`character_retired`, then `character_moved`), and the system subject must satisfy the character-write ABAC gate.
+- **D-38:** The move runs **through `world.Service.MoveCharacter`**, not a direct location write. Consequence: retirement emits two envelopes (`character_retired`, then `character_moved`). **The "as a system subject" clause is superseded by D-47** — the reactor's caller identity is now the 02.2 job model (`JobCaller` / `job:` principal), not a `system:` subject; the routing-through-`MoveCharacter` half of D-38 stands unchanged.
 - **Reactor v1 scope fence:** sessions only — `EmitLeave` to the OLD location, `EmitSessionEnded`, session teardown, then the move. Scenes, channels, and any future pages/stories consumers are explicitly NOT in v1.
 - **D-39:** IDENT-04's "their **own** character" is enforced in **ABAC policy, not in the command**. The commands call `checkAccess` and assert no ownership predicate of their own.
 - **D-40:** **Distinct ABAC actions** — `retire` and `unretire` against `CharacterResource` — not a reuse of the existing `write` action.
@@ -30,6 +38,9 @@
 - **D-43:** Phase 3 writes **no** `idle` transition. Settled by INV-WORLD-5.
 - **D-44:** **`RenameCharacter` is removed from Phase 3 and from the v0.13 milestone**, and moves to the backlog linked to Phase 999.6.
 - **D-42:** `last_active_at` is written through a NATS JetStream KV buffer with a periodic flush, in its OWN general-purpose subsystem. The KV bucket MUST set `Storage: jetstream.FileStorage` explicitly. The listener covers session start/end AND character-generated activity via the `Actor.Kind == character` signal; it MUST NOT hook `internal/session/session.go:485` `RefreshConnection`. The flusher is a fourth out-of-world writer under INV-WORLD-4 and the enumeration is amended in the same change.
+- **D-45 (STRUCK — superseded 2026-08-07 by D-47):** ~~the reactor authorizes `MoveCharacter` with a seeded `"system:retirement"` subject plus a new `principal is system` × `resource is character` seed permit.~~ Recorded because it was reached, acted on (the 2026-08-06 plans), and withdrawn; it MUST NOT be silently re-derived. Its premise — a synthetic principal described by static policy — was rejected because `parseEntityType` matches the prefix only (a permit for `system:retirement` also grants `system:bootstrap`), envelope-actor borrowing over-grants, and `WithSystemSubject` bypasses the chokepoint.
+- **D-46 (2026-08-06):** `createConsumerWithRetry` + `consumerCreateBackoffs` **move to a neutral shared package** (e.g. `internal/eventbus/consumer`); the two audit callers are updated to use it. The move MUST NOT change either caller's error code (`AUDIT_CONSUMER_CREATE_FAILED` / `AUDIT_PLUGIN_CONSUMER_CREATE_FAILED`). Rejected: exporting in place (layering inversion), duplicating, no-retry. **Note (2026-08-07): 02.2's D-55 designates this relocated wrapper as the stamp site for job provenance attributes — see §0.4.**
+- **D-47 (2026-08-07, SUPERSEDES D-45):** the reactor's authorization is **not Phase 3's to solve** — it is deferred to the Background-Job Authorization Model phase (created as 02.1, renumbered **02.2** the same day; a new 02.1 World Caller Model was split out ahead of it, see 02.2-CONTEXT D-56). What that phase builds: a first-class **job identity plus per-execution attributes** the policy engine can test (`types.NewAccessRequest`'s 4th param overlaid onto `bags.Action`, reachable in DSL as `action.*`); the load-bearing blocker is `world.Service.checkAccess` hardcoding `nil` (fixed by 02.1). **Consequence for Phase 3: the D-45 ABAC seed work leaves this phase; the 2026-08-06 plans (03-01's seed tasks, 03-04's authorization path) MUST be reconciled before execution.**
 
 ### Claude's Discretion
 
@@ -63,9 +74,180 @@
 
 ---
 
+## 0. Upstream substrate: Phases 02.1 & 02.2 — what Phase 3 must assume (NEW, 2026-08-07)
+
+Phase 3 now sits on two phases that did not exist when the rest of this document was written.
+Neither has been planned; 02.1 has **no artifacts at all** — its locked design lives only in
+`02.2-CONTEXT.md` D-56/D-57 and the ROADMAP §"Phase 02.1" entry. Everything in this section that
+describes their *output* is therefore `[ASSUMED]` against those decision records; everything that
+describes the *current tree* is `[VERIFIED]` this session.
+
+### 0.1 The dependency chain and what each phase delivers
+
+| Phase | Delivers | Status |
+|---|---|---|
+| **02.1 World Caller Model** | `world.Service`'s 21 public commands take a **typed caller value** instead of `subjectID string`; `checkAccess` forwards the caller's execution context to `types.NewAccessRequest`, replacing the hardcoded `nil`; `location_follow.go:197`'s `WithSystemSubject` migrates to `SystemCaller` | No artifacts; design locked in D-56/D-57 `[CITED: .planning/ROADMAP.md §Phase 02.1; 02.2-CONTEXT.md D-56]` |
+| **02.2 Background-Job Authorization Model** | `job:` principal namespace + attribute provider gated on a **liveness registry** (D-49); jobs declare a **capability class** in Go at registration (D-50/D-51); per-execution **event provenance triple** `trigger_event_id`/`trigger_event_type`/`trigger_subject` stamped at the consumer boundary (D-54/D-55), namespaced `action.job.*` (D-57); `action` schema-namespace registration (D-59/D-60); job deny-code shape (D-58); **fixture job only** (D-52) | CONTEXT.md exists (D-48…D-60); not planned `[CITED: 02.2-CONTEXT.md]` |
+| **Phase 3** | The **first real job-identity consumers**: the retirement reactor and the `last_active_at` flusher (D-52 says so explicitly: "This phase ships the model and a fixture; Phase 3 brings the first real consumers") | this phase |
+
+**Current-tree ground truth the chain is built on (all re-verified 2026-08-07):**
+
+- `checkAccess` hardcodes the attrs channel closed:
+  `req, reqErr := types.NewAccessRequest(subject, action, resource, nil)`
+  `[VERIFIED: internal/world/service.go:214]`. Its signature is
+  `checkAccess(ctx context.Context, subject, action, resource string, prefix entityPrefix) error` (`:209`).
+- Every public command takes the bare string today, e.g.
+  `func (s *Service) MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error`
+  `[VERIFIED: internal/world/service.go:985]`, checking `"write"` on
+  `access.CharacterResource(characterID.String())` (`:989-990`).
+- The engine overlays caller attrs onto the action bag: *"caller-supplied per-call attributes
+  overlay bags.Action. Caller wins on non-reserved key conflict."*
+  `[VERIFIED: internal/access/policy/engine.go:252-265]` — so once 02.1 threads them, `action.job.*`
+  is readable in seed DSL with zero engine change.
+- The provider template 02.2 copies: `PluginProvider.ResolveSubject` returns `nil, nil` for an
+  unknown/unloaded ref — `if p.registry == nil || !p.registry.IsPluginLoaded(subjectID) { return nil, nil }`
+  `[VERIFIED: internal/access/policy/attribute/plugin_provider.go:40-47]`. Missing attrs are `false`
+  for every DSL operator (ADR holomush-iv43), which is what makes D-49's liveness gate fail closed.
+- The D-59 landmine is real: `validateAttributes` **hard-errors** for the `action` namespace —
+  `return nil, fmt.Errorf("unregistered action attribute %q: action namespace is registered but attribute is not", fqn)`
+  `[VERIFIED: internal/access/policy/compiler.go:162-163]` — and
+  `action.dispatch_location` ships today in `seed:plugin-world-mutation-own-location`
+  `[VERIFIED: internal/access/policy/seed.go:329-334]`. (That flip is 02.2's task, but Phase 3 seeds
+  written with `action.job.*` refs compile against whatever registration 02.2 lands.)
+- `bags.Action["name"] = req.Action` and provider-independent `bags.Subject["id"]` stamping
+  `[VERIFIED: internal/access/policy/attribute/resolver.go:185, 197-199]` — `principal.id` works for
+  any prefixed subject with no provider.
+
+### 0.2 The post-02.1 call shape Phase 3 plans MUST be written against — `[ASSUMED]`
+
+Per D-56/D-57 and the ROADMAP shape note (typed constructors, no variadic escape hatch):
+
+```go
+// ASSUMED shape — Phase 02.1 has no artifacts; pinned only by D-56/D-57.
+// world.HumanCaller(subjectID) — human/CLI/RPC callers (the 47 existing production sites)
+// world.JobCaller(name, provenance) — background jobs; produces the action.job.* keys in ONE place
+// world.SystemCaller() — the bootstrap/system path (replaces WithSystemSubject at the world boundary)
+func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterID ulid.ULID, expectedVersion int) error
+```
+
+Concrete consequences for Phase 3 planning:
+
+1. **`RetireCharacter`/`UnretireCharacter` are methods 22 and 23** of the 21-method surface 02.1
+   refactors. If Phase 3 plans are written in the old `subjectID string` shape and 02.1 lands first
+   (it must — it blocks 02.2 which blocks Phase 3 execution), every Phase 3 signature, call site,
+   and test fixture is written against a shape that no longer exists. Write them caller-shaped from
+   the start, with a plan-level note that the exact `Caller` type name/constructor signatures must
+   be reconciled against 02.1's landed code at execution time.
+2. **The census is unaffected by the caller refactor.** The AST cross-check keys on the method body
+   referencing the `s.mutator` selector, not on signatures
+   (`test/meta/world_envelope_census_test.go:136` `bodyReferencesSelector`), so §1's findings all
+   survive 02.1 unchanged.
+3. **`checkAccess` will take the caller's context.** The §11 code example's
+   `s.checkAccess(ctx, subjectID, "retire", …)` line becomes whatever 02.1 lands (plausibly
+   `s.checkAccess(ctx, caller, "retire", …)`). The error-classification and metrics behavior
+   (`prefixCharacter` → `CHARACTER_ACCESS_DENIED` / `CHARACTER_ACCESS_EVALUATION_FAILED`,
+   `[VERIFIED: internal/world/service.go:209-254]`) is expected to survive, with D-58's job-aware
+   deny code (`JOB_CHARACTER_ACCESS_DENIED`) layered on by 02.2 — that requires the classification
+   to consult the **principal** kind, not just the resource-derived `entityPrefix` (`:210-212`).
+4. **`SystemCaller` vs the S1 defense is an unverified seam and NOT Phase 3's to solve**
+   (02.2-CONTEXT open question 2; ROADMAP 02.1 research flag). Phase 3 does not use `SystemCaller`
+   anywhere: the reactor is a `JobCaller`, and the retire/unretire commands are `HumanCaller`s.
+
+### 0.3 How the retirement reactor authorizes its effects under the 02.2 model
+
+The brief's key question. Grounded answer, effect by effect — **only ONE of the reactor's four
+effects crosses an ABAC chokepoint**:
+
+| Reactor effect | Substrate | ABAC gate? |
+|---|---|---|
+| End sessions | `session.Store.DeleteByCharacter` | **No** — `internal/store/session_store.go:813-827` is a plain `DELETE … RETURNING`; zero `access.`/`Evaluate` references in the file `[VERIFIED: rg]` |
+| Notify old location (`EmitLeave`) | `presence.Emitter` | **No** — zero ABAC references in `internal/presence/` `[VERIFIED: rg]`; it publishes directly to the bus |
+| `EmitSessionEnded` | `presence.Emitter` | **No** (same) |
+| **Move to starting location** | `world.Service.MoveCharacter` → `checkAccess` `"write"` on `character:<id>` | **YES** `[VERIFIED: internal/world/service.go:985-992]` |
+
+So "how does the reactor authorize its `MoveCharacter`/session-end/notify effects" resolves to:
+**the `MoveCharacter` call authorizes as a `JobCaller`; the session-end and notify effects have no
+policy chokepoint today and authorize as nothing.** Two planning consequences:
+
+- **The reactor's `MoveCharacter` call shape** (assembled from D-48/D-50/D-54/D-55, `[ASSUMED]`
+  constructor names): the D-46 neutral-package consumer wrapper stamps the provenance triple from
+  the delivered event *before handler logic runs* (D-55 — the handler cannot alter it), the handler
+  independently derives the character ID from its own processing, and the call is
+  `MoveCharacter(ctx, world.JobCaller("retirement", prov), charID, startLoc)`. The seed that permits
+  it binds both dimensions (D-54's canonical example, verbatim from 02.2-CONTEXT):
+  `when { action.job.trigger_event_type == "character_retired" && action.job.trigger_subject == resource.id }`.
+  A redelivered or mis-derived aggregate is DENIED — that is the model's point (D-53's testable
+  claim b).
+- **D-50's declared capability class** (`{name: "retirement", writes: ["character","session"]}` is
+  02.2's own example) lists `session` — but the session store has no evaluation point, so the
+  `session` entry narrows nothing today. The declaration is self-attested and only meaningful where
+  a gate exists. Do not let a plan claim the reactor's session teardown is policy-authorized; per
+  D-53, specs MUST NOT claim more than the bindings prove.
+
+**`trigger_subject` vs the resource** — a seam the planner must pin: the delivered event's subject is
+`events.<game_id>.character.<charULID>` (§5.2), while `resource.id` in the DSL is the bare entity id
+stamped from `character:<id>` (`resolver.go:212-214`). D-54 says the triple is taken "verbatim from
+the delivered event", so either the stamp site normalizes `trigger_subject` to the bare aggregate ID
+or the seed cannot compare it to `resource.id` with `==`. **02.2's fixture will settle the
+normalization; Phase 3 plans must consume whatever it lands, not invent their own.** `[ASSUMED]`
+
+### 0.4 Open interlocks Phase 3 planning must NOT resolve unilaterally
+
+1. **Who lands the D-46 relocation?** 02.2's D-55 names "the neutral-package consumer wrapper that
+   Phase 3's D-46 relocation produces" as the provenance stamp site — but 02.2 **executes before
+   Phase 3** and its fixture job needs a stamp site too. Either 02.2 pulls the relocation forward
+   (and Phase 3's D-46 task shrinks to "consume it"), or 02.2 stamps its fixture elsewhere and
+   Phase 3 lands the relocation plus the stamp seam. **This is a cross-phase sequencing decision for
+   whichever phase plans first; Phase 3's plan must carry both branches or be written after 02.2's
+   plan exists.**
+2. **Where do the REAL job seeds land?** 02.2 ships fixture-only (D-52); its in-scope list includes
+   "ABAC seeds" for the fixture. D-47's consequence line says "the ABAC seed work leaves this phase
+   entirely" — written about D-45's `system:` seed. Somebody must still write
+   `job:retirement`'s seed (+ registry registration with declared writes) for the real reactor, and
+   nothing assigns it explicitly. **Most consistent reading: Phase 3 ships its consumers' seeds
+   against 02.2's landed vocabulary (first-real-consumer phase brings its own grants), which means
+   Phase 3 touches `seed.go` after all and the `abac-reviewer` gate fires before push.** Flag for
+   confirmation during planning. `[ASSUMED]`
+3. **The timer-driven flusher has NO triggering event** — 02.2-CONTEXT open question 1, verbatim:
+   *"Phase 3's `last_active_at` flusher (03-05) is periodic, so the D-54 provenance triple has
+   nothing to carry … Resolve before the model is documented as universal. … Do not let a planner
+   pick one silently."* Candidate shapes recorded there: a distinct `trigger_kind` (`event` vs
+   `schedule`) with a per-kind attribute set, or the tick/window presented as provenance. **Do NOT
+   invent an answer in Phase 3's plan.** Research adds one grounded observation that reframes the
+   question: **the flusher as designed never calls `world.Service` at all** — its
+   `UPDATE characters SET last_active_at …` is a direct writer-boundary call (§4.4), sanctioned as
+   INV-WORLD-4's fourth out-of-world writer, so it crosses **no ABAC chokepoint** and needs no job
+   identity *for its write to function*. Whether it should register with the job registry anyway
+   (for 02.2 criterion 4's "the path every future background consumer takes" universality claim) is
+   exactly the open question — surface it to the user/02.2 planner; do not resolve it in a Phase 3
+   plan.
+4. **Requirement IDs**: 02.1/02.2 requirements are TBD (`AUTHZ-*` family proposed, not minted —
+   02.2-CONTEXT open question 4). Phase 3's own IDs (IDENT-04, IDENT-10) are unaffected.
+
+### 0.5 What this invalidates in the 2026-08-06 plans (reconciliation list, per D-47)
+
+| 2026-08-06 artifact | Invalidated element | Replacement |
+|---|---|---|
+| plan 03-01 | `seed:system-retirement-character` seed tasks | gone entirely; job seeds per §0.4-2 |
+| plan 03-04 | reactor authorizes as `"system:retirement"` prefixed subject | `JobCaller("retirement", provenance)` via 02.2 model |
+| all plans | `world.Service` signatures written as `(ctx, subjectID string, …)` | caller-shaped per §0.2 |
+| this file, §5.5 (old text) | "recommended minimal grant `seed:system-retirement-character`" | struck — see the reworked §5.5 |
+| this file, §8.3 (old text) | same seed row | reworked §8.3 |
+
+---
+
 ## Summary
 
-Phase 3 is two independent subsystems plus two domain commands, and the single highest-risk finding is
+**New since 2026-08-07 (§0):** Phase 3 now depends on Phase 02.2 (Background-Job Authorization
+Model) and transitively Phase 02.1 (World Caller Model), neither of which is planned — 02.1 has no
+artifacts at all. The reactor's authorization story changed shape entirely (D-45's `system:` seed →
+D-47's `JobCaller` + provenance triple), Phase 3's new commands must be written against a
+typed-caller `world.Service` signature that does not exist in the tree yet, and the 2026-08-06 plans
+carry a reconciliation list (§0.5). Three cross-phase interlocks (D-46/D-55 stamp-site ownership,
+real-job seed placement, the timer-driven flusher's missing provenance) MUST be surfaced to the
+user/planner rather than resolved silently (§0.4).
+
+Within the phase itself, Phase 3 is two independent subsystems plus two domain commands, and the single highest-risk in-repo finding is
 **not** the one the ROADMAP flagged. The `writeCommands` census is *two* assertions, not one: a
 kind↔command bijection **and** a `go/ast` cross-check that the registered command set equals the set of
 `world.Service` methods whose body references the `s.mutator` selector. That second assertion
@@ -86,7 +268,10 @@ subsystem needs a `NewSubsystemWithStorage`-style seam so tests can force `Memor
 **Primary recommendation:** structure the phase as three independent tracks — (A) the two domain
 commands routed through `s.mutator` with a new `CharacterRepository.SetStatus`, (B) the retirement
 reactor subsystem, (C) the `last_active_at` KV subsystem — and land the 13-site subsystem cascade
-**once**, for both new IDs together, as a single dedicated task before (B) and (C) branch.
+**once**, for both new IDs together, as a single dedicated task before (B) and (C) branch. Write
+every `world.Service` touchpoint caller-shaped (§0.2), authorize the reactor's move as a
+`JobCaller` against 02.2's landed vocabulary (§0.3), and do not finalize track (B)'s authorization
+tasks or track (C)'s job-registry participation until 02.2's plan exists (§0.4).
 
 ---
 
@@ -609,7 +794,7 @@ At-least-once redelivery means each effect needs an idempotent formulation:
 
 | Effect | Idempotent formulation | Substrate |
 |---|---|---|
-| **End sessions** | `Store.DeleteByCharacter(ctx, characterID) (*Info, error)` — returns the deleted `*Info`, or nothing to do on redelivery | `[VERIFIED: internal/session/session.go:306, 428]` |
+| **End sessions** | `Store.DeleteByCharacter(ctx, characterID) (*Info, error)` — returns the deleted `*Info`; on absence returns **`(nil, nil)`** (impl: `pgx.ErrNoRows` → `nil, nil`), so redelivery finds nothing to do | `[VERIFIED: internal/session/session.go:306, 428; internal/store/session_store.go:813-827]` |
 | **Notify the old location** | Gate on the `*Info` returned above: no session ⇒ no `EmitLeave`. The `LocationID` for the leave comes from that `Info`, so a redelivery that finds nothing cannot double-emit | `internal/presence/emitter.go:148-168` |
 | **Move to start** | `MoveCharacter` is inherently idempotent-ish: after the first move `char.LocationID == startLoc`, so re-running is a no-op write that still emits a second `character_moved` envelope. **Guard explicitly**: read the character first and skip when already at `starting_location_id` | `internal/world/service.go:985-1048` |
 
@@ -653,7 +838,7 @@ There are **seven** production `EmitLeave` call sites, not four
   `[VERIFIED: internal/core/session_ended_payload.go:24-31]`. Note the struct's field comment
   (`:20`) lists the causes inline — update it in the same edit.
 
-### 5.5 D-37 / D-38 — starting location + system subject
+### 5.5 D-37 / D-38 — starting location + the reactor's caller identity (REWORKED 2026-08-07)
 
 **Starting location.** `starting_location_id` is resolved at bootstrap and stored in the metadata
 store:
@@ -667,34 +852,30 @@ Exposed by `func (s *BootstrapSubsystem) StartLocationID() ulid.ULID`, which **p
 `Prepare()`** `[VERIFIED: internal/bootstrap/setup/subsystem.go:299-303]`. The reactor must therefore
 declare `DependsOn(SubsystemBootstrap)` or resolve lazily.
 
-**System-subject precedent.** `"system:bootstrap"` is a raw string literal at
-`internal/bootstrap/setting.go:134`. There is **no `access.SystemSubject(...)` helper** `[NOT FOUND]`.
-Two distinct system paths exist and the plan must pick one deliberately:
+**Caller identity — SUPERSEDED MECHANISM.** The 2026-08-06 version of this section recommended a
+`"system:retirement"` prefixed subject plus a `seed:system-retirement-character` permit. **That is
+D-45, struck by D-47 — do not build it.** The verified facts that made the gap real still hold and
+are worth keeping (they are why D-47 exists):
 
-| Path | Mechanism | Verified at |
-|---|---|---|
-| **Prefixed** `"system:<x>"` | `parseEntityType` splits on `:` → `"system"` → matches `principal is system` in the DSL | `internal/access/policy/engine.go:542-548, 559-562` |
-| **Bare** `"system"` | **hard bypass**, `EffectSystemBypass`, but only if `access.IsSystemContext(ctx)`; otherwise a hard `SYSTEM_SUBJECT_REJECTED` error | `internal/access/policy/engine.go:91-104`; `internal/access/context.go:16-18` |
+- Existing `principal is system` seeds cover **location and exit only**
+  (`seed:system-bootstrap-world` / `seed:system-bootstrap-exits`)
+  `[VERIFIED: internal/access/policy/seed.go:206-217]`. There is **no** system→character permit, and
+  ABAC is default-deny — so before 02.2, a background caller's `MoveCharacter` is denied, full stop.
+- `MoveCharacter` checks `"write"` on `access.CharacterResource(id)`
+  `[VERIFIED: internal/world/service.go:989-992]`.
+- `parseEntityType` (`internal/access/policy/engine.go:542-548`) matches the **prefix only** — the
+  reason a `system:` permit cannot be narrowed to one job, and the D-48 rationale for the disjoint
+  `job:` namespace.
+- The bare-`"system"` bypass requires BOTH `req.Subject == "system"` AND
+  `access.IsSystemContext(ctx)` (`engine.go:91-104`); it is rejected for the reactor because it puts
+  a new subsystem outside the default-deny chokepoint (D-47 candidate 3).
 
-> `access.ParseEntityRef` (`internal/access/prefix.go:290-320`) matches `system` only on **exact
-> equality** and would reject `"system:bootstrap"` — but it has **zero production callers**
-> `[VERIFIED: rg]`, so it is not on this path. Do not reason from it.
-
-**The ABAC gap D-38 flags is REAL and unpatched.** Existing system seeds cover **location and exit
-only**:
-```
-seed:system-bootstrap-world  — permit(principal is system, action in ["read","write"], resource is location);
-seed:system-bootstrap-exits  — permit(principal is system, action in ["read","write"], resource is exit);
-```
-`[VERIFIED: internal/access/policy/seed.go:206-217]`. There is **no** system→character permit.
-`MoveCharacter` checks `"write"` on `access.CharacterResource(id)`
-`[VERIFIED: internal/world/service.go:989-992]`, so a `"system:retirement"` subject is **denied today**.
-Phase 3 must add a seed — recommended minimal grant:
-
-```
-seed:system-retirement-character
-permit(principal is system, action in ["read", "write"], resource is character);
-```
+**What the reactor does instead (post-02.1/02.2):** it calls
+`MoveCharacter(ctx, world.JobCaller("retirement", prov), charID, startLoc)` — see §0.3 for the full
+shape, the provenance-stamping site (D-55, the D-46 wrapper), the instance-scoping seed pattern
+(D-54), and the `trigger_subject`-vs-`resource.id` normalization seam. The permit lives in the
+`job:` namespace against 02.2's landed vocabulary; whether Phase 3 or 02.2 ships the
+`job:retirement` seed is interlock §0.4-2.
 
 **Movement pipeline.** `MoveCharacter` reads the character (CAS version + from-location), verifies the
 destination exists, routes `moveCharacter` through `mutate()`, then fires
@@ -846,12 +1027,13 @@ The engine's `Evaluate` path likewise does not enumerate actions.
 | `seed:player-self-access` (`:39-43`) | `permit(principal is character, action in ["read","write"], resource is character) when { resource.character.id == principal.character.id };` | Does **not** cover `retire`/`unretire` — a player self-retire needs this widened or a new seed. |
 | `seed:system-bootstrap-world` / `-exits` (`:206-217`) | `principal is system` on `location` / `exit` | **No system→character permit exists.** §5.5. |
 
-### 8.3 Exactly what this phase adds
+### 8.3 Exactly what this phase adds (REWORKED 2026-08-07)
 
 | Seed | DSL | Why |
 |---|---|---|
 | `seed:player-self-retire` (**conditional — see the open question**) | `permit(principal is character, action in ["retire"], resource is character) when { resource.character.id == principal.character.id };` | IDENT-04's "their own character", D-39/D-40. **Deliberately omits `unretire`** so D-40's admin-only-unretire future is expressible. |
-| `seed:system-retirement-character` | `permit(principal is system, action in ["read","write"], resource is character);` | D-38's reactor move. **Required** — the reactor is denied without it. |
+| ~~`seed:system-retirement-character`~~ | ~~`permit(principal is system, …)`~~ | **STRUCK (D-45→D-47).** The reactor's permit is a `job:`-namespace seed against 02.2's vocabulary, shaped per D-54 (e.g. `permit(principal is job, action in ["write"], resource is character) when { action.job.trigger_event_type == "character_retired" && action.job.trigger_subject == resource.id };` — exact wording is the 02.2/Phase-3 planner's). **Which phase ships it is interlock §0.4-2**; either way, touching `seed.go` fires the `abac-reviewer` gate. |
+| (possible) `job:activity-flush` registration/seed | — | **Only if 02.2's open question 1 resolves that timer-driven jobs join the model.** The flusher's write crosses no ABAC chokepoint (§0.4-3); do not seed it speculatively. |
 
 `SeedPolicy` shape: `{Name, Description, DSLText, SeedVersion}` `[VERIFIED: internal/access/policy/seed.go:39-43]`.
 Seed-provider coverage is validated at construction by `validateSeedProviderCoverage`
@@ -880,10 +1062,11 @@ admin-only path, which contradicts the requirement text. **Flag for user confirm
 | Zero-row CAS classification | A custom "did the row exist or move?" query | `classifyCASZeroRow` (`internal/world/postgres/character_repo.go:166`) | Locks `FOR UPDATE` and splits NOT_FOUND from WORLD_CONCURRENT_EDIT correctly |
 | Mutation delta construction | A hand-built `wmodel.MutationDelta` | `primaryDeltaVersioned(aggregate, id, tombstone, fromV, toV)` (`character_repo.go:256`) | INV-WORLD-2 delta parity |
 | Same-tx envelope | Calling `OutboxWriter.WriteIntent` yourself | `worldMutator.mutate(ctx, intent, write)` | Compile-time write-requires-envelope seam; the census AST check requires it |
-| Consumer creation retry | A fresh backoff loop | `createConsumerWithRetry` (export or relocate it) | Absorbs the documented JetStream warmup race (flake holomush-l015) |
+| Consumer creation retry | A fresh backoff loop | `createConsumerWithRetry`, relocated to a neutral shared package per **D-46** (e.g. `internal/eventbus/consumer`); preserve both audit callers' error codes | Absorbs the documented JetStream warmup race (flake holomush-l015); the relocated wrapper is also 02.2's designated provenance stamp site (D-55, §0.4-1) |
+| Reactor authorization | A bespoke system-subject/bypass shim (D-45's shape) | 02.2's job model: `JobCaller` + `job:` principal + provenance triple (§0.3) | D-47; `parseEntityType` prefix-matching makes a `system:` permit unnarrowable, and `WithSystemSubject` exits the default-deny chokepoint |
 | Session teardown by character | Iterating `ListActive` and filtering | `Store.DeleteByCharacter(ctx, characterID) (*Info, error)` | One round-trip, returns the `Info` the leave event needs, idempotent |
 | Leave/session-ended events | Publishing raw `eventbus.Event`s | `presence.Emitter.EmitLeave` / `.EmitSessionEnded` via a consumer-defined 2-method interface | Handles payload marshalling, actor mapping, the `location.<id>` subject, and the fresh-context discipline in `session_ended.go:26-38` |
-| Character location write | A direct `UPDATE characters SET location_id` | `world.Service.MoveCharacter` | D-38; keeps INV-WORLD-4 at four writers instead of five, and exercises MovementHook |
+| Character location write | A direct `UPDATE characters SET location_id` | `world.Service.MoveCharacter` (as a `JobCaller` from the reactor, §0.3) | D-38; keeps INV-WORLD-4 at four writers instead of five, and exercises MovementHook |
 | KV bucket creation | `CreateKeyValue` + `ErrBucketExists` handling | `CreateOrUpdateKeyValue` | `Prepare` MUST be idempotent (`internal/lifecycle/subsystem.go:105-109`) |
 | Enumerating all KV keys | `Keys(ctx)` | `ListKeys(ctx)` | `Keys` loads everything into memory; `ListKeys` streams |
 | Status parsing | `strings.ToLower` / `==` comparisons | `world.ParseStatus` + `world.Selectable` | INV-WORLD-5's exhaustive-switch-with-denying-default is load-bearing (`internal/world/lifecycle.go:64-80`) |
@@ -946,16 +1129,49 @@ the handler rather than at construction.
 
 ### Pitfall 9: Assuming `createConsumerWithRetry` is callable
 **What goes wrong:** it is unexported; the reactor's package cannot reach it.
-**Avoid:** budget a task to export/relocate it, or accept a small duplication with a comment pointing
-at the original.
+**Avoid:** D-46 settles this — relocate it (with `consumerCreateBackoffs`) to a neutral shared
+package and update both audit callers, preserving their error codes. Check whether 02.2 already did
+the relocation before budgeting it (§0.4-1).
+
+### Pitfall 10: Writing Phase 3 against the pre-02.1 `subjectID string` signature
+**What goes wrong:** 02.1 refactors all 21 public `world.Service` methods (47 production + 347 test
+call sites) to typed callers before Phase 3 executes; plans/skeletons written as
+`RetireCharacter(ctx, subjectID string, …)` describe a shape that will not exist, and every fixture
+in them needs rework at execution time.
+**Avoid:** write signatures caller-shaped (§0.2) with an explicit reconcile-against-02.1 note; keep
+constructor names (`HumanCaller`/`JobCaller`/`SystemCaller`) marked `[ASSUMED]` until 02.1 lands.
+**Warning sign:** a plan task whose code block passes a bare string as arg 2 of a `world.Service`
+call.
+
+### Pitfall 11: Re-deriving D-45 (a `system:` subject or seed for the reactor)
+**What goes wrong:** a permit for `principal is system` cannot be narrowed to one job
+(`parseEntityType` is prefix-only), so the reactor's grant silently extends to `system:bootstrap` —
+and D-45 is explicitly struck; re-deriving it violates the CONTEXT's "must not be silently
+re-derived" marker.
+**Avoid:** the reactor is a `JobCaller` under 02.2's model; no `system:` seed, no
+`WithSystemSubject` (02.2 success criterion 1: it "appears on no reactor or flusher path").
+
+### Pitfall 12: Inventing provenance for the timer-driven flusher
+**What goes wrong:** 02.2's open question 1 is explicitly reserved ("Do not let a planner pick one
+silently"); a Phase 3 plan that assigns the flusher a `trigger_kind`/tick-provenance shape preempts
+the 02.2 model design.
+**Avoid:** the flusher's write needs no ABAC identity to function (it never calls `world.Service`,
+§0.4-3); leave its job-registry participation as an explicit open input to 02.2 planning.
 
 ---
 
 ## 11. Code Examples
 
 ### The narrow-write Service command (shape derived from `UpdateCharacterDescription`)
+
+> **Signature caveat (2026-08-07):** the body below is the verified in-tree shape TODAY. Post-02.1,
+> `subjectID string` becomes a typed caller (§0.2) and the `checkAccess` line takes it — for the two
+> human-initiated commands that caller is `world.HumanCaller(subjectID)` `[ASSUMED per D-56/D-57]`.
+> The mutator/repo/payload/error-mapping layers below the `checkAccess` line are unaffected.
+
 ```go
 // Source: internal/world/service.go:799-836 (verbatim shape), adapted
+// NOTE: `subjectID string` shown as it exists today — becomes a typed Caller after 02.1 (§0.2).
 func (s *Service) RetireCharacter(ctx context.Context, subjectID string, characterID ulid.ULID, expectedVersion int) error {
     if s.characterRepo == nil {
         return oops.Code("CHARACTER_RETIRE_FAILED").Errorf("character repository not configured")
@@ -1073,6 +1289,7 @@ cons, err := createConsumerWithRetry(ctx, func(ctx context.Context) (jetstream.C
 | IDENT-04 | Retire clears `players.default_character_id` **in the same transaction** (rollback ⇒ neither changes) | audit-integration | `task test:int -- -run TestRetireClearsDefaultCharacter ./test/integration/world/` | ❌ Wave 0 |
 | IDENT-04 | Reactor: `character_retired` ⇒ sessions ended, `leave` at the OLD location, character at `starting_location_id` | full-stack integration | `task test:int -- -run TestRetirementReactor ./test/integration/world/` | ❌ Wave 0 |
 | IDENT-04 | Reactor is idempotent: a redelivered message emits exactly one `leave` and one move | full-stack integration | same suite, second `It` | ❌ Wave 0 |
+| IDENT-04 | Reactor's `MoveCharacter` authorizes as its **own job identity** (no borrowed actor, no bypass) and is **DENIED against an aggregate other than the one whose event it is handling** (02.2 D-53 claim b, D-54 instance scoping) | full-stack integration | same suite, third `It` | ❌ Wave 0 — **blocked on 02.2's landed model; test shape depends on §0.4 interlocks** |
 | IDENT-04 | Retire / idle-out / purge stay three distinct operations; `DeleteCharacter`'s cascade+tombstone path is untouched | unit (census + lifecycle) | `task test -- ./test/meta/ ./internal/world/` | ✅ (INV-WORLD-5 binding test) |
 | IDENT-10 | Stale `expected_version` on retire ⇒ `WORLD_CONCURRENT_EDIT`, no silent overwrite | unit + **two-replica integration** | `HOLOMUSH_RUN_QUARANTINED=1 task test:int -- -run TestWorldModelResilience ./test/integration/resilience/` | ✅ suite exists, new `Describe` needed |
 | IDENT-10 | State change + its ONE envelope commit or roll back together | audit-integration | `task test:int -- ./internal/world/outbox/` | ✅ (INV-WORLD-1 pattern) |
@@ -1118,7 +1335,15 @@ external-mode-specific behavior. Applying that rule:
 - [ ] New `Describe` in `test/integration/resilience/` — covers IDENT-10's two-replica proof
 - [ ] Extend `test/integration/world/character_lifecycle_test.go` for the retire-path assertions
       (do NOT touch its `// Verifies: INV-WORLD-6` block's claims)
+- [ ] `job:retirement` seed + job-registry registration with declared writes — **conditional on
+      interlock §0.4-2 resolving to Phase 3**; if so, the seed's DENY test (wrong aggregate) pairs
+      with a positive control per PORTAL-10 rule 2
 - [ ] Framework install: **none** — Ginkgo/Gomega/testify/mockery/testcontainers all present
+
+> **Cross-phase gate:** every test touching the reactor's authorization (`JobCaller`, the job seed,
+> the DENY case) is unwritable until 02.1+02.2 land — their signatures and vocabulary do not exist
+> in the tree yet. Track (A) (domain commands) and track (C)'s KV mechanics are NOT blocked, except
+> that track (A)'s `Service` method signatures should be written caller-shaped (§0.2).
 
 ### PORTAL-10 verification-integrity rules (binding on every phase plan)
 
@@ -1158,8 +1383,9 @@ external-mode-specific behavior. Applying that rule:
 
 | Pattern | STRIDE | Standard Mitigation |
 |---------|--------|---------------------|
-| Over-broad system-subject seed (`permit(principal is system, action, resource)`) | Elevation of Privilege | Scope the new seed to `resource is character` and `action in ["read","write"]` only — never a bare `action` |
-| Bare `"system"` subject reaching a request context that is not a system context | Elevation of Privilege | Already fail-closed: `SYSTEM_SUBJECT_REJECTED` unless `access.IsSystemContext(ctx)` (`internal/access/policy/engine.go:92-101`). Prefer the prefixed `"system:<x>"` + explicit seed over the bypass |
+| Over-broad job seed (blanket `action in ["read","write"]` over every character) | Elevation of Privilege | D-54 instance-scoping: bind `action.job.trigger_event_type` AND `action.job.trigger_subject == resource.id` in the `when` clause — "a blanket permit is the ceiling, not the target" (02.2-CONTEXT, carried from D-45's surviving guidance) |
+| Reactor authorization drifting back to a `system:` subject or `WithSystemSubject` bypass | Elevation of Privilege | D-45 is struck; 02.2 criterion 1 requires `WithSystemSubject` on no reactor/flusher path. The bare-`"system"` route stays fail-closed regardless: `SYSTEM_SUBJECT_REJECTED` unless `access.IsSystemContext(ctx)` (`internal/access/policy/engine.go:92-101`) |
+| Handler-supplied provenance making the instance-scope check tautological | Tampering | D-55: attributes are stamped at the consumer boundary before handler logic runs; the handler independently derives the resource, so a wrong derivation is DENIED rather than self-authorized |
 | Retire used to evict another player's character | Elevation of Privilege | The `resource.character.id == principal.character.id` predicate in the self-retire seed; paired positive control in the test |
 | SQL injection via status | Tampering | Parameterized `$2`; `Status` is a typed const, never caller-supplied text |
 | Reactor evicting a character that was un-retired between emit and delivery | Tampering / DoS | Read-current-state guard before each effect (§5.3) |
@@ -1217,8 +1443,12 @@ external-mode-specific behavior. Applying that rule:
 | A3 | A 5-minute throttle window and a comparable flush interval are reasonable defaults | §4 | Purely a tuning value; CONTEXT explicitly leaves it to the planner |
 | A4 | `character_retired` / `character_unretired` payloads should be `{character_id, status}` | §2.5 | Wire-contract shape; a different field set is equally valid but is one-way once emitted |
 | A5 | The reactor and the flusher are two separate Go packages (not one) | §3 | CONTEXT mandates two *subsystems*; package layout is a plan decision |
-| A6 | `Store.DeleteByCharacter` returns `(nil, nil)` when no session exists (rather than an error) — the basis for the reactor's idempotency gate | §5.3 | If it errors on absence, the redelivery guard must be written differently. **Verify the implementation body before writing the handler.** |
+| ~~A6~~ | ~~`Store.DeleteByCharacter` returns `(nil, nil)` when no session exists~~ **CLOSED 2026-08-07 — VERIFIED**: `pgx.ErrNoRows` → `return nil, nil` `[VERIFIED: internal/store/session_store.go:813-827]` (`DELETE FROM sessions WHERE character_id = $1 AND status IN ('active','detached') RETURNING …`). The idempotency gate in §5.3 is sound as written. | §5.3 | — |
 | A7 | Docker is available on the execution host | Environment | `task test:int` cannot run |
+| A8 | 02.1 lands typed callers as `world.HumanCaller(subjectID)` / `world.JobCaller(name, provenance)` / `world.SystemCaller()` with those approximate names/arities | §0.2 | Phase 3 signatures/fixtures written against the wrong constructor shapes; mitigated by a plan-level "reconcile against landed 02.1" note. Design pinned only in D-56/D-57 — **no code exists.** |
+| A9 | Phase 3 (not 02.2) ships the real `job:retirement` seed + registry registration, since 02.2 is fixture-only (D-52) and Phase 3 "brings the first real consumers" | §0.4-2 | If 02.2 ships them, Phase 3 double-plans a seed and the `abac-reviewer` gate fires for nothing; if neither ships them, the reactor is denied at runtime. **Needs cross-phase confirmation.** |
+| A10 | The D-46 relocation (neutral consumer package) is still Phase 3's task and 02.2 stamps its fixture elsewhere or pulls the relocation forward | §0.4-1 | Duplicate relocation work, or Phase 3 building the stamp seam twice. **Sequencing decision for whichever phase plans first.** |
+| A11 | The `trigger_subject` attribute is normalized to the bare aggregate ID (comparable to `resource.id` with `==`), not the full `events.<game>.character.<id>` subject | §0.3 | The D-54 instance-scoping seed never matches and every reactor move is denied. 02.2's fixture settles it; Phase 3 consumes it. |
 
 ---
 
@@ -1238,10 +1468,10 @@ external-mode-specific behavior. Applying that rule:
    - Recommendation: minimal honest amendment (exemption clause, explicitly naming the writer and why),
      with the deeper "world-state vs operational writer" question left in CONTEXT's separate todo.
 
-3. **Where does `createConsumerWithRetry` live after this phase?**
-   - What we know: unexported in `internal/eventbus/audit`, shared by two callers in that package.
-   - Recommendation: export it as `audit.CreateConsumerWithRetry` (smallest diff), or relocate to a
-     neutral `internal/eventbus` helper. Decide in the plan; do not leave it to the executor.
+3. **~~Where does `createConsumerWithRetry` live after this phase?~~ SETTLED by D-46** (2026-08-06,
+   after this question was first raised): it moves to a neutral shared package (e.g.
+   `internal/eventbus/consumer`) with `consumerCreateBackoffs`; both audit callers migrate;
+   error codes preserved. **The residual question is WHO lands it** — see question 7.
 
 4. **Which package hosts the flusher's writer-boundary call?**
    - What we know: `UPDATE characters` must live in `internal/world/postgres`; the flusher's package
@@ -1252,6 +1482,32 @@ external-mode-specific behavior. Applying that rule:
 5. **Where in the pinned topological order do the two new subsystems land?**
    - What we know: `topoSort` tie-breaks by `SubsystemID` value; new IDs sort last within their tier.
    - Recommendation: derive it by running the test once and reading the failure diff, not by hand.
+
+6. **What per-execution context does the timer-driven `last_active_at` flusher present?** (02.2-CONTEXT
+   open question 1 — reserved; **MUST NOT be invented by a Phase 3 planner**.)
+   - What we know: the D-54 provenance triple assumes a triggering event; the flusher has none. The
+     flusher's own write crosses no ABAC chokepoint (direct writer-boundary call, §0.4-3), so nothing
+     breaks functionally if it stays outside the job model — but 02.2 criterion 4's universality claim
+     is then false for an entire class of job.
+   - Candidate shapes (recorded in 02.2-CONTEXT, not chosen): a `trigger_kind` (`event` vs `schedule`)
+     with per-kind attribute sets; or tick/window-as-provenance.
+   - Recommendation: surface to the user during 02.2 planning; Phase 3's plan carries a placeholder
+     that consumes whichever answer lands.
+
+7. **Who lands the D-46 relocation — 02.2 (which needs the stamp site for its fixture) or Phase 3
+   (whose CONTEXT owns the decision)?** (§0.4-1)
+   - Recommendation: resolve when the first of the two phases is planned; Phase 3's plan should carry
+     an "if already landed by 02.2, consume it" branch.
+
+8. **Which phase ships the real `job:retirement` seed + registry registration?** (§0.4-2, A9)
+   - What we know: 02.2 is fixture-only by decision (D-52); D-47's "seed work leaves this phase
+     entirely" sentence was written about the struck `system:` seed, not about job seeds.
+   - Recommendation: Phase 3 ships its consumers' seeds against 02.2's landed vocabulary; confirm
+     with the user, and note the `abac-reviewer` gate fires either way.
+
+9. **(Not Phase 3's, but blocks its mental model)** `SystemCaller()` vs the S1 defense — a caller
+   *value* must influence the *context* (`engine.go:92-101` requires both the bare subject AND
+   `IsSystemContext(ctx)`). Owned by 02.1's research flag; Phase 3 never uses `SystemCaller`.
 
 ---
 
@@ -1267,6 +1523,7 @@ external-mode-specific behavior. Applying that rule:
 - `internal/presence/emitter.go`, `internal/core/session_ended_payload.go`, `internal/session/session.go`
 - `internal/auth/auth_service.go`, `internal/auth/character_reaping.go`, `internal/grpc/lifecycle_handler.go`, `internal/grpc/command_handler.go`, `internal/grpc/auth_handlers.go`, `cmd/holomush/sub_grpc.go`
 - `internal/access/prefix.go`, `internal/access/policy/engine.go`, `internal/access/policy/seed.go`, `internal/access/policy/types/types.go`, `internal/access/setup/seed_coverage.go`
+- **2026-08-07 re-grounding pass:** `internal/world/service.go:209-254, 985-992` (checkAccess `nil`, `MoveCharacter` shape), `internal/access/policy/engine.go:245-265` (attrs overlay), `internal/access/policy/compiler.go:149-170` (`action` hard-error), `internal/access/policy/attribute/plugin_provider.go` (full), `internal/access/policy/attribute/resolver.go:175-214` (bag stamping), `internal/access/policy/seed.go:320-334` (`action.dispatch_location`), `internal/store/session_store.go:813-827` (`DeleteByCharacter` — closes A6), `rg` over `internal/presence/` + `internal/store/session_store.go` for ABAC-chokepoint absence
 - `internal/bootstrap/setting.go`, `internal/bootstrap/setup/subsystem.go`
 - `internal/store/migrations/000001_baseline.sql`, `internal/store/migrations/000054_character_identity_and_lifecycle.sql`
 - `docs/architecture/invariants.yaml` (INV-WORLD-4/5/6/7)
@@ -1276,8 +1533,10 @@ external-mode-specific behavior. Applying that rule:
 - **Pinned module source:** `$GOMODCACHE/github.com/nats-io/nats.go@v1.52.0/jetstream/kv.go`, `.../stream_config.go`
 
 ### Secondary (MEDIUM confidence)
-- `.claude/rules/*` (testing, invariants, event-conventions, database-migrations, logging, search-tools, gateway-boundary, subagent-briefing)
-- `.planning/phases/03-world-character-commands/03-CONTEXT.md`, `.planning/REQUIREMENTS.md`, `.planning/STATE.md`
+- `.claude/rules/*` (testing, invariants, event-conventions, database-migrations, logging, search-tools, gateway-boundary, subagent-briefing, abac-providers)
+- `.planning/phases/03-world-character-commands/03-CONTEXT.md` (incl. D-45 struck / D-46 / D-47), `.planning/REQUIREMENTS.md`, `.planning/STATE.md`
+- **`.planning/phases/02.2-background-job-authorization-model/02.2-CONTEXT.md`** (D-48…D-60, open questions 1-4) — the upstream decision record §0 is grounded on; its own line-refs were "verified 2026-08-07" by that phase's discussion and spot-re-verified here
+- `.planning/ROADMAP.md` §"Phase 02.1: World Caller Model" and §"Phase 02.2" (goals, success criteria, verified blast radius, research flags)
 
 ### Tertiary (LOW confidence)
 - None. No web search was performed; the nats.go API was read from the pinned module source rather than from documentation.
@@ -1290,12 +1549,13 @@ external-mode-specific behavior. Applying that rule:
 - Census semantics: **HIGH** — the meta-test was read line-by-line and both assertions quoted verbatim.
 - Subsystem cascade: **HIGH** — every one of the 13 sites opened; counts derived from the tree, not from memory.
 - JetStream KV API: **HIGH** — read from the pinned `v1.52.0` source; the `FileStorage = iota` default is a direct quote.
-- Reactor substrate: **HIGH** for the consumer/subject/session/presence seams; **MEDIUM** for the idempotency design (A6 needs one more read).
-- ABAC: **HIGH** for the absence of a system→character permit and for the open action vocabulary; **MEDIUM** for the recommended seed text (untested DSL).
+- Reactor substrate: **HIGH** — the consumer/subject/session/presence seams all opened; the idempotency gate's A6 premise is now VERIFIED (`session_store.go:813-827`).
+- ABAC current-tree state: **HIGH** — chokepoint locations, seed inventory, `action` hard-error, provider template, and attrs overlay all opened this session.
+- **Post-02.1/02.2 substrate: LOW** — 02.1 has no artifacts; 02.2 has a CONTEXT but no plan. Every §0 claim about their *output* is `[ASSUMED]` against D-48…D-60/D-56/D-57 decision records; the four §0.4 interlocks are deliberately unresolved planning inputs.
 - Invariant amendment: **HIGH** for current state; **MEDIUM** for the recommended wording (A2).
 
-**Research date:** 2026-08-06
-**Valid until:** 2026-09-05 (30 days — in-repo seams are stable; `main` moves, so re-verify `file:line` citations if the branch rebases past a world/lifecycle change)
+**Research date:** 2026-08-06; re-grounded 2026-08-07 against the 02.1/02.2 split
+**Valid until:** 2026-09-05 — **but §0 must be re-checked the moment 02.1 or 02.2 produces artifacts** (RESEARCH/PLAN files or landed code): constructor names, the stamp-site owner, seed placement, and the flusher-provenance answer all supersede the `[ASSUMED]` entries here. In-repo `file:line` citations remain valid while the branch sits at `23f7f75d0` (intervening commits since 2026-08-06 are docs-only — verified via `git log`).
 
 **REFUTED CONTEXT claims (summary):**
 1. The "5-site compile cascade" — it is **13 sites across 5 files**, one of which pins an exact ordered 18-element sequence.
@@ -1304,6 +1564,12 @@ external-mode-specific behavior. Applying that rule:
 4. `createConsumerWithRetry` as "a third user" — it is **unexported** and unreachable from another package as written.
 5. `internal/eventbus/subsystem.go:214-222 resolveStoreDir` — `:214` is the call site; the function is at `:490-501`.
 6. Implied by the brief: that Retire should follow `Rename`'s repo-writes-envelope shape — the census AST cross-check and the reader-view compile fence both forbid it.
+
+**SUPERSEDED findings from the 2026-08-06 version of this file (struck in place, 2026-08-07):**
+1. §5.5's `seed:system-retirement-character` recommendation and §8.3's matching row — D-45 → D-47; the reactor authorizes via 02.2's job model (§0.3).
+2. Open question 3 ("where does `createConsumerWithRetry` live") — settled by D-46 (neutral shared package); the residual is ownership/sequencing (§0.4-1).
+3. A6 — closed as VERIFIED (`DeleteByCharacter` returns `(nil, nil)` on absence).
+4. All `world.Service` signatures shown as `(ctx, subjectID string, …)` — the tree's current shape, but 02.1 retypes them before Phase 3 executes (§0.2).
 
 **NOT FOUND symbols (do not invent):**
 - `CharacterRepository.SetStatus` / `.Retire` — no status writer exists; must be created.
