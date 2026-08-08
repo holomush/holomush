@@ -779,12 +779,20 @@ scopes:
 
   - name: INV-WORLD
     description: "World-model write integrity: atomic state+feed emission, delta-parity of the affected-aggregates manifest,
-      ordered gap-free feed publication, and the raw-world-write boundary. Registered by 05-12 (Phase 5, MODEL-04)."
+      ordered gap-free feed publication, and the raw-world-write boundary. Registered by 05-12 (Phase 5, MODEL-04). ALSO covers
+      the shape of the world.Service COMMAND API itself -- the typed caller argument every authorizing command takes in its
+      second parameter slot, and the caller's execution context that checkAccess forwards to the ABAC request (INV-WORLD-8,
+      AUTHZ-01, phase 02.1)."
     boundary: "World-model correctness guarantees born from the MODEL-01 ADR (holomush-i4784, Option B: CRUD-canonical world
-      state + optimistic-concurrency version guard + transactional outbox / ordered atomic feed). Does NOT include: crypto
-      payload encryption (→ INV-CRYPTO), plugin-owned scene storage (plugin_core_scenes.scene_participants is out of the world
-      fence, D-05), migration timestamp discipline (→ INV-STORE). status: pending because internal/world/ carries pre-existing
-      FOREIGN bare INV-N tokens from other design specs (the holomush-72ou per-property-ABAC INV-1/INV-2 in service.go / service_test.go)
+      state + optimistic-concurrency version guard + transactional outbox / ordered atomic feed), PLUS the world.Service command-API
+      caller argument and checkAccess's forwarding of that caller's execution context (subject string, system marker, attribute
+      channel) into the ABAC request -- world-owned surface that is not itself born from MODEL-01, added deliberately by phase
+      02.1 (AUTHZ-01) rather than filed under INV-ACCESS, because the guarantee is about the shape of world.Service's own
+      API and not about how access control decides. Does NOT include: ABAC policy-evaluation semantics, the S1 system-subject
+      double-gate's own behavior, or attribute-provider behavior, all of which remain INV-ACCESS; crypto payload encryption
+      (→ INV-CRYPTO), plugin-owned scene storage (plugin_core_scenes.scene_participants is out of the world fence, D-05),
+      migration timestamp discipline (→ INV-STORE). status: pending because internal/world/ carries pre-existing FOREIGN bare
+      INV-N tokens from other design specs (the holomush-72ou per-property-ABAC INV-1/INV-2 in service.go / service_test.go)
       that the provenance residual-walk would misattribute to this scope; the four INV-WORLD-N entries are nonetheless binding:
       bound (born canonical — no legacy-token migration is pending for THIS scope)."
     status: pending
@@ -5119,3 +5127,26 @@ invariants:
       its state change together with its one outbox envelope in the SAME transaction (INV-WORLD-1) so a committed character
       mutation without its envelope is impossible."
     binding: pending
+  - id: INV-WORLD-8
+    scope: INV-WORLD
+    origin_spec: ".planning/phases/02.1-world-caller-model/02.1-CONTEXT.md"
+    summary: "CALLER-ARGUMENT: every public world.Service COMMAND -- an exported *Service method whose first parameter is
+      a context.Context -- that performs an authorization check (its body calls the receiver's checkAccess) declares the opaque
+      world.Caller value in its second parameter slot rather than a bare subject string, and checkAccess forwards that caller's
+      attribute channel to the ABAC request (types.NewAccessRequest's attributes argument) rather than a hardcoded nil, so
+      a caller-carried attribute surfaces in the policy DSL as action.<key> and SystemCaller() satisfies BOTH halves of the
+      S1 double-gate without the call site stamping access.WithSystemSubject of its own. NO public world.Service command --
+      authorizing or not -- declares a bare string in that second slot. world.Service.UpdateCharacterPreferences is the SINGLE
+      deliberate exception to the caller-argument clause: it takes no subject at all (its second parameter is the character
+      ULID) and deliberately runs no checkAccess, because it is the settings-subsystem persistence primitive whose authorization
+      decision is made at the settings command layer and whose predecessor raw-store path had no ABAC -- gating it here would
+      be an out-of-scope behavior change (D-05, per internal/world/service.go:862 and that method's own doc comment). The
+      scoping to COMMANDS is likewise deliberate and is mirrored word-for-word by the census predicate: world.Service.SetMovementHook
+      (internal/world/service.go:160) is an exported lifecycle setter with no context.Context and no authorization check,
+      so a summary phrased over every exported world.Service METHOD would claim more than the binding proves. The census is
+      structural over go/ast, not a name list, so it follows a command that gains or loses its authorization check and catches
+      a future command written with a bare subjectID string -- which the compiler would accept (AUTHZ-01, phase 02.1)."
+    binding: bound
+    asserted_by:
+      - "test/meta/world_caller_census_test.go"
+      - "internal/world/caller_test.go"
