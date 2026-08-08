@@ -335,7 +335,7 @@ func TestDeleteLocationCascadesToItsEntityProperties(t *testing.T) {
 
 	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "location", locID), "property should exist before delete")
 
-	err := svc.DeleteLocation(ctx, world.HumanCaller("system"), locID)
+	err := svc.DeleteLocation(ctx, world.SystemCaller(), locID)
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, countPropertiesForParent(ctx, t, "location", locID), "properties should be deleted")
@@ -374,7 +374,7 @@ func TestDeleteObjectCascadesToItsEntityProperties(t *testing.T) {
 
 	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "object", objID), "property should exist before delete")
 
-	err := svc.DeleteObject(ctx, world.HumanCaller("system"), objID)
+	err := svc.DeleteObject(ctx, world.SystemCaller(), objID)
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, countPropertiesForParent(ctx, t, "object", objID), "properties should be deleted")
@@ -413,7 +413,7 @@ func TestDeleteCharacterCascadesToItsEntityProperties(t *testing.T) {
 
 	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "character", charID), "property should exist before delete")
 
-	err := svc.DeleteCharacter(ctx, world.HumanCaller("system"), charID)
+	err := svc.DeleteCharacter(ctx, world.SystemCaller(), charID)
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, countPropertiesForParent(ctx, t, "character", charID), "properties should be deleted")

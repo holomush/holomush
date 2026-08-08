@@ -268,3 +268,73 @@ func TestWorldServiceCallerParamSlotHoldsNoBareStringOnAnyCommand(t *testing.T) 
 			cmd.name, cmd.file)
 	}
 }
+
+// TestWorldServiceMethodsAllDeclareNamedReceivers pins the census's own
+// PRECONDITION, which was silent until a code review surfaced it.
+//
+// worldServiceCommands discriminates a *Service method via serviceReceiverName
+// (world_envelope_census_test.go:145), and that helper returns ok=false for an
+// ANONYMOUS receiver — `func (*Service) Foo(...)` — because it has no name to
+// hand to bodyReferencesSelector. The collector then `continue`s, so such a
+// method is dropped from the command universe ENTIRELY rather than censused.
+// Both INV-WORLD-8 assertions above are scoped to that universe, so an
+// anonymous-receiver command carrying a bare `subjectID string` would be
+// invisible to the fence that exists to catch exactly that.
+//
+// The gap is narrow — an anonymous receiver cannot reference s.checkAccess, so
+// such a method can never be an AUTHORIZING command, leaving the first clause
+// of INV-WORLD-8 intact — but the no-bare-string clause is genuinely weakened.
+// Rather than widen the shared leaf helper (whose other consumer,
+// serviceMutatingMethods, depends on its current contract), this test forbids
+// the construct outright, which makes the census universe provably total.
+//
+// No such method exists today; this is a tripwire, not a repair.
+func TestWorldServiceMethodsAllDeclareNamedReceivers(t *testing.T) {
+	root := findRepoRoot(t)
+	dir := filepath.Join(root, "internal", "world")
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err, "read internal/world")
+
+	fset := token.NewFileSet()
+	checked := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, parseErr := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
+		require.NoErrorf(t, parseErr, "parse internal/world/%s", name)
+
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Recv == nil || len(fn.Recv.List) == 0 {
+				continue
+			}
+			recv := fn.Recv.List[0]
+			if !isServiceReceiverType(recv) {
+				continue
+			}
+			checked++
+			assert.NotEmptyf(t, recv.Names,
+				"world.Service.%s (internal/world/%s) declares an ANONYMOUS receiver — serviceReceiverName cannot name it, so worldServiceCommands drops it from the census universe and both INV-WORLD-8 assertions stop covering it; give the receiver a name (conventionally `s`)",
+				fn.Name.Name, name)
+		}
+	}
+
+	require.NotZerof(t, checked,
+		"no Service-receiver methods found in internal/world — the receiver-type predicate matched nothing, so this tripwire would pass vacuously")
+}
+
+// isServiceReceiverType reports whether a receiver field's TYPE is Service or
+// *Service, independent of whether the receiver is named. This is deliberately
+// the name-blind half of serviceReceiverName: telling "not a Service method"
+// apart from "a Service method with no receiver name" is the whole point of the
+// test above, and the shared helper collapses both into (\"\", false).
+func isServiceReceiverType(recv *ast.Field) bool {
+	expr := recv.Type
+	if star, ok := expr.(*ast.StarExpr); ok {
+		expr = star.X
+	}
+	return isIdentNamed(expr, "Service")
+}

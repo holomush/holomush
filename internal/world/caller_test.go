@@ -306,6 +306,8 @@ func TestWorldServiceCallerAttributesReachActionBag(t *testing.T) {
 // The negative half is what proves the context marker is load-bearing rather
 // than the subject string alone: the same bare "system" subject wrapped as a
 // HumanCaller — which stamps no marker — must be REJECTED.
+//
+// Verifies: INV-WORLD-8
 func TestWorldServiceSystemCallerSatisfiesTheS1GateWithoutAmbientContext(t *testing.T) {
 	// A policy that permits nothing relevant: the S1 bypass short-circuits
 	// before policy lookup, so a permit here would confuse the two mechanisms.

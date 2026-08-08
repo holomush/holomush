@@ -161,6 +161,16 @@ produces hunks at all four **real** `internal/plugin/hostcap/world.go` sites
 `internal/world/postgres/cascade_delete_test.go` sites (`:338, :377, :416`). A
 path-glob ignore of either file would have destroyed those.
 
+**Historical measurement — do not re-run this one.** The retention proof above
+was taken on the PRE-FLIP tree, where those seven sites still carried a bare
+subject string. Post-flip every rule reads 0 hunks there (the D-63 contract), so
+the paragraph records *why the constraint was shaped this way*; it is not a check
+to re-run. The three `cascade_delete_test.go` sites were subsequently changed
+from `world.HumanCaller("system")` to `world.SystemCaller()`, closing a
+doc-vs-code contradiction against `internal/world/caller.go:87` — the migrated
+subject is byte-identical (`systemSubject == "system"`), and those tests run
+under `policytest.AllowAllEngine()`, so no S1 behaviour changed.
+
 > **Measurement note (2026-08-08).** On the current tree the `SUBJ` allowlist and
 > the `RECV` blocklist each independently exclude the same 20 sites — argument 2
 > at every one of them is spelled `charID` / `locID` / `characterID`, none of

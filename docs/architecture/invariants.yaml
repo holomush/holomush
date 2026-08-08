@@ -5140,7 +5140,7 @@ invariants:
       deliberate exception to the caller-argument clause: it takes no subject at all (its second parameter is the character
       ULID) and deliberately runs no checkAccess, because it is the settings-subsystem persistence primitive whose authorization
       decision is made at the settings command layer and whose predecessor raw-store path had no ABAC -- gating it here would
-      be an out-of-scope behavior change (D-05, per internal/world/service.go:862 and that method's own doc comment). The
+      be an out-of-scope behavior change (D-05, per internal/world/service.go:864 and that method's own doc comment). The
       scoping to COMMANDS is likewise deliberate and is mirrored word-for-word by the census predicate: world.Service.SetMovementHook
       (internal/world/service.go:160) is an exported lifecycle setter with no context.Context and no authorization check,
       so a summary phrased over every exported world.Service METHOD would claim more than the binding proves. The census is
