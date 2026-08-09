@@ -16,7 +16,9 @@ import (
 // declared kinds or any per-type payload schema changes. Each declared KindSchema
 // ALSO carries its own SchemaVersion (the per-type payload schema version), so a
 // single kind's payload can evolve independently of the registry revision.
-const AppSchemaVersion = 1
+// Revision 2 (plan 03-01) adds the character lifecycle kinds
+// KindCharacterRetired and KindCharacterUnretired.
+const AppSchemaVersion = 2
 
 // The declared world-change envelope kinds. These are the taxonomy VOCABULARY the
 // mechanical emission rollout (05-10/05-11) wires each world write command to; the
@@ -54,6 +56,13 @@ const (
 	KindCharacterDeleted           = "character_deleted"
 	KindCharacterMoved             = "character_moved"
 	KindCharacterPreferencesUpdate = "character_preferences_update"
+	// KindCharacterRetired is the SOFT-retire lifecycle kind (D-31/D-32, plan
+	// 03-01). It is NOT a tombstone: the row, its properties and its name
+	// reservation all survive (INV-WORLD-6), and the operation is reversible via
+	// KindCharacterUnretired. It carries its own kind rather than reusing
+	// character_updated because the census bijection is one-producer-of-record
+	// and character_updated already belongs to UpdateCharacterDescription.
+	KindCharacterRetired = "character_retired"
 )
 
 // PayloadField describes one field of a kind's intent-level, new-values-only
@@ -111,6 +120,7 @@ var registry = func() map[string]KindSchema {
 		{Kind: KindCharacterDeleted, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Tombstone: true, Payload: tombstonePayload},
 		{Kind: KindCharacterMoved, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: movePayload},
 		{Kind: KindCharacterPreferencesUpdate, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterPreferencesPayload},
+		{Kind: KindCharacterRetired, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterLifecyclePayload},
 	}
 	m := make(map[string]KindSchema, len(entries))
 	for _, e := range entries {
@@ -160,6 +170,14 @@ var (
 	characterPreferencesPayload = []PayloadField{
 		{Name: "character_id", Type: "ulid"},
 		{Name: "preferences", Type: "json"},
+	}
+	// characterLifecyclePayload is the shape both lifecycle kinds declare: the
+	// character id plus the COMMITTED new status. characterUpdatePayload is not
+	// reusable — it declares a description field these kinds never carry, and
+	// the registry rule is new-values-only and erasure-safe.
+	characterLifecyclePayload = []PayloadField{
+		{Name: "character_id", Type: "ulid"},
+		{Name: "status", Type: "string"},
 	}
 )
 

@@ -303,6 +303,18 @@ type CharacterUpdateChangePayload struct {
 	Description string `json:"description"`
 }
 
+// CharacterLifecycleChangePayload is the new-values-only payload for the
+// character lifecycle envelopes (character_retired / character_unretired). It
+// carries the character id and the COMMITTED new status.
+//
+// It is a distinct shape from CharacterUpdateChangePayload rather than a reuse:
+// that payload declares a description field a lifecycle change never carries,
+// and the taxonomy registry's rule is new-values-only and erasure-safe.
+type CharacterLifecycleChangePayload struct {
+	CharacterID string `json:"character_id"`
+	Status      string `json:"status"`
+}
+
 // TombstonePayload is the payload for a delete envelope: only the id of the
 // deleted aggregate. Cascaded aggregates (a location's exits, a bidirectional
 // exit's reverse) are represented in the envelope's affected-aggregates manifest
@@ -402,6 +414,20 @@ func BuildCharacterUpdatePayload(characterID ulid.ULID, description string) ([]b
 	})
 	if err != nil {
 		return nil, oops.Wrapf(err, "marshal character update payload")
+	}
+	return payload, nil
+}
+
+// BuildCharacterLifecyclePayload marshals the new-values-only character
+// lifecycle payload (character id + the committed new status) for a
+// character_retired / character_unretired envelope.
+func BuildCharacterLifecyclePayload(characterID ulid.ULID, status Status) ([]byte, error) {
+	payload, err := json.Marshal(CharacterLifecycleChangePayload{
+		CharacterID: characterID.String(),
+		Status:      string(status),
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal character lifecycle payload")
 	}
 	return payload, nil
 }

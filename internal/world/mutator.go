@@ -258,6 +258,28 @@ func (m *worldMutator) updateCharacterPreferences(
 	})
 }
 
+// setCharacterStatus builds the character-lifecycle write closure — capturing
+// the PRIVATE character writer plus the target status — and routes it through
+// mutate(). ONE executor serves BOTH lifecycle commands: the census keys on
+// world.Service method names, not on executor methods, so RetireCharacter and
+// UnretireCharacter each keep their own descriptor and their own taxonomy kind
+// while sharing this closure builder.
+//
+// expectedVersion is the CALLER's expected version threaded from service.go,
+// NOT a freshly-read one — passing the just-read char.Version would make the
+// guard vacuous for caller staleness (INV-WORLD-7).
+func (m *worldMutator) setCharacterStatus(
+	ctx context.Context,
+	intent wmodel.EnvelopeIntent,
+	characterID ulid.ULID,
+	status Status,
+	expectedVersion int,
+) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.characterWriter.SetStatus(txCtx, characterID, status, expectedVersion)
+	})
+}
+
 // updateCharacter routes a character update through mutate() (character_updated).
 // char carries the read Version as the CAS guard; the character writer's Update
 // finalizes the character_updated envelope from the returned delta in the same tx.

@@ -879,13 +879,107 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID Call
 	return nil
 }
 
-// RetireCharacter soft-retires a character. STUB — implemented in the GREEN half
-// of plan 03-01 Task 1.
-func (s *Service) RetireCharacter(_ context.Context, _ Caller, characterID ulid.ULID, expectedVersion int) error {
-	return oops.Code("CHARACTER_RETIRE_FAILED").
-		With("character_id", characterID.String()).
-		With("expected_version", expectedVersion).
-		Errorf("RetireCharacter not implemented")
+// RetireCharacter SOFT-retires a character: it writes characters.status =
+// retired, bumps the version, and emits exactly one character_retired envelope
+// in the SAME transaction (IDENT-04, IDENT-10).
+//
+// It destroys nothing. The row, its entity properties and its name reservation
+// all survive — retire, idle-out and purge are three distinct operations
+// (PORTAL-04), and only a hard DeleteCharacter writes a tombstone. The
+// operation is reversible through UnretireCharacter.
+//
+// # The guard chain, in this order
+//
+// The ORDER is load-bearing, not stylistic:
+//
+//  0. expectedVersion <= 0 -> CHARACTER_VERSION_REQUIRED, BEFORE any read. The
+//     repository's expectedVersion == 0 unversioned-write affordance exists for
+//     repo-level callers; INV-WORLD-7 requires an existing-row character
+//     mutation to CARRY an expected version, so this command makes that
+//     affordance unreachable rather than merely discouraged.
+//  1. checkAccess. The action is "retire", DISTINCT from "write" (D-40), so
+//     policy can grant retire without granting every character write. There is
+//     deliberately NO ownership predicate here: "their own character" is an
+//     ABAC policy decision, not a Go conditional (D-39).
+//  2. Get — its Version arms the precheck and its Status arms the lifecycle
+//     guard.
+//  3. Version precheck: a caller version that does not match the stored version
+//     is WORLD_CONCURRENT_EDIT. It runs BEFORE the lifecycle guard so a stale
+//     caller racing a writer that already retired the row sees the CONFLICT,
+//     not that writer's outcome (CHARACTER_ALREADY_RETIRED) — the conflict is
+//     the honest answer, and reporting the racing writer's state would tell the
+//     caller their own stale view was authoritative.
+//  4. Lifecycle guard (exhaustive switch over the closed vocabulary).
+//  5. CAS carrying the CALLER's expectedVersion — never the freshly-read
+//     char.Version, which would make step 3's guarantee vacuous at the write.
+//
+// Nothing is written and no envelope is emitted unless every step passes.
+//
+// # Why this body is not factored into a shared helper
+//
+// UnretireCharacter runs the SAME chain in the same order and the two bodies
+// are deliberately parallel rather than deduplicated. Two meta-tests require
+// it: the envelope census cross-checks that each registered command is a
+// *Service method whose own body references the s.mutator selector
+// (test/meta/world_envelope_census_test.go), and the caller-param census
+// requires each command's own body to call s.checkAccess
+// (test/meta/world_caller_census_test.go). A shared helper would hide both
+// signals from the AST and turn two green censuses red.
+func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterID ulid.ULID, expectedVersion int) error {
+	// (0) Reject an absent/zero/negative caller version BEFORE any read.
+	if expectedVersion <= 0 {
+		return oops.Code("CHARACTER_VERSION_REQUIRED").
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			Errorf("retire requires a caller-supplied expected_version >= 1")
+	}
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_RETIRE_FAILED").Errorf("character repository not configured")
+	}
+	// (1) Authorization. D-39: no ownership predicate in Go — policy is the control.
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, caller, "retire", resource, prefixCharacter); err != nil {
+		return err
+	}
+	// (2) Read: Version arms the precheck, Status arms the lifecycle guard.
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", characterID)
+		}
+		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+	// (3) Version precheck — BEFORE any lifecycle-state guard.
+	if char.Version != expectedVersion {
+		return oops.Code(CodeConcurrentEdit).
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			With("current_version", char.Version).
+			Wrap(ErrConcurrentEdit)
+	}
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_RETIRE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildCharacterLifecyclePayload(characterID, StatusRetired)
+	if err != nil {
+		return oops.Code("CHARACTER_RETIRE_FAILED").Wrapf(err, "build character lifecycle payload %s", characterID)
+	}
+	// (5) The status write and its ONE envelope commit or roll back together.
+	// The CAS carries the CALLER's expectedVersion, never char.Version.
+	intent := s.buildIntent(kindCharacterRetired, wmodel.AggregateCharacter, characterID, caller.subject, payload)
+	if _, err := s.mutator.setCharacterStatus(ctx, intent, characterID, StatusRetired, expectedVersion); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				With("expected_version", expectedVersion).
+				Wrap(err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "retire character %s", characterID)
+		}
+		return oops.Code("CHARACTER_RETIRE_FAILED").Wrapf(err, "retire character %s", characterID)
+	}
+	return nil
 }
 
 // UpdateCharacterPreferences persists a character's whole preferences bag
