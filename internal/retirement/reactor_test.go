@@ -432,6 +432,30 @@ func TestNewDeliveryDerivesTheCharacterIndependentlyOfTheSubject(t *testing.T) {
 	require.Equal(t, subjectChar.String(), d.Aggregate, "the provenance comes from the subject")
 }
 
+// TestAggregateFromSubjectRefusesEveryShapeThatIsNotTheFourTokenAggregate pins
+// the positional parse. A last-token read would return the FACET of a faceted
+// subject, which the instance-scoped seed then compares against resource.id --
+// default-denying the write, which classifyWorldError acks as terminal. The
+// fanout would be dropped with no retry behind a misleading "policy denied".
+func TestAggregateFromSubjectRefusesEveryShapeThatIsNotTheFourTokenAggregate(t *testing.T) {
+	charID := core.NewULID()
+
+	require.Equal(t, charID.String(),
+		aggregateFromSubject("events."+testGameID+".character."+charID.String()),
+		"the canonical four-token subject yields the bare aggregate ULID")
+
+	for _, subject := range []string{
+		"events." + testGameID + ".character." + charID.String() + ".facet",
+		"events." + testGameID + ".character",
+		"character." + charID.String(),
+		charID.String(),
+		"",
+	} {
+		require.Empty(t, aggregateFromSubject(subject),
+			"an unexpected subject shape MUST NOT masquerade as an aggregate id: %q", subject)
+	}
+}
+
 func TestNewDeliveryRejectsAnUndecodableBody(t *testing.T) {
 	eventID := core.NewULID()
 	_, err := newDelivery("events.main.character.x", retiredHeaders(eventID), []byte("not a protobuf envelope"))

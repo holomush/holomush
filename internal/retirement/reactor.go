@@ -205,11 +205,24 @@ func newDelivery(subject string, hdr nats.Header, data []byte) (delivery, error)
 // substring after the first ':' of the resource ref. A dotted subject or a
 // prefixed "character:<id>" ref compares unequal, and every job write then
 // silently default-denies.
+// It parses POSITIONALLY and refuses every other shape. The consumer filter
+// ends in ">", which admits any depth, so a faceted subject
+// (events.<game>.character.<ulid>.<facet>) would yield the FACET name under a
+// last-token read. That value is byte-compared against bags.Resource["id"] by
+// seed:job-retirement-instance-scoped, so it would not self-authorize — it
+// would default-deny, and classifyWorldError acks a deny as terminal, dropping
+// the fanout with no retry behind a misleading "policy denied" log. Returning
+// "" for an unrecognized shape keeps the deny (which is correct) while making
+// the cause legible, and never lets a facet name masquerade as an aggregate id.
+//
+// Today's world-envelope subjects are exactly four tokens
+// (internal/world/outbox/wire.go:159-160), so the faceted case is latent.
 func aggregateFromSubject(subject string) string {
-	if i := strings.LastIndex(subject, "."); i >= 0 {
-		return subject[i+1:]
+	parts := strings.Split(subject, ".")
+	if len(parts) != 4 { // events.<game>.character.<ulid>
+		return ""
 	}
-	return subject
+	return parts[3]
 }
 
 // handle is the Consume callback. It owns the ack decision; process owns the
