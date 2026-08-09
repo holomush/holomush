@@ -9,15 +9,21 @@ import (
 	"github.com/holomush/holomush/internal/world/wmodel"
 )
 
-// AppSchemaVersion is the versioned taxonomy schema registry's global
-// App-Schema-Version — the ARCH-04 / Phase-7 input. It stamps the taxonomy
-// REVISION that produced a world-change feed row; a consumer reads it to know
-// which taxonomy shape a payload was encoded against. Bump it whenever the set of
-// declared kinds or any per-type payload schema changes. Each declared KindSchema
-// ALSO carries its own SchemaVersion (the per-type payload schema version), so a
-// single kind's payload can evolve independently of the registry revision.
-// Revision 2 (plan 03-01) adds the character lifecycle kinds
-// KindCharacterRetired and KindCharacterUnretired.
+// AppSchemaVersion is a BUILD-TIME marker of this taxonomy registry's revision.
+//
+// IT IS NOT ON THE WIRE. Nothing stamps it onto a NATS header, a wmodel.Envelope,
+// or an outbox row, and no consumer can read it. The App-Schema-Version HEADER is
+// stamped from a DIFFERENT constant — eventbus.SchemaVersion, the proto envelope's
+// major version (internal/eventbus/publisher.go:62,304) — and wmodel.Envelope
+// carries only the per-kind SchemaVersion below. Bumping this constant therefore
+// documents a vocabulary change to a reader of this package; it does not signal
+// one to any consumer, and it changes no byte on the wire or on disk.
+//
+// Bump it whenever the set of declared kinds or any per-type payload schema
+// changes. Each declared KindSchema ALSO carries its own SchemaVersion (the
+// per-type payload schema version), so a single kind's payload can evolve
+// independently of this registry revision. Revision 2 (plan 03-01) adds the
+// character lifecycle kinds KindCharacterRetired and KindCharacterUnretired.
 const AppSchemaVersion = 2
 
 // The declared world-change envelope kinds. These are the taxonomy VOCABULARY the
