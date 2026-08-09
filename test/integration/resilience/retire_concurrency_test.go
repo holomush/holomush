@@ -139,7 +139,14 @@ var _ = Describe("IDENT-10: a stale caller-held expected_version is rejected by 
 			To(Succeed(), "A's retire must commit (its expected version still matches the stored row)")
 
 		midStatus, midVersion := readCharacter(ctx)
-		Expect(midStatus).To(Equal(string(world.StatusRetired)), "A's retire must have landed the status change")
+		// THIS is the load-bearing half of the guard-order proof: the row is
+		// ALREADY retired when B calls. So the lifecycle guard, had it run
+		// first, would have rejected B with CHARACTER_ALREADY_RETIRED. B
+		// receiving WORLD_CONCURRENT_EDIT below is therefore only possible if
+		// the version precheck ran BEFORE the lifecycle guard.
+		Expect(midStatus).To(Equal(string(world.StatusRetired)),
+			"A's retire must have landed the status change — and this is what arms the guard-order proof: "+
+				"the lifecycle guard is now live for B, so a WORLD_CONCURRENT_EDIT can only come from an EARLIER precheck")
 		Expect(midVersion).To(Equal(readVersion+1), "a committed retire bumps the version exactly once")
 
 		// B drives the SAME caller-held version — now stale by one. The precheck
@@ -151,12 +158,14 @@ var _ = Describe("IDENT-10: a stale caller-held expected_version is rejected by 
 
 		oopsErr, ok := oops.AsOops(errB)
 		Expect(ok).To(BeTrue(), "conflict must be an oops error")
+		// Guard order (03-01 R1): against a row that is ALREADY retired (asserted
+		// above), the version precheck runs BEFORE the lifecycle guard, so the
+		// stale caller sees the CONFLICT rather than the racing writer's outcome.
+		// A second assertion that this code is NOT codeAlreadyRetired would be
+		// decorative — it cannot fail unless this one already has.
 		Expect(oopsErr.Code()).To(Equal(world.CodeConcurrentEdit),
-			"the surfaced code is WORLD_CONCURRENT_EDIT (D-02: propagated unchanged)")
-		// The negative half: the guard ORDER proof. A stale caller must never be
-		// handed the racing writer's outcome.
-		Expect(oopsErr.Code()).NotTo(Equal(codeAlreadyRetired),
-			"guard order (03-01 R1): the version precheck runs BEFORE the lifecycle guard, so a stale caller sees the CONFLICT, never %s", codeAlreadyRetired)
+			"the surfaced code is WORLD_CONCURRENT_EDIT (D-02: propagated unchanged), never %s, "+
+				"even though the lifecycle guard was live", codeAlreadyRetired)
 		errutil.AssertErrorCode(suiteT, errB, world.CodeConcurrentEdit)
 
 		// The loser left no trace: no second status write, no second version bump.
