@@ -55,7 +55,8 @@ func TestNewSubsystemWithStorageForcesTheRequestedBackingStore(t *testing.T) {
 // never calling Prepare.
 func TestNewSubsystemAcquiresNoLiveResources(t *testing.T) {
 	s := NewSubsystem(Config{})
-	require.False(t, s.prepared, "constructor MUST NOT mark the subsystem prepared")
+	require.Nil(t, s.kv, "constructor MUST NOT acquire the KV bucket")
+	require.Nil(t, s.cons, "constructor MUST NOT create the durable consumer")
 	require.Nil(t, s.done, "constructor MUST NOT launch a work loop")
 }
 
@@ -77,16 +78,32 @@ func TestDependsOnExcludesItselfSoTheGraphStaysAcyclic(t *testing.T) {
 
 func TestPrepareIsIdempotent(t *testing.T) {
 	ctx := context.Background()
-	s := NewSubsystem(Config{})
+	kv := newFakeKV()
+	s := newFakeWiredSubsystem(t, kv, (&recordingWriter{}).write)
+
 	require.NoError(t, s.Prepare(ctx))
-	require.True(t, s.prepared)
+	first := s.kv
+	require.NotNil(t, first)
 	require.NoError(t, s.Prepare(ctx), "a repeated Prepare MUST be a no-op, not an error")
-	require.True(t, s.prepared)
+	require.Equal(t, first, s.kv, "a repeated Prepare MUST NOT reacquire the bucket")
+}
+
+// TestPrepareUsesTheIdempotentBucketConstructor pins the CreateOrUpdateKeyValue
+// choice: the lifecycle contract requires Prepare to be re-runnable, and
+// CreateKeyValue returns ErrBucketExists on the second boot.
+func TestPrepareUsesTheIdempotentBucketConstructor(t *testing.T) {
+	require.Equal(t, "character_activity", BucketName)
+	require.Equal(t, "character_activity_listener", DefaultConsumerName)
+}
+
+func TestPrepareRefusesToRunUnwired(t *testing.T) {
+	err := NewSubsystem(Config{}).Prepare(context.Background())
+	require.Error(t, err, "a nil JetStream provider is a composition-root bug, not a runtime condition")
 }
 
 func TestActivateIsIdempotent(t *testing.T) {
 	ctx := context.Background()
-	s := NewSubsystem(Config{})
+	s := newFakeWiredSubsystem(t, newFakeKV(), (&recordingWriter{}).write)
 	require.NoError(t, s.Prepare(ctx))
 	require.NoError(t, s.Activate(ctx))
 	first := s.done
@@ -95,11 +112,12 @@ func TestActivateIsIdempotent(t *testing.T) {
 	require.Equal(t, first, s.done, "a repeated Activate MUST NOT replace the done channel")
 }
 
-func TestActivateWithoutPrepareStillSucceeds(t *testing.T) {
-	// The orchestrator runs the whole Prepare sweep before the whole
-	// Activate sweep, so this ordering never occurs in production — but
-	// Activate must not panic if a test or a rollback path reaches it.
-	require.NoError(t, NewSubsystem(Config{}).Activate(context.Background()))
+// TestActivateWithoutPrepareRefuses mirrors the retirement reactor: the
+// orchestrator always runs the whole Prepare sweep first, so this never fires
+// in production — and a silent success would leave last_active_at permanently
+// unwritten with nothing to point at.
+func TestActivateWithoutPrepareRefuses(t *testing.T) {
+	require.Error(t, NewSubsystem(Config{}).Activate(context.Background()))
 }
 
 // TestStopResetsBothGuardsSoRetryWorks is the guard-reset contract: Stop is
@@ -107,17 +125,17 @@ func TestActivateWithoutPrepareStillSucceeds(t *testing.T) {
 // reattach rather than short-circuit on torn-down state.
 func TestStopResetsBothGuardsSoRetryWorks(t *testing.T) {
 	ctx := context.Background()
-	s := NewSubsystemWithStorage(Config{}, jetstream.MemoryStorage)
+	s := newFakeWiredSubsystem(t, newFakeKV(), (&recordingWriter{}).write)
 	require.NoError(t, s.Prepare(ctx))
 	require.NoError(t, s.Activate(ctx))
 
 	require.NoError(t, s.Stop(ctx))
-	require.False(t, s.prepared, "Stop MUST reset the Prepare guard")
+	require.Nil(t, s.kv, "Stop MUST reset the Prepare guard")
 	require.Nil(t, s.done, "Stop MUST reset the Activate guard")
 
 	require.NoError(t, s.Prepare(ctx))
 	require.NoError(t, s.Activate(ctx))
-	require.True(t, s.prepared)
+	require.NotNil(t, s.kv)
 	require.NotNil(t, s.done)
 	require.Equal(t, jetstream.MemoryStorage, s.storage,
 		"Stop MUST NOT reset the configured backing store — it is construction-time config, not acquired state")
@@ -142,7 +160,7 @@ func TestStopIsSafeInEveryLifecycleState(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewSubsystem(Config{})
+			s := newFakeWiredSubsystem(t, newFakeKV(), (&recordingWriter{}).write)
 			tt.reach(t, s)
 			require.NoError(t, s.Stop(ctx))
 			require.NoError(t, s.Stop(ctx), "Stop MUST be idempotent")
