@@ -260,7 +260,8 @@ func (r *reactor) reportIfAbandoned(ctx context.Context, msg jetstream.Msg) {
 	if !isFinalDelivery(meta.NumDelivered, r.cfg.MaxDeliver) {
 		return
 	}
-	errutil.LogErrorContext(ctx,
+	errutil.LogErrorContext(
+		ctx,
 		"retirement fanout ABANDONED: MaxDeliver exhausted, the character stays retired but not evicted",
 		oops.Code("RETIREMENT_FANOUT_ABANDONED").
 			With("subject", msg.Subject()).
