@@ -6,6 +6,7 @@ package retirement
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"testing"
 
 	"github.com/nats-io/nats.go"
@@ -443,6 +444,51 @@ func TestProcessAcksAnUndecodableBodyRatherThanRedeliveringItForever(t *testing.
 		"events.main.character.x", retiredHeaders(f.eventID), []byte("garbage")))
 	require.Empty(t, f.j.steps)
 }
+
+// TestHandleDecodedAcksAForeignEventTypeWithoutDecodingItsBody pins the header
+// gate that keeps routine traffic off the poison path.
+//
+// The consumer filter (events.*.character.>) also carries presence's
+// session_ended (internal/presence/session_ended.go:67 publishes on exactly
+// character.<id>), whose body is NOT a world envelope. Gating on the header
+// before the unmarshal is what stops every logout — and every SUCCESSFUL
+// retirement, whose own step-(3) session_ended comes straight back to this
+// consumer — from logging an ERROR "poison" line. A body that could never
+// decode proves the decode was never attempted: the old order logged here.
+func TestHandleDecodedAcksAForeignEventTypeWithoutDecodingItsBody(t *testing.T) {
+	f := newFixture(t)
+
+	capture := &errorLogCapture{}
+	old := slog.Default()
+	slog.SetDefault(slog.New(capture))
+	defer slog.SetDefault(old)
+
+	hdr := nats.Header{}
+	hdr.Set("Nats-Msg-Id", f.eventID.String())
+	hdr.Set("App-Event-Type", "session_ended")
+
+	require.Equal(t, ack, f.reactor.handleDecoded(context.Background(),
+		"events."+testGameID+".character."+f.charID.String(), hdr, []byte("not a world envelope")))
+	require.Empty(t, f.j.steps, "a foreign event type triggers no effect")
+	require.Zero(t, capture.errors, "routine non-world traffic MUST NOT be logged as poison")
+}
+
+// errorLogCapture counts ERROR-level records so a test can assert the absence
+// of a spurious diagnostic.
+type errorLogCapture struct{ errors int }
+
+func (c *errorLogCapture) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c *errorLogCapture) Handle(_ context.Context, r slog.Record) error {
+	if r.Level >= slog.LevelError {
+		c.errors++
+	}
+	return nil
+}
+
+func (c *errorLogCapture) WithAttrs([]slog.Attr) slog.Handler { return c }
+
+func (c *errorLogCapture) WithGroup(string) slog.Handler { return c }
 
 // --- wire fixtures -----------------------------------------------------
 

@@ -223,10 +223,29 @@ func (r *reactor) handle(msg jetstream.Msg) {
 	// an instant-redeliver storm against whatever surface is already failing.
 }
 
-// handleDecoded decodes then processes one message. A body this handler cannot
-// decode is permanently unhandleable: redelivering it forever would occupy a
-// MaxAckPending slot until MaxDeliver, so it is logged and acked.
+// handleDecoded gates on the HEADER, then decodes, then processes one message.
+//
+// THE HEADER GATE MUST COME FIRST. The consumer's filter is the whole character
+// aggregate (events.*.character.>), and the world outbox relay is not the only
+// publisher on it: internal/presence/session_ended.go:67 publishes session_ended
+// on exactly character.<id>, and the reactor's own step-(3) EmitSessionEnded
+// lands there too. Those bodies are not world envelopes, so decoding them first
+// fails in outbox.UnmarshalEnvelope and misreports routine traffic — every
+// logout, guest reap and eviction, plus at least one line per SUCCESSFUL
+// retirement — as ERROR-level poison. The ack would still be correct, but the
+// diagnostic signal the poison classification exists to carry would be buried
+// under noise proportional to session churn, leaving a genuinely undecodable
+// message indistinguishable from a routine one.
+//
+// A body this handler cannot decode IS permanently unhandleable: redelivering it
+// forever would occupy a MaxAckPending slot until MaxDeliver, so past this gate
+// a decode failure is logged and acked.
 func (r *reactor) handleDecoded(ctx context.Context, subject string, hdr nats.Header, data []byte) disposition {
+	if hdr.Get(eventbus.HeaderEventType) != eventTypeCharacterRetired {
+		// Not ours. Advancing the cursor past it is the point of the fast path,
+		// and it costs no unmarshal at all.
+		return ack
+	}
 	d, err := newDelivery(subject, hdr, data)
 	if err != nil {
 		errutil.LogErrorContext(ctx, "retirement reactor could not decode a delivered event; acking as poison",
@@ -253,9 +272,11 @@ func (r *reactor) handleDecoded(ctx context.Context, subject string, hdr nats.He
 // a larger commitment than the loss warrants.
 func (r *reactor) process(ctx context.Context, d delivery) disposition {
 	if d.EventType != eventTypeCharacterRetired {
-		// The consumer's filter is the whole character aggregate, so
-		// character_created / _moved / _unretired all arrive here. Advancing
-		// the cursor past them is the point of the fast path.
+		// Defence in depth. handleDecoded already gated on the same header
+		// before spending an unmarshal, so this arm is unreachable from the
+		// Consume path; it stays because process is also called directly by
+		// package tests, and a future second caller must not be able to skip
+		// the type check.
 		return ack
 	}
 
