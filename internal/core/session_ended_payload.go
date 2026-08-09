@@ -16,7 +16,7 @@ package core
 type SessionEndedPayload struct {
 	SessionID   string `json:"session_id"`   // ULID of the ended session
 	CharacterID string `json:"character_id"` // ULID of the character whose session ended
-	Cause       string `json:"cause"`        // quit|logout|guest_end|kicked|reaped|evicted
+	Cause       string `json:"cause"`        // quit|logout|guest_end|kicked|reaped|evicted|retired
 	Reason      string `json:"reason"`       // human-readable; delivered to client as STREAM_CLOSED message
 }
 
@@ -28,4 +28,10 @@ const (
 	SessionEndedCauseKicked   = "kicked"
 	SessionEndedCauseReaped   = "reaped"
 	SessionEndedCauseEvicted  = "evicted"
+	// SessionEndedCauseRetired is the character-retirement fanout's cause
+	// (IDENT-04, D-36). It is distinct from evicted and kicked on purpose:
+	// those are involuntary terminations of a character that remains playable,
+	// whereas a retired character has left active play entirely and its
+	// session will not be re-established until an admin un-retires it.
+	SessionEndedCauseRetired = "retired"
 )

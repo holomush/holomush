@@ -22,6 +22,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
@@ -30,9 +33,80 @@ import (
 const stopTimeout = 5 * time.Second
 
 // Config configures the retirement reactor subsystem.
+//
+// Every effect surface is a consumer-defined interface declared in reactor.go,
+// and every live value the fanout needs at handle time arrives through a
+// PROVIDER rather than eagerly at construction: cmd/holomush builds this
+// subsystem before the database, event bus, world and bootstrap subsystems have
+// started, so an eagerly-resolved handle would be nil (or, for
+// StartLocationID, a panic).
 type Config struct {
 	Logger *slog.Logger
+
+	// JetStream yields the JetStream handle at Prepare time.
+	JetStream JetStreamProvider
+	// Sessions is the session-teardown surface.
+	Sessions SessionEnder
+	// Presence is the leave / session_ended fanout surface.
+	Presence PresenceEmitter
+	// World is the ABAC-gated world surface (status read + move).
+	World WorldSurface
+	// Jobs is the background-job liveness registry. Optional: a nil registry
+	// means no job attributes are ever stamped, so every job-gating seed
+	// default-denies — the correct fail-closed state, not a bypass.
+	Jobs JobRegistry
+	// StartLocationID resolves the move destination at handle time. It MUST
+	// NOT be called before the bootstrap subsystem's Prepare (it panics), which
+	// is why DependsOn declares that edge.
+	StartLocationID func() ulid.ULID
+
+	// ConsumerName overrides DefaultConsumerName. Tests only — changing it in
+	// production strands the existing durable consumer.
+	ConsumerName string
+	// AckWait, MaxAckPending and MaxDeliver mirror the audit projector's
+	// defaults when zero.
+	AckWait       time.Duration
+	MaxAckPending int
+	MaxDeliver    int
 }
+
+// Defaults fills any zero-valued consumer tuning field.
+func (c Config) Defaults() Config {
+	if c.Logger == nil {
+		c.Logger = slog.Default()
+	}
+	if c.ConsumerName == "" {
+		c.ConsumerName = DefaultConsumerName
+	}
+	if c.AckWait == 0 {
+		c.AckWait = defaultAckWait
+	}
+	if c.MaxAckPending == 0 {
+		c.MaxAckPending = defaultMaxAckPending
+	}
+	if c.MaxDeliver == 0 {
+		c.MaxDeliver = defaultMaxDeliver
+	}
+	return c
+}
+
+// JetStreamProvider yields the JetStream context at Prepare time. Same shape
+// (and same rationale) as audit.JSProvider: the eventbus subsystem has not
+// started when this subsystem is constructed, so the accessor call is deferred.
+type JetStreamProvider interface {
+	JS() jetstream.JetStream
+}
+
+// Consumer tuning defaults, mirroring the audit projector so the two durable
+// consumers on the EVENTS stream age and redeliver alike.
+const (
+	defaultAckWait       = 5 * time.Second
+	defaultMaxAckPending = 64
+	// defaultMaxDeliver caps redelivery for a message the handler can never
+	// complete. The handler acks every permanently-unhandleable message
+	// itself, so reaching this cap means a genuinely stuck effect surface.
+	defaultMaxDeliver = 10
+)
 
 // Subsystem is the lifecycle.Subsystem that owns the retirement fanout.
 type Subsystem struct {
@@ -50,10 +124,7 @@ type Subsystem struct {
 // touches no live resources — cmd/holomush's real-constructor graph tests
 // build every production subsystem this way and never call Prepare.
 func NewSubsystem(cfg Config) *Subsystem {
-	if cfg.Logger == nil {
-		cfg.Logger = slog.Default()
-	}
-	return &Subsystem{cfg: cfg}
+	return &Subsystem{cfg: cfg.Defaults()}
 }
 
 // ID returns lifecycle.SubsystemRetirementReactor.
