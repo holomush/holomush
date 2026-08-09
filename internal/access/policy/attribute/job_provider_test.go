@@ -134,6 +134,7 @@ func TestJobProviderSchemaDeclaresWritesAsAStringList(t *testing.T) {
 // resolved answer. And if this test could be made to pass while the provider
 // returned a placeholder VALUE, D-49 would not be proven at all — a sentinel is
 // fail-OPEN under .claude/rules/abac-providers.md.
+// Verifies: INV-ACCESS-13
 func TestJobProviderResolvesNothingForAJobThatIsNotRunning(t *testing.T) {
 	reg := &fakeJobRegistry{
 		running: map[string]bool{"running-job": true},
@@ -149,6 +150,7 @@ func TestJobProviderResolvesNothingForAJobThatIsNotRunning(t *testing.T) {
 // TestJobProviderNilRegistryResolvesNothing is D-49's degenerate case: an
 // entrypoint that wires no job registry must fail closed for every job rather
 // than panicking or resolving a bare name.
+// Verifies: INV-ACCESS-13
 func TestJobProviderNilRegistryResolvesNothing(t *testing.T) {
 	p := NewJobProvider(nil)
 

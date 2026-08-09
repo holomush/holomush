@@ -2312,6 +2312,54 @@ invariants:
       RPC added without an inventory row fails the census RED rather than shipping."
     binding: pending
 
+  # -- v0.13 background-job authorization model (milestone v0.13, Phase 02.2).
+  # Born canonical; no legacy tokens. INV-ACCESS-13 is bound by the phase's own
+  # tests; INV-ACCESS-14 is the D-55 stamping contract, deliberately left pending
+  # because Phase 02.2 ships a fixture job only (D-52) and has no consumer
+  # wrapper to assert against. Phase 3 owns binding it.
+  - id: INV-ACCESS-13
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/02.2-background-job-authorization-model/02.2-CONTEXT.md"
+    summary: "JOB-PRINCIPAL: a background job that crosses the world.Service ABAC chokepoint authorizes under the disjoint
+      job: principal namespace, and its authority is gated by three independent conditions that the SHIPPED FIXTURE SEED seed:job-fixture-instance-scoped
+      reads and that its tests assert. (1) LIVENESS: attribute.JobProvider.ResolveSubject returns (nil, nil) for a job name
+      absent from the injected jobs.Registry -- and for a nil registry -- so no principal.job.* attribute is stamped at all,
+      and every attribute-conditioned permit therefore fails to match; the absent case resolves to nothing rather than to
+      a sentinel, because an empty-string sentinel would be fail-OPEN. (2) DECLARED CAPABILITY CLASS: the fixture seed requires
+      principal.job.writes to contain the resource kind, so a job that grows an undeclared write path is denied until that
+      seed is deliberately widened, which makes the seed the code-review surface (D-51/D-53). This clause is scoped to the
+      SHIPPED FIXTURE SEED and is deliberately NOT phrased as a universal rule over every future `principal is job` seed --
+      no meta-test enumerates job seeds and requires the capability conjunct, so the universal phrasing would over-claim.
+      (3) INSTANCE SCOPE, EVENT-DRIVEN ONLY: the fixture seed requires action.job.trigger_subject -- carried on world.JobCaller
+      as the BARE aggregate ULID, byte-identical to bags.Resource[id] and NOT a dotted NATS subject -- to equal resource.id,
+      where the resource is whatever the handler derives independently of the provenance, so a wrong derivation is denied
+      rather than corrupting the aggregate. A timer-driven job constructed via world.ScheduledJobCaller carries clauses (1)
+      and (2) ONLY: it stamps no per-execution attributes whatsoever, its authority is deliberately coarse, and this summary
+      does NOT claim instance scoping for it (D-68). This summary also does NOT claim any defense against malicious in-process
+      code: nothing inside the process can stop Go from calling Engine.Evaluate with arbitrary arguments, and the honest claim
+      is scope drift plus handler bugs (D-53). The stamping contract -- that the provenance triple is fixed from the delivered
+      message before handler logic runs and cannot be altered by the handler -- is deliberately NOT part of this entry: Phase
+      02.2 ships a fixture job only (D-52) and its tests construct world.JobCaller directly, so binding that clause here would
+      be a partial-binding false-green. It is registered separately as INV-ACCESS-14 with binding: pending, for Phase 3 to
+      bind."
+    binding: bound
+    asserted_by:
+      - "internal/access/policy/attribute/job_provider_test.go"
+      - "internal/access/policy/seed_smoke_test.go"
+      - "internal/world/caller_test.go"
+  - id: INV-ACCESS-14
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/02.2-background-job-authorization-model/02.2-CONTEXT.md"
+    summary: "JOB-PROVENANCE-STAMP: the per-execution provenance a background job authorizes under -- action.job.trigger_event_id,
+      action.job.trigger_event_type and action.job.trigger_subject -- is stamped at the consumer boundary from the delivered
+      message, before any handler logic runs, and the handler cannot alter it (D-55). This is what keeps INV-ACCESS-13's instance-scope
+      conjunct from being tautological: the resource is whatever the handler independently derives, so the two sides of the
+      comparison have independent provenance. binding: pending is deliberate and is NOT a backfill oversight -- Phase 02.2
+      ships a fixture job only (D-52) and its tests construct world.JobCaller by hand, so no message, no consumer wrapper
+      and no handler boundary exists in-tree to assert this against. Phase 3 owns binding it when the D-46 neutral-package
+      consumer wrapper lands."
+    binding: pending
+
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
   # boundary note). FIRST bare-INV-N scope: dense per-scope renumbering (legacy 28,29,53-60

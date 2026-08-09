@@ -1205,6 +1205,7 @@ func jobProvider(subjectAttrs map[string]any) *mockAttributeProvider {
 //
 // D-51's shape, stated as policy: the DECLARATION narrows and the SEED grants.
 // Both gates must pass, and a declaration alone authorizes nothing.
+// Verifies: INV-ACCESS-13
 func TestSeedSmokeJobFixtureCapabilityClassIsASecondGate(t *testing.T) {
 	const charID = "01ARZ3NDEKTSV4RRFFQ69G5FB1"
 

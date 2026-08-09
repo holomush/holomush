@@ -509,6 +509,7 @@ func newFixtureJobProbe(t *testing.T, charID ulid.ULID) (*world.Service, *record
 // introduced by changing ONLY the provenance value — the resource ULID is the
 // same variable in both subtests — so the denial can only be caused by the
 // instance-scoping conjunct.
+// Verifies: INV-ACCESS-13
 func TestJobCallerWritesOnlyTheAggregateItsProvenanceNames(t *testing.T) {
 	charID := ulid.MustParse(fixtureCharacter)
 
@@ -602,6 +603,7 @@ func TestJobCallerCarriesExactlyTheProvenanceTriple(t *testing.T) {
 // half: a timer-driven job has no triggering event, so it carries NO
 // per-execution attributes — and specifically no empty-string sentinel, which
 // would be fail-OPEN (.claude/rules/abac-providers.md).
+// Verifies: INV-ACCESS-13
 func TestScheduledJobCallerCarriesNoPerExecutionAttributes(t *testing.T) {
 	caller := world.ScheduledJobCaller(fixtureJobName)
 
