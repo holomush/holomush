@@ -93,3 +93,43 @@ func TestJobRegistrySeamIsOneSharedTypeAcrossBothConfigs(t *testing.T) {
 	// The production implementation must actually satisfy that seam.
 	var _ attribute.JobRegistry = jobs.NewRegistry()
 }
+
+// TestActionNamespaceIsRegisteredWithTheAuditedKeySet pins the D-60 registration
+// step BuildABACStack performs at its `// 10b.` slot, on the same
+// stack-equivalent seam plan 02.2-02 used for the job provider: BuildABACStack
+// itself opens a SQL bridge and pings it, so it cannot run in the unit tier.
+//
+// What this proves is that the exact call BuildABACStack makes —
+// attribute.Register(schemaReg, "action", attribute.ActionNamespaceSchema()) —
+// yields a registry in which every audited key resolves. What it deliberately
+// does NOT claim is that the registration protects anything today: on this tree
+// the production compiler is built on a separate, never-populated schema, so the
+// registration is a no-op until phase plan 02.2-04 wires the two together.
+func TestActionNamespaceIsRegisteredWithTheAuditedKeySet(t *testing.T) {
+	t.Parallel()
+
+	schemaReg := attribute.NewSchemaRegistry()
+
+	// Paired negative control: without the registration nothing else supplies
+	// `action`. Without this, the assertions below could pass because some
+	// other construction step had already claimed the namespace.
+	require.False(t, schemaReg.HasNamespace("action"),
+		"control: a fresh schema registry MUST NOT already carry `action`, or the "+
+			"assertions below prove nothing about the registration step")
+
+	// The verbatim call BuildABACStack makes at its `// 10b.` slot.
+	require.NoError(t, attribute.Register(schemaReg, "action", attribute.ActionNamespaceSchema()))
+
+	require.True(t, schemaReg.HasNamespace("action"))
+	for _, key := range []string{
+		"name",
+		"dispatch_location",
+		"job.trigger_event_id",
+		"job.trigger_event_type",
+		"job.trigger_subject",
+	} {
+		assert.True(t, schemaReg.IsRegistered("action", key),
+			"action.%s MUST be registered: once 02.2-04 wires the compiler to this registry, "+
+				"an undeclared key referenced by any compiled policy hard-errors and fails boot", key)
+	}
+}

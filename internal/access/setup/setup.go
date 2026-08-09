@@ -350,9 +350,39 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		return nil, eb.Wrapf(err, "register job provider")
 	}
 
+	// 10b. Action namespace schema (02.2 D-60). `action` is a caller-supplied
+	// bag, not an entity that gets resolved, so it is registered by a direct
+	// package-level Register call rather than through a synthetic provider whose
+	// ResolveSubject/ResolveResource would return (nil, nil) purely to carry a
+	// Schema(). attribute.ActionNamespaceSchema is the single source of truth for
+	// the key set; its provenance is
+	// .planning/phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md.
+	//
+	// HONEST STATUS: on this tree THIS REGISTRATION IS A NO-OP. It does not
+	// protect anything today, and a comment claiming otherwise would be wrong.
+	// The compiler built at :163 above is constructed on `schema` — a separately
+	// allocated types.AttributeSchema that is never populated and never
+	// referenced again — NOT on schemaReg. So validateAttributes' `action`
+	// hard-error branch (compiler.go:162-164) sees HasNamespace("action") ==
+	// false and is skipped, exactly as it was before this call existed. 02.2-CONTEXT
+	// D-59 originally described both a landmine and a benefit here; its own AMENDED
+	// banner records that research finding F1 falsified both AS MECHANISM. Phase
+	// plan 02.2-04 (D-66) wires the compiler to schemaReg and is what makes this
+	// load-bearing.
+	//
+	// Placement note: SchemaRegistry.Schema() returns the LIVE
+	// *types.AttributeSchema pointer (schema.go:96-99), so a compiler later built
+	// on schemaReg.Schema() observes this registration regardless of relative
+	// construction order. What such a compiler would NOT observe is a compile
+	// that RAN before this line — which is the cache.Reload-at-:167 ordering
+	// problem 02.2-04 owns, not this step's.
+	if err := attribute.Register(schemaReg, "action", attribute.ActionNamespaceSchema()); err != nil {
+		return nil, eb.Wrapf(err, "register action namespace schema")
+	}
+
 	// 10c. Seed-coverage validator (holomush-xxel). Renumbered from 10a when the
-	// job provider took that slot; 10b is RESERVED for the `action` schema
-	// registration (D-60), so the labels keep reading in execution order.
+	// job provider took that slot; 10b is the `action` schema registration
+	// (D-60) directly above, so the labels keep reading in execution order.
 	// After all providers are
 	// registered, walk the seed corpus and WARN per namespace referenced by
 	// any seed but not registered. Catches the holomush-g776 / xxel bug
