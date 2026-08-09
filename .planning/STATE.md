@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02.2
 current_phase_name: background-job-authorization-model
 status: executing
-stopped_at: Completed 02.2-01-PLAN.md
-last_updated: "2026-08-09T16:08:09.454Z"
+stopped_at: Completed 02.2-02-PLAN.md
+last_updated: "2026-08-09T16:30:22.761Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 02.2 execution started
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 40
-  completed_plans: 30
+  completed_plans: 31
   percent: 44
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02.2 (background-job-authorization-model) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
-Progress: [████████░░] 75% (1/6 phases)
+Progress: [████████░░] 78% (1/6 phases)
 Last activity: 2026-08-09 — Phase 02.2 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -246,6 +246,7 @@ no action needed.
 | Phase 02.1 P02 | ~2h | 3 tasks | 42 files |
 | Phase 02.1 P03 | ~1.5h | 3 tasks | 4 files |
 | Phase 02.2 P01 | 27min | 3 tasks | 15 files |
+| Phase 02.2 P02 | 17min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -499,6 +500,11 @@ the next milestone yet.
 - [Phase ?]: 02.2-01: trigger_subject is the BARE aggregate ULID, byte-identical to bags.Resource["id"] — settled by a passing permit (research A6); Phase 3 plan 03-04 copies this spelling byte-for-byte
 - [Phase ?]: 02.2-01: seed:job-fixture-instance-scoped was added to D-29's pinned resource-is-character fence with a written justification (job principal, write-only, unmatchable liveness gate) rather than the fence being weakened
 - [Phase ?]: 02.2-01: only the fixture grant shipped — job:retirement and job:activity-flush have no seed and remain Phase 3's to add (D-52)
+- [Phase ?]: 02-02: jobs.Registry injected through config, not a PluginProvider-style two-phase SetRegistry — zero-dependency registry means no nil window in production
+- [Phase ?]: 02-02: the D-58 principal qualifier is a PREFIX because grpc_server.go:169 classifies on the _ACCESS_DENIED suffix; CHARACTER_ACCESS_DENIED_JOB was rejected outright
+- [Phase ?]: 02-02: evaluation-failure codes stay UNQUALIFIED and KnownEntityPrefixes()/internal/command/errors.go were NOT extended — those exact-match maps drive player-facing text a job denial never reaches
+- [Phase ?]: 02-02: no lifecycle.SubsystemID minted for the job registry; the pinned 18-element topological start order was not touched
+- [Phase ?]: 02-02: AUTHZ-02 left Pending — all five plans of phase 02.2 carry it; requirements.mark-complete was not run at all this time, so no flip needed reverting. Plan 02.2-05 owns it.
 
 ### Pending Todos
 
@@ -555,11 +561,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-09T16:08:09.441Z
+Last session: 2026-08-09T16:30:13.794Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02.2-01-PLAN.md
+Stopped at: Completed 02.2-02-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.

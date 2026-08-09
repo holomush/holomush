@@ -397,7 +397,7 @@ unverified seams, and timer-driven jobs (Phase 3's `last_active_at` flusher) car
 event, so what they present as per-execution context is an open question that MUST NOT be invented
 by a planner.
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
@@ -406,7 +406,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02.2-02-PLAN.md — Production ABAC wiring + the D-58 principal-aware deny code
+- [x] 02.2-02-PLAN.md — Production ABAC wiring + the D-58 principal-aware deny code
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
