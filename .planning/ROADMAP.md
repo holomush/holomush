@@ -442,7 +442,7 @@ Plans:
 4. The `writeCommands` census and the mutation taxonomy list the new commands in the same change that introduces them; the census meta-test fails if either is missing.
 5. `characters.last_active_at` is actually written — Phase 2 shipped the column and every read path, but nothing writes it. A character's activity updates it without a per-event database write, and `INV-WORLD-4`'s writer enumeration is amended in the same change that adds the writer.
 
-**Plans**: 3/6 plans executed
+**Plans**: 4/6 plans executed
 **UI hint**: no
 **Research flag**: `--research-phase` recommended — the `writeCommands` census bijection semantics (`internal/world/mutator.go:78-100`) are genuinely unverified, and this repo has a documented history of plans failing on unverified seam assumptions.
 
@@ -457,7 +457,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 03-03-PLAN.md — IDENT-10 proof: two-replica stale-version rejection `Describe` in the resilience harness, retire row+envelope atomicity, name-reservation assertion, INV-WORLD-6 defect filed (wave 2)
-- [ ] 03-04-PLAN.md — Retirement reactor: sessions-only fanout idempotent under redelivery, `JobCaller` authorization per 02.2's landed model, admin-only retire/unretire surface (user decision 2026-08-07; no player self-retire seed) + conditional `job:retirement` grant (wave 2)
+- [x] 03-04-PLAN.md — Retirement reactor: sessions-only fanout idempotent under redelivery, `JobCaller` authorization per 02.2's landed model, admin-only retire/unretire surface (user decision 2026-08-07; no player self-retire seed) + conditional `job:retirement` grant (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -546,7 +546,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1. Channels Subsystem | v0.11 | 6/6 | In Progress|  |
 | 2. Scenes Lineage Completion | v0.11 | 13/13 | In Progress|  |
-| 3. Platform Hardening & Deployment Scaling | v0.11 | 3/6 | In Progress|  |
+| 3. Platform Hardening & Deployment Scaling | v0.11 | 4/6 | In Progress|  |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |

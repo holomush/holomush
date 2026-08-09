@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 6
+open_count: 7
 waived_count: 0
 fixed_count: 7
-total_count: 13
-last_updated: 2026-08-06T16:14:12.518Z
+total_count: 14
+last_updated: 2026-08-09T21:53:11.900Z
 ---
 
 # Broken Windows Ledger
@@ -28,6 +28,7 @@ last_updated: 2026-08-06T16:14:12.518Z
 | 11 | 02 | deviation | internal/store/role_store_integration_test.go |  | 02-13 Rule 1 fix: colliding player usernames from an 8-char ULID prefix; caught only by the plan-level integration sweep because no per-task verify covers ./internal/store/ | open |  | 2026-08-05T00:29:54.787Z |  |
 | 12 | 02 | deviation | .planning/phases/02-abac-schema-vocabulary/02-12-SUMMARY.md |  | INV-WORLD-4's 'exactly TWO sanctioned out-of-world writers' text is false until plan 02-11 amends it to three | open |  | 2026-08-05T04:50:04.129Z |  |
 | 13 | 01.1 | unrun-verify | site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md |  | D-18 surgical rollback is WRITTEN but never EXECUTED against restored sandbox data — a rollback nobody has run is a hypothesis, not a control. Split out of #9, whose D-16 half was executed and passed 2026-08-03 (snapshot k8895de81ae827d94862d54a5c9b5b19f: side A version=53/1 row/dirty=false; adopt recorded_version=53 seeded_versions=44; checks a/b/c green incl. ZERO core drift across 353 columns). D-18 remains the unexercised half. | open |  | 2026-08-06T16:13:50.936Z |  |
+| 14 | 03 | deviation | internal/access/policy/seed_profile_visibility_test.go |  | D-29 character-resource guard extended with an argued exemption to admit seed:job-retirement-instance-scoped's read action; abac-reviewer must confirm before push | open |  | 2026-08-09T21:53:11.900Z |  |
 
 ````json
 [
@@ -185,6 +186,18 @@ last_updated: 2026-08-06T16:14:12.518Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-06T16:13:50.936Z",
+    "resolved_at": null
+  },
+  {
+    "id": 14,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "internal/access/policy/seed_profile_visibility_test.go",
+    "line": null,
+    "description": "D-29 character-resource guard extended with an argued exemption to admit seed:job-retirement-instance-scoped's read action; abac-reviewer must confirm before push",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-09T21:53:11.900Z",
     "resolved_at": null
   }
 ]
