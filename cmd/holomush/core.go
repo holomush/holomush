@@ -41,6 +41,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/natsconn"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/jobs"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
@@ -394,10 +395,27 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// instead would make ABAC a wiring consumer and close a second
 	// ABAC -> cryptoWiring -> ABAC cycle (THE RULE forces every consumer to
 	// DependsOn SubsystemABAC) — cross-AI round 4, BLOCKER.
+	// The single background-job liveness registry for this process. It is
+	// constructed HERE, before subsystem assembly, because jobs.Registry has
+	// zero dependencies — which is also why it is deliberately NOT a
+	// lifecycle.Subsystem (minting a SubsystemID is a multi-site cascade across
+	// the pinned topological start order, and nothing here needs ordered
+	// start/stop).
+	//
+	// Today its only consumer is the ABAC job attribute provider, which reads it
+	// to answer "is job <name> running, and what did it declare it writes".
+	// Phase 3's job subsystems are the writers: they will call
+	// jobRegistry.Register(...) from their own Start and Unregister(...) from
+	// their Stop, against THIS instance. Until then the registry is empty, so
+	// every job resolves to no attributes and every job-gating seed
+	// default-denies — the correct fail-closed state.
+	jobRegistry := jobs.NewRegistry()
+
 	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
 		DB:              dbSub,
 		Registry:        registry,
 		CryptoOperators: cryptoConfig.Operators,
+		JobRegistry:     jobRegistry,
 	})
 
 	authSub := authsetup.NewAuthSubsystem(authsetup.AuthSubsystemConfig{

@@ -84,6 +84,50 @@ func TestBuildABACStack_SeedCoverageMatchesAcknowledged(t *testing.T) {
 			"remove it from AcknowledgedMissingSeedNamespaces. Per holomush-xxel.")
 }
 
+// TestBuildABACStackRegistersTheJobNamespaceInTheProductionResolver asserts the
+// job provider's registration on the REAL stack, by name.
+//
+// This is the production-path half of
+// TestJobProviderOwnsTheJobNamespaceInTheResolver (setup_test.go), which can
+// only build a bare resolver because BuildABACStack opens a SQL bridge and pings
+// it. Between them the claim is complete: the provider owns `job`, and the stack
+// production actually builds registers it.
+//
+// It also asserts the JobRegistry the config carried reached a live provider:
+// ABACStack.JobProvider is non-nil, so cmd/holomush's single jobs.Registry has
+// somewhere to land.
+func TestBuildABACStackRegistersTheJobNamespaceInTheProductionResolver(t *testing.T) {
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, shared)
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, connStr)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	// JobRegistry intentionally nil: a nil registry is the documented
+	// fail-closed shape (02.2-CONTEXT D-49), and REGISTRATION — not liveness —
+	// is what this test pins. A provider that only registered when handed a
+	// registry would leave `job` unowned on every job-less entrypoint.
+	stack, err := BuildABACStack(ctx, ABACConfig{
+		Pool:                   pool,
+		CharacterRepo:          worldpostgres.NewCharacterRepository(pool),
+		LocationRepo:           worldpostgres.NewLocationRepository(pool),
+		ObjectRepo:             worldpostgres.NewObjectRepository(pool),
+		PropertyRepo:           worldpostgres.NewPropertyRepository(pool),
+		ParentLocationResolver: worldpostgres.NewParentLocationResolver(pool),
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stack.Close() })
+
+	assert.Contains(t, stack.Resolver.RegisteredNamespaces(), "job",
+		"BuildABACStack MUST register the job attribute provider: without it no provider owns "+
+			"the `job` namespace and every seed gating on principal.job.* silently default-denies")
+	assert.NotNil(t, stack.JobProvider,
+		"ABACStack MUST expose the constructed job provider — it is what the injected "+
+			"jobs.Registry is read through")
+}
+
 func sortedKeysOf(m map[string][]string) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
