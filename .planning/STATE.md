@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 03
 current_phase_name: world-character-commands
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-08-09T21:53:07.407Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-08-09T22:26:36.730Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 02.2 complete — UAT passed, security verified, transitioned to Phase 03
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 40
-  completed_plans: 38
+  completed_plans: 39
   percent: 56
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 03 (world-character-commands) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 95%)
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 98%)
 Last activity: 2026-08-09 — Phase 03 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -255,6 +255,7 @@ no action needed.
 | Phase 03 P02 | ~35 min | 3 tasks | 14 files |
 | Phase 03 P03 | 35m | 2 tasks | 4 files |
 | Phase 03 P04 | 50m | 2 tasks | 11 files |
+| Phase 03 P05 | 70m | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -537,6 +538,9 @@ the next milestone yet.
 - [Phase ?]: Interlock §0.4-2 fired on CREATE: 02.2 shipped only the job fixture seed, so plan 03-04 ships seed:job-retirement-instance-scoped — the first real background-job grant.
 - [Phase ?]: The retirement job seed permits read AND write; the D-29 character-resource guard was extended with an argued single-member exemption (the instance fence makes the read a single-row lookup, not an enumeration primitive) rather than relaxed.
 - [Phase ?]: The reactor stamps its D-55 provenance at its own message boundary, not at consumer.CreateWithRetry — 02.2 landed the vocabulary on world.JobCaller and the wrapper stamps nothing.
+- [Phase ?]: 03-05: interlock 0.4-3 fired on the ANSWERED branch — 02.2's D-68 (option A+D) names the last_active_at flusher, so it registers job identity character_activity with writes [character] and stamps no per-execution attributes
+- [Phase ?]: 03-05: INV-WORLD-4 amended THREE->FOUR; the atomicity clause is NARROWED to world-state writers with the activity flusher named as the sole envelope-exempt operational-column writer. Whether that becomes a CLASS is deferred until a second one appears
+- [Phase ?]: 03-05: the charactivity KV seam declares DeleteRevision(ctx,key,revision) rather than jetstream's variadic KVDeleteOpt, because deleteOpts is unexported and a fake could not otherwise observe the guarded revision
 
 ### Pending Todos
 
@@ -598,12 +602,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-09T21:53:07.391Z
+Last session: 2026-08-09T22:26:28.567Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 03-04-PLAN.md
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z

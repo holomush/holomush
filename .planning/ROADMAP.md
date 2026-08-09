@@ -442,7 +442,7 @@ Plans:
 4. The `writeCommands` census and the mutation taxonomy list the new commands in the same change that introduces them; the census meta-test fails if either is missing.
 5. `characters.last_active_at` is actually written — Phase 2 shipped the column and every read path, but nothing writes it. A character's activity updates it without a per-event database write, and `INV-WORLD-4`'s writer enumeration is amended in the same change that adds the writer.
 
-**Plans**: 4/6 plans executed
+**Plans**: 5/6 plans executed
 **UI hint**: no
 **Research flag**: `--research-phase` recommended — the `writeCommands` census bijection semantics (`internal/world/mutator.go:78-100`) are genuinely unverified, and this repo has a documented history of plans failing on unverified seam assumptions.
 
@@ -461,7 +461,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-05-PLAN.md — `last_active_at`: writer-boundary flush function, KV listener/flusher subsystem with revision-conditional deletes, the `INV-WORLD-4` THREE→FOUR enumeration amendment, and the `WithCharacterActivity` harness option + charactivity suite (wave 3)
+- [x] 03-05-PLAN.md — `last_active_at`: writer-boundary flush function, KV listener/flusher subsystem with revision-conditional deletes, the `INV-WORLD-4` THREE→FOUR enumeration amendment, and the `WithCharacterActivity` harness option + charactivity suite (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -546,7 +546,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1. Channels Subsystem | v0.11 | 6/6 | In Progress|  |
 | 2. Scenes Lineage Completion | v0.11 | 13/13 | In Progress|  |
-| 3. Platform Hardening & Deployment Scaling | v0.11 | 4/6 | In Progress|  |
+| 3. Platform Hardening & Deployment Scaling | v0.11 | 5/6 | In Progress|  |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |

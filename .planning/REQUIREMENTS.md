@@ -136,7 +136,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       guest path, which provisions characters automatically and at volume. (Amended — see
       `01-SPEC.md` §6.1.3 and §14 row 7.)
 
-- [ ] **IDENT-10**: Every new character mutation carries **`expected_version`** (migration `000049`) and
+- [x] **IDENT-10**: Every new character mutation carries **`expected_version`** (migration `000049`) and
       emits through the **transactional outbox in-transaction**, preserving v0.12's MODEL-03/04
       guarantees.
 
