@@ -16,7 +16,6 @@ import (
 	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
-	policytypes "github.com/holomush/holomush/internal/access/policy/types"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/lifecycle"
@@ -40,13 +39,23 @@ func startRealABAC(t *testing.T, ctx context.Context, pool *pgxpool.Pool) *abacs
 	// Seed first: the subsystem's Start → BuildABACStack → cache.Reload reads
 	// the policy store at construction. An unseeded store has zero policies and
 	// default-denies everything.
+	//
+	// Because seeding runs BEFORE abacSub.Prepare/Activate, no populated provider
+	// registry exists at this point BY CONSTRUCTION — the registry the providers
+	// fill is created inside BuildABACStack, which has not run yet. So this
+	// compiler is built on an action-only registry (02.2-04, D-66 site 3), which
+	// is what keeps the harness's validation behaviour identical to production's
+	// for `action`: the compiler validates by DSL ROOT, never by provider name, so
+	// the roots this registry does not carry are skipped and only the `action`
+	// hard-error branch differs from a bare schema — which is exactly the branch
+	// the harness must not silently disarm.
 	require.NoError(
 		t,
 		policy.Bootstrap(
 			ctx,
 			audit.NewPostgresPartitionCreator(pool),
 			policystore.NewPostgresStore(pool),
-			policy.NewCompiler(policytypes.NewAttributeSchema()),
+			policy.NewCompiler(attribute.NewActionOnlySchemaRegistry().Schema()),
 			slog.Default(),
 			policy.BootstrapOptions{},
 		),

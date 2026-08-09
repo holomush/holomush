@@ -68,12 +68,7 @@ import (
 func NewSeedEngine(t *testing.T, providers ...attribute.AttributeProvider) *policy.Engine {
 	t.Helper()
 
-	registry := attribute.NewSchemaRegistry()
-	resolver := attribute.NewResolver(registry)
-	for _, p := range providers {
-		require.NoError(t, resolver.RegisterProvider(p),
-			"registering the %q provider", p.Namespace())
-	}
+	registry, resolver := newSeedSchemaRegistry(t, providers...)
 
 	compiler := policy.NewCompiler(registry.Schema())
 	cache := policy.NewCache(seedStore{}, compiler)
@@ -89,6 +84,50 @@ func NewSeedEngine(t *testing.T, providers ...attribute.AttributeProvider) *poli
 	})
 
 	return policy.NewEngine(resolver, cache, unusedSessionResolver{}, auditLogger)
+}
+
+// newSeedSchemaRegistry builds the registry NewSeedEngine's compiler is built on:
+// the caller's providers, plus the `action` namespace.
+//
+// Why `action` is registered here, unconditionally (02.2-04, D-66 site 4):
+// NewSeedEngine compiles the FULL policy.SeedPolicies() corpus, and the compiler's
+// action branch HARD-ERRORS on a reference to an undeclared action.* key
+// (internal/access/policy/compiler.go). Without this registration
+// HasNamespace("action") is false, that branch is skipped, and a seed carrying a
+// typo'd action.* key compiles clean in the UNIT tier and only fails at boot —
+// which is the same silent-default-deny failure the gate exists to prevent,
+// arriving through a compilation site that carries a real registry.
+//
+// It has to be an explicit call rather than arriving with a provider like every
+// other namespace this helper carries: `action` is a caller-supplied per-request
+// bag with no provider by design (D-60), so it never appears in
+// Resolver.RegisteredNamespaces() and no caller can pass it in.
+//
+// It is deliberately NOT opt-in — no variadic option, no second constructor. A
+// gate that can be turned off will be off in the test that needed it. If this
+// registration turns an existing test red, that test's policy text references an
+// undeclared action.* key: a real finding to report, not a reason to make the
+// registration conditional.
+//
+// This is extracted from NewSeedEngine rather than inlined so that
+// action_registration_internal_test.go can drive the REAL construction path
+// instead of asserting against a hand-built mirror of it.
+func newSeedSchemaRegistry(
+	t *testing.T,
+	providers ...attribute.AttributeProvider,
+) (*attribute.SchemaRegistry, *attribute.Resolver) {
+	t.Helper()
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	for _, p := range providers {
+		require.NoError(t, resolver.RegisterProvider(p),
+			"registering the %q provider", p.Namespace())
+	}
+	require.NoError(t, attribute.Register(registry, "action", attribute.ActionNamespaceSchema()),
+		"the action namespace MUST register, or a bad action.* seed reference passes the unit tier")
+
+	return registry, resolver
 }
 
 // seedStore is an in-memory [store.PolicyStore] serving the seed corpus.
