@@ -16,6 +16,15 @@ const (
 	SubjectSystem    = "system"
 	SubjectSession   = "session:"
 	SubjectPlayer    = "player:"
+	// SubjectJob is the background-job principal namespace (02.2-CONTEXT
+	// D-48). Background jobs are host subsystems that act on the world without
+	// a human on the other end; they get their own namespace rather than
+	// reusing SubjectSystem because parseEntityType
+	// (internal/access/policy/engine.go) matches the PREFIX ONLY, so a
+	// `principal is system` permit written for a job would also grant
+	// system:bootstrap. A disjoint namespace makes that impossible at the
+	// target clause instead of patching it with an identity-string guard.
+	SubjectJob = "job:"
 	// SubjectViewer is the web-viewer subject namespace (01-SPEC §8.4.1). A
 	// viewer is the tier-ladder principal of the portal read path; it is
 	// deliberately distinct from SubjectCharacter and SubjectPlayer, both of
@@ -78,6 +87,7 @@ var knownPrefixes = []string{
 	SubjectSession,
 	SubjectPlayer,
 	SubjectViewer,
+	SubjectJob,
 	ResourceCharacter,
 	ResourceLocation,
 	ResourceObject,
@@ -123,6 +133,21 @@ func PlayerSubject(playerID string) string {
 		panic("access.PlayerSubject: empty playerID would bypass access control")
 	}
 	return SubjectPlayer + playerID
+}
+
+// JobSubject returns the canonical ABAC subject ID for a background job
+// ("job:<name>"). The name is the job's registration name in internal/jobs —
+// the same string the liveness registry is keyed by, and the same string a seed
+// reads as principal.job.name.
+//
+// Panics if name is empty, mirroring PluginSubject / CharacterSubject /
+// PlayerSubject: a bare "job:" prefix is a subject whose id half is empty, and
+// an empty subject would bypass access control.
+func JobSubject(name string) string {
+	if name == "" {
+		panic("access.JobSubject: empty name would bypass access control")
+	}
+	return SubjectJob + name
 }
 
 // ViewerSubject returns the canonical ABAC subject ID for a web viewer, per

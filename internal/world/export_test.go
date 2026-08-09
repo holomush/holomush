@@ -24,8 +24,9 @@ import "context"
 // and no other package's non-test build, can reach them. The prohibition D-62
 // states — that nothing outside package world may build a caller carrying
 // arbitrary attributes — continues to hold for every production-reachable path:
-// world.Caller still has unexported fields, exactly two exported constructors
-// (neither populating attrs), and no exported accessor in caller.go.
+// world.Caller still has unexported fields, no exported accessor in caller.go,
+// and no exported constructor that accepts an attribute map (JobCaller derives
+// its three keys from a typed Provenance).
 
 // SubjectForTest returns the caller's verbatim ABAC subject string.
 func (c Caller) SubjectForTest() string { return c.subject }
@@ -41,9 +42,11 @@ func (c Caller) EvalContextForTest(ctx context.Context) context.Context {
 	return c.evalContext(ctx)
 }
 
-// NewCallerWithAttrsForTest builds a Caller carrying attributes — the injection
-// path that deliberately does NOT exist in production before Phase 02.2 defines
-// the action vocabulary.
+// NewCallerWithAttrsForTest builds a Caller carrying an ARBITRARY attribute map
+// — an injection path that deliberately does not exist in production. Phase
+// 02.2 defined the action vocabulary, but it did so through JobCaller's typed
+// Provenance: no exported constructor takes a caller-chosen map, so this helper
+// remains test-only.
 func NewCallerWithAttrsForTest(subject string, attrs map[string]any) Caller {
 	return Caller{subject: subject, attrs: attrs}
 }
