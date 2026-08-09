@@ -53,6 +53,7 @@ const (
 	kindCharacterMoved             = "character_moved"
 	kindCharacterPreferencesUpdate = "character_preferences_update"
 	kindCharacterRetired           = "character_retired"
+	kindCharacterUnretired         = "character_unretired"
 	worldSchemaVersion             = 1
 )
 
@@ -980,6 +981,15 @@ func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterI
 		return oops.Code("CHARACTER_RETIRE_FAILED").Wrapf(err, "retire character %s", characterID)
 	}
 	return nil
+}
+
+// UnretireCharacter returns a retired character to play. STUB — implemented in
+// the GREEN half of plan 03-01 Task 2.
+func (s *Service) UnretireCharacter(_ context.Context, _ Caller, characterID ulid.ULID, expectedVersion int) error {
+	return oops.Code("CHARACTER_UNRETIRE_FAILED").
+		With("character_id", characterID.String()).
+		With("expected_version", expectedVersion).
+		Errorf("UnretireCharacter not implemented")
 }
 
 // UpdateCharacterPreferences persists a character's whole preferences bag

@@ -135,6 +135,63 @@ func TestWorldServiceRetireCharacter(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
 	})
 
+	t.Run("rejects an already-retired character with CHARACTER_ALREADY_RETIRED", func(t *testing.T) {
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "retire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.StatusRetired}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+
+		err := svc.RetireCharacter(ctx, world.HumanCaller(subjectID), charID, 5)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_ALREADY_RETIRED")
+		mockRepo.AssertNotCalled(t, "SetStatus")
+		assert.Zero(t, outbox.calls, "a refused transition writes nothing and emits nothing")
+	})
+
+	t.Run("retires an idle character because idle to retired is a legal exit", func(t *testing.T) {
+		// D-43/INV-WORLD-5: v0.13 ships no transition INTO idle, but a row
+		// constructed there must still be retirable — the missing transition is
+		// the inbound one, not the outbound one.
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "retire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.StatusIdle}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+		mockRepo.EXPECT().SetStatus(mock.Anything, charID, world.StatusRetired, 5).Return(nil, nil)
+
+		err := svc.RetireCharacter(ctx, world.HumanCaller(subjectID), charID, 5)
+		require.NoError(t, err)
+		assert.Equal(t, 1, outbox.calls)
+		assert.Equal(t, "character_retired", outbox.lastIntent.Kind)
+	})
+
+	t.Run("prefers the version conflict over the already-retired guard on a stale caller", func(t *testing.T) {
+		// R1 guard order: a stale caller racing a writer that already retired
+		// the row must see the CONFLICT, never that writer's outcome.
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "retire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 6, Status: world.StatusRetired}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+
+		err := svc.RetireCharacter(ctx, world.HumanCaller(subjectID), charID, 5)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+		mockRepo.AssertNotCalled(t, "SetStatus")
+		assert.Zero(t, outbox.calls)
+	})
+
+	t.Run("denies an unrecognized stored status through the exhaustive default arm", func(t *testing.T) {
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "retire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.Status("bogus")}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+
+		err := svc.RetireCharacter(ctx, world.HumanCaller(subjectID), charID, 5)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_RETIRE_FAILED")
+		mockRepo.AssertNotCalled(t, "SetStatus")
+		assert.Zero(t, outbox.calls)
+	})
+
 	t.Run("denies a caller without the retire action", func(t *testing.T) {
 		// The grant is on "write", NOT on "retire" (D-40: distinct actions), so
 		// the command must be denied — reusing write to retire is exactly the
@@ -142,6 +199,129 @@ func TestWorldServiceRetireCharacter(t *testing.T) {
 		svc, mockRepo, outbox := retireFixture(t, subjectID, "write", charID)
 
 		err := svc.RetireCharacter(ctx, world.HumanCaller(subjectID), charID, 5)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Get")
+		assert.Zero(t, outbox.calls)
+	})
+}
+
+func TestWorldServiceUnretireCharacter(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(ulid.Make().String())
+
+	t.Run("unretires a retired character and emits exactly one character_unretired envelope", func(t *testing.T) {
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "unretire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 6, Status: world.StatusRetired}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+		mockRepo.EXPECT().SetStatus(mock.Anything, charID, world.StatusActive, 6).Return(nil, nil)
+
+		err := svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, 6)
+		require.NoError(t, err)
+		require.Equal(t, 1, outbox.calls, "an unretire emits exactly one envelope")
+		assert.Equal(t, "character_unretired", outbox.lastIntent.Kind)
+		assert.Equal(t, charID, outbox.lastIntent.AggregateID)
+	})
+
+	t.Run("rejects a zero expected version with CHARACTER_VERSION_REQUIRED before any read", func(t *testing.T) {
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "unretire", charID)
+
+		err := svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, 0)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_VERSION_REQUIRED")
+		mockRepo.AssertNotCalled(t, "Get")
+		mockRepo.AssertNotCalled(t, "SetStatus")
+		assert.Zero(t, outbox.calls)
+	})
+
+	t.Run("rejects a negative expected version with CHARACTER_VERSION_REQUIRED before any read", func(t *testing.T) {
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "unretire", charID)
+
+		err := svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, -3)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_VERSION_REQUIRED")
+		mockRepo.AssertNotCalled(t, "Get")
+		assert.Zero(t, outbox.calls)
+	})
+
+	t.Run("prefers the version conflict over the not-retired guard on a stale caller", func(t *testing.T) {
+		// R1 guard order: a stale unretire racing a COMPLETED unretire must see
+		// WORLD_CONCURRENT_EDIT, never CHARACTER_NOT_RETIRED — the latter would
+		// report the racing writer's outcome as if the stale view were current.
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "unretire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 9, Status: world.StatusActive}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+
+		err := svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, 4)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+		mockRepo.AssertNotCalled(t, "SetStatus")
+		assert.Zero(t, outbox.calls)
+	})
+
+	t.Run("rejects an active character with CHARACTER_NOT_RETIRED", func(t *testing.T) {
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "unretire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 4, Status: world.StatusActive}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+
+		err := svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, 4)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_RETIRED")
+		mockRepo.AssertNotCalled(t, "SetStatus")
+		assert.Zero(t, outbox.calls)
+	})
+
+	t.Run("rejects an idle character with CHARACTER_NOT_RETIRED", func(t *testing.T) {
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "unretire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 4, Status: world.StatusIdle}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+
+		err := svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, 4)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_RETIRED")
+		mockRepo.AssertNotCalled(t, "SetStatus")
+		assert.Zero(t, outbox.calls)
+	})
+
+	t.Run("denies an unrecognized stored status through the exhaustive default arm", func(t *testing.T) {
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "unretire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 4, Status: world.Status("bogus")}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+
+		err := svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, 4)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_UNRETIRE_FAILED")
+		mockRepo.AssertNotCalled(t, "SetStatus")
+		assert.Zero(t, outbox.calls)
+	})
+
+	t.Run("returns CHARACTER_NOT_FOUND for a nonexistent character", func(t *testing.T) {
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "unretire", charID)
+
+		mockRepo.EXPECT().Get(ctx, charID).
+			Return(nil, oops.Code("CHARACTER_NOT_FOUND").Wrap(world.ErrNotFound))
+
+		err := svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, 1)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
+		assert.Zero(t, outbox.calls)
+	})
+
+	t.Run("denies a caller granted only the retire action", func(t *testing.T) {
+		// D-40 splits retire from unretire precisely so a policy may grant one
+		// without the other; a shared "write" (or "retire") grant must not carry.
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "retire", charID)
+
+		err := svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, 4)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
