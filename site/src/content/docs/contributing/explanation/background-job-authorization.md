@@ -240,8 +240,14 @@ action.job.trigger_subject
 Run this **before** upgrading:
 
 ```sql
-SELECT id, name, dsl_text FROM policies WHERE dsl_text LIKE '%action.%';
+SELECT id, name, source, dsl_text
+FROM access_policies
+WHERE enabled = true AND dsl_text LIKE '%action.%';
 ```
+
+`enabled = true` matches what the cache actually compiles — a disabled row
+cannot fail the boot — and `source` tells you whether the row came from a
+seed, a plugin, or an operator, which decides how you fix it.
 
 Every `action.<key>` appearing in any returned row must be a member of the
 declared set above. A row referencing `action.event_type`,
