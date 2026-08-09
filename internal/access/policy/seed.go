@@ -500,6 +500,13 @@ func SeedPolicies() []SeedPolicy {
 		// subscription happens to deliver for that aggregate, which is how a job
 		// on a broad filter acquires broader authority than intended.
 		//
+		// THE CAPABILITY-CLASS CONJUNCT IS THE SECOND GATE (D-51). A job declares
+		// its write kinds in Go at registration; that declaration NARROWS, and
+		// this seed GRANTS. Both must pass, and the declaration alone authorizes
+		// nothing unless a seed reads it — which is exactly what
+		// `principal.job.writes.containsAll(["character"])` does. Delete it and
+		// the declaration becomes decoration.
+		//
 		// trigger_subject is the BARE AGGREGATE ULID — byte-identical to
 		// bags.Resource["id"], which is the substring after the first ':' of the
 		// resource ref. Not a dotted NATS subject, not a prefixed entity ref:
@@ -507,7 +514,7 @@ func SeedPolicies() []SeedPolicy {
 		{
 			Name:        "seed:job-fixture-instance-scoped",
 			Description: "A live background job may write only the character its triggering event names (AUTHZ-02 fixture; no production consumer — real job grants are Phase 3's per D-52)",
-			DSLText:     `permit(principal is job, action in ["write"], resource is character) when { principal.job.name == "fixture" && action.job.trigger_event_type == "fixture_triggered" && action.job.trigger_subject == resource.id };`,
+			DSLText:     `permit(principal is job, action in ["write"], resource is character) when { principal.job.name == "fixture" && principal.job.writes.containsAll(["character"]) && action.job.trigger_event_type == "fixture_triggered" && action.job.trigger_subject == resource.id };`,
 			SeedVersion: 1,
 		},
 

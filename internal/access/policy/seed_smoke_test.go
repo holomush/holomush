@@ -1171,3 +1171,93 @@ func TestEverySeededCapabilityResourceHasDefaultPermit(t *testing.T) {
 		}
 	}
 }
+
+// --- Background-job fixture (AUTHZ-02) -------------------------------------
+
+// jobProvider builds a "job"-namespace mock provider with the given subject
+// attributes (e.g. {"name": "fixture", "writes": []string{"character"},
+// "has_writes": true}), mirroring characterProvider / pluginProvider above.
+//
+// Its schema declares exactly the keys attribute.JobProvider declares. A double
+// declaring a key the real provider does not emit would turn every downstream
+// behavioural assertion into a test of the double.
+func jobProvider(subjectAttrs map[string]any) *mockAttributeProvider {
+	return &mockAttributeProvider{
+		namespace:  "job",
+		subjectMap: subjectAttrs,
+		schema: &types.NamespaceSchema{
+			Attributes: map[string]types.AttrType{
+				"name":       types.AttrTypeString,
+				"writes":     types.AttrTypeStringList,
+				"has_writes": types.AttrTypeBool,
+			},
+		},
+	}
+}
+
+// TestSeedSmokeJobFixtureCapabilityClassIsASecondGate proves the declared
+// capability class is a gate the seed ACTUALLY READS, not decoration.
+//
+// The pair is what makes that claim: the two subtests differ ONLY in the job's
+// declared writes. Everything else — subject, action, resource, and all three
+// action.job.* provenance attributes — is identical, so the denial can only be
+// caused by `character` being absent from principal.job.writes.
+//
+// D-51's shape, stated as policy: the DECLARATION narrows and the SEED grants.
+// Both gates must pass, and a declaration alone authorizes nothing.
+func TestSeedSmokeJobFixtureCapabilityClassIsASecondGate(t *testing.T) {
+	const charID = "01ARZ3NDEKTSV4RRFFQ69G5FB1"
+
+	// The provenance triple world.JobCaller stamps, spelled here as the engine
+	// sees it: bare bag keys under the job. prefix, overlaid onto bags.Action.
+	provenance := map[string]any{
+		"job.trigger_event_id":   "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+		"job.trigger_event_type": "fixture_triggered",
+		"job.trigger_subject":    charID,
+	}
+
+	t.Run("permits a job that declared character", func(t *testing.T) {
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name":       "fixture",
+				"writes":     []string{"character"},
+				"has_writes": true,
+			}),
+			characterProvider(nil, map[string]any{"id": charID, "name": "Fixture"}),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:    access.JobSubject("fixture"),
+			Action:     "write",
+			Resource:   access.CharacterResource(charID),
+			Attributes: provenance,
+		})
+		require.NoError(t, err)
+		assert.True(t, decision.IsAllowed(),
+			"a job declaring `character` must be permitted to write the character its provenance names; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
+
+	t.Run("denies a job whose capability class omits character", func(t *testing.T) {
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name": "fixture",
+				// The ONLY difference from the permit case.
+				"writes":     []string{"location"},
+				"has_writes": true,
+			}),
+			characterProvider(nil, map[string]any{"id": charID, "name": "Fixture"}),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:    access.JobSubject("fixture"),
+			Action:     "write",
+			Resource:   access.CharacterResource(charID),
+			Attributes: provenance,
+		})
+		require.NoError(t, err)
+		assert.False(t, decision.IsAllowed(),
+			"a job that did NOT declare `character` must be denied even when its provenance matches the resource; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
+}

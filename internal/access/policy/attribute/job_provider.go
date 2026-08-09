@@ -78,7 +78,26 @@ func (p *JobProvider) ResolveSubject(_ context.Context, subjectID string) (map[s
 	// The BARE name, not the prefixed ref: it equals bags.Subject["id"] (which
 	// the resolver stamps provider-independently as the substring after the
 	// first ':'), so `principal.job.name == "fixture"` reads naturally.
-	return map[string]any{"name": name}, nil
+	attrs := map[string]any{"name": name}
+
+	// The declared capability class (D-50). It is SELF-ATTESTED and that is
+	// fine, because it can only NARROW: a seed must still grant the write, and
+	// both gates must pass (D-51).
+	//
+	// The witness is emitted on EVERY path; only the VALUE is omitted. An empty
+	// or nil writes VALUE would be a RESOLVED value that containsAll evaluates
+	// against — the list-flavored empty-string sentinel
+	// .claude/rules/abac-providers.md forbids — so an undeclared class drops
+	// the key entirely and every capability-class condition then evaluates
+	// false.
+	if writes, ok := p.registry.DeclaredWrites(name); ok && len(writes) > 0 {
+		attrs["writes"] = writes
+		attrs["has_writes"] = true
+	} else {
+		attrs["has_writes"] = false
+	}
+
+	return attrs, nil
 }
 
 // ResolveResource returns nil — jobs are a principal, never a resource.
@@ -91,6 +110,13 @@ func (p *JobProvider) Schema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
 			"name": types.AttrTypeString,
+			// AttrTypeStringList, not AttrTypeString. Declaring it as a scalar
+			// still registers successfully and then misbehaves silently under
+			// containsAll, so registration succeeding proves nothing about the
+			// type — TestJobProviderSchemaDeclaresWritesAsAStringList asserts it
+			// directly.
+			"writes":     types.AttrTypeStringList,
+			"has_writes": types.AttrTypeBool,
 		},
 	}
 }
