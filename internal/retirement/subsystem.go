@@ -290,6 +290,27 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 		defer close(done)
 		<-runCtx.Done()
 		cc.Stop()
+		// Stop() IS NOT A BARRIER. In nats.go v1.52.0 it only does
+		// closed.CompareAndSwap(0,1) + close(s.done) and returns
+		// (jetstream/pull.go:768); the handler is invoked from the NATS
+		// subscription's own dispatch goroutine, which Stop never joins. So a
+		// process() can still be mid-fanout after Stop returns — and Stop()
+		// then retracts the job's liveness, at which point a still-running
+		// MoveCharacter loses its ABAC attributes and classifyWorldError would
+		// ACK the resulting deny as terminal, permanently abandoning a
+		// half-applied fanout (session already deleted, character never moved).
+		//
+		// Closed() is the real barrier: nats.go invokes the subscription's
+		// closed handler at the very END of waitForMsgs (nats.go:3656), after
+		// the delivery loop has exited, so once it fires no handler is in
+		// flight. Waiting on it here is what makes Stop's <-s.done a genuine
+		// join rather than a flag read.
+		select {
+		case <-cc.Closed():
+		case <-time.After(stopTimeout):
+			// A handler is wedged. Bounded rather than blocking shutdown
+			// forever; the unacked message is redelivered on the next boot.
+		}
 	}()
 
 	slog.InfoContext(ctx, "retirement reactor subsystem activated", "consumer", s.cfg.ConsumerName)

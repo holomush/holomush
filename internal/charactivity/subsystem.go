@@ -382,6 +382,24 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 			defer wg.Done()
 			<-runCtx.Done()
 			cc.Stop()
+			// Stop() IS NOT A BARRIER. In nats.go v1.52.0 it only does
+			// closed.CompareAndSwap(0,1) + close(s.done) and returns
+			// (jetstream/pull.go:768); the handler runs on the NATS
+			// subscription's own dispatch goroutine, which Stop never joins.
+			// Without the wait below a listener Put could land concurrently
+			// with — or after — Stop's final drain, which is exactly what the
+			// R2b claim on Stop forbids.
+			//
+			// Closed() is the real barrier: nats.go invokes the subscription's
+			// closed handler at the very END of waitForMsgs (nats.go:3656),
+			// after the delivery loop has exited, so once it fires no handler
+			// is in flight.
+			select {
+			case <-cc.Closed():
+			case <-time.After(stopTimeout):
+				// A handler is wedged. Bounded rather than blocking shutdown
+				// forever; the buffer is durable, so the next boot flushes it.
+			}
 		}()
 		go func() {
 			defer wg.Done()

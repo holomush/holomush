@@ -374,8 +374,14 @@ func (r *reactor) process(ctx context.Context, d delivery) disposition {
 // line every five seconds. Everything else — evaluation failures, missing
 // rows, persistence errors — is treated as transient and redelivered, which is
 // safe precisely because every effect above is gated on observed state.
+// A deny observed while the lifecycle context is ALREADY CANCELLED is the one
+// exception: during shutdown the job's liveness is being retracted, so a deny
+// may mean "the job no longer has attributes" rather than "the seed refuses
+// this write". Acking that would permanently abandon a half-applied fanout, so
+// it is redelivered instead — on the next boot the job is live again and the
+// state guards make the re-run silent.
 func (r *reactor) classifyWorldError(ctx context.Context, err error, msg string) disposition {
-	if errors.Is(err, world.ErrPermissionDenied) {
+	if errors.Is(err, world.ErrPermissionDenied) && ctx.Err() == nil {
 		errutil.LogErrorContext(ctx, msg+"; policy denied the job and redelivery cannot cure it", err)
 		return ack
 	}

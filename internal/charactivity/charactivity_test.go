@@ -405,6 +405,13 @@ func TestFlusherSurvivesAListKeysFailure(t *testing.T) {
 
 // TestStopJoinsBothProducersBeforeTheFinalDrain is R2b: no listener and no
 // ticker may be live while the shutdown drain runs.
+//
+// The join is exercised, not merely asserted. inFlight stands in for a
+// listener handler that is still running when Stop is called — the real Stop
+// flags the subscription and returns without joining the NATS dispatch
+// goroutine, so its Put lands DURING shutdown. The final drain must observe
+// that Put, which it can only do if Stop waited on Closed() first. Relying on
+// Stop() alone, the drain races the Put and flushes the stale value.
 func TestStopJoinsBothProducersBeforeTheFinalDrain(t *testing.T) {
 	ctx := context.Background()
 	kv := newFakeKV()
@@ -416,10 +423,23 @@ func TestStopJoinsBothProducersBeforeTheFinalDrain(t *testing.T) {
 	s := newFakeWiredSubsystem(t, kv, w.write)
 	require.NoError(t, s.Prepare(ctx))
 	require.NoError(t, s.Activate(ctx))
+
+	cons, ok := s.cons.(*fakeConsumer)
+	require.True(t, ok, "the fake wiring installs a fakeConsumer")
+	cons.cc.mu.Lock()
+	cons.cc.inFlight = func() {
+		// A listener Put that was already in flight when Stop was called.
+		time.Sleep(20 * time.Millisecond)
+		_, putErr := kv.Put(context.Background(), id.String(), []byte("2000"))
+		assert.NoError(t, putErr)
+	}
+	cons.cc.mu.Unlock()
+
 	require.NoError(t, s.Stop(ctx))
 
-	assert.Equal(t, []writeCall{{id: id, nanos: 1000}}, w.recorded(),
-		"Stop runs one final drain after both producers have been joined")
+	assert.Equal(t, []writeCall{{id: id, nanos: 2000}}, w.recorded(),
+		"the final drain runs only after the in-flight listener handler has been joined, "+
+			"so it flushes that handler's value and not the stale one")
 	assert.Empty(t, kv.snapshot())
 }
 
@@ -452,22 +472,56 @@ type fakeConsumer struct {
 
 func (c *fakeConsumer) Consume(h jetstream.MessageHandler, _ ...jetstream.PullConsumeOpt) (jetstream.ConsumeContext, error) {
 	c.handler = h
-	c.cc = &fakeConsumeContext{}
+	c.cc = newFakeConsumeContext()
 	return c.cc, nil
 }
 
+// fakeConsumeContext models the REAL jetstream.ConsumeContext teardown
+// contract, which the subsystem's join now depends on.
+//
+// Closed() must be a channel that closes only once no handler is in flight —
+// in nats.go that is the subscription's closed handler firing at the end of
+// waitForMsgs. A fake returning a nil channel (blocks forever) or a
+// pre-closed one would make the join untestable in opposite directions: the
+// first hangs the shutdown to its timeout, the second lets a Stop that joins
+// nothing still pass. Here Stop closes it, and onStop lets a test interpose a
+// still-running "handler" so the ordering claim can actually fail.
 type fakeConsumeContext struct {
 	mu      sync.Mutex
 	stopped bool
+	closed  chan struct{}
+	// inFlight, when set, stands in for a handler that is STILL RUNNING when
+	// Stop is called. Stop returns without waiting for it — as the real Stop
+	// does — and Closed() is signalled only once it returns, which is the
+	// contract nats.go provides and the one the subsystem's join relies on.
+	inFlight func()
+}
+
+func newFakeConsumeContext() *fakeConsumeContext {
+	return &fakeConsumeContext{closed: make(chan struct{})}
 }
 
 func (c *fakeConsumeContext) Stop() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	already := c.stopped
 	c.stopped = true
+	inFlight := c.inFlight
+	c.mu.Unlock()
+	if already {
+		return
+	}
+	// Deliberately NOT synchronous: the real Stop flags the subscription and
+	// returns while the dispatch goroutine is still running the handler.
+	go func() {
+		if inFlight != nil {
+			inFlight()
+		}
+		close(c.closed)
+	}()
 }
-func (c *fakeConsumeContext) Drain()                  {}
-func (c *fakeConsumeContext) Closed() <-chan struct{} { return nil }
+
+func (c *fakeConsumeContext) Drain()                  { c.Stop() }
+func (c *fakeConsumeContext) Closed() <-chan struct{} { return c.closed }
 
 // newFakeWiredSubsystem builds a Subsystem whose two acquisition seams yield
 // fakes, so the whole Prepare/Activate/Stop contract runs without a live
