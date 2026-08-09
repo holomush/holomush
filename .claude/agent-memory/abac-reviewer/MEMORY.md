@@ -1,9 +1,7 @@
 # ABAC Reviewer Memory
 
 Durable patterns from prior reviews. Read at the start of each review; update after.
-**Curated 2026-08-08** (was 760 lines / 3.8x over cap): per-bead narratives for
-shipped-and-verified Phase-5/6 work were collapsed into the reusable lessons below.
-Full per-review detail lives in `reports/`.
+Curated 2026-08-09; full per-review detail lives in `reports/`.
 
 ## Engine facts worth not re-deriving
 
@@ -133,60 +131,75 @@ Full per-review detail lives in `reports/`.
 5. New audit-chain subject prefix ⇒ needs TWO forbid seeds (`principal is character` AND
    `principal is plugin`). Historically missed for `rekey` / `crypto_policy`.
 
-## Reviewing a refactor that claims to be policy-neutral
+6. "Policy-neutral refactor" is a CLAIM, not evidence — an empty
+   `git diff --stat internal/access/` proves nothing. Trace what actually reaches
+   `NewAccessRequest`: subject string (byte identity — often ALSO an audit field, e.g. the
+   outbox envelope `Actor`), evaluation CONTEXT (system marker), attribute map. Ask whether
+   the refactor changed the *width* or *discoverability* of a bypass, not its spelling.
 
-`git diff --stat internal/access/` being empty is a CLAIM, not evidence. Test it by tracing
-what actually reaches `NewAccessRequest`: the subject string (byte identity — it is often
-ALSO an audit field such as the outbox envelope `Actor`), the evaluation CONTEXT (system
-marker), and the attribute map. Check whether the refactor changed the *width* or the
-*discoverability* of a bypass, not just its spelling.
 
-## Phase 02.1 world.Caller model (2026-08-08) — READY
+## world.Caller / job-principal model (02.1 READY 2026-08-08, 02.2 NOT READY 2026-08-09)
 
-`world.Service`'s 23 commands moved from `subjectID string` to an opaque `world.Caller`
-(`internal/world/caller.go`); `checkAccess` (`service.go:209-262`) now forwards
-`caller.attrs` to `NewAccessRequest` (was hardcoded `nil`) and evaluates against
-`caller.evalContext(ctx)`. Verified sound and NARROWING:
+`world.Service` commands take an opaque `world.Caller`; `checkAccess` (`service.go:231-297`)
+forwards `caller.attrs` into `NewAccessRequest` and evaluates against
+`caller.evalContext(ctx)`. Settled:
 
-- **`SystemCaller()` narrows S1.** The marker is applied ONLY to the ctx handed to
-  `Evaluate`, so it can't reach repos/outbox; it takes NO parameters, so no request-derived
-  value can ever *select* the bypass. After this phase the only non-test
-  `access.WithSystemSubject` in the tree is `caller.go:104`, so "ambient marker + a subject
-  that happens to be `system`" is unreachable in production. Exactly 2 production
-  `SystemCaller()` sites (`internal/grpc/location_follow.go:200,213`, both reads).
-  `"system:bootstrap"` correctly stays `HumanCaller` (normal policy path).
-- **Opacity (D-62) holds.** Unexported fields, 2 exported constructors (neither populates
-  `attrs`), 0 exported accessors in `caller.go`; all 5 accessors live in
-  `internal/world/export_test.go` (package `world` `_test.go` ⇒ that test binary only).
-  Rewritten assertions `assert.Equal(t, world.HumanCaller("lit"), captured)` are STRONGER
-  than the old string compare — they also pin `system==false`, `attrs==nil`.
-- **Envelope Actor byte identity** pinned for real by
-  `internal/world/outbox_actor_test.go` driving both `buildIntent` and `buildMoveIntent`.
-  Reusable lesson: a normalization applied INSIDE a wrapper value is invisible in the
-  migration diff and keeps every pre-existing suite green — only a builder-level byte
-  comparison detects it. Demand one on any "opaque value replaces an audit-bearing string".
-- **CARRY INTO 02.2 (open Medium).** The now-open `Caller.attrs` channel lands in the SAME
-  `bags.Action` namespace as the live permit `seed:plugin-world-mutation-own-location`
-  (`seed.go:332`, `when { resource.location.id == action.dispatch_location }`).
-  `dispatch_location` is produced today only at the host-vouched
-  `internal/plugin/hostcap/interceptor.go:294` and is NOT in `reservedActionKeys`. A world
-  caller self-asserting it would permit an ARBITRARY location write by a plugin subject.
-  Unreachable in 02.1 (attrs always nil), live the moment 02.2 populates it. Fix before
-  02.2: reserve the key, namespace the world channel's keys, or make the guard an allowlist.
-- **Open Medium #2.** No census pins the `SystemCaller()` call-site set, and the bypass is
-  no longer findable via `rg WithSystemSubject`. Recommend a `test/meta/` allowlist census
-  in the `worldCallerExemptCommands()` idiom.
-- Structural census pattern worth reusing: `test/meta/world_caller_census_test.go` derives
-  the command universe over `go/ast` (predicate: exported `*Service` method whose first
-  FLATTENED param is `context.Context`; authorizing = body references the receiver's
-  `checkAccess`), asserts the exemption set in BOTH directions, and carries anti-vacuity
-  guards (`require.NotEmpty` on the universe, `require.NotZerof` on the authorizing count).
-  `flattenedParamTypes` matters — grouped params make `Params.List[1]` ≠ parameter 1.
-- `internal/plugin/hostfunc/cap_property.go` / `cap_world_query.go` still take a
-  Lua-SCRIPT-supplied subject string (`L.CheckString(1)`). Unwired scaffolding today (no
-  production implementer) and outside the census universe — flag if ever wired.
+- **`SystemCaller()` narrows S1**: marker applied only to the ctx handed to `Evaluate`;
+  takes NO parameters, so no request value can *select* the bypass. `caller.go` holds the
+  only non-test `access.WithSystemSubject`. `"system:bootstrap"` stays `HumanCaller`.
+- **Opacity holds**: unexported fields; NO exported constructor takes an attribute map
+  (`JobCaller` derives 3 hardcoded `job.`-prefixed keys from a typed `Provenance`);
+  accessors live in `internal/world/export_test.go`. 02.1's carry-forward
+  `dispatch_location` risk is thus CLOSED BY CONSTRUCTION, not by the denylist —
+  `reservedActionKeys` is still one entry, and only 3 production non-nil-attr
+  `NewAccessRequest` producers exist (`authguard/guard.go:134`,
+  `pluginauthz/capability.go:50`, `world/service.go:251`). `dispatch_location` CANNOT be
+  denylisted: `capability.go:50` supplies it for the host's own scope fence.
+- **Still open**: no census pins the `SystemCaller()` call-site set;
+  `hostfunc/cap_property.go` / `cap_world_query.go` take a Lua-SCRIPT-supplied subject
+  (unwired — flag if ever wired). Reusable:
+  `test/meta/world_caller_census_test.go` derives its universe over `go/ast`
+  (`flattenedParamTypes` matters) and asserts the exemption set BOTH ways. Demand a
+  builder-level BYTE comparison when an opaque value replaces an audit-bearing string —
+  normalization inside the wrapper keeps every suite green.
+
+## New reflexes from 02.2
+
+1. **A name-set fence does not gate the SHAPE of an entry it already admits.**
+   `TestNoPhase2SeedIntroducesACharacterResourceTypePermit`
+   (`seed_profile_visibility_test.go:692`) compares NAMES of seeds whose compiled
+   `Target.ResourceType == "character"`. Once a name is in `want`, widening that seed's
+   action list or flipping its principal stays GREEN. When a phase adds an entry to such a
+   fence with a written justification, demand an exact-DSL + `SeedVersion` pin (precedent
+   `:653-661`, `:757`), and **read the fence comment against the assertion** — 02.2's "a
+   future edit that widens this one's action to `read` ... fails the same way" is false for
+   both halves. That was the blocking finding.
+2. **The `action` gate is LIVE as of 02.2-04.** `BuildABACStack` builds its compiler on the
+   populated `attribute.SchemaRegistry` (`setup.go:396`), so `compiler.go:185-190`
+   hard-errors → `cache.Reload` fails → boot fails. `attribute.ActionNamespaceSchema()`
+   (`action_schema.go:43`) is the single source of truth; 4 sites (`setup.go:396`,
+   `bootstrap/setup/subsystem.go:214`, `real_abac.go:58`, `abactest.go:73`). Validation is
+   by DSL ROOT (principal|resource|action|env), NEVER by provider name — `resource.<ns>.<k>`
+   is namespace `resource`, key `<ns>.<k>` — so an action-only registry is FULL fidelity.
+   - **Un-gated hole**: plugin-policy install runs only `dsl.Parse`
+     (`policy_installer.go:62`) + resource-attr checks (`policy_schema_validator.go:60`), so
+     an undeclared `action.*` key installs, then fails every reload → `EnterDegradedMode`
+     (deny-all) → boot brick. Produced-but-undeclared today: `event_type`, `plugin_name`,
+     `plugin_inst` (`authguard/guard.go:134`) — referencing any is a boot brick.
+3. **`job:` principal.** `access.SubjectJob` (`prefix.go:27`) disjoint from
+   `SubjectSystem`; `access.JobSubject` panics on empty (4-for-4 intact).
+   `attribute.JobProvider` is `PluginProvider`'s shape over a liveness registry: `(nil,nil)`
+   for unknown/dead/nil-registry/foreign-prefix, `has_writes` witness on BOTH branches,
+   `writes` omitted (never empty list) when undeclared. Deny code composes as a
+   PREFIX (`JOB_CHARACTER_ACCESS_DENIED`) so `grpc_server.go:169`'s `_ACCESS_DENIED` suffix
+   classification survives. `seed:job-fixture-instance-scoped` is UNMATCHABLE in production
+   (`cmd/holomush/core.go:412` builds an empty registry) — not a live grant.
+4. **INV-ACCESS-13 is a genuine multi-clause binding** (liveness / capability class /
+   instance scope / ScheduledJobCaller carve-out, each a real paired assertion).
+   INV-ACCESS-14 (D-55 stamping) is honestly `pending` — NO production `JobCaller` call
+   site exists. Phase 3 owns it: verify stamping precedes handler logic when it lands.
 
 ## Harness note
 
-This worktree's bash/Read harness has intermittently returned STALE stdout. Trust exit codes
-captured as the FIRST token (`TESTRC=$?`) over printed text; `base64 < file` detects replay.
+This worktree's bash/Read harness intermittently returns STALE stdout — trust exit codes
+captured as the FIRST token over printed text; `base64 < file` detects replay.
