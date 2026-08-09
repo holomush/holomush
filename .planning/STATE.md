@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 03
 current_phase_name: world-character-commands
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-08-09T20:53:37.884Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-08-09T21:16:16.708Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 02.2 complete — UAT passed, security verified, transitioned to Phase 03
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 40
-  completed_plans: 36
+  completed_plans: 37
   percent: 56
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 03 (world-character-commands) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([█████████░] 90%)
+Progress: [█████████████████░░░] 34/40 plans ([█████████░] 93%)
 Last activity: 2026-08-09 — Phase 03 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -253,6 +253,7 @@ no action needed.
 | Phase 02.2 P05 | 21min | 3 tasks | 8 files |
 | Phase 03 P01 | 14m | 3 tasks | 13 files |
 | Phase 03 P02 | ~35 min | 3 tasks | 14 files |
+| Phase 03 P03 | 35m | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -530,6 +531,8 @@ the next milestone yet.
 - [Phase ?]: consumer.CreateWithRetry deliberately codes nothing — an identity assertion (not errors.Is) pins that it returns the create error unwrapped, so neither audit caller's oops Code can be demoted by a future edit.
 - [Phase ?]: task generate does not exist in this repo; the SubsystemID stringer is regenerated with go generate ./internal/lifecycle/, matching every other generator in the tree.
 - [Phase ?]: Adding a productionSubsystemSet field without widening allStubs' fixed-size array is NOT a compile error (contra the in-repo comment) — the field is nil and the suite segfaults; the doc comment now states the real failure mode.
+- [Phase ?]: 03-03: neither new spec carries a // Verifies: annotation — INV-WORLD-1 and INV-WORLD-6 are already bound, and a second claimant on a bound entry dilutes provenance
+- [Phase ?]: 03-03: the retire atomicity proof's third case drives the transactor+repo directly — an in-transaction CAS failure is unreachable through the public command because 03-01's version precheck fires first
 
 ### Pending Todos
 
@@ -546,11 +549,12 @@ None yet.
 - Operator action outstanding: ruleset 11923801 unchanged; no coverage context gates merges (#4875, #4876)
 - 02-07: PROFILE-11's characters.description half is NOT discharged in Phase 2 — D-29 defers seed:profile-public-read-character to Phase 4, to land with the characterToProto projection narrowing. EXT-07's admin section registry is still 02-09's.
 - BLOCKING pre-merge: abac-reviewer (/holomush-dev:review-abac) has NOT reviewed the Phase 2 diff. D-05 makes it mandatory. Brief is written verbatim in 02-11-SUMMARY.md; owner is the orchestrator/human.
-- MAINTAINER DECISION: ROADMAP success criterion 4 — the in-world-description half is deferred to Phase 4 by D-29. Three options stated in 02-11-SUMMARY.md, none selected. Criterion 1 is settled by D-30 and MUST NOT be touched.
+- MAINTAINER DECISION: ROADMAP success criterion 4 — the in-world-description half is deferred to Phase 4 by D-29. Three options stated in 02-11-SUMMARY.md, selected. Criterion 1 is settled by D-30 and MUST NOT be touched.
 - [Phase 02.2] DEPLOYMENT PRECONDITION (AR-02.2-04): UAT test 2 passed *vacuously* — there are no deployed instances holding data, so the D-67 pre-flight query was never actually executed. It MUST be run before the first upgrade of any instance whose `access_policies` table carries operator- or plugin-authored rows; an undeclared `action.*` key there is an unrecoverable boot failure. Query and remedy: `02.2-UAT.md` test 2 and `contributing/explanation/background-job-authorization.md`.
 - [Phase 02.2] Five compiler-construction sites in the integration tiers still skip the `action` gate (WR-05: `world_suite_test.go:243`, `access_suite_test.go:214`, `abac_widget_test.go:283`/`:426`, `binary_plugin_test.go:457`), so a typo'd `action.*` key can compile clean there. Test-tier only — production still fails loudly. The sharper half is that `action_schema.go:92-95` and `setup.go:374-379` claim the gate is "identical at every compilation site", which is now inaccurate.
 - [Phase 02.2] Two concurrency findings on `jobs.Registry`, neither blocking: the liveness read is two calls under separate RLocks (WR-02 — fails closed either way, but INV-ACCESS-13 clause 1 is not concurrency-exact as phrased), and `Register` is silently last-writer-wins with no duplicate check (WR-03 — a second registration can replace a security-gating capability class). Both sit inside the D-53 in-process out-of-scope boundary.
 - [Phase 02.2] Four abac-reviewer Low findings filed, not fixed: check-then-act in `SchemaRegistry.Register`; `attribute.Resolver`'s own maps unsynchronized (pre-existing); three undeclared action keys at `eventbus/authguard/guard.go:134`; `reservedActionKeys` still a one-entry denylist rather than an allowlist.
+- The two-replica resilience suite is fully red on the nightly lane (4 pre-existing failures; natstest.Conn dials a scoped NATS env without credentials) — filed as holomush/holomush#4953, not fixed in 03-03
 
 ### Quick Tasks Completed
 
@@ -590,12 +594,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-09T20:53:30.166Z
+Last session: 2026-08-09T21:16:16.693Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 03-02-PLAN.md
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
