@@ -403,7 +403,7 @@ unverified seams, and timer-driven jobs (Phase 3's `last_active_at` flusher) car
 event, so what they present as per-execution context is an open question that MUST NOT be invented
 by a planner.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -424,7 +424,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 02.2-05-PLAN.md — INV-ACCESS-13, the contributor/operator doc, and the criterion-4 amendment
+- [x] 02.2-05-PLAN.md — INV-ACCESS-13, the contributor/operator doc, and the criterion-4 amendment
 
 ### Phase 3: World Character Commands
 

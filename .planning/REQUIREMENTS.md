@@ -260,7 +260,7 @@ world caller model (Phase 02.1) and the background-job authorization model (Phas
       `types.NewAccessRequest` (deleting the hardcoded `nil` at `internal/world/service.go:214`),
       so a world write can be conditioned on `action.*` attributes in the policy DSL.
 
-- [ ] **AUTHZ-02**: Background jobs act under a **first-class `job:` principal** with
+- [x] **AUTHZ-02**: Background jobs act under a **first-class `job:` principal** with
       liveness-gated attributes and per-execution provenance (`action.job.*`), so a job's
       authority is scoped to the work it is currently performing — a job that grows an undeclared
       write path or derives the wrong resource is **denied**, not granted blanket capability.
@@ -406,4 +406,4 @@ Which phases cover which requirements. Filled during roadmap creation.
 | EXT-07 | Phase 2 | Pending |
 | EXT-08 | Phase 5 | Pending |
 | AUTHZ-01 | Phase 02.1 | Pending |
-| AUTHZ-02 | Phase 02.2 | Pending |
+| AUTHZ-02 | Phase 02.2 | Complete |

@@ -4,17 +4,17 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02.2
 current_phase_name: background-job-authorization-model
-status: executing
-stopped_at: Completed 02.2-04-PLAN.md
-last_updated: "2026-08-09T17:16:49.471Z"
+status: verifying
+stopped_at: Completed 02.2-05-PLAN.md (final plan of phase 02.2)
+last_updated: "2026-08-09T17:37:50.872Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 02.2 execution started
 progress:
   total_phases: 9
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 40
-  completed_plans: 33
-  percent: 44
+  completed_plans: 34
+  percent: 56
 ---
 
 # Project State
@@ -35,8 +35,8 @@ complete character identity surface (creation, management, public profiles with 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02.2 (background-job-authorization-model) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
-Progress: [████████░░] 83% (1/6 phases)
+Status: Phase complete — ready for verification
+Progress: [█████████░] 85% (1/6 phases)
 Last activity: 2026-08-09 — Phase 02.2 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -249,6 +249,7 @@ no action needed.
 | Phase 02.2 P02 | 17min | 2 tasks | 9 files |
 | Phase 02.2 P03 | 11min | 2 tasks | 6 files |
 | Phase 02.2 P04 | 20min | 3 tasks | 10 files |
+| Phase 02.2 P05 | 21min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -513,6 +514,9 @@ the next milestone yet.
 - [Phase ?]: 02.2-04: BuildABACStack's compiler is now built on schemaReg.Schema() and the initial cache.Reload moved AFTER all provider and action registrations, so boot and steady-state validate against the same populated schema
 - [Phase ?]: 02.2-04: the action hard-error branch carries oops code POLICY_UNREGISTERED_ACTION_ATTRIBUTE and is fatal for EVERY policy source including operator-authored DB rows (D-67) — no flag, no source-conditional
 - [Phase ?]: 02.2-04: sites 2 and 3 use attribute.NewActionOnlySchemaRegistry() rather than a new ABACSubsystem.SchemaRegistry() accessor; the compiler validates by DSL root, never by provider name, so action validation is identical at all four sites
+- [Phase ?]: INV-ACCESS-13 splits D-55's consumer-boundary stamping into a separate binding: pending entry (INV-ACCESS-14) rather than over-claiming a partial binding
+- [Phase ?]: ROADMAP criterion 4 amended by scoped Edit because gsd-tools has no phase edit verb; gap filed upstream as open-gsd/gsd-core#3254
+- [Phase ?]: AUTHZ-02 traceability row filled by hand after requirements.mark-complete reported table_unmatched; root cause is updateTableCell's first-table-wins scan (open-gsd/gsd-core#3255)
 
 ### Pending Todos
 
@@ -569,11 +573,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-09T17:16:42.146Z
+Last session: 2026-08-09T17:37:43.885Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02.2-04-PLAN.md
+Stopped at: Completed 02.2-05-PLAN.md (final plan of phase 02.2)
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
