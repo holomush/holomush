@@ -381,11 +381,17 @@ than granted as a blanket capability or borrowed from the human whose command tr
 
 3. The `action` namespace is registered in the schema registry with **every** key it must carry —
    the job provenance triple, the already-shipped `dispatch_location`, and the resolver-owned
-   `name` — so a typo'd `action.*` reference is a compile-time failure rather than a silent
+   `name` — so a typo'd `action.*` reference is a policy-compile failure at boot (cache reload) rather than a silent
    default-deny, and no shipped seed regresses.
 
-4. The model is documented as the path every future background consumer takes, and existing
-   `WithSystemSubject` call sites are enumerated (migration itself belongs to Phase 02.1).
+4. Every background consumer gets a `job:` identity and a **declared capability class**
+   (`principal.job.name`, `principal.job.writes`, via the liveness-gated registry and provider);
+   **only event-driven** consumers additionally get **per-execution instance scoping** (the
+   provenance triple bound against `resource.id`). A timer-driven job's authority is therefore
+   **necessarily coarse**, and the documentation says so plainly rather than implying it is
+   instance-scoped. Existing `WithSystemSubject` / `SystemCaller()` call sites are enumerated,
+   with the note that `rg 'SystemCaller\(\)'` — not `rg WithSystemSubject` — is the enumerating
+   grep after Phase 02.1 (migration itself belonged to Phase 02.1).
 
 5. `abac-reviewer` returns READY on the new principal type, its provider, its schema, and its
    seeds.
@@ -414,7 +420,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [x] 02.2-04-PLAN.md — D-61 compiler↔SchemaRegistry wiring (3 sites) + D-62 fatal-for-all-sources
+- [x] 02.2-04-PLAN.md — D-66 compiler↔SchemaRegistry wiring (4 sites) + D-67 fatal-for-all-sources
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
