@@ -397,12 +397,12 @@ unverified seams, and timer-driven jobs (Phase 3's `last_active_at` flusher) car
 event, so what they present as per-execution context is an open question that MUST NOT be invented
 by a planner.
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 02.2-01-PLAN.md — Tracer: the `job:` principal end to end (subject, registry, provider, JobCaller, fixture seed, paired permit/deny)
+- [x] 02.2-01-PLAN.md — Tracer: the `job:` principal end to end (subject, registry, provider, JobCaller, fixture seed, paired permit/deny)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

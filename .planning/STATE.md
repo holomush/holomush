@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02.2
-current_phase_name: Background Job Authorization Model
+current_phase_name: background-job-authorization-model
 status: executing
-stopped_at: Completed 02.1-03-PLAN.md
-last_updated: "2026-08-09T15:22:44.178Z"
-last_activity: 2026-08-08
-last_activity_desc: Phase 02.1 execution started
+stopped_at: Completed 02.2-01-PLAN.md
+last_updated: "2026-08-09T16:08:09.454Z"
+last_activity: 2026-08-09
+last_activity_desc: Phase 02.2 execution started
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 40
-  completed_plans: 29
+  completed_plans: 30
   percent: 44
 ---
 
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 02.1 — world-caller-model
+**Current focus:** Phase 02.2 — background-job-authorization-model
 complete character identity surface (creation, management, public profiles with privacy) and stand up the
 `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 02.2 — Background Job Authorization Model
-Plan: Not started
+Phase: 02.2 (background-job-authorization-model) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Progress: [████████░░] 80% (1/6 phases)
-Last activity: 2026-08-08 — Phase 02.1 complete, transitioned to Phase 02.2
+Progress: [████████░░] 75% (1/6 phases)
+Last activity: 2026-08-09 — Phase 02.2 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -245,6 +245,7 @@ no action needed.
 | Phase 02.1 P01 | 3h | 2 tasks | 35 files |
 | Phase 02.1 P02 | ~2h | 3 tasks | 42 files |
 | Phase 02.1 P03 | ~1.5h | 3 tasks | 4 files |
+| Phase 02.2 P01 | 27min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -495,6 +496,9 @@ the next milestone yet.
 - [Phase ?]: 02.1-02: system:bootstrap (4 sites) and cascade_delete_test's bare "system" (3 sites) map to HumanCaller, never SystemCaller — the S1 gate is exact string equality, so the system constructor would create total ABAC bypasses.
 - [Phase ?]: INV-WORLD-8 stays in INV-WORLD and the scope's description/boundary are amended to name the command-API caller argument, rather than moving the invariant to INV-ACCESS (D-67)
 - [Phase ?]: the census universe is scoped structurally to world.Service COMMANDS (exported *Service method, context.Context first), so SetMovementHook is excluded by predicate rather than by a second exemption entry
+- [Phase ?]: 02.2-01: trigger_subject is the BARE aggregate ULID, byte-identical to bags.Resource["id"] — settled by a passing permit (research A6); Phase 3 plan 03-04 copies this spelling byte-for-byte
+- [Phase ?]: 02.2-01: seed:job-fixture-instance-scoped was added to D-29's pinned resource-is-character fence with a written justification (job principal, write-only, unmatchable liveness gate) rather than the fence being weakened
+- [Phase ?]: 02.2-01: only the fixture grant shipped — job:retirement and job:activity-flush have no seed and remain Phase 3's to add (D-52)
 
 ### Pending Todos
 
@@ -551,11 +555,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-08T23:12:03.790Z
+Last session: 2026-08-09T16:08:09.441Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02.1-03-PLAN.md
+Stopped at: Completed 02.2-01-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
