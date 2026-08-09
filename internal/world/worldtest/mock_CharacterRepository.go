@@ -450,6 +450,67 @@ func (_c *MockCharacterRepository_Rename_Call) RunAndReturn(run func(context.Con
 	return _c
 }
 
+// SetStatus provides a mock function with given fields: ctx, characterID, status, expectedVersion
+func (_m *MockCharacterRepository) SetStatus(ctx context.Context, characterID ulid.ULID, status world.Status, expectedVersion int) (*wmodel.MutationDelta, error) {
+	ret := _m.Called(ctx, characterID, status, expectedVersion)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetStatus")
+	}
+
+	var r0 *wmodel.MutationDelta
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, world.Status, int) (*wmodel.MutationDelta, error)); ok {
+		return rf(ctx, characterID, status, expectedVersion)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, world.Status, int) *wmodel.MutationDelta); ok {
+		r0 = rf(ctx, characterID, status, expectedVersion)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*wmodel.MutationDelta)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, world.Status, int) error); ok {
+		r1 = rf(ctx, characterID, status, expectedVersion)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockCharacterRepository_SetStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetStatus'
+type MockCharacterRepository_SetStatus_Call struct {
+	*mock.Call
+}
+
+// SetStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - characterID ulid.ULID
+//   - status world.Status
+//   - expectedVersion int
+func (_e *MockCharacterRepository_Expecter) SetStatus(ctx interface{}, characterID interface{}, status interface{}, expectedVersion interface{}) *MockCharacterRepository_SetStatus_Call {
+	return &MockCharacterRepository_SetStatus_Call{Call: _e.mock.On("SetStatus", ctx, characterID, status, expectedVersion)}
+}
+
+func (_c *MockCharacterRepository_SetStatus_Call) Run(run func(ctx context.Context, characterID ulid.ULID, status world.Status, expectedVersion int)) *MockCharacterRepository_SetStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(world.Status), args[3].(int))
+	})
+	return _c
+}
+
+func (_c *MockCharacterRepository_SetStatus_Call) Return(_a0 *wmodel.MutationDelta, _a1 error) *MockCharacterRepository_SetStatus_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockCharacterRepository_SetStatus_Call) RunAndReturn(run func(context.Context, ulid.ULID, world.Status, int) (*wmodel.MutationDelta, error)) *MockCharacterRepository_SetStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Update provides a mock function with given fields: ctx, char
 func (_m *MockCharacterRepository) Update(ctx context.Context, char *world.Character) (*wmodel.MutationDelta, error) {
 	ret := _m.Called(ctx, char)

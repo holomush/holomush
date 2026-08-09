@@ -101,6 +101,7 @@ var writeCommands = []WriteCommandDescriptor{
 	{Command: "UpdateCharacterDescription", Kind: kindCharacterUpdated},
 	{Command: "MoveCharacter", Kind: kindCharacterMoved},
 	{Command: "UpdateCharacterPreferences", Kind: kindCharacterPreferencesUpdate},
+	{Command: "RetireCharacter", Kind: kindCharacterRetired},
 }
 
 // WriteCommands returns the explicit closed write-command descriptor set (a copy),

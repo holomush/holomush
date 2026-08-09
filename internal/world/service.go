@@ -52,6 +52,7 @@ const (
 	kindCharacterDeleted           = "character_deleted"
 	kindCharacterMoved             = "character_moved"
 	kindCharacterPreferencesUpdate = "character_preferences_update"
+	kindCharacterRetired           = "character_retired"
 	worldSchemaVersion             = 1
 )
 
@@ -876,6 +877,15 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID Call
 		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "update character %s", characterID)
 	}
 	return nil
+}
+
+// RetireCharacter soft-retires a character. STUB — implemented in the GREEN half
+// of plan 03-01 Task 1.
+func (s *Service) RetireCharacter(_ context.Context, _ Caller, characterID ulid.ULID, expectedVersion int) error {
+	return oops.Code("CHARACTER_RETIRE_FAILED").
+		With("character_id", characterID.String()).
+		With("expected_version", expectedVersion).
+		Errorf("RetireCharacter not implemented")
 }
 
 // UpdateCharacterPreferences persists a character's whole preferences bag

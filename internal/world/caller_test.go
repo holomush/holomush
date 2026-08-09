@@ -476,6 +476,12 @@ func (*recordingCharacterRepo) UpdatePreferences(
 	return nil, errProbeCharacterWriteUnsupported
 }
 
+func (*recordingCharacterRepo) SetStatus(
+	context.Context, ulid.ULID, world.Status, int,
+) (*wmodel.MutationDelta, error) {
+	return nil, errProbeCharacterWriteUnsupported
+}
+
 // newFixtureJobProbe builds the shared fixture: a live registry carrying the
 // `fixture` job with `character` in its declared capability class, a real engine
 // over the WHOLE shipped seed corpus with the job provider registered, and a

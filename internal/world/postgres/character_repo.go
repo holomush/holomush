@@ -429,6 +429,16 @@ func (r *CharacterRepository) UpdatePreferences(ctx context.Context, characterID
 	return delta, nil
 }
 
+// SetStatus writes a character's lifecycle status with a version-predicated CAS
+// (MODEL-03). STUB — implemented in the GREEN half of plan 03-01 Task 1.
+func (r *CharacterRepository) SetStatus(_ context.Context, characterID ulid.ULID, status world.Status, expectedVersion int) (*wmodel.MutationDelta, error) {
+	return nil, oops.Code("CHARACTER_STATUS_UPDATE_FAILED").
+		With("character_id", characterID.String()).
+		With("status", string(status)).
+		With("expected_version", expectedVersion).
+		Errorf("SetStatus not implemented")
+}
+
 // IsOwnedByPlayer checks if a character is owned by a specific player.
 // Returns false (not an error) if the character does not exist.
 func (r *CharacterRepository) IsOwnedByPlayer(ctx context.Context, characterID, playerID ulid.ULID) (bool, error) {
