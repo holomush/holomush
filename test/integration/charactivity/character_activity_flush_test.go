@@ -21,9 +21,13 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-// flushInterval is short enough to keep the suite fast and long enough that the
-// pre-flush assertions below are not racing the very first tick. Production
-// runs five minutes: the column lags by one interval BY CONSTRUCTION (D-42).
+// flushInterval keeps the suite fast. It deliberately carries NO claim about
+// racing the first tick: the ticker starts at Activate, inside
+// integrationtest.Start, an unbounded time before emit() runs (an AuthedPlayer
+// provisioning and several DB round trips intervene), so its phase is
+// uncorrelated with this spec and no assertion below may depend on a tick
+// having — or not having — already fired. Production runs five minutes: the
+// column lags by one interval BY CONSTRUCTION (D-42).
 const flushInterval = 250 * time.Millisecond
 
 var _ = Describe("Character activity", func() {
@@ -79,6 +83,23 @@ var _ = Describe("Character activity", func() {
 		return string(entry.Value()), nil
 	}
 
+	// bufferedOrFlushed reports the activity timestamp WHEREVER it currently
+	// lives: in the KV buffer before a tick drains it, or in the column after.
+	//
+	// Written this way on purpose. The ticker's phase is uncorrelated with this
+	// spec (see flushInterval), so a poll that insisted on reading the key
+	// would fail permanently the moment a tick drained it first — the key never
+	// comes back, so every subsequent poll returns ErrKeyNotFound and the
+	// Eventually times out. Reading through to the column keeps the assertion
+	// about the VALUE, which is the part that matters, and removes the
+	// dependence on when the tick lands.
+	bufferedOrFlushed := func() string {
+		if v, err := bufferedValue(); err == nil {
+			return v
+		}
+		return strconv.FormatInt(lastActiveAt(), 10)
+	}
+
 	// emit publishes one character-actor event through the production
 	// publisher and returns the timestamp it carried.
 	emit := func() int64 {
@@ -105,14 +126,21 @@ var _ = Describe("Character activity", func() {
 
 			at := emit()
 
-			// The EMIT path performed no database write — the deciding
-			// property of D-42. The buffered key appears while the column is
-			// still the never-active sentinel.
-			Eventually(bufferedValue, 5*time.Second, 20*time.Millisecond).
+			// SYNCHRONOUS, before any await: the emit path itself performed no
+			// database write — the deciding property of D-42. Publish has
+			// returned, so anything the emit path was going to write is
+			// already written. This is the assertion that used to sit AFTER a
+			// polling wait, where a tick landing in between failed it outright.
+			Expect(lastActiveAt()).To(Equal(world.NeverActive),
+				"the emit path MUST NOT touch Postgres; only the flush writes the column")
+
+			// The timestamp reaches the pipeline. Asserted wherever it
+			// currently lives rather than on the KEY SURVIVING: a tick may
+			// drain the buffer at any moment, and requiring the key to still
+			// be there would make this a race against the ticker's phase.
+			Eventually(bufferedOrFlushed, 5*time.Second, 20*time.Millisecond).
 				Should(Equal(strconv.FormatInt(at, 10)),
 					"the listener buffers the event timestamp as decimal epoch nanoseconds")
-			Expect(lastActiveAt()).To(Equal(world.NeverActive),
-				"the emit path MUST NOT touch Postgres; only the flush ticker writes the column")
 
 			// One tick later, the flusher has drained the buffer through
 			// INV-WORLD-4's fourth sanctioned writer.
