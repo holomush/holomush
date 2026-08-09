@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 02.2
 current_phase_name: background-job-authorization-model
 status: executing
-stopped_at: Completed 02.2-03-PLAN.md
-last_updated: "2026-08-09T16:49:47.096Z"
+stopped_at: Completed 02.2-04-PLAN.md
+last_updated: "2026-08-09T17:16:49.471Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 02.2 execution started
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 40
-  completed_plans: 32
+  completed_plans: 33
   percent: 44
 ---
 
@@ -34,9 +34,9 @@ complete character identity surface (creation, management, public profiles with 
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 02.2 (background-job-authorization-model) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
-Progress: [████████░░] 80% (1/6 phases)
+Progress: [████████░░] 83% (1/6 phases)
 Last activity: 2026-08-09 — Phase 02.2 execution started
 `binding: pending`, 9 amendments applied, 3 verification gaps closed
 
@@ -248,6 +248,7 @@ no action needed.
 | Phase 02.2 P01 | 27min | 3 tasks | 15 files |
 | Phase 02.2 P02 | 17min | 2 tasks | 9 files |
 | Phase 02.2 P03 | 11min | 2 tasks | 6 files |
+| Phase 02.2 P04 | 20min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -509,6 +510,9 @@ the next milestone yet.
 - [Phase ?]: action DECLARE set is exactly 5 keys; the criterion is what policy TEXT references, not what a producer produces
 - [Phase ?]: 02.2-RESEARCH §Q2 is WRONG that authguard/guard.go supplies no caller attrs — :130 supplies event_type/plugin_name/plugin_inst since v0.3.0
 - [Phase ?]: The // 10b. action registration is a NO-OP until plan 02.2-04 wires the compiler to schemaReg; the call site says so
+- [Phase ?]: 02.2-04: BuildABACStack's compiler is now built on schemaReg.Schema() and the initial cache.Reload moved AFTER all provider and action registrations, so boot and steady-state validate against the same populated schema
+- [Phase ?]: 02.2-04: the action hard-error branch carries oops code POLICY_UNREGISTERED_ACTION_ATTRIBUTE and is fatal for EVERY policy source including operator-authored DB rows (D-67) — no flag, no source-conditional
+- [Phase ?]: 02.2-04: sites 2 and 3 use attribute.NewActionOnlySchemaRegistry() rather than a new ABACSubsystem.SchemaRegistry() accessor; the compiler validates by DSL root, never by provider name, so action validation is identical at all four sites
 
 ### Pending Todos
 
@@ -565,11 +569,11 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-09T16:49:47.081Z
+Last session: 2026-08-09T17:16:42.146Z
 100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
 v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
 Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02.2-03-PLAN.md
+Stopped at: Completed 02.2-04-PLAN.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
