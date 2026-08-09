@@ -397,11 +397,15 @@ unverified seams, and timer-driven jobs (Phase 3's `last_active_at` flusher) car
 event, so what they present as per-execution context is an open question that MUST NOT be invented
 by a planner.
 
-**Plans:** 0 plans
+**Plans:** 5 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 02.2 to break down)
+- [ ] 02.2-01-PLAN.md — Tracer: the `job:` principal end to end (subject, registry, provider, JobCaller, fixture seed, paired permit/deny)
+- [ ] 02.2-02-PLAN.md — Production ABAC wiring + the D-58 principal-aware deny code
+- [ ] 02.2-03-PLAN.md — The exhaustive `action.*` audit + D-60 `action` namespace registration
+- [ ] 02.2-04-PLAN.md — D-61 compiler↔SchemaRegistry wiring (3 sites) + D-62 fatal-for-all-sources
+- [ ] 02.2-05-PLAN.md — INV-ACCESS-13, the contributor/operator doc, and the criterion-4 amendment
 
 ### Phase 3: World Character Commands
 
