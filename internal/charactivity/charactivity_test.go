@@ -91,11 +91,16 @@ func (k *fakeKV) Put(_ context.Context, key string, value []byte) (uint64, error
 }
 
 func (k *fakeKV) Get(_ context.Context, key string) (jetstream.KeyValueEntry, error) {
-	if k.beforeGet != nil {
-		hook := k.beforeGet
-		k.beforeGet = nil
+	// Same capture-under-lock/invoke-after-unlock shape as DeleteRevision: the
+	// hook re-enters this fake, so the mutex must not be held across it.
+	k.mu.Lock()
+	hook := k.beforeGet
+	k.beforeGet = nil
+	k.mu.Unlock()
+	if hook != nil {
 		hook()
 	}
+
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	e, ok := k.entries[key]
@@ -149,11 +154,18 @@ func (k *fakeKV) Delete(_ context.Context, key string) error {
 }
 
 func (k *fakeKV) DeleteRevision(_ context.Context, key string, revision uint64) error {
-	if k.beforeDelete != nil {
-		hook := k.beforeDelete
-		k.beforeDelete = nil
+	// Captured UNDER the lock and invoked after releasing it: the hook itself
+	// re-enters this fake (that is its whole purpose), so holding the mutex
+	// across the call would deadlock. Reading the field unguarded is what -race
+	// flags the moment a spec drives two drains concurrently.
+	k.mu.Lock()
+	hook := k.beforeDelete
+	k.beforeDelete = nil
+	k.mu.Unlock()
+	if hook != nil {
 		hook()
 	}
+
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	e, ok := k.entries[key]
