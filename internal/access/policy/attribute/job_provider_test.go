@@ -121,3 +121,89 @@ func TestJobProviderSchemaDeclaresWritesAsAStringList(t *testing.T) {
 	assert.Equal(t, types.AttrTypeStringList, schema.Attributes["writes"])
 	assert.Equal(t, types.AttrTypeBool, schema.Attributes["has_writes"])
 }
+
+// --- Fail-closed fences (AUTHZ-02) -----------------------------------------
+
+// TestJobProviderResolvesNothingForAJobThatIsNotRunning is D-49's proof:
+// authority is tied to LIVENESS. A job that is not running stamps NO attributes
+// at all, so every attribute-conditioned permit fails to match — a missing
+// attribute is false for every operator (ADR holomush-iv43).
+//
+// BOTH returns must be nil. A non-nil empty map is not the same thing: it would
+// still be merged into the bag, and the resolver's cache would store it as a
+// resolved answer. And if this test could be made to pass while the provider
+// returned a placeholder VALUE, D-49 would not be proven at all — a sentinel is
+// fail-OPEN under .claude/rules/abac-providers.md.
+func TestJobProviderResolvesNothingForAJobThatIsNotRunning(t *testing.T) {
+	reg := &fakeJobRegistry{
+		running: map[string]bool{"running-job": true},
+		writes:  map[string][]string{"running-job": {"character"}},
+	}
+	p := NewJobProvider(reg)
+
+	attrs, err := p.ResolveSubject(context.Background(), "job:stopped-job")
+	require.NoError(t, err, "a stopped job is not an ERROR — it simply resolves to nothing")
+	assert.Nil(t, attrs, "a job that is not running MUST stamp no attributes")
+}
+
+// TestJobProviderNilRegistryResolvesNothing is D-49's degenerate case: an
+// entrypoint that wires no job registry must fail closed for every job rather
+// than panicking or resolving a bare name.
+func TestJobProviderNilRegistryResolvesNothing(t *testing.T) {
+	p := NewJobProvider(nil)
+
+	attrs, err := p.ResolveSubject(context.Background(), "job:fixture")
+	require.NoError(t, err)
+	assert.Nil(t, attrs, "a nil registry MUST deny every job (fail-closed)")
+}
+
+// TestJobProviderIgnoresForeignRefsWithoutConsultingTheRegistry is the
+// spoofing fence (T-02.2-03).
+//
+// Resolver.resolveEntity hands the FULL entity ref to EVERY registered
+// provider, so this provider is called with every character, plugin, player and
+// system subject in the system. Without a prefix guard, a registry that
+// happened to answer true for one of those refs would stamp job.* keys onto
+// another principal's bag — forging a job identity.
+//
+// The assertion is on the CALL COUNT, not on the answer. Asserting only that
+// the result is nil cannot distinguish "the guard fired" from "the registry
+// happened to say no", and the second is not a fence.
+func TestJobProviderIgnoresForeignRefsWithoutConsultingTheRegistry(t *testing.T) {
+	foreign := []string{
+		"character:01ARZ3NDEKTSV4RRFFQ69G5FB1",
+		"plugin:builder-bot",
+		"player:01ARZ3NDEKTSV4RRFFQ69G5FB2",
+		// The bare system subject carries no ':' at all.
+		"system",
+	}
+
+	for _, ref := range foreign {
+		t.Run(ref, func(t *testing.T) {
+			// The registry answers TRUE for everything, so a missing guard
+			// would visibly stamp attributes rather than failing quietly.
+			reg := &alwaysRunningJobRegistry{}
+			p := NewJobProvider(reg)
+
+			attrs, err := p.ResolveSubject(context.Background(), ref)
+			require.NoError(t, err)
+			assert.Nil(t, attrs, "the job provider MUST NOT stamp attributes onto a foreign ref")
+			assert.Zero(t, reg.calls,
+				"the prefix guard MUST short-circuit BEFORE the registry lookup")
+		})
+	}
+}
+
+// alwaysRunningJobRegistry answers true for every name and counts its calls, so
+// a missing prefix guard produces attributes rather than a quiet nil.
+type alwaysRunningJobRegistry struct{ calls int }
+
+func (r *alwaysRunningJobRegistry) IsJobRunning(string) bool {
+	r.calls++
+	return true
+}
+
+func (r *alwaysRunningJobRegistry) DeclaredWrites(string) ([]string, bool) {
+	r.calls++
+	return []string{"character"}, true
+}

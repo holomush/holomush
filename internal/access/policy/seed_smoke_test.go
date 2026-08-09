@@ -1261,3 +1261,111 @@ func TestSeedSmokeJobFixtureCapabilityClassIsASecondGate(t *testing.T) {
 			decision.Effect(), decision.Reason())
 	})
 }
+
+// TestSeedSmokeJobPrincipalIsDisjointFromEveryOtherNamespace is D-48's
+// corpus-level proof, in both directions.
+//
+// It runs against the WHOLE shipped corpus rather than an isolated policy,
+// because a corpus-level DENY is the claim D-48 actually makes: the reason for
+// a separate `job:` namespace is that parseEntityType matches the PREFIX ONLY,
+// so any permit written for one principal type would otherwise reach another.
+func TestSeedSmokeJobPrincipalIsDisjointFromEveryOtherNamespace(t *testing.T) {
+	const (
+		charID  = "01ARZ3NDEKTSV4RRFFQ69G5FB1"
+		otherID = "01ARZ3NDEKTSV4RRFFQ69G5FB3"
+		locID   = "01LOC000ZZZZZZZZZZZZZZZZZZ"
+	)
+
+	provenance := map[string]any{
+		"job.trigger_event_id":   "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+		"job.trigger_event_type": "fixture_triggered",
+		"job.trigger_subject":    charID,
+	}
+
+	t.Run("a character subject is not admitted by the job seed", func(t *testing.T) {
+		// A character subject carrying attributes IDENTICAL to the ones the job
+		// seed reads. `principal is job` must not match it — and the character
+		// bag cannot satisfy principal.job.* either way.
+		//
+		// The subject is a DIFFERENT character from the resource and carries no
+		// location, so neither seed:player-self-access (id equality) nor
+		// seed:player-character-colocation (location equality, and read-only)
+		// can produce a false green here.
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name":       "fixture",
+				"writes":     []string{"character"},
+				"has_writes": true,
+			}),
+			characterProvider(
+				map[string]any{"id": otherID, "roles": []string{}},
+				map[string]any{"id": charID, "name": "Fixture"},
+			),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:    access.CharacterSubject(otherID),
+			Action:     "write",
+			Resource:   access.CharacterResource(charID),
+			Attributes: provenance,
+		})
+		require.NoError(t, err)
+		assert.False(t, decision.IsAllowed(),
+			"`principal is job` MUST NOT match a character subject; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
+
+	t.Run("a job subject is not admitted by the system permits", func(t *testing.T) {
+		// seed.go ships exactly two `principal is system` permits, on location
+		// and exit. A location write is therefore the sharpest probe: if
+		// `principal is system` reached a job: subject the way it reaches
+		// system:bootstrap, THIS is where it would show.
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name":       "fixture",
+				"writes":     []string{"character", "location"},
+				"has_writes": true,
+			}),
+			locationProvider(map[string]any{"id": locID, "name": "Workshop"}),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:    access.JobSubject("fixture"),
+			Action:     "write",
+			Resource:   access.LocationResource(locID),
+			Attributes: provenance,
+		})
+		require.NoError(t, err)
+		assert.False(t, decision.IsAllowed(),
+			"the two `principal is system` permits MUST NOT reach a job: subject; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
+
+	t.Run("a job subject is not admitted by the plugin permits", func(t *testing.T) {
+		// The plugin corpus carries eleven default-permit seeds plus an
+		// instance-level location write, so `principal is plugin` is the widest
+		// non-character grant in the tree — and it must not reach a job either.
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name":       "fixture",
+				"writes":     []string{"character", "location"},
+				"has_writes": true,
+			}),
+			locationProvider(map[string]any{"id": locID, "name": "Workshop"}),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:  access.JobSubject("fixture"),
+			Action:   "write",
+			Resource: access.LocationResource(locID),
+			// The host-vouched key seed:plugin-world-mutation-own-location
+			// reads. A job asserting it must still be denied: the target clause
+			// gates on the principal type, not on the attribute.
+			Attributes: map[string]any{"dispatch_location": locID},
+		})
+		require.NoError(t, err)
+		assert.False(t, decision.IsAllowed(),
+			"`principal is plugin` MUST NOT reach a job: subject; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
+}
