@@ -181,20 +181,18 @@ func TestDecodeULIDStringRejectsInvalid(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "AUDIT_BAD_ULID")
 }
 
-// withShortBackoffs swaps consumer.CreateBackoffs for the duration of t
-// so retry tests don't pay the production schedule's wall time. The
-// schedule shape (number of retries) is preserved so attempt counts
-// match the production path; only the per-step sleep shrinks.
+// shortBackoffs is the per-call schedule this package's one retry-touching
+// test passes so it does not pay the production schedule's wall time.
 //
-// The retry loop itself now lives in internal/eventbus/consumer and is
-// tested there (D-46). What remains in this package is the WRAP contract
-// below — the part the relocation MUST NOT have changed.
-func withShortBackoffs(t *testing.T) {
-	t.Helper()
-	orig := consumer.CreateBackoffs
-	consumer.CreateBackoffs = []time.Duration{1 * time.Millisecond, 2 * time.Millisecond}
-	t.Cleanup(func() { consumer.CreateBackoffs = orig })
-}
+// It is an OPTION, not a swap of consumer.CreateBackoffs. Mutating that
+// exported var from here made a package-level constraint owned by
+// internal/eventbus/consumer ("MUST NOT call t.Parallel()") binding on a
+// second package that never restated it.
+//
+// The retry loop itself lives in internal/eventbus/consumer and is tested
+// there (D-46). What remains in this package is the WRAP contract below —
+// the part the relocation MUST NOT have changed.
+var shortBackoffs = []time.Duration{1 * time.Millisecond, 2 * time.Millisecond}
 
 // TestNewProjectionWrapSurfacesUnderlyingNATSError pins the observability
 // contract: when CreateOrUpdateConsumer ultimately fails, the wrapped
@@ -204,7 +202,6 @@ func withShortBackoffs(t *testing.T) {
 // see only the code and cannot diagnose the root cause (the original
 // holomush-l015 failure observation lost the underlying error here).
 func TestNewProjectionWrapSurfacesUnderlyingNATSError(t *testing.T) {
-	withShortBackoffs(t)
 	// Use the retry helper directly with a permanent error to exercise
 	// the wrap path. newProjection itself can't be reached without a
 	// real jetstream.JetStream impl; the wrap shape is the only thing
@@ -212,7 +209,7 @@ func TestNewProjectionWrapSurfacesUnderlyingNATSError(t *testing.T) {
 	permanent := errors.New("nats: no stream matches subject")
 	_, retryErr := consumer.CreateWithRetry(context.Background(), func(_ context.Context) (jetstream.Consumer, error) {
 		return nil, permanent
-	})
+	}, consumer.WithBackoffs(shortBackoffs...))
 	require.Error(t, retryErr)
 
 	// Apply the same wrap newProjection applies.

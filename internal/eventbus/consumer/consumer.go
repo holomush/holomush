@@ -29,15 +29,29 @@ import (
 // jitter, short enough that a real permanent failure (config mismatch,
 // stream missing) still fails fast within the surrounding test timeout.
 //
-// Declared `var` (not `const`) so consumer_test.go's WithShortBackoffs(t)
-// can swap it to a microsecond schedule for the retry tests. Tests that
-// swap it MUST NOT call t.Parallel() — concurrent t.Cleanup restores
-// would race on the shared slice. The race detector would catch a
-// violation, but the failure mode is non-obvious; prefer the comment as
-// a guard.
+// It is the DEFAULT, and nothing mutates it. A test that needs a
+// microsecond schedule passes WithBackoffs to the call it is driving
+// rather than swapping this slice: a package-level swap had to be
+// restored via t.Cleanup, which made "MUST NOT call t.Parallel()" a
+// constraint every test in every package that reached for it had to
+// honour — and it was stated in only one of them.
 var CreateBackoffs = []time.Duration{
 	100 * time.Millisecond,
 	250 * time.Millisecond,
+}
+
+// CreateOption tunes a single CreateWithRetry call.
+type CreateOption func(*createOptions)
+
+type createOptions struct {
+	backoffs []time.Duration
+}
+
+// WithBackoffs overrides the retry schedule for ONE call, leaving the
+// shared CreateBackoffs default untouched. This is the seam tests use to
+// avoid paying the production schedule's wall time.
+func WithBackoffs(backoffs ...time.Duration) CreateOption {
+	return func(o *createOptions) { o.backoffs = backoffs }
 }
 
 // CreateWithRetry invokes create with bounded retries from CreateBackoffs.
@@ -63,22 +77,31 @@ var CreateBackoffs = []time.Duration{
 // world.JobCaller), so NOTHING is stamped here today — this pointer exists
 // so a future reader looking for the stamp site finds where it actually
 // lives rather than concluding it was lost.
-func CreateWithRetry(ctx context.Context, create func(context.Context) (jetstream.Consumer, error)) (jetstream.Consumer, error) {
+func CreateWithRetry(
+	ctx context.Context,
+	create func(context.Context) (jetstream.Consumer, error),
+	opts ...CreateOption,
+) (jetstream.Consumer, error) {
+	o := createOptions{backoffs: CreateBackoffs}
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	var lastErr error
-	for attempt := 0; attempt <= len(CreateBackoffs); attempt++ {
+	for attempt := 0; attempt <= len(o.backoffs); attempt++ {
 		cons, err := create(ctx)
 		if err == nil {
 			return cons, nil
 		}
 		lastErr = err
-		if attempt == len(CreateBackoffs) {
+		if attempt == len(o.backoffs) {
 			break
 		}
 		if ctx.Err() != nil {
 			return nil, lastErr
 		}
 		select {
-		case <-time.After(CreateBackoffs[attempt]):
+		case <-time.After(o.backoffs[attempt]):
 		case <-ctx.Done():
 			return nil, lastErr
 		}

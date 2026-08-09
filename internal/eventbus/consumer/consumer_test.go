@@ -13,31 +13,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// withShortBackoffs swaps CreateBackoffs for the duration of t so retry
-// tests don't pay the production schedule's wall time. The schedule shape
-// (number of retries) is preserved so attempt counts match the production
+// shortBackoffs is the per-call schedule the retry tests pass so they do
+// not pay the production schedule's wall time. The SHAPE (number of
+// retries) matches CreateBackoffs so attempt counts match the production
 // path; only the per-step sleep shrinks.
-func withShortBackoffs(t *testing.T) {
-	t.Helper()
-	orig := CreateBackoffs
-	CreateBackoffs = []time.Duration{1 * time.Millisecond, 2 * time.Millisecond}
-	t.Cleanup(func() { CreateBackoffs = orig })
-}
+//
+// Passed as an option rather than swapped into the package-level
+// CreateBackoffs: a global swap needed a t.Cleanup restore, which made
+// "MUST NOT call t.Parallel()" a constraint on every test that used it.
+var shortBackoffs = []time.Duration{1 * time.Millisecond, 2 * time.Millisecond}
 
 func TestCreateWithRetrySucceedsOnFirstAttempt(t *testing.T) {
-	withShortBackoffs(t)
 	var attempts int
 	cons, err := CreateWithRetry(context.Background(), func(_ context.Context) (jetstream.Consumer, error) {
 		attempts++
 		return nil, nil //nolint:nilnil // test stub
-	})
+	}, WithBackoffs(shortBackoffs...))
 	require.NoError(t, err)
 	require.Nil(t, cons, "test stub returns nil consumer; production returns a real one")
 	require.Equal(t, 1, attempts, "no retries when first attempt succeeds")
 }
 
 func TestCreateWithRetrySucceedsAfterTransientFailures(t *testing.T) {
-	withShortBackoffs(t)
 	transient := errors.New("nats: no responders")
 	var attempts int
 	cons, err := CreateWithRetry(context.Background(), func(_ context.Context) (jetstream.Consumer, error) {
@@ -46,26 +43,25 @@ func TestCreateWithRetrySucceedsAfterTransientFailures(t *testing.T) {
 			return nil, transient
 		}
 		return nil, nil //nolint:nilnil // test stub: success after 2 transient errors
-	})
+	}, WithBackoffs(shortBackoffs...))
 	require.NoError(t, err)
 	require.Nil(t, cons)
 	require.Equal(t, 3, attempts, "should retry through the two-step backoff schedule")
 }
 
 func TestCreateWithRetryGivesUpAfterBudgetExhausted(t *testing.T) {
-	withShortBackoffs(t)
 	permanent := errors.New("nats: stream not found")
 	var attempts int
 	_, err := CreateWithRetry(context.Background(), func(_ context.Context) (jetstream.Consumer, error) {
 		attempts++
 		return nil, permanent
-	})
+	}, WithBackoffs(shortBackoffs...))
 	require.ErrorIs(t, err, permanent, "final error MUST be the underlying NATS error so the caller can surface it")
-	require.Equal(t, 1+len(CreateBackoffs), attempts, "should attempt initial call + one per backoff entry")
+	require.Equal(t, 1+len(shortBackoffs), attempts, "should attempt initial call + one per backoff entry")
+	require.Len(t, CreateBackoffs, 2, "the shared default MUST be untouched by a per-call override")
 }
 
 func TestCreateWithRetryRespectsCancelledContext(t *testing.T) {
-	withShortBackoffs(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // pre-cancel
 	transient := errors.New("transient")
@@ -73,7 +69,7 @@ func TestCreateWithRetryRespectsCancelledContext(t *testing.T) {
 	_, err := CreateWithRetry(ctx, func(_ context.Context) (jetstream.Consumer, error) {
 		attempts++
 		return nil, transient
-	})
+	}, WithBackoffs(shortBackoffs...))
 	require.ErrorIs(t, err, transient)
 	require.Equal(t, 1, attempts,
 		"ctx.Err() check between attempts MUST short-circuit further retries; only the initial attempt should run")
@@ -102,11 +98,10 @@ func TestCreateWithRetryHonorsCtxDeadlineDuringBackoff(t *testing.T) {
 // AUDIT_PLUGIN_CONSUMER_CREATE_FAILED) remains the outermost code. A wrap
 // added here would silently change both audit callers' error surfaces.
 func TestCreateWithRetryReturnsTheUnderlyingErrorUnwrapped(t *testing.T) {
-	withShortBackoffs(t)
 	permanent := errors.New("nats: no stream matches subject")
 	_, err := CreateWithRetry(context.Background(), func(_ context.Context) (jetstream.Consumer, error) {
 		return nil, permanent
-	})
+	}, WithBackoffs(shortBackoffs...))
 	require.Equal(t, permanent, err, //nolint:testifylint // identity, not just errors.Is: the helper MUST NOT wrap
 		"the helper MUST return the create error itself so callers own the error code")
 }
