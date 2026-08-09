@@ -712,22 +712,42 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	//     gate in attribute.JobProvider leaves principal.job.* absent and the
 	//     permit cannot match at all.
 	//
-	// The gate keeps its teeth: any FURTHER `resource is character` seed still
-	// turns this RED by name, and a future edit that widens this one's action to
-	// `read` or its principal to `character` fails the same way.
+	// The gate keeps its teeth on all three counts, but NOT from one assertion:
+	// the name-set equality below turns RED only when the MEMBERSHIP of the
+	// `resource is character` family changes, so it alone would stay GREEN if
+	// this seed's action list were widened to `read` or its principal swapped to
+	// `character` (neither edit changes a name or a resource type). The
+	// per-entry target-shape equality that follows it is what pins PRINCIPAL and
+	// ACTION, and the exact-DSL assertion after that is what pins MATCHABILITY —
+	// the `principal.job.name == "fixture"` clause. All three assertions are
+	// load-bearing; deleting any one re-opens the corresponding half of D-29.
 	want := []string{
 		"seed:job-fixture-instance-scoped",
 		"seed:player-character-colocation",
 		"seed:player-self-access",
 	}
 
+	// The compiled target shape of every member, so a widening of an EXISTING
+	// member is caught even though the name set is unchanged.
+	wantShapes := map[string]characterSeedTargetShape{
+		"seed:job-fixture-instance-scoped": {principal: "job", actions: []string{"write"}},
+		"seed:player-character-colocation": {principal: "character", actions: []string{"read"}},
+		"seed:player-self-access":          {principal: "character", actions: []string{"read", "write"}},
+	}
+
 	compiler := NewCompiler(emptySchema())
 	var got []string
+	gotShapes := map[string]characterSeedTargetShape{}
 	for _, s := range SeedPolicies() {
 		compiled, _, err := compiler.Compile(s.DSLText)
 		require.NoError(t, err, "seed %q MUST compile", s.Name)
 		if compiled.Target.ResourceType != nil && *compiled.Target.ResourceType == "character" {
 			got = append(got, s.Name)
+			shape := characterSeedTargetShape{actions: compiled.Target.ActionList}
+			if compiled.Target.PrincipalType != nil {
+				shape.principal = *compiled.Target.PrincipalType
+			}
+			gotShapes[s.Name] = shape
 		}
 	}
 	sort.Strings(got)
@@ -741,9 +761,45 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 			"D-10/D-11: `characters` has no `visibility` column, so D-11's mandated remedy does not exist "+
 			"for that resource.")
 
+	assert.Equal(t, wantShapes, gotShapes,
+		"D-29's exemption for seed:job-fixture-instance-scoped was granted on PRINCIPAL (`job`, a namespace "+
+			"no human can hold) and ACTION (`write` only, so it gates no read path and reaches no "+
+			"characterToProto projection). Widening either — action to include `read`, or principal to "+
+			"`character` — instantiates exactly the risk D-29 defers to Phase 4, WITHOUT changing this "+
+			"family's name set. That is why the shape is pinned here and not left to the name-set equality "+
+			"above. The same pin covers the two shipped seeds: widening either of those is the same leak "+
+			"by a different door.")
+
+	// MATCHABILITY, the third leg of the exemption. Pinned as exact DSL because
+	// the clause that makes the permit unmatchable in production
+	// (`principal.job.name == "fixture"`, no such job registered) lives in the
+	// `when` body, which the compiled Target does not carry. SeedVersion rides
+	// along for the same reason the `untouched` table above pins it: a bump on a
+	// shipped policy triggers the upgrade path.
+	jobSeed := requireSeedPolicy(t, "seed:job-fixture-instance-scoped")
+	const wantJobDSL = `permit(principal is job, action in ["write"], resource is character) ` +
+		`when { principal.job.name == "fixture" && principal.job.writes.containsAll(["character"]) && ` +
+		`action.job.trigger_event_type == "fixture_triggered" && action.job.trigger_subject == resource.id };`
+	assert.Equal(t, wantJobDSL, jobSeed.DSLText,
+		"the fixture seed's third exemption leg is that it cannot match in production: no job named "+
+			"\"fixture\" is registered, so attribute.JobProvider's liveness gate leaves principal.job.* "+
+			"absent and the permit default-denies. Relaxing or deleting the name clause makes this seed "+
+			"live against whatever job IS registered — an unreviewed grant of character writes.")
+	assert.Equal(t, 1, jobSeed.SeedVersion,
+		"seed:job-fixture-instance-scoped ships at SeedVersion 1 (v0.13 phase 02.2, AUTHZ-02)")
+
 	_, exists := seedPolicyByName("seed:profile-public-read-character")
 	assert.False(t, exists,
 		"seed:profile-public-read-character is DEFERRED TO PHASE 4 by D-29 and MUST NOT be seeded here")
+}
+
+// characterSeedTargetShape is the slice of a compiled Target that D-29 cares
+// about for the `resource is character` family: WHO may act (principal type)
+// and WHAT they may do (action list). Resource type is not a member — every
+// entry in the family has it equal to "character" by construction.
+type characterSeedTargetShape struct {
+	principal string
+	actions   []string
 }
 
 // --- Admin sections (EXT-07, §10.4, §10.5) ---
