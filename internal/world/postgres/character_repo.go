@@ -473,6 +473,32 @@ func (r *CharacterRepository) UpdatePreferences(ctx context.Context, characterID
 // not a fenced world table, so no fence allowlist entry is involved. The write
 // MUST stay on the world tx connection (txFromContext) and MUST NOT reach for
 // the auth pool — the two-pool boundary claims no atomicity across it.
+//
+// LOCK ORDER — READ THIS BEFORE ADDING A STATEMENT TO EITHER TRANSACTION.
+// This transaction takes its locks in the order characters -> players (the CAS
+// UPDATE below, then the players clear). The character-genesis transaction
+// takes them in the OPPOSITE order: PlayerReapingGuard.EnsureNotReaping does
+// `SELECT reaping_at FROM players ... FOR UPDATE` (reaping_guard.go:67) and
+// only then inserts into characters (internal/auth/character_genesis.go:189-192).
+// That is a genuine lock-order inversion on the same two tables.
+//
+// It is LATENT, not live. The cycle does not close today because the genesis
+// side never waits on a lock this transaction holds: it INSERTS a new
+// characters row rather than locking an existing one, and the
+// characters.player_id FK check takes only FOR KEY SHARE on the players row
+// genesis already holds. So a concurrent retire merely WAITS on genesis's
+// players lock and proceeds when genesis commits.
+//
+// It becomes a real deadlock (SQLSTATE 40P01, surfacing as an opaque
+// CHARACTER_RETIRE_DEFAULT_CLEAR_FAILED or CHARACTER_CREATE_FAILED) the moment
+// the genesis transaction acquires a lock on an EXISTING characters row —
+// e.g. a uniqueness or sibling-character check that does SELECT ... FOR UPDATE,
+// or any UPDATE of another character. If you add such a statement, fix the
+// order rather than the symptom: take the players lock first here, before the
+// CAS. That is deliberately NOT done pre-emptively because
+// `WHERE default_character_id = $1` has no supporting index
+// (migrations/000001_baseline.sql:64) and would seq-scan players on every
+// retire to defend against a cycle that cannot currently form.
 func (r *CharacterRepository) SetStatus(
 	ctx context.Context,
 	characterID ulid.ULID,

@@ -66,6 +66,13 @@ import (
 // is an AUTH table and is deliberately not in fencedWorldTables — so it needs no
 // allowlist entry here. A future layering pass MUST NOT "fix" either exception away
 // without replacing the atomicity they provide.
+//
+// The two exceptions touch the SAME two tables in OPPOSITE orders (the guard locks
+// players then inserts characters; SetStatus updates characters then players), which
+// is a latent lock-order inversion rather than a live deadlock — the full analysis and
+// the condition that would make it real are in the SetStatus doc block
+// (internal/world/postgres/character_repo.go). Anyone widening either exception MUST
+// read it first.
 
 // fencedWorldTables is the CORE/WORLD-table set the fence covers. scene_participants
 // is DELIBERATELY absent (round-4 C5 / D-05). entity_properties STAYS IN
