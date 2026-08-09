@@ -170,6 +170,12 @@ type grpcSubsystem struct {
 	reaperCancel  context.CancelFunc
 	guestReaper   *auth.GuestReaper
 	sessionReaper *session.Reaper
+	// presenceEmitter is the ONE arrive/leave/session_ended emitter, built in
+	// Prepare over the rendering-wrapped publisher. Retained so the retirement
+	// reactor's fanout emits over the same emitter rather than constructing a
+	// second one — a second emitter built over the RAW publisher would omit the
+	// App-Rendering header the audit projection fails closed without.
+	presenceEmitter *presence.Emitter
 }
 
 // sceneMuteNotifyCacheTTL bounds how long a character's {globalNotifyEnabled,
@@ -203,6 +209,19 @@ func (s *grpcSubsystem) wrapPublisher(raw eventbus.Publisher) (eventbus.Publishe
 	}
 	return eventbus.NewRenderingPublisher(raw, s.cfg.VerbRegistry), nil
 }
+
+// PresenceEmitter returns the process's single presence emitter, or nil before
+// Prepare has run.
+//
+// It returns nil rather than panicking (unlike WorldSubsystem.Service and
+// SessionSubsystem.Store) because its one consumer — the retirement reactor —
+// resolves it LAZILY, per delivered message, through a provider closure. The
+// reactor is topologically BEFORE gRPC, so an eager read at its Prepare would
+// legitimately find nothing; but the orchestrator's global barrier means every
+// Prepare has returned before any Activate, so by the time the reactor's
+// consume loop can deliver a message this is populated. Nil-tolerance keeps
+// that ordering fact from turning a construction-order detail into a boot panic.
+func (s *grpcSubsystem) PresenceEmitter() *presence.Emitter { return s.presenceEmitter }
 
 // ID returns SubsystemGRPC.
 func (s *grpcSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemGRPC }
@@ -390,6 +409,7 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	// App-Rendering header the wrapper stamps), plus the bus's own GameID
 	// as the qualification source (FINDING-5).
 	presenceEmitter := presence.NewEmitter(publisher, s.cfg.EventBus.GameID)
+	s.presenceEmitter = presenceEmitter
 
 	// Wire game-session fanout into the auth service so evictions emit
 	// session_ended events for child game sessions before FK cascade removes them.

@@ -48,6 +48,18 @@ const eventTypeCharacterRetired = "character_retired"
 // the eight existing fanout vocabularies ("evicted", "quit", "booted", …).
 const leaveReasonRetired = "retired"
 
+// jobWrites is the capability class the reactor self-attests at registration
+// (D-50). It NARROWS: a seed must still grant the write, and both gates must
+// pass, so the declaration alone authorizes nothing (D-51).
+//
+// SESSION TEARDOWN IS DELIBERATELY ABSENT, and its absence is honest rather
+// than an oversight (D-53). The session store has no policy chokepoint — the
+// reactor calls DeleteByCharacter directly, as all eight existing fanout sites
+// do — so declaring a "session" write kind here would narrow nothing and would
+// imply a policy-authorized teardown that no binding proves. The only gated
+// effect this job has is the character write.
+var jobWrites = []string{"character"}
+
 // PresenceEmitter is the subset of *presence.Emitter the retirement fanout
 // calls. Declared consumer-side (the internal/auth/auth_service.go:26-29
 // shape) rather than importing internal/presence, which would pull

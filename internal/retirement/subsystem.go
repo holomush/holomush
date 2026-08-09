@@ -248,6 +248,22 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 			Errorf("activate called before prepare; no durable consumer exists")
 	}
 
+	// Declare the job LIVE before a single message can be delivered. Authority
+	// is tied to liveness (D-49): until this returns, attribute.JobProvider
+	// stamps nothing for "job:retirement" and every world write the handler
+	// attempts default-denies. Registering after Consume would open a window
+	// where the first delivered retirement is denied for no reason an operator
+	// could diagnose.
+	if s.cfg.Jobs != nil {
+		if err := s.cfg.Jobs.Register(JobName, jobWrites); err != nil {
+			// Wrapped for context only, NOT re-coded: the registry already
+			// codes its rejections (JOB_REGISTRATION_INVALID), and stacking a
+			// second code on top would push the diagnostic one deeper into the
+			// chain for no gain.
+			return oops.With("job", JobName).Wrap(err)
+		}
+	}
+
 	// The handler runs on JetStream's own goroutines with no context of its
 	// own, so the effect context is stored on the reactor BEFORE Consume
 	// registers the callback — assigning it after registration is a data race
@@ -261,6 +277,7 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 		cancel()
 		s.cancel = nil
 		s.reactor.ctx = nil
+		s.unregisterJob()
 		return oops.Code("RETIREMENT_CONSUME_FAILED").
 			With("consumer", s.cfg.ConsumerName).
 			Wrap(err)
@@ -294,8 +311,19 @@ func (s *Subsystem) Stop(_ context.Context) error {
 		}
 		s.done = nil
 	}
+	s.unregisterJob()
 	s.cc = nil
 	s.cons = nil
 	s.reactor = nil
 	return nil
+}
+
+// unregisterJob drops the job's liveness declaration, so a stopped reactor's
+// identity resolves to no attributes and any residual in-flight write
+// default-denies. Registry.Unregister is idempotent, so calling it from both
+// the Activate rollback path and Stop is safe.
+func (s *Subsystem) unregisterJob() {
+	if s.cfg.Jobs != nil {
+		s.cfg.Jobs.Unregister(JobName)
+	}
 }

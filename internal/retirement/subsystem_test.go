@@ -65,21 +65,59 @@ func (f *fakeConsumer) Consume(handler jetstream.MessageHandler, _ ...jetstream.
 	return f.cc, nil
 }
 
+// fakeJobs records the liveness declarations the subsystem makes.
+type fakeJobs struct {
+	registered map[string][]string
+	registerEr error
+	// events records the registration ORDER so it can be checked against
+	// consumer startup.
+	events []string
+}
+
+func newFakeJobs() *fakeJobs { return &fakeJobs{registered: map[string][]string{}} }
+
+func (f *fakeJobs) Register(name string, writes []string) error {
+	f.events = append(f.events, "register:"+name)
+	if f.registerEr != nil {
+		return f.registerEr
+	}
+	f.registered[name] = writes
+	return nil
+}
+
+func (f *fakeJobs) Unregister(name string) {
+	f.events = append(f.events, "unregister:"+name)
+	delete(f.registered, name)
+}
+
 // newLifecycleSubsystem builds a Subsystem with every effect surface wired to
 // an inert fake and the consumer-create seam substituted, so the
 // Prepare/Activate/Stop contract is exercisable without a live JetStream.
 func newLifecycleSubsystem(t *testing.T) (*Subsystem, *fakeConsumer) {
 	t.Helper()
+	s, cons, _ := newLifecycleSubsystemWithJobs(t, newFakeJobs())
+	return s, cons
+}
+
+func newLifecycleSubsystemWithJobs(t *testing.T, jobsReg *fakeJobs) (*Subsystem, *fakeConsumer, *fakeJobs) {
+	t.Helper()
 	cons := &fakeConsumer{cc: newFakeConsumeContext()}
 	j := &journal{}
-	s := NewSubsystem(Config{
+	cfg := Config{
 		Sessions:        &fakeSessions{j: j},
 		Presence:        &fakePresence{j: j},
 		World:           &fakeWorld{j: j},
 		StartLocationID: func() ulid.ULID { return core.NewULID() },
-	})
+	}
+	// Assigned conditionally: `Jobs: (*fakeJobs)(nil)` would be a NON-nil
+	// interface holding a nil pointer, so the nil-registry path would never be
+	// what the caller asked for.
+	if jobsReg != nil {
+		cfg.Jobs = jobsReg
+	}
+	s := NewSubsystem(cfg)
 	s.createConsumer = func(context.Context) (consumeStarter, error) { return cons, nil }
-	return s, cons
+	return s, cons, jobsReg
 }
 
 func TestNewSubsystemDefaultsANilLoggerToTheProcessDefault(t *testing.T) {
@@ -234,6 +272,83 @@ func TestStopIsSafeInEveryLifecycleState(t *testing.T) {
 			require.NoError(t, s.Stop(ctx), "Stop MUST be idempotent")
 		})
 	}
+}
+
+// --- job liveness ------------------------------------------------------
+
+// TestActivateDeclaresTheJobLiveBeforeAnyMessageCanBeDelivered is the D-49
+// ordering proof: authority is tied to liveness, so registering AFTER Consume
+// would leave the first delivered retirement denied for no diagnosable reason.
+func TestActivateDeclaresTheJobLiveBeforeAnyMessageCanBeDelivered(t *testing.T) {
+	ctx := context.Background()
+	s, cons, jobsReg := newLifecycleSubsystemWithJobs(t, newFakeJobs())
+	require.NoError(t, s.Prepare(ctx))
+	require.Equal(t, 0, cons.calls, "Prepare MUST NOT start consuming")
+
+	require.NoError(t, s.Activate(ctx))
+	require.Equal(t, []string{"register:" + JobName}, jobsReg.events)
+	require.Equal(t, 1, cons.calls)
+	require.NoError(t, s.Stop(ctx))
+}
+
+// TestActivateDeclaresOnlyTheCharacterWriteCapabilityClass pins D-53: the
+// declaration claims no more than the bindings prove. Session teardown has no
+// policy chokepoint, so declaring it would be a claim nothing enforces.
+func TestActivateDeclaresOnlyTheCharacterWriteCapabilityClass(t *testing.T) {
+	ctx := context.Background()
+	s, _, jobsReg := newLifecycleSubsystemWithJobs(t, newFakeJobs())
+	require.NoError(t, s.Prepare(ctx))
+	require.NoError(t, s.Activate(ctx))
+
+	require.Equal(t, map[string][]string{JobName: {"character"}}, jobsReg.registered)
+	require.NoError(t, s.Stop(ctx))
+}
+
+func TestStopRetractsTheJobsLivenessDeclaration(t *testing.T) {
+	ctx := context.Background()
+	s, _, jobsReg := newLifecycleSubsystemWithJobs(t, newFakeJobs())
+	require.NoError(t, s.Prepare(ctx))
+	require.NoError(t, s.Activate(ctx))
+	require.NoError(t, s.Stop(ctx))
+
+	require.Empty(t, jobsReg.registered, "a stopped reactor MUST resolve to no job attributes")
+}
+
+// TestActivateRetractsTheJobDeclarationWhenConsumeFails keeps a failed boot
+// from leaving a job declared live that will never process a message.
+func TestActivateRetractsTheJobDeclarationWhenConsumeFails(t *testing.T) {
+	ctx := context.Background()
+	s, cons, jobsReg := newLifecycleSubsystemWithJobs(t, newFakeJobs())
+	cons.consumeErr = oops.Errorf("subscription refused")
+	require.NoError(t, s.Prepare(ctx))
+
+	require.Error(t, s.Activate(ctx))
+	require.Empty(t, jobsReg.registered)
+}
+
+func TestActivateFailsWhenTheJobRegistrationIsRejected(t *testing.T) {
+	ctx := context.Background()
+	jobsReg := newFakeJobs()
+	jobsReg.registerEr = oops.Code("JOB_REGISTRATION_INVALID").Errorf("nope")
+	s, cons, _ := newLifecycleSubsystemWithJobs(t, jobsReg)
+	require.NoError(t, s.Prepare(ctx))
+
+	err := s.Activate(ctx)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "JOB_REGISTRATION_INVALID")
+	require.Equal(t, 0, cons.calls, "a rejected declaration MUST NOT be followed by consumption")
+}
+
+// TestActivateToleratesANilJobRegistry pins the fail-CLOSED shape: an
+// entrypoint that wires no registry runs a reactor whose every world write
+// default-denies, which is safe — it is not a bypass.
+func TestActivateToleratesANilJobRegistry(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := newLifecycleSubsystemWithJobs(t, nil)
+	require.Nil(t, s.cfg.Jobs)
+	require.NoError(t, s.Prepare(ctx))
+	require.NoError(t, s.Activate(ctx))
+	require.NoError(t, s.Stop(ctx))
 }
 
 // TestSubsystemSatisfiesTheLifecycleInterface is the compile-time proof the

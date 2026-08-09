@@ -518,6 +518,52 @@ func SeedPolicies() []SeedPolicy {
 			SeedVersion: 1,
 		},
 
+		// --- Background job: the retirement reactor (IDENT-04, D-52) ---
+		//
+		// The first REAL job grant. It is the fixture above with `fixture`
+		// replaced by the live job, and it is deliberately no wider: every
+		// conjunct there is load-bearing here for the same reasons, so read
+		// that comment first.
+		//
+		// WHAT IT AUTHORIZES, EXACTLY. The retirement reactor
+		// (internal/retirement) consumes character_retired off
+		// events.*.character.> and moves the retiree to the starting location.
+		// Two effects cross the ABAC chokepoint — the status read the guard
+		// performs and the move itself — so the action list is read+write and
+		// nothing else. Notably NOT here: retire, unretire, delete. The
+		// reactor reacts to a retirement; it never performs one.
+		//
+		// WHY BOTH READ AND WRITE ARE INSTANCE-SCOPED. The read looks like it
+		// could safely be broader — it is only a status lookup — but a
+		// job-wide character read is a character-enumeration primitive, and
+		// the reactor genuinely needs exactly one character per delivery. The
+		// same `when` clause therefore fences both.
+		//
+		// THE INSTANCE FENCE IS WHAT MAKES THIS SAFE (D-54). The reactor
+		// derives the character from the message BODY while the provenance
+		// triple is stamped from the transport SUBJECT. Those two derivations
+		// are independent, so `action.job.trigger_subject == resource.id`
+		// denies a handler that derives the wrong aggregate rather than
+		// letting it corrupt one. A blanket `permit(principal is job, ...)`
+		// would be the ceiling this seed exists to stay under, not the target.
+		//
+		// THE EVENT-TYPE CONJUNCT IS NOT REDUNDANT. The consumer's filter is
+		// the whole character aggregate, so character_created / _moved /
+		// _unretired all reach the handler. Binding the trigger to
+		// character_retired is what stops a broad subscription from becoming
+		// broad authority.
+		//
+		// LIVENESS IS THE THIRD GATE (D-49). principal.job.name resolves only
+		// while internal/jobs.Registry reports the job running — the reactor
+		// registers in Activate and unregisters in Stop — so a host that does
+		// not run the reactor cannot have this permit match at all.
+		{
+			Name:        "seed:job-retirement-instance-scoped",
+			Description: "The retirement reactor may read and write only the character its triggering character_retired event names (IDENT-04, D-52/D-54)",
+			DSLText:     `permit(principal is job, action in ["read", "write"], resource is character) when { principal.job.name == "retirement" && principal.job.writes.containsAll(["character"]) && action.job.trigger_event_type == "character_retired" && action.job.trigger_subject == resource.id };`,
+			SeedVersion: 1,
+		},
+
 		// --- Character directory (INV-ACCESS-9) ---
 		//
 		// Any authenticated character (registered or guest) may list the server-wide

@@ -721,8 +721,43 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	// ACTION, and the exact-DSL assertion after that is what pins MATCHABILITY —
 	// the `principal.job.name == "fixture"` clause. All three assertions are
 	// load-bearing; deleting any one re-opens the corresponding half of D-29.
+	//
+	// seed:job-retirement-instance-scoped (v0.13 phase 03, IDENT-04) is the
+	// second addition and it is a DIFFERENT argument, not a copy of the
+	// fixture's. State the difference plainly: it is a LIVE grant, so the
+	// fixture's third leg (unmatchability) does not apply to it, and it does
+	// permit `read`, which the paragraph above names as a widening. What makes
+	// that safe is the leg the fixture shares — the instance fence:
+	//
+	//   - PRINCIPAL is still `job`. Same disjoint namespace; still no human,
+	//     guest or otherwise, can hold a job: subject.
+	//   - THE READ IS NOT AN ENUMERATION PRIMITIVE, which is the actual risk
+	//     D-29 defers. `action.job.trigger_subject == resource.id` binds the
+	//     readable character to the one the TRIGGERING event names, and
+	//     `action.job.trigger_event_type == "character_retired"` binds which
+	//     event may do the triggering. The reactor can therefore read exactly
+	//     the character that has just been retired, one per delivered message,
+	//     and no other — it cannot walk the roster, and there is no request on
+	//     whose behalf it could render what it read. characterToProto is not on
+	//     this path: the caller is an in-process host subsystem, not a gRPC
+	//     handler.
+	//   - THE PROVENANCE IS NOT CALLER-CHOSEN. world.JobCaller derives the
+	//     triple from the delivered message and exposes no attribute-map
+	//     parameter, and the reactor derives the RESOURCE independently (from
+	//     the message body, while the provenance comes from the transport
+	//     subject). A handler that derives the wrong aggregate is therefore
+	//     denied by this very clause rather than authorized by it.
+	//   - LIVENESS still gates it (D-49): principal.job.name resolves only
+	//     while internal/jobs.Registry reports "retirement" running, which the
+	//     reactor declares in Activate and retracts in Stop.
+	//
+	// Its own exact-DSL pin below is what keeps that fence from being relaxed.
+	// If a future edit drops either `when` conjunct, this seed becomes a job-
+	// wide character read — which IS the D-29 risk, reached by a door the name
+	// set and the shape map would both stay green for.
 	want := []string{
 		"seed:job-fixture-instance-scoped",
+		"seed:job-retirement-instance-scoped",
 		"seed:player-character-colocation",
 		"seed:player-self-access",
 	}
@@ -730,9 +765,10 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	// The compiled target shape of every member, so a widening of an EXISTING
 	// member is caught even though the name set is unchanged.
 	wantShapes := map[string]characterSeedTargetShape{
-		"seed:job-fixture-instance-scoped": {principal: "job", actions: []string{"write"}},
-		"seed:player-character-colocation": {principal: "character", actions: []string{"read"}},
-		"seed:player-self-access":          {principal: "character", actions: []string{"read", "write"}},
+		"seed:job-fixture-instance-scoped":    {principal: "job", actions: []string{"write"}},
+		"seed:job-retirement-instance-scoped": {principal: "job", actions: []string{"read", "write"}},
+		"seed:player-character-colocation":    {principal: "character", actions: []string{"read"}},
+		"seed:player-self-access":             {principal: "character", actions: []string{"read", "write"}},
 	}
 
 	compiler := NewCompiler(emptySchema())
@@ -768,7 +804,10 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 			"`character` — instantiates exactly the risk D-29 defers to Phase 4, WITHOUT changing this "+
 			"family's name set. That is why the shape is pinned here and not left to the name-set equality "+
 			"above. The same pin covers the two shipped seeds: widening either of those is the same leak "+
-			"by a different door.")
+			"by a different door. seed:job-retirement-instance-scoped is the ONE member permitted to carry "+
+			"`read`, and only because its instance fence makes it a single-row lookup rather than an "+
+			"enumeration primitive (see this test's doc comment); a THIRD job seed carrying `read` is not "+
+			"covered by that reasoning and must argue its own case here.")
 
 	// MATCHABILITY, the third leg of the exemption. Pinned as exact DSL because
 	// the clause that makes the permit unmatchable in production
@@ -787,6 +826,28 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 			"live against whatever job IS registered — an unreviewed grant of character writes.")
 	assert.Equal(t, 1, jobSeed.SeedVersion,
 		"seed:job-fixture-instance-scoped ships at SeedVersion 1 (v0.13 phase 02.2, AUTHZ-02)")
+
+	// The retirement grant's exemption rests ENTIRELY on its instance fence
+	// (it is live, so it has no unmatchability leg to fall back on), and the
+	// fence lives in the `when` body the compiled Target does not carry. Pinned
+	// as exact DSL for that reason: dropping `action.job.trigger_subject ==
+	// resource.id` turns a single-row lookup into a job-wide character read,
+	// and dropping `action.job.trigger_event_type == "character_retired"` lets
+	// every other character event the consumer's filter delivers carry the same
+	// authority.
+	retirementSeed := requireSeedPolicy(t, "seed:job-retirement-instance-scoped")
+	const wantRetirementDSL = `permit(principal is job, action in ["read", "write"], resource is character) ` +
+		`when { principal.job.name == "retirement" && principal.job.writes.containsAll(["character"]) && ` +
+		`action.job.trigger_event_type == "character_retired" && action.job.trigger_subject == resource.id };`
+	assert.Equal(t, wantRetirementDSL, retirementSeed.DSLText,
+		"seed:job-retirement-instance-scoped is a LIVE grant whose only fence is its `when` clause. Both "+
+			"action.job.* conjuncts are load-bearing: trigger_subject bounds WHICH character may be read "+
+			"or written (to the one the triggering event names), and trigger_event_type bounds WHAT may "+
+			"trigger it (the reactor's consumer filter is the whole character aggregate, so without this "+
+			"conjunct a character_created or character_moved delivery would carry retirement's authority). "+
+			"Relaxing either is the D-29 leak by a different door.")
+	assert.Equal(t, 1, retirementSeed.SeedVersion,
+		"seed:job-retirement-instance-scoped ships at SeedVersion 1 (v0.13 phase 03, IDENT-04)")
 
 	_, exists := seedPolicyByName("seed:profile-public-read-character")
 	assert.False(t, exists,

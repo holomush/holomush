@@ -53,6 +53,7 @@ import (
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telemetry"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	"github.com/holomush/holomush/internal/xdg"
@@ -892,8 +893,22 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		RekeyCheckpointSweep: rekeyCheckpointSweepSub,
 		OutboxRelay:          outboxRelaySub,
 		BlockList:            blockListSub,
-		RetirementReactor:    retirement.NewSubsystem(retirement.Config{Logger: slog.Default()}),
-		CharacterActivity:    charactivity.NewSubsystem(charactivity.Config{Logger: slog.Default()}),
+		RetirementReactor: retirement.NewSubsystem(retirement.Config{
+			Logger:    slog.Default(),
+			JetStream: eventBusSub,
+			Sessions:  &retirementSessionBridge{sub: sessionSub},
+			Presence:  &retirementPresenceBridge{sub: grpcSub},
+			World:     &retirementWorldBridge{sub: worldSub},
+			// THE SAME registry instance abacSub reads. A second one would
+			// report the reactor as not running to the attribute provider, and
+			// every world write it makes would silently default-deny.
+			Jobs: jobRegistry,
+			// Resolved per delivered message, never here: StartLocationID
+			// PANICS before the bootstrap subsystem's Prepare, which is the
+			// reason the reactor declares DependsOn(Bootstrap).
+			StartLocationID: bootstrapSub.StartLocationID,
+		}),
+		CharacterActivity: charactivity.NewSubsystem(charactivity.Config{Logger: slog.Default()}),
 	}) {
 		orch.Register(sub)
 	}
@@ -1088,6 +1103,69 @@ func parseSessionConfig(cfg *coreConfig) (sessionTTL, reaperInterval, leaseTTL, 
 // sessionBridge adapts SessionSubsystem to pluginsetup.SessionProvider.
 type sessionBridge struct {
 	sub *sessionsetup.SessionSubsystem
+}
+
+// --- Retirement reactor bridges ---
+//
+// All three resolve their live dependency PER CALL rather than at
+// construction. The retirement subsystem is built here, before any Prepare has
+// run, so an eager read would panic (WorldSubsystem.Service and
+// SessionSubsystem.Store both do) or capture nil. Per-call resolution also
+// keeps a Stop/Prepare retry from leaving the reactor bound to a torn-down
+// handle.
+
+// retirementSessionBridge adapts SessionSubsystem to retirement.SessionEnder.
+type retirementSessionBridge struct {
+	sub *sessionsetup.SessionSubsystem
+}
+
+func (b *retirementSessionBridge) DeleteByCharacter(ctx context.Context, characterID ulid.ULID) (*session.Info, error) {
+	return b.sub.Store().DeleteByCharacter(ctx, characterID)
+}
+
+// retirementWorldBridge adapts WorldSubsystem to retirement.WorldSurface. Both
+// methods cross the ABAC chokepoint with the caller they are handed — the
+// bridge adds no identity of its own and MUST NOT.
+type retirementWorldBridge struct {
+	sub *worldsetup.WorldSubsystem
+}
+
+func (b *retirementWorldBridge) GetCharacter(ctx context.Context, caller world.Caller, id ulid.ULID) (*world.Character, error) {
+	return b.sub.Service().GetCharacter(ctx, caller, id)
+}
+
+func (b *retirementWorldBridge) MoveCharacter(ctx context.Context, caller world.Caller, characterID, toLocationID ulid.ULID) error {
+	return b.sub.Service().MoveCharacter(ctx, caller, characterID, toLocationID)
+}
+
+// retirementPresenceBridge adapts the gRPC subsystem's single presence emitter
+// to retirement.PresenceEmitter.
+//
+// The reactor is topologically BEFORE gRPC, so this resolves nil until the
+// gRPC subsystem's Prepare has run. The orchestrator's global barrier — every
+// Prepare returns before any Activate — means that is impossible by the time
+// the reactor's consume loop can deliver a message. A nil emitter is
+// nonetheless handled rather than dereferenced: losing a leave notification is
+// operational degradation, exactly as it is at the eight existing fanout
+// sites, and is never worth panicking a live server over.
+type retirementPresenceBridge struct {
+	sub *grpcSubsystem
+}
+
+func (b *retirementPresenceBridge) EmitLeave(ctx context.Context, char core.CharacterRef, reason string) error {
+	em := b.sub.PresenceEmitter()
+	if em == nil {
+		return oops.Code("PRESENCE_EMITTER_UNAVAILABLE").Errorf("presence emitter is not yet constructed")
+	}
+	return em.EmitLeave(ctx, char, reason)
+}
+
+func (b *retirementPresenceBridge) EmitSessionEnded(ctx context.Context, char core.CharacterRef, sessionID, cause, reason string) error {
+	em := b.sub.PresenceEmitter()
+	if em == nil {
+		return oops.Code("PRESENCE_EMITTER_UNAVAILABLE").Errorf("presence emitter is not yet constructed")
+	}
+	return em.EmitSessionEnded(ctx, char, sessionID, cause, reason)
 }
 
 // pluginAuditClientAdapter bridges the proto-generated
