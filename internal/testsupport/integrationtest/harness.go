@@ -67,6 +67,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
@@ -75,6 +76,7 @@ import (
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/charactivity"
 	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/commandquery"
@@ -237,6 +239,13 @@ type startConfig struct {
 	// of creating a fresh one (WithSharedDatabase). Used by the two-replica
 	// resilience suite so replica 2 boots against replica 1's database.
 	sharedConnStr string
+	// characterActivity boots the real charactivity subsystem (WithCharacterActivity).
+	characterActivity bool
+	// characterActivityStorage is the KV bucket's backing store. Explicit
+	// because FileStorage is StorageType's zero value — see the option's doc.
+	characterActivityStorage jetstream.StorageType
+	// characterActivityFlushInterval shortens the production five-minute tick.
+	characterActivityFlushInterval time.Duration
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -858,8 +867,46 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// migration.
 	srv.backfillCharacterSkeletons(ctx)
 
+	if cfg.characterActivity {
+		srv.startCharacterActivity(ctx, cfg)
+	}
+
 	return srv
 }
+
+// startCharacterActivity boots the real charactivity subsystem against the
+// harness's embedded JetStream and pool (WithCharacterActivity).
+//
+// It goes through the production Prepare/Activate/Stop contract rather than
+// reaching inside, so the spec observes the same bucket, the same durable
+// consumer and the same flush loop production runs. The writer is the same
+// closure cmd/holomush wires — the real writer-boundary free function, not a
+// harness stand-in — because the property under test is that THAT function is
+// what advances the column.
+func (s *Server) startCharacterActivity(ctx context.Context, cfg *startConfig) {
+	s.t.Helper()
+	sub := charactivity.NewSubsystemWithStorage(charactivity.Config{
+		FlushInterval: cfg.characterActivityFlushInterval,
+		JetStream:     jsHandle{js: s.bus.JS},
+		Writer: func(ctx context.Context, characterID ulid.ULID, lastActiveNanos int64) error {
+			return worldpg.UpdateCharacterLastActive(ctx, s.pool, characterID, lastActiveNanos)
+		},
+	}, cfg.characterActivityStorage)
+	require.NoError(s.t, sub.Prepare(ctx), "integrationtest.Start: prepare character activity subsystem")
+	require.NoError(s.t, sub.Activate(ctx), "integrationtest.Start: activate character activity subsystem")
+	s.t.Cleanup(func() {
+		if err := sub.Stop(context.Background()); err != nil {
+			s.t.Logf("integrationtest.Start: character activity subsystem Stop: %v", err)
+		}
+	})
+}
+
+// jsHandle adapts the harness's already-live JetStream handle to the
+// charactivity.JetStreamProvider deferral shape (production defers because the
+// eventbus subsystem has not started at construction time; here it already has).
+type jsHandle struct{ js jetstream.JetStream }
+
+func (h jsHandle) JS() jetstream.JetStream { return h.js }
 
 // cryptoPublisherOf returns pc's crypto-enabled publisher, or nil when pc is
 // nil (no WithPluginCrypto). A nil cryptoPublisher leaves the plugin event

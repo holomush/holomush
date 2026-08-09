@@ -5,6 +5,12 @@
 
 package integrationtest
 
+import (
+	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
+)
+
 // WithExtraPluginDir stages an additional plugin directory (e.g. a test-only
 // Lua fixture under test/integration/.../testdata/lua/<name>) into the plugin
 // load path so the real plugin subsystem loads it alongside the in-tree
@@ -51,4 +57,30 @@ func WithExternalNATS(url string) StartOption {
 // only when set, so every existing suite keeps the fresh-DB-per-Start path.
 func WithSharedDatabase(connStr string) StartOption {
 	return func(c *startConfig) { c.sharedConnStr = connStr }
+}
+
+// WithCharacterActivity boots the real internal/charactivity subsystem inside
+// the harness (D-42, IDENT-10) so a spec can observe the whole
+// event → KV buffer → periodic flush → characters.last_active_at path.
+//
+// storage MUST be jetstream.MemoryStorage in a memory harness. A KV bucket
+// carries its OWN storage config and does not inherit the stream's, and
+// FileStorage is the ZERO VALUE of jetstream.StorageType — so a bucket left at
+// the default is file-backed even here, leaking bucket state into the embedded
+// server's StoreDir across runs. That is the whole reason charactivity ships a
+// NewSubsystemWithStorage pair, and the reason this option takes the parameter
+// rather than choosing for the caller.
+//
+// flushInterval SHOULD be short (a few hundred milliseconds): production's
+// default is five minutes, which is the column's worst-case lag by design.
+//
+// The subsystem consumes bus events directly, so no outbox relay is needed and
+// none is started. Zero blast radius: the branch is taken only when the option
+// is passed.
+func WithCharacterActivity(storage jetstream.StorageType, flushInterval time.Duration) StartOption {
+	return func(c *startConfig) {
+		c.characterActivity = true
+		c.characterActivityStorage = storage
+		c.characterActivityFlushInterval = flushInterval
+	}
 }
