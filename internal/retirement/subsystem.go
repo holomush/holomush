@@ -24,7 +24,10 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/consumer"
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
@@ -108,16 +111,34 @@ const (
 	defaultMaxDeliver = 10
 )
 
+// consumeStarter is the one jetstream.Consumer method the subsystem uses.
+// Declared narrowly so a package test can substitute a fake without
+// implementing the eight-method jetstream.Consumer surface; *the* production
+// value is whatever consumer.CreateWithRetry returns.
+type consumeStarter interface {
+	Consume(handler jetstream.MessageHandler, opts ...jetstream.PullConsumeOpt) (jetstream.ConsumeContext, error)
+}
+
 // Subsystem is the lifecycle.Subsystem that owns the retirement fanout.
 type Subsystem struct {
-	cfg Config
-	// prepared guards Prepare. Plan 03-04 replaces the bare bool with the
-	// durable jetstream.Consumer handle (nil-field guard, as the outbox
-	// relay guards on s.relay); the guard SEMANTICS do not change.
-	prepared bool
+	cfg     Config
+	reactor *reactor
+	// cons is the durable consumer AND the Prepare guard (the outbox relay
+	// guards on s.relay the same way). Nil until Prepare has run.
+	cons consumeStarter
+	// cc is the live consume context, stopped by Stop.
+	cc jetstream.ConsumeContext
+	// cancel cancels the context every handler effect runs under.
+	cancel context.CancelFunc
 	// done guards Activate and is closed when the consume loop exits. Nil
 	// until Activate has run.
 	done chan struct{}
+
+	// createConsumer is the consumer-create seam. Nil in production, where
+	// Prepare builds the real durable consumer through
+	// consumer.CreateWithRetry; package tests substitute a fake so the
+	// lifecycle contract can be exercised without a live JetStream.
+	createConsumer func(ctx context.Context) (consumeStarter, error)
 }
 
 // NewSubsystem constructs the retirement reactor. It allocates nothing and
@@ -149,32 +170,112 @@ func (s *Subsystem) DependsOn() []lifecycle.SubsystemID {
 	}
 }
 
-// Prepare creates the durable JetStream consumer — acquisition, no work
-// loop, per the Prepare/Activate contract's process-internal-substrate
-// carve-out. Inert until plan 03-04; the idempotency guard is live now so
-// the contract shape is fixed.
+// Prepare builds the handler and creates the durable JetStream consumer —
+// acquisition, no work loop, per the Prepare/Activate contract's
+// process-internal-substrate carve-out. Idempotent behind the s.cons guard.
 func (s *Subsystem) Prepare(ctx context.Context) error {
-	if s.prepared {
+	if s.cons != nil {
 		return nil // already prepared
 	}
-	s.prepared = true
-	slog.DebugContext(ctx, "retirement reactor subsystem prepared (no-op until 03-04)")
+	r, err := newReactor(s.cfg)
+	if err != nil {
+		return err
+	}
+	create := s.createConsumer
+	if create == nil {
+		create = s.createDurableConsumer
+	}
+	cons, err := create(ctx)
+	if err != nil {
+		return err
+	}
+	s.reactor = r
+	s.cons = cons
+	slog.InfoContext(ctx, "retirement reactor subsystem prepared",
+		"consumer", s.cfg.ConsumerName, "filter_subject", ConsumerFilterSubject)
 	return nil
 }
 
-// Activate starts the consume loop — domain traffic. Inert until plan
-// 03-04. Idempotent behind the done-channel guard.
+// createDurableConsumer is the production consumer-create path.
+//
+// The create call goes through consumer.CreateWithRetry (the shared D-46
+// helper) rather than a fresh backoff loop, so this consumer absorbs the same
+// JetStream warmup window the audit projector does. The helper codes nothing,
+// so the RETIREMENT_CONSUMER_CREATE_FAILED wrap below is the whole error
+// surface.
+func (s *Subsystem) createDurableConsumer(ctx context.Context) (consumeStarter, error) {
+	if s.cfg.JetStream == nil {
+		return nil, oops.Code("RETIREMENT_REACTOR_UNWIRED").Errorf("jetstream provider is required")
+	}
+	js := s.cfg.JetStream.JS()
+	if js == nil {
+		return nil, oops.Code("RETIREMENT_REACTOR_UNWIRED").Errorf("jetstream handle is not available")
+	}
+	cons, err := consumer.CreateWithRetry(ctx, func(ctx context.Context) (jetstream.Consumer, error) {
+		return js.CreateOrUpdateConsumer(ctx, eventbus.StreamName, jetstream.ConsumerConfig{
+			Durable:       s.cfg.ConsumerName,
+			Name:          s.cfg.ConsumerName,
+			FilterSubject: ConsumerFilterSubject,
+			AckPolicy:     jetstream.AckExplicitPolicy,
+			AckWait:       s.cfg.AckWait,
+			MaxAckPending: s.cfg.MaxAckPending,
+			MaxDeliver:    s.cfg.MaxDeliver,
+		})
+	})
+	if err != nil {
+		return nil, oops.Code("RETIREMENT_CONSUMER_CREATE_FAILED").
+			With("stream", eventbus.StreamName).
+			With("consumer", s.cfg.ConsumerName).
+			With("nats_err", err.Error()).
+			Wrap(err)
+	}
+	return cons, nil
+}
+
+// Activate starts the consume loop — domain traffic. Idempotent behind the
+// done-channel guard.
+//
+// It REFUSES to run without a prepared consumer rather than no-op'ing. The
+// orchestrator always runs the whole Prepare sweep before the whole Activate
+// sweep, so this never fires in production; if it ever did, a silent success
+// would leave retirement permanently ineffective with nothing to point at.
 func (s *Subsystem) Activate(ctx context.Context) error {
 	if s.done != nil {
 		return nil // already activated
 	}
+	if s.cons == nil {
+		return oops.Code("RETIREMENT_REACTOR_NOT_PREPARED").
+			Errorf("activate called before prepare; no durable consumer exists")
+	}
+
+	// The handler runs on JetStream's own goroutines with no context of its
+	// own, so the effect context is stored on the reactor BEFORE Consume
+	// registers the callback — assigning it after registration is a data race
+	// (the audit projector carries the same note).
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	s.cancel = cancel
+	s.reactor.ctx = runCtx
+
+	cc, err := s.cons.Consume(s.reactor.handle)
+	if err != nil {
+		cancel()
+		s.cancel = nil
+		s.reactor.ctx = nil
+		return oops.Code("RETIREMENT_CONSUME_FAILED").
+			With("consumer", s.cfg.ConsumerName).
+			Wrap(err)
+	}
+	s.cc = cc
+
 	done := make(chan struct{})
-	// No work loop yet: 03-04 launches the Consume loop and closes this on
-	// exit. Closing it here keeps Stop's drain wait a no-op today and lets
-	// 03-04 add the real wait without touching Stop.
-	close(done)
 	s.done = done
-	slog.DebugContext(ctx, "retirement reactor subsystem activated (no-op until 03-04)")
+	go func() {
+		defer close(done)
+		<-runCtx.Done()
+		cc.Stop()
+	}()
+
+	slog.InfoContext(ctx, "retirement reactor subsystem activated", "consumer", s.cfg.ConsumerName)
 	return nil
 }
 
@@ -182,6 +283,10 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 // Prepare/Activate retry after Stop rebuilds the consumer and relaunches
 // the loop rather than short-circuiting on a torn-down one.
 func (s *Subsystem) Stop(_ context.Context) error {
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
 	if s.done != nil {
 		select {
 		case <-s.done:
@@ -189,6 +294,8 @@ func (s *Subsystem) Stop(_ context.Context) error {
 		}
 		s.done = nil
 	}
-	s.prepared = false
+	s.cc = nil
+	s.cons = nil
+	s.reactor = nil
 	return nil
 }

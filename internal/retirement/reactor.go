@@ -5,14 +5,22 @@ package retirement
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	gamesession "github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/outbox"
+	"github.com/holomush/holomush/pkg/errutil"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
 // JobName is the background-job identity the reactor's world writes are
@@ -111,9 +119,17 @@ const (
 	retry
 )
 
-// reactor is the stateless handler behind the durable consumer.
+// reactor is the handler behind the durable consumer. It holds no per-message
+// state — the only field beyond configuration is the lifecycle context the
+// Consume callback runs effects under.
 type reactor struct {
 	cfg Config
+	// ctx is the Activate context, stored so handle (which JetStream invokes
+	// on its own goroutine, with no context of its own) can propagate
+	// cancellation and trace context into every effect. It MUST be assigned
+	// before Consume registers the callback — JetStream may invoke handle the
+	// moment Consume returns, and assigning after registration is a data race.
+	ctx context.Context //nolint:containedctx // lifecycle ctx, not a request ctx — same shape as audit.projection.workerCtx
 }
 
 // newReactor validates that every effect surface the fanout needs is wired.
@@ -131,20 +147,202 @@ func newReactor(cfg Config) (*reactor, error) {
 	case cfg.StartLocationID == nil:
 		return nil, oops.Code("RETIREMENT_REACTOR_UNWIRED").Errorf("starting-location resolver is required")
 	}
-	return &reactor{cfg: cfg}, nil
+	// Defaults is idempotent, so re-applying it over a Subsystem config that
+	// already ran it costs nothing and keeps a directly-constructed reactor
+	// (tests, future callers) from carrying a nil logger into a hot path.
+	return &reactor{cfg: cfg.Defaults()}, nil
 }
 
 // newDelivery decodes the wire parts of one JetStream message.
-func newDelivery(_ string, _ nats.Header, _ []byte) (delivery, error) {
-	return delivery{}, oops.Errorf("not implemented")
+//
+// The body is the outbox relay's shape and nothing else: a proto-marshaled
+// eventbusv1.Event whose Payload is the JSON world envelope
+// (internal/world/outbox/wire.go's EnvelopeToEvent). The canonical decoder
+// outbox.UnmarshalEnvelope is reused rather than re-derived, so the aggregate
+// this handler authorizes against is parsed by the same code that wrote it.
+//
+// A world envelope is never a sensitive-codec payload — the relay publishes
+// already-committed facts with no crypto.emits declaration — so no decrypt
+// path is needed here. If one ever were, the proto unmarshal below would still
+// succeed and the ENVELOPE unmarshal would fail, which lands on the
+// permanently-unhandleable ack path rather than on a silent mis-decode.
+func newDelivery(subject string, hdr nats.Header, data []byte) (delivery, error) {
+	var wire eventbusv1.Event
+	if err := proto.Unmarshal(data, &wire); err != nil {
+		return delivery{}, oops.Code("RETIREMENT_EVENT_UNMARSHAL_FAILED").
+			With("subject", subject).Wrap(err)
+	}
+	env, err := outbox.UnmarshalEnvelope(wire.GetPayload())
+	if err != nil {
+		return delivery{}, oops.Code("RETIREMENT_ENVELOPE_UNMARSHAL_FAILED").
+			With("subject", subject).Wrap(err)
+	}
+	return delivery{
+		EventID:   hdr.Get(eventbus.HeaderMsgID),
+		EventType: hdr.Get(eventbus.HeaderEventType),
+		Aggregate: aggregateFromSubject(subject),
+		Character: env.AggregateID,
+	}, nil
 }
 
-// handleDecoded decodes then processes one message.
-func (r *reactor) handleDecoded(_ context.Context, _ string, _ nats.Header, _ []byte) disposition {
+// aggregateFromSubject returns the BARE aggregate ULID from a qualified NATS
+// subject (events.<game>.character.<ulid>).
+//
+// Bare is load-bearing (D-54): a seed binds
+// `action.job.trigger_subject == resource.id`, and bags.Resource["id"] is the
+// substring after the first ':' of the resource ref. A dotted subject or a
+// prefixed "character:<id>" ref compares unequal, and every job write then
+// silently default-denies.
+func aggregateFromSubject(subject string) string {
+	if i := strings.LastIndex(subject, "."); i >= 0 {
+		return subject[i+1:]
+	}
+	return subject
+}
+
+// handle is the Consume callback. It owns the ack decision; process owns the
+// effects.
+func (r *reactor) handle(msg jetstream.Msg) {
+	if r.handleDecoded(r.workerContext(), msg.Subject(), msg.Headers(), msg.Data()) == ack {
+		_ = msg.Ack() //nolint:errcheck // an ack failure is absorbed by redelivery, which is idempotent here
+	}
+	// retry: deliberately no Nak. Leaving the message unacked lets AckWait
+	// pace the redelivery, matching the audit projector — a Nak would produce
+	// an instant-redeliver storm against whatever surface is already failing.
+}
+
+// handleDecoded decodes then processes one message. A body this handler cannot
+// decode is permanently unhandleable: redelivering it forever would occupy a
+// MaxAckPending slot until MaxDeliver, so it is logged and acked.
+func (r *reactor) handleDecoded(ctx context.Context, subject string, hdr nats.Header, data []byte) disposition {
+	d, err := newDelivery(subject, hdr, data)
+	if err != nil {
+		errutil.LogErrorContext(ctx, "retirement reactor could not decode a delivered event; acking as poison",
+			err, "subject", subject)
+		return ack
+	}
+	return r.process(ctx, d)
+}
+
+// process runs the guarded fanout for one delivery, in the D-37/D-38 order:
+// status guard, session teardown, leave at the OLD location, session_ended,
+// then the move.
+//
+// Every effect is gated on OBSERVED STATE rather than on a durable progress
+// record, which is what makes a JetStream redelivery safe: whatever already
+// happened is visible as absence (no session row to delete, the character
+// already at the starting location) and is skipped.
+//
+// ACCEPTED CRASH WINDOW. A crash after the session row is deleted but before
+// the two emissions loses those notifications permanently — redelivery sees
+// (nil, nil) and skips them. That is accepted rather than fixed with a durable
+// progress record: it matches the semantics of all eight existing synchronous
+// fanout sites, and introducing an outbox for a presence notification would be
+// a larger commitment than the loss warrants.
+func (r *reactor) process(ctx context.Context, d delivery) disposition {
+	if d.EventType != eventTypeCharacterRetired {
+		// The consumer's filter is the whole character aggregate, so
+		// character_created / _moved / _unretired all arrive here. Advancing
+		// the cursor past them is the point of the fast path.
+		return ack
+	}
+
+	caller := world.JobCaller(JobName, world.Provenance{
+		EventID:   d.EventID,
+		EventType: d.EventType,
+		Subject:   d.Aggregate,
+	})
+	logger := r.cfg.Logger.With(
+		"character_id", d.Character.String(),
+		"event_id", d.EventID,
+		"trigger_subject", d.Aggregate,
+	)
+
+	// (1) Status guard. A character un-retired between emit and delivery MUST
+	// NOT be evicted, so nothing at all happens before this read succeeds.
+	char, err := r.cfg.World.GetCharacter(ctx, caller, d.Character)
+	if err != nil {
+		return r.classifyWorldError(ctx, err, "retirement reactor could not read the retiring character")
+	}
+	status, err := world.ParseStatus(string(char.Status))
+	if err != nil {
+		// INV-WORLD-5's denying default. An unrecognized status will not
+		// become recognized on redelivery, so this acks rather than retries.
+		errutil.LogErrorContext(ctx, "retirement reactor read an unrecognized lifecycle status; skipping the fanout",
+			err, "character_id", d.Character.String())
+		return ack
+	}
+	if status != world.StatusRetired {
+		logger.InfoContext(ctx, "retirement reactor skipping a character that is no longer retired",
+			"status", string(status))
+		return ack
+	}
+
+	// (2) Session teardown. (nil, nil) is the absence signal a redelivery
+	// relies on: there was no active or detached session to end.
+	info, err := r.cfg.Sessions.DeleteByCharacter(ctx, d.Character)
+	if err != nil {
+		errutil.LogErrorContext(ctx, "retirement reactor could not end the retiree's session; redelivering",
+			err, "character_id", d.Character.String())
+		return retry
+	}
+
+	// (3) Notify the OLD location, before the move, so the leave names the
+	// place the character left. Both emissions are best-effort: a fanout
+	// failure is operational degradation, exactly as at the eight existing
+	// synchronous sites.
+	if info != nil {
+		ref := core.CharacterRef{ID: d.Character, Name: char.Name, LocationID: info.LocationID}
+		if emitErr := r.cfg.Presence.EmitLeave(ctx, ref, leaveReasonRetired); emitErr != nil {
+			errutil.LogErrorContext(ctx, "retirement reactor could not emit leave for a retired character",
+				emitErr, "character_id", d.Character.String(), "location_id", info.LocationID.String())
+		}
+		if emitErr := r.cfg.Presence.EmitSessionEnded(
+			ctx, ref, info.ID, core.SessionEndedCauseRetired, leaveReasonRetired,
+		); emitErr != nil {
+			errutil.LogErrorContext(ctx, "retirement reactor could not emit session_ended for a retired character",
+				emitErr, "character_id", d.Character.String(), "session_id", info.ID)
+		}
+	}
+
+	// (4) Move to the starting location, skipping when the character is
+	// already there — MoveCharacter itself would succeed and emit a second
+	// character_moved envelope, so the guard is what makes redelivery silent.
+	startLoc := r.cfg.StartLocationID()
+	if char.LocationID != nil && *char.LocationID == startLoc {
+		logger.DebugContext(ctx, "retirement reactor skipping a move to the starting location the character already occupies")
+		return ack
+	}
+	if err := r.cfg.World.MoveCharacter(ctx, caller, d.Character, startLoc); err != nil {
+		return r.classifyWorldError(ctx, err, "retirement reactor could not move the retiree to the starting location")
+	}
+
+	logger.InfoContext(ctx, "retirement fanout complete", "start_location_id", startLoc.String())
+	return ack
+}
+
+// classifyWorldError splits a world.Service failure into the two dispositions.
+//
+// A policy DENY is terminal: the seed will not change between now and AckWait,
+// so redelivering buys nothing but a consumed MaxAckPending slot and a log
+// line every five seconds. Everything else — evaluation failures, missing
+// rows, persistence errors — is treated as transient and redelivered, which is
+// safe precisely because every effect above is gated on observed state.
+func (r *reactor) classifyWorldError(ctx context.Context, err error, msg string) disposition {
+	if errors.Is(err, world.ErrPermissionDenied) {
+		errutil.LogErrorContext(ctx, msg+"; policy denied the job and redelivery cannot cure it", err)
+		return ack
+	}
+	errutil.LogErrorContext(ctx, msg+"; redelivering", err)
 	return retry
 }
 
-// process runs the guarded fanout for one delivery.
-func (r *reactor) process(_ context.Context, _ delivery) disposition {
-	return retry
+// workerContext returns the context the Consume callback runs effects under.
+// JetStream invokes handle on its own goroutine with no context of its own, so
+// the subsystem's Activate context is stored here at start.
+func (r *reactor) workerContext() context.Context {
+	if r.ctx == nil {
+		return context.Background()
+	}
+	return r.ctx
 }
