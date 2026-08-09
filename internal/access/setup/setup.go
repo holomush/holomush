@@ -375,8 +375,16 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	// HasNamespace("action") == true and its hard-error branch is live: a policy
 	// referencing an undeclared action.* key fails to compile, which fails the
 	// reload below, which fails this function, which fails boot. That is
-	// deliberate and applies to EVERY policy source — in-tree seeds and
-	// operator-authored database rows alike (D-67).
+	// deliberate and applies to EVERY policy source — in-tree seeds,
+	// operator-authored database rows, and plugin-manifest policies alike (D-67).
+	//
+	// Plugin policies reach the same verdict through a DIFFERENT door: they are
+	// compiled under an equivalent action-only gate at INSTALL time
+	// (internal/plugin/policy_installer.go actionGate), so a bad manifest fails
+	// that plugin's load instead of persisting a row that would fail this reload
+	// — and every subsequent one — corpus-wide. Do not read "applies to every
+	// source" as "every source is caught here"; this line catches two of the
+	// three, and the third is caught earlier on purpose.
 	//
 	// (Until 02.2-04 this registration was a documented no-op, because the
 	// compiler was built on a separate, never-populated schema. 02.2-CONTEXT D-59

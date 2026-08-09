@@ -158,13 +158,25 @@ func mapEffect(effect string) (types.PolicyEffect, error) {
 // staying silent about every other root.
 //
 // The `action` branch below is DELIBERATELY FATAL FOR EVERY POLICY SOURCE —
-// in-tree seeds and operator-authored database rows alike (02.2-CONTEXT D-67).
-// The considered-and-rejected alternative was fatal-for-seeds-only with a warning
-// for DB rows; it was rejected because a typo'd action.* reference must never
-// silently default-deny anywhere, which is the same fail-closed posture the rest
-// of the ABAC stack takes. Do not soften this to a warning, a log-and-skip, or a
-// source-conditional, and do not gate it behind a flag: a validation gate that
-// can be turned off will be off in the deployment that needed it.
+// in-tree seeds, operator-authored database rows, and plugin-manifest policies
+// alike (02.2-CONTEXT D-67). The considered-and-rejected alternative was
+// fatal-for-seeds-only with a warning for DB rows; it was rejected because a
+// typo'd action.* reference must never silently default-deny anywhere, which is
+// the same fail-closed posture the rest of the ABAC stack takes. Do not soften
+// this to a warning, a log-and-skip, or a source-conditional, and do not gate it
+// behind a flag: a validation gate that can be turned off will be off in the
+// deployment that needed it.
+//
+// WHERE EACH SOURCE MEETS IT differs, and that difference is load-bearing.
+// Seeds and DB rows meet it at Cache.Reload, which is all-or-nothing: one bad
+// row fails the whole corpus. That is the right posture for rows an operator
+// authored or the binary shipped. It would be the WRONG posture for a plugin,
+// because a plugin's row is already persisted by the time a reload sees it, so a
+// third-party manifest could take the corpus into deny-all and fail the next
+// boot. Plugin policies therefore meet this same gate EARLIER, at install time
+// (internal/plugin/policy_installer.go actionGate), where a rejection fails that
+// one plugin's load and nothing else. Same compiler, same branch, same verdict —
+// only the containment boundary differs.
 //
 // The declared key set and its per-key provenance live in
 // attribute.ActionNamespaceSchema(), whose audit is

@@ -6,13 +6,76 @@ package plugins
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/dsl"
 	"github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
+
+// actionGate is the compiler that applies the live `action`-namespace
+// validation gate to plugin-manifest policies at INSTALL time.
+//
+// WHY IT EXISTS. compilePolicies / compilePoliciesWithManifest previously
+// validated with dsl.Parse + dsl.CompilePolicy only, and
+// ValidateManifestPolicySchemas walks only resource.<type>.<attr> references
+// against the plugin's own declared schema. Neither reaches
+// policy.Compiler.validateAttributes, so neither reaches the `action` branch
+// that phase 02.2-04 made fatal. A manifest policy carrying a typo'd action.*
+// key therefore parsed clean, passed both validators, and was PERSISTED by
+// ReplaceBySource — after which every Cache.Reload failed corpus-wide (the
+// reload is all-or-nothing), escalating the policy health tier into
+// Engine.EnterDegradedMode (deny-all) and failing BuildABACStack on the next
+// boot, recoverable only by hand-deleting the row. One third-party plugin
+// manifest could brick the host.
+//
+// Compiling here moves that failure to plugin LOAD, where loader.go's existing
+// rollback path (unregister providers, host.Unload, return) already handles it:
+// a bad plugin fails to load instead of taking the corpus down with it.
+//
+// WHY THE ACTION-ONLY REGISTRY. The compiler validates BY DSL ROOT, never by
+// provider name (compiler.go validateAttributes), so a schema carrying only the
+// `action` namespace validates `action` exactly as the full production stack
+// does while staying silent about every other root. That is the correct scope
+// here: plugin resource attributes are already covered by
+// ValidateManifestPolicySchemas against the plugin's OWN schema, which this
+// package has and the production registry does not.
+//
+// The registry is private to this variable and never mutated after
+// construction, so unlike the live production schema it carries no concurrent
+// map-write hazard; the sync.OnceValue keeps the panic inside
+// NewActionOnlySchemaRegistry off package-init and out of any process that
+// never installs a plugin policy.
+var actionGate = sync.OnceValue(func() *policy.Compiler {
+	return policy.NewCompiler(attribute.NewActionOnlySchemaRegistry().Schema())
+})
+
+// validateActionAttributes runs the install-time `action` gate over one
+// manifest policy. See [actionGate] for why this is not left to Cache.Reload.
+//
+// It deliberately adds NO oops code of its own. oops resolves Code() to the
+// DEEPEST code in the chain, so an outer PLUGIN_POLICY_* code would never be
+// what errutil.AssertErrorCode or an operator's log filter actually sees — it
+// would read as a distinct failure class while being unreachable. Letting the
+// compiler's POLICY_UNREGISTERED_ACTION_ATTRIBUTE surface is also the better
+// operator story: one code for one failure class, whichever of the three policy
+// sources produced it, with the plugin/policy context keys carrying attribution.
+func validateActionAttributes(pluginName string, mp ManifestPolicy) error {
+	if _, _, err := actionGate().Compile(mp.DSL); err != nil {
+		return oops.
+			In("plugin").
+			With("plugin", pluginName).
+			With("policy", mp.Name).
+			Wrapf(err, "plugin policy references an action attribute that is not declared in "+
+				"attribute.ActionNamespaceSchema; installing it would fail every subsequent "+
+				"policy cache reload, so the plugin load is refused instead")
+	}
+	return nil
+}
 
 // PluginPolicyInstaller manages installation and removal of ABAC policies
 // declared in plugin manifests.
@@ -91,6 +154,10 @@ func compilePolicies(pluginName string, policies []ManifestPolicy) ([]*store.Sto
 				Wrapf(err, "compiling plugin policy AST")
 		}
 
+		if err := validateActionAttributes(pluginName, mp); err != nil {
+			return nil, err
+		}
+
 		result = append(result, &store.StoredPolicy{
 			Name:        "plugin:" + pluginName + ":" + mp.Name,
 			Description: "Auto-installed policy from plugin " + pluginName,
@@ -151,6 +218,10 @@ func compilePoliciesWithManifest(manifest *Manifest, policies []ManifestPolicy, 
 				With("plugin", pluginName).
 				With("policy", mp.Name).
 				Wrapf(err, "compiling plugin policy AST")
+		}
+
+		if err := validateActionAttributes(pluginName, mp); err != nil {
+			return nil, err
 		}
 
 		result = append(result, &store.StoredPolicy{

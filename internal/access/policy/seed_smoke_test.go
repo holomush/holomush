@@ -10,7 +10,6 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1134,43 +1133,17 @@ func TestSeedSmokePluginStreamReadConcreteNonSystemPermitted(t *testing.T) {
 		decision.Effect(), decision.Reason())
 }
 
-// Verifies: INV-PLUGIN-50
-func TestEverySeededCapabilityResourceHasDefaultPermit(t *testing.T) {
-	// Drift guard: every served, non-exempt, NON-scope-eligible capability method
-	// in hostcap.Descriptors MUST be authorized by a default-permit seed at the
-	// type level (resource "<type>:*", exactly how the interceptor evaluates a
-	// non-scoped call). A capability added later without its seed would fail
-	// closed at runtime; this test catches that at build time — the seed-side
-	// analogue of the INV-PLUGIN-52 extractor-completeness meta-test.
-	//
-	// Scope-eligible methods are intentionally skipped: they are gated by the
-	// own-location seed and proven by the scoped smoke tests, which require a
-	// concrete resource + dispatch_location this type-level probe does not supply.
-	// Exempt (self-gated) capabilities short-circuit before the ABAC gate.
-	engine := createSeedEngine(t, nil) // unconditional permits resolve without providers
-
-	for token, desc := range hostcap.Descriptors {
-		if hostcap.IsDeclarationExempt(token) {
-			continue
-		}
-		for method, md := range desc.Methods {
-			if len(md.Scopes) > 0 {
-				continue
-			}
-			t.Run(token+"/"+method, func(t *testing.T) {
-				decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-					Subject:  access.PluginSubject("drift-probe"),
-					Action:   md.Action,
-					Resource: md.Resource + ":*",
-				})
-				require.NoError(t, err)
-				assert.True(t, decision.IsAllowed(),
-					"non-exempt non-scoped capability %s/%s (action=%q resource=%q) has no default-permit seed — it would fail closed at the interceptor; add a seed:plugin-cap-* permit for resource %q",
-					token, method, md.Action, md.Resource, md.Resource)
-			})
-		}
-	}
-}
+// TestEverySeededCapabilityResourceHasDefaultPermit (INV-PLUGIN-50) MOVED to
+// seed_capability_permit_test.go, which is `package policy_test`.
+//
+// It is the only test in this file that needed internal/plugin/hostcap, and
+// hostcap imports internal/plugin. Once internal/plugin gained an import of
+// internal/access/policy (the install-time `action` gate in
+// internal/plugin/policy_installer.go), that made this IN-PACKAGE test file
+// import a package that depends on the package under test — which Go rejects
+// outright with `import cycle not allowed in test`. An external test package is
+// exempt because it compiles separately; seed_profile_smoke_test.go documents
+// the same manoeuvre for the same reason.
 
 // --- Background-job fixture (AUTHZ-02) -------------------------------------
 

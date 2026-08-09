@@ -213,9 +213,19 @@ above is over-claiming.
 **Upgrade risk, knowingly accepted.** After Phase 02.2 lands, the ABAC policy
 compiler validates `action.*` attribute references against a declared schema,
 and an undeclared reference is **fatal for every policy source** — in-tree
-seeds and operator-authored database rows alike. A deployment carrying an
-operator-authored policy that references an `action.*` key outside the declared
-set will **fail to boot on upgrade**.
+seeds, operator-authored database rows, and plugin-manifest policies alike. A
+deployment carrying an operator-authored policy that references an `action.*`
+key outside the declared set will **fail to boot on upgrade**.
+
+Plugin-manifest policies are the third source, and they are caught in a
+different place. A plugin's policies are compiled under the same gate at
+**install time**, during plugin load, so a manifest referencing an undeclared
+key fails **that plugin's load** and nothing else. That asymmetry is
+deliberate: a plugin's rows are persisted before any cache reload sees them, so
+catching it at reload instead would let one third-party plugin take the whole
+policy corpus into deny-all and fail your next boot. If a plugin fails to load
+with `unregistered action attribute`, the fix belongs to the plugin author —
+the host is refusing it precisely so your server keeps running.
 
 The declared set is exactly:
 
