@@ -18,6 +18,9 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/audit"
+	"github.com/holomush/holomush/internal/charname"
+	"github.com/holomush/holomush/internal/jobs"
+	"github.com/holomush/holomush/internal/testsupport/abactest"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -237,6 +240,41 @@ func newProbeService(t *testing.T, dsl string, loc *world.Location) *world.Servi
 	require.NoError(t, cache.Reload(context.Background()),
 		"the probe policy MUST compile and load through the exported cache path")
 
+	engine := policy.NewEngine(resolver, cache, unusedSessionResolver{}, newProbeAuditLogger(t))
+
+	return newProbeServiceWithEngine(t, engine, loc, nil)
+}
+
+// newProbeServiceWithEngine wires an ALREADY-BUILT engine into a world.Service.
+// It is the single Service-wiring path: newProbeService delegates to it after
+// building its own single-policy engine, and the 02.2 job proofs call it
+// directly with an abactest.NewSeedEngine over the WHOLE shipped seed corpus.
+//
+// The corpus matters. A hand-copied DSL literal in this file would open a drift
+// window against the seed that actually ships — and the seed that ships is the
+// text Phase 3 copies byte-for-byte — so the job proofs must source their
+// policy from policy.SeedPolicies(), which is exactly what a custom-DSL builder
+// cannot do.
+func newProbeServiceWithEngine(
+	t *testing.T,
+	engine *policy.Engine,
+	loc *world.Location,
+	charRepo world.CharacterRepository,
+) *world.Service {
+	t.Helper()
+
+	return world.NewService(world.ServiceConfig{
+		LocationRepo:  stubLocationReader{loc: loc},
+		CharacterRepo: charRepo,
+		Engine:        engine,
+	})
+}
+
+// newProbeAuditLogger builds the WAL-backed, output-discarding audit logger both
+// engine builders need, and registers its cleanup.
+func newProbeAuditLogger(t *testing.T) *audit.Logger {
+	t.Helper()
+
 	walPath := filepath.Join(t.TempDir(), "world-caller-probe-wal.jsonl")
 	auditLogger := audit.NewLogger(audit.ModeAll, discardAuditWriter{}, walPath)
 	t.Cleanup(func() {
@@ -244,13 +282,7 @@ func newProbeService(t *testing.T, dsl string, loc *world.Location) *world.Servi
 			t.Logf("world-caller probe: closing the audit logger: %v", err)
 		}
 	})
-
-	engine := policy.NewEngine(resolver, cache, unusedSessionResolver{}, auditLogger)
-
-	return world.NewService(world.ServiceConfig{
-		LocationRepo: stubLocationReader{loc: loc},
-		Engine:       engine,
-	})
+	return auditLogger
 }
 
 // TestWorldServiceCallerAttributesReachActionBag is ROADMAP criterion 2: a
@@ -354,4 +386,240 @@ func TestWorldServiceEmptyHumanCallerFailsClosed(t *testing.T) {
 	})
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+}
+
+// --- 02.2 job-principal proofs (AUTHZ-02) ----------------------------------
+
+// The fixture vocabulary. `fixture` is a FIXTURE job: it has no production
+// consumer, and seed:job-fixture-instance-scoped exists to prove the model
+// end-to-end, not to authorize anything real. Phase 3 brings job:retirement and
+// job:activity-flush and their own grants (D-52).
+const (
+	fixtureJobName    = "fixture"
+	fixtureEventType  = "fixture_triggered"
+	fixtureEventID    = "01ARZ3NDEKTSV4RRFFQ69G5FB0"
+	fixtureCharacter  = "01ARZ3NDEKTSV4RRFFQ69G5FB1"
+	unrelatedCharacer = "01ARZ3NDEKTSV4RRFFQ69G5FB2"
+)
+
+// recordingCharacterRepo is a world.CharacterRepository double that RECORDS the
+// ids it was asked for. The recording is the point: reaching characterRepo.Get
+// is positive proof that checkAccess returned nil, which a "no permission-denied
+// error" assertion alone cannot establish — that assertion is also satisfied by
+// failing earlier for an unrelated reason.
+//
+// Every write method errors rather than returning a zero value, so a future
+// caller that reaches one fails loudly.
+type recordingCharacterRepo struct {
+	char     *world.Character
+	getCalls []ulid.ULID
+}
+
+var errProbeCharacterWriteUnsupported = oops.Code("WORLD_CALLER_PROBE_CHARACTER_WRITE_UNSUPPORTED").
+	Errorf("recordingCharacterRepo is read-only")
+
+func (r *recordingCharacterRepo) Get(_ context.Context, id ulid.ULID) (*world.Character, error) {
+	r.getCalls = append(r.getCalls, id)
+	if r.char == nil {
+		return nil, world.ErrNotFound
+	}
+	return r.char, nil
+}
+
+func (*recordingCharacterRepo) GetByLocation(
+	context.Context, ulid.ULID, world.ListOptions,
+) ([]*world.Character, error) {
+	return nil, world.ErrNotFound
+}
+
+func (*recordingCharacterRepo) IsOwnedByPlayer(context.Context, ulid.ULID, ulid.ULID) (bool, error) {
+	return false, nil
+}
+
+func (*recordingCharacterRepo) GetNamesByIDs(
+	context.Context, []ulid.ULID,
+) (map[ulid.ULID]string, error) {
+	return map[ulid.ULID]string{}, nil
+}
+
+func (*recordingCharacterRepo) Create(
+	context.Context, *world.Character, charname.Admitted,
+) (*wmodel.MutationDelta, error) {
+	return nil, errProbeCharacterWriteUnsupported
+}
+
+func (*recordingCharacterRepo) Update(
+	context.Context, *world.Character,
+) (*wmodel.MutationDelta, error) {
+	return nil, errProbeCharacterWriteUnsupported
+}
+
+func (*recordingCharacterRepo) Rename(
+	context.Context, ulid.ULID, charname.Admitted, int, wmodel.EnvelopeIntent,
+) (*wmodel.MutationDelta, error) {
+	return nil, errProbeCharacterWriteUnsupported
+}
+
+func (*recordingCharacterRepo) Delete(context.Context, ulid.ULID, int) (*wmodel.MutationDelta, error) {
+	return nil, errProbeCharacterWriteUnsupported
+}
+
+func (*recordingCharacterRepo) UpdateLocation(
+	context.Context, ulid.ULID, *ulid.ULID, int,
+) (*wmodel.MutationDelta, error) {
+	return nil, errProbeCharacterWriteUnsupported
+}
+
+func (*recordingCharacterRepo) UpdatePreferences(
+	context.Context, ulid.ULID, []byte, int,
+) (*wmodel.MutationDelta, error) {
+	return nil, errProbeCharacterWriteUnsupported
+}
+
+// newFixtureJobProbe builds the shared fixture: a live registry carrying the
+// `fixture` job with `character` in its declared capability class, a real engine
+// over the WHOLE shipped seed corpus with the job provider registered, and a
+// recording character repository.
+//
+// Only the job provider is needed. bags.Resource["id"] is stamped
+// provider-independently by the resolver, and `resource is character` target
+// matching is prefix-only, so no character attribute provider participates in
+// either assertion.
+func newFixtureJobProbe(t *testing.T, charID ulid.ULID) (*world.Service, *recordingCharacterRepo) {
+	t.Helper()
+
+	reg := jobs.NewRegistry()
+	require.NoError(t, reg.Register(fixtureJobName, []string{"character"}))
+
+	engine := abactest.NewSeedEngine(t, attribute.NewJobProvider(reg))
+	repo := &recordingCharacterRepo{char: &world.Character{ID: charID, Name: "Fixture"}}
+
+	return newProbeServiceWithEngine(t, engine, nil, repo), repo
+}
+
+// TestJobCallerWritesOnlyTheAggregateItsProvenanceNames is the phase tracer's
+// load-bearing proof, and it is PAIRED on purpose.
+//
+// The PERMIT half settles research assumption A6: trigger_subject normalizes to
+// the BARE aggregate ULID, so `action.job.trigger_subject == resource.id`
+// actually matches. Phase 3 plan 03-04 copies that normalization byte-for-byte,
+// so a deny-only proof would leave the whole binding unverified.
+//
+// The DENY half is what makes the permit mean something. The mismatch is
+// introduced by changing ONLY the provenance value — the resource ULID is the
+// same variable in both subtests — so the denial can only be caused by the
+// instance-scoping conjunct.
+func TestJobCallerWritesOnlyTheAggregateItsProvenanceNames(t *testing.T) {
+	charID := ulid.MustParse(fixtureCharacter)
+
+	t.Run("permits the character the provenance names", func(t *testing.T) {
+		svc, repo := newFixtureJobProbe(t, charID)
+
+		caller := world.JobCaller(fixtureJobName, world.Provenance{
+			EventID:   fixtureEventID,
+			EventType: fixtureEventType,
+			Subject:   charID.String(),
+		})
+
+		err := svc.UpdateCharacterDescription(context.Background(), caller, charID, "retired")
+
+		// (a) The write is NOT denied. The call still terminates in an error —
+		// the probe wires no mutator, so it stops at CHARACTER_UPDATE_FAILED —
+		// which is expected and is not a denial.
+		if oopsErr, ok := oops.AsOops(err); ok {
+			require.NotEqual(t, "CHARACTER_ACCESS_DENIED", oopsErr.Code(),
+				"a live fixture job MUST be permitted to write the character its provenance names")
+		}
+
+		// (b) The repository was reached. checkAccess runs BEFORE
+		// characterRepo.Get, so a recorded Get is positive proof it returned nil
+		// rather than the call failing earlier for an unrelated reason.
+		require.Equal(t, []ulid.ULID{charID}, repo.getCalls,
+			"reaching characterRepo.Get is the positive proof that checkAccess permitted")
+	})
+
+	t.Run("denies a different character", func(t *testing.T) {
+		svc, repo := newFixtureJobProbe(t, charID)
+
+		caller := world.JobCaller(fixtureJobName, world.Provenance{
+			EventID:   fixtureEventID,
+			EventType: fixtureEventType,
+			// The ONLY difference from the permit case.
+			Subject: unrelatedCharacer,
+		})
+
+		err := svc.UpdateCharacterDescription(context.Background(), caller, charID, "retired")
+
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+		// Pins that the DENY branch produced the code, not an evaluation
+		// failure that happens to classify nearby.
+		require.ErrorIs(t, err, world.ErrPermissionDenied)
+		require.Empty(t, repo.getCalls,
+			"a denied write MUST NOT reach the repository")
+	})
+}
+
+// TestJobCallerCarriesExactlyTheProvenanceTriple asserts SET EQUALITY, not
+// containment: the key set is the whole security claim. A fourth key would mean
+// some other channel reached the action bag through the job door, which is the
+// door T-02.2-04 exists to keep shut.
+func TestJobCallerCarriesExactlyTheProvenanceTriple(t *testing.T) {
+	caller := world.JobCaller(fixtureJobName, world.Provenance{
+		EventID:   fixtureEventID,
+		EventType: fixtureEventType,
+		Subject:   fixtureCharacter,
+	})
+
+	assert.Equal(t, "job:"+fixtureJobName, caller.SubjectForTest())
+
+	keys := make([]string, 0, len(caller.AttrsForTest()))
+	for k := range caller.AttrsForTest() {
+		keys = append(keys, k)
+	}
+	assert.ElementsMatch(t,
+		[]string{"job.trigger_event_id", "job.trigger_event_type", "job.trigger_subject"},
+		keys,
+		"JobCaller must emit exactly the D-54 triple, every key under the job. prefix")
+
+	assert.Equal(t, fixtureCharacter, caller.AttrsForTest()["job.trigger_subject"],
+		"trigger_subject carries the BARE aggregate ULID, byte-comparable to resource.id")
+}
+
+// TestScheduledJobCallerCarriesNoPerExecutionAttributes pins D-68's coarse
+// half: a timer-driven job has no triggering event, so it carries NO
+// per-execution attributes — and specifically no empty-string sentinel, which
+// would be fail-OPEN (.claude/rules/abac-providers.md).
+func TestScheduledJobCallerCarriesNoPerExecutionAttributes(t *testing.T) {
+	caller := world.ScheduledJobCaller(fixtureJobName)
+
+	assert.Equal(t, "job:"+fixtureJobName, caller.SubjectForTest())
+	assert.Empty(t, caller.AttrsForTest())
+	for k, v := range caller.AttrsForTest() {
+		assert.NotEqual(t, "", v,
+			"key %q carries an empty-string sentinel, which matches any unresolved peer", k)
+	}
+}
+
+// TestJobCallersNeverTakeTheSystemBypass keeps the job principal disjoint from
+// the S1 gate: neither job constructor may set the system flag or stamp the
+// ambient system marker on the derived evaluation context.
+func TestJobCallersNeverTakeTheSystemBypass(t *testing.T) {
+	callers := map[string]world.Caller{
+		"JobCaller": world.JobCaller(fixtureJobName, world.Provenance{
+			EventID:   fixtureEventID,
+			EventType: fixtureEventType,
+			Subject:   fixtureCharacter,
+		}),
+		"ScheduledJobCaller": world.ScheduledJobCaller(fixtureJobName),
+	}
+
+	for name, caller := range callers {
+		t.Run(name, func(t *testing.T) {
+			assert.False(t, caller.IsSystemForTest(),
+				"a job caller must never request the S1 system bypass")
+			assert.False(t, access.IsSystemContext(caller.EvalContextForTest(context.Background())),
+				"a job caller must never stamp the ambient system marker")
+		})
+	}
 }

@@ -694,7 +694,29 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 
 	// The complete pre-Phase-2 set. Each is CONDITIONED (self-access, and
 	// colocation); neither is the unconditional shape D-29 defers.
+	//
+	// seed:job-fixture-instance-scoped (v0.13 phase 02.2, AUTHZ-02) is the one
+	// addition, and it does not instantiate the risk D-29 names. That risk has
+	// three parts and this seed misses all three:
+	//
+	//   - PRINCIPAL. D-29's concern is `principal is character`, which admits
+	//     every ephemeral guest. This seed's principal is `job` — a disjoint
+	//     namespace (D-48) whose subjects are constructible only via
+	//     access.JobSubject / world.JobCaller. No human, guest or otherwise,
+	//     can hold a job: subject.
+	//   - ACTION. The leak D-29 describes is through world.Service.GetCharacter,
+	//     which checks `read`. This seed permits `write` only, so it gates no
+	//     read path and reaches no characterToProto projection.
+	//   - MATCHABILITY. The `when` clause pins principal.job.name == "fixture",
+	//     and no job by that name is registered in production, so the liveness
+	//     gate in attribute.JobProvider leaves principal.job.* absent and the
+	//     permit cannot match at all.
+	//
+	// The gate keeps its teeth: any FURTHER `resource is character` seed still
+	// turns this RED by name, and a future edit that widens this one's action to
+	// `read` or its principal to `character` fails the same way.
 	want := []string{
+		"seed:job-fixture-instance-scoped",
 		"seed:player-character-colocation",
 		"seed:player-self-access",
 	}

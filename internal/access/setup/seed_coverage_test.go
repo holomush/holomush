@@ -119,8 +119,8 @@ var AcknowledgedMissingSeedNamespaces = map[string]string{}
 
 // TestValidateSeedProviderCoverage_ProductionCorpusIsCovered is the
 // load-bearing regression lock at the UNIT level: it verifies the validator
-// CORRECTLY identifies the known-missing namespaces (property, object) for
-// the production seed corpus. The companion integration test
+// CORRECTLY identifies the known-missing namespaces for the production seed
+// corpus. The companion integration test
 // TestBuildABACStack_SeedCoverageMatchesAcknowledged
 // (internal/access/setup/buildabacstack_seed_coverage_integ_test.go) is the
 // drift-detector: it builds the REAL BuildABACStack and asserts its actual
@@ -138,6 +138,7 @@ func TestValidateSeedProviderCoverage_ProductionCorpusIsCovered(t *testing.T) {
 	// registrations. The integration test asserts no drift.
 	productionRegistered := []string{
 		"character", "location", "object", "property", "player", "viewer", "command", "stream", "plugin",
+		"job",
 	}
 
 	missing := validateSeedProviderCoverage(productionRegistered, policy.SeedPolicies())

@@ -36,6 +36,7 @@ type ABACStack struct {
 	AuditLogger     *audit.Logger
 	PolicyInstaller *plugins.PolicyInstaller
 	PluginProvider  *attribute.PluginProvider
+	JobProvider     *attribute.JobProvider
 	sqlDB           *sql.DB
 }
 
@@ -129,6 +130,17 @@ type ABACConfig struct {
 	// and no failing test (RESEARCH P-7's failure mode). Production wiring at
 	// internal/access/setup/subsystem.go passes roleStore.PlayerRoles.
 	PlayerRoleLookup attribute.PlayerRoleLookup
+	// JobRegistry is the liveness registry for background jobs
+	// (internal/jobs.Registry satisfies it). It feeds JobProvider, which
+	// populates principal.job.* for job:<name> subjects.
+	//
+	// NIL IS TOLERATED AND FAILS CLOSED, which is the difference between this
+	// field and the repo fields above: a nil registry makes the provider answer
+	// "not running" for every job, so principal.job.* is absent, every
+	// job-gating seed default-denies, and an entrypoint that runs no background
+	// jobs needs no wiring. The provider still registers, so the `job`
+	// namespace is known to the resolver either way. Per 02.2-CONTEXT D-49.
+	JobRegistry attribute.JobRegistry
 }
 
 // BuildABACStack constructs and wires all ABAC components in the correct dependency order:
@@ -322,7 +334,26 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		return nil, eb.Wrapf(err, "register plugin provider")
 	}
 
-	// 10a. Seed-coverage validator (holomush-xxel). After all providers are
+	// 10a. Job provider (background-job principals; 02.2 AUTHZ-02). It resolves
+	// principal.job.{name,...} for job:<name> subjects, gated on the liveness
+	// registry. cfg.JobRegistry is nil-tolerant: a nil registry fails closed for
+	// every job, which is correct for an entrypoint that runs none.
+	//
+	// REGISTERING IT IS NOT OPTIONAL once a seed references principal.job.*.
+	// Without this step no provider owns the `job` namespace, so every such seed
+	// silently default-denies with no startup signal — the holomush-g776 / xxel
+	// bug class. Its PLACEMENT is load-bearing too: it must precede
+	// warnOnMissingSeedCoverage below, so `job` is already in
+	// resolver.RegisteredNamespaces() when the corpus sweep runs.
+	jobProvider := attribute.NewJobProvider(cfg.JobRegistry)
+	if err := resolver.RegisterProvider(jobProvider); err != nil {
+		return nil, eb.Wrapf(err, "register job provider")
+	}
+
+	// 10c. Seed-coverage validator (holomush-xxel). Renumbered from 10a when the
+	// job provider took that slot; 10b is RESERVED for the `action` schema
+	// registration (D-60), so the labels keep reading in execution order.
+	// After all providers are
 	// registered, walk the seed corpus and WARN per namespace referenced by
 	// any seed but not registered. Catches the holomush-g776 / xxel bug
 	// class at construction time: a missing provider means every seed
@@ -413,6 +444,7 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		AuditLogger:     auditLogger,
 		PolicyInstaller: installer,
 		PluginProvider:  pluginProvider,
+		JobProvider:     jobProvider,
 		sqlDB:           sqlDB,
 	}, nil
 }

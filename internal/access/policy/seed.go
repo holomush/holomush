@@ -472,6 +472,45 @@ func SeedPolicies() []SeedPolicy {
 			SeedVersion: 1,
 		},
 
+		// --- Background-job fixture: instance-scoped character write (AUTHZ-02) ---
+		//
+		// WHAT THIS SEED PROVES. A background job (subject job:<name>) may write
+		// exactly the character its triggering event names — and no other. It is
+		// the phase tracer's grant: the `when` clause binds the caller-supplied
+		// provenance (world.JobCaller's action.job.* triple) against the
+		// resolver-stamped resource.id, so a handler that derives the wrong
+		// aggregate is denied rather than corrupting it.
+		//
+		// `fixture` IS A FIXTURE. No job by that name is ever registered in
+		// production, so the liveness gate in attribute.JobProvider resolves it to
+		// nothing and this permit cannot match: principal.job.name is absent, and
+		// a missing attribute is false for every operator (ADR holomush-iv43).
+		// Grants for the REAL consumers — job:retirement, job:activity-flush — are
+		// deliberately deferred to Phase 3 (D-52); none shipped here.
+		//
+		// THE `when` CLAUSE IS MANDATORY, NOT DECORATION. parseEntityType matches
+		// the PREFIX ONLY, so a bare `permit(principal is job, ...)` would be a
+		// blanket grant to every present and future job — exactly the failure D-48
+		// created a disjoint namespace to avoid.
+		//
+		// BOTH action.job.* CONJUNCTS ARE LOAD-BEARING (D-54). trigger_subject
+		// bounds WHAT the job may touch; trigger_event_type bounds WHAT CAUSED the
+		// write. The event-type half reads as redundant against the subject match
+		// and is not: dropping it would grant this job every event type its
+		// subscription happens to deliver for that aggregate, which is how a job
+		// on a broad filter acquires broader authority than intended.
+		//
+		// trigger_subject is the BARE AGGREGATE ULID — byte-identical to
+		// bags.Resource["id"], which is the substring after the first ':' of the
+		// resource ref. Not a dotted NATS subject, not a prefixed entity ref:
+		// either compares unequal and every job write silently default-denies.
+		{
+			Name:        "seed:job-fixture-instance-scoped",
+			Description: "A live background job may write only the character its triggering event names (AUTHZ-02 fixture; no production consumer — real job grants are Phase 3's per D-52)",
+			DSLText:     `permit(principal is job, action in ["write"], resource is character) when { principal.job.name == "fixture" && action.job.trigger_event_type == "fixture_triggered" && action.job.trigger_subject == resource.id };`,
+			SeedVersion: 1,
+		},
+
 		// --- Character directory (INV-ACCESS-9) ---
 		//
 		// Any authenticated character (registered or guest) may list the server-wide
