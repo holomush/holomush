@@ -338,10 +338,21 @@ func (r *reactor) process(ctx context.Context, d delivery) disposition {
 	// failure is operational degradation, exactly as at the eight existing
 	// synchronous sites.
 	if info != nil {
-		ref := core.CharacterRef{ID: d.Character, Name: char.Name, LocationID: info.LocationID}
+		// The CHARACTER row is authoritative for where the character is. The
+		// session row's LocationID is a copy written when the session was last
+		// updated, so a move that landed after that would announce the leave at
+		// the place the character had already left. char.LocationID was read
+		// two steps ago from the row the move itself writes; the session row is
+		// the fallback for the (legitimate) case of a character with no
+		// location set.
+		leaveLoc := info.LocationID
+		if char.LocationID != nil {
+			leaveLoc = *char.LocationID
+		}
+		ref := core.CharacterRef{ID: d.Character, Name: char.Name, LocationID: leaveLoc}
 		if emitErr := r.cfg.Presence.EmitLeave(ctx, ref, leaveReasonRetired); emitErr != nil {
 			errutil.LogErrorContext(ctx, "retirement reactor could not emit leave for a retired character",
-				emitErr, "character_id", d.Character.String(), "location_id", info.LocationID.String())
+				emitErr, "character_id", d.Character.String(), "location_id", leaveLoc.String())
 		}
 		if emitErr := r.cfg.Presence.EmitSessionEnded(
 			ctx, ref, info.ID, core.SessionEndedCauseRetired, leaveReasonRetired,

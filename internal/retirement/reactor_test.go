@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -251,7 +252,7 @@ func TestProcessEndsTheSessionNotifiesTheOldLocationThenMovesToTheStartLocation(
 	}, f.j.steps, "the leave MUST strictly precede the move so it names the place they left")
 }
 
-func TestProcessEmitsTheLeaveAtTheDeletedSessionsLocation(t *testing.T) {
+func TestProcessEmitsTheLeaveAtTheLocationTheCharacterIsLeaving(t *testing.T) {
 	f := newFixture(t)
 	oldLoc := f.sessions.info.LocationID
 
@@ -261,6 +262,38 @@ func TestProcessEmitsTheLeaveAtTheDeletedSessionsLocation(t *testing.T) {
 		Char:   core.CharacterRef{ID: f.charID, Name: "Rhea", LocationID: oldLoc},
 		Reason: leaveReasonRetired,
 	}, f.presence.leaves[0])
+}
+
+// TestProcessPrefersTheCharacterRowsLocationOverTheSessionRowsStaleCopy pins
+// which row is authoritative when the two disagree. The session row's
+// LocationID is a copy written when the session was last updated, so a move
+// that landed after that would have the leave announced at a place the
+// character had already left.
+func TestProcessPrefersTheCharacterRowsLocationOverTheSessionRowsStaleCopy(t *testing.T) {
+	f := newFixture(t)
+	currentLoc := core.NewULID()
+	f.world.char.LocationID = &currentLoc // a move landed after the session row was written
+	staleLoc := f.sessions.info.LocationID
+	require.NotEqual(t, staleLoc, currentLoc)
+
+	require.Equal(t, ack, f.reactor.process(context.Background(), f.delivery()))
+	require.Len(t, f.presence.leaves, 1)
+	assert.Equal(t, currentLoc, f.presence.leaves[0].Char.LocationID,
+		"the character row is authoritative for where the character is")
+	require.Len(t, f.presence.sessionsE, 1)
+	assert.Equal(t, currentLoc, f.presence.sessionsE[0].Char.LocationID,
+		"both emissions carry the same ref")
+}
+
+// TestProcessFallsBackToTheSessionLocationWhenTheCharacterHasNone covers the
+// legitimate no-location case, where the session row is the only source.
+func TestProcessFallsBackToTheSessionLocationWhenTheCharacterHasNone(t *testing.T) {
+	f := newFixture(t)
+	f.world.char.LocationID = nil
+
+	require.Equal(t, ack, f.reactor.process(context.Background(), f.delivery()))
+	require.Len(t, f.presence.leaves, 1)
+	assert.Equal(t, f.sessions.info.LocationID, f.presence.leaves[0].Char.LocationID)
 }
 
 func TestProcessEmitsSessionEndedWithTheRetiredCause(t *testing.T) {
