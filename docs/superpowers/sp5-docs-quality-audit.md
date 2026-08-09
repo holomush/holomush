@@ -14,9 +14,9 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 | guide          | 5     | 1  | 1  | 3  |
 | operating      | 24    | 1  | 6  | 17 |
 | extending      | 25    | 1  | 5  | 19 |
-| contributing   | 22    | 1  | 3  | 18 |
+| contributing   | 23    | 1  | 3  | 19 |
 | reference      | 5     | 1  | 2  | 2  |
-| **Total**      | **81**| **5**  | **17** | **59** |
+| **Total**      | **82**| **5**  | **17** | **60** |
 
 ---
 
@@ -95,13 +95,14 @@ Per-page editorial quality audit of the HoloMUSH docs site (`site/src/content/do
 
 ---
 
-## contributing (22 pages)
+## contributing (23 pages)
 
 | Page (slug/path)                                           | Orient | Aud | Mode | Clarity | Ex | Term | Xlink | Concise | Total | Priority | Biggest issue |
 | ---------------------------------------------------------- | ------ | --- | ---- | ------- | -- | ---- | ----- | ------- | ----- | -------- | ------------- |
 | `contributing/index.mdx`                                   | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | None material |
 | `contributing/explanation/architecture.md`                 | 1      | 1   | 2    | 1       | 1  | 2    | 1     | 1       | 10    | P2       | No orientation opener; audience assumed; diagram-heavy but prose light; missing link to event-store or gateway-boundary explanation |
 | `contributing/explanation/authentication.md`               | 1      | 1   | 1    | 1       | 1  | 2    | 2     | 1       | 10    | P2       | Mode: this reads as an internal spec dump (source file line references like `auth_service.go:81`) rather than an explanation; audience is undeclared |
+| `contributing/explanation/background-job-authorization.md` | 2      | 1   | 1    | 2       | 2  | 2    | 2     | 2       | 14    | OK       | Mode: the core is a numbered four-step procedure, which is how-to shape inside an explanation page; audience (a contributor adding a background consumer) is implied but never declared in the opener |
 | `contributing/explanation/event-emit-pipeline.md`          | 2      | 1   | 2    | 2       | 2  | 2    | 2     | 2       | 15    | OK       | Assumes contributor audience without saying so; otherwise well-formed explanation |
 | `contributing/explanation/event-store.md`                  | 2      | 1   | 2    | 2       | 2  | 2    | 2     | 2       | 15    | OK       | `---` separator mid-page is noise; audience not stated in opener |
 | `contributing/explanation/gateway-boundary.md`             | 2      | 2   | 2    | 2       | 1  | 2    | 2     | 2       | 15    | OK       | Missing a concrete "wrong" example to pair with the "how to apply" guidance |
