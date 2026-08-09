@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 03
-current_phase_name: World Character Commands
-status: planning
-stopped_at: Completed 02.2-05-PLAN.md (final plan of phase 02.2)
-last_updated: "2026-08-09T19:53:19.821Z"
+current_phase_name: world-character-commands
+status: executing
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-08-09T20:27:01.362Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 02.2 complete — UAT passed, security verified, transitioned to Phase 03
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 40
-  completed_plans: 34
+  completed_plans: 35
   percent: 56
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-09)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 03 — World Character Commands (`Rename` / soft `Retire`). The milestone goal is
+**Current focus:** Phase 03 — world-character-commands
 unchanged: complete the character identity surface (creation, management, public profiles with privacy) and
 stand up the `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces
 without rework.
@@ -34,11 +34,11 @@ without rework.
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 03 — World Character Commands
-Plan: Not started
-Status: Ready to plan
-Progress: [█████████████████░░░] 34/40 plans (85%)
-Last activity: 2026-08-09 — Phase 02.2 complete (UAT 2/2, security verified), transitioned to Phase 03
+Phase: 03 (world-character-commands) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
+Progress: [█████████████████░░░] 34/40 plans ([█████████░] 88%)
+Last activity: 2026-08-09 — Phase 03 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
 (`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
@@ -251,6 +251,7 @@ no action needed.
 | Phase 02.2 P03 | 11min | 2 tasks | 6 files |
 | Phase 02.2 P04 | 20min | 3 tasks | 10 files |
 | Phase 02.2 P05 | 21min | 3 tasks | 8 files |
+| Phase 03 P01 | 14m | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -522,6 +523,8 @@ the next milestone yet.
 - [Phase ?]: INV-ACCESS-13 splits D-55's consumer-boundary stamping into a separate binding: pending entry (INV-ACCESS-14) rather than over-claiming a partial binding
 - [Phase ?]: ROADMAP criterion 4 amended by scoped Edit because gsd-tools has no phase edit verb; gap filed upstream as open-gsd/gsd-core#3254
 - [Phase ?]: AUTHZ-02 traceability row filled by hand after requirements.mark-complete reported table_unmatched; root cause is updateTableCell's first-table-wins scan (open-gsd/gsd-core#3255)
+- [Phase ?]: Retire/Unretire commands take a caller-supplied expected_version; the version conflict outranks every lifecycle-state guard (R1 guard order)
+- [Phase ?]: The two lifecycle command bodies are deliberately not deduplicated — two meta-test AST cross-checks require each command's own body to reference s.mutator and call s.checkAccess
 
 ### Pending Todos
 
@@ -582,12 +585,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-09T20:20:00Z
+Last session: 2026-08-09T20:26:53.975Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Phase 02.2 complete, ready to plan Phase 03
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
