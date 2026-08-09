@@ -547,6 +547,30 @@ func (c *errorLogCapture) WithAttrs([]slog.Attr) slog.Handler { return c }
 
 func (c *errorLogCapture) WithGroup(string) slog.Handler { return c }
 
+// TestIsFinalDeliveryIdentifiesTheLastDeliveryJetStreamWillMake pins the
+// abandonment alarm's trigger. Past MaxDeliver the message is dropped and the
+// character is left retired-but-not-evicted with nothing else observing it.
+func TestIsFinalDeliveryIdentifiesTheLastDeliveryJetStreamWillMake(t *testing.T) {
+	tests := []struct {
+		name          string
+		numDelivered  uint64
+		maxDeliver    int
+		wantAbandoned bool
+	}{
+		{"first of ten is not final", 1, 10, false},
+		{"ninth of ten is not final", 9, 10, false},
+		{"tenth of ten is final", 10, 10, true},
+		{"past the cap is final", 11, 10, true},
+		{"an unlimited consumer never abandons", 50, 0, false},
+		{"a negative cap is treated as unlimited", 50, -1, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantAbandoned, isFinalDelivery(tt.numDelivered, tt.maxDeliver))
+		})
+	}
+}
+
 // --- wire fixtures -----------------------------------------------------
 
 func retiredHeaders(eventID ulid.ULID) nats.Header {

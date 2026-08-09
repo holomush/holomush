@@ -228,12 +228,57 @@ func aggregateFromSubject(subject string) string {
 // handle is the Consume callback. It owns the ack decision; process owns the
 // effects.
 func (r *reactor) handle(msg jetstream.Msg) {
-	if r.handleDecoded(r.workerContext(), msg.Subject(), msg.Headers(), msg.Data()) == ack {
+	ctx := r.workerContext()
+	if r.handleDecoded(ctx, msg.Subject(), msg.Headers(), msg.Data()) == ack {
 		_ = msg.Ack() //nolint:errcheck // an ack failure is absorbed by redelivery, which is idempotent here
+		return
 	}
 	// retry: deliberately no Nak. Leaving the message unacked lets AckWait
 	// pace the redelivery, matching the audit projector — a Nak would produce
 	// an instant-redeliver storm against whatever surface is already failing.
+	r.reportIfAbandoned(ctx, msg)
+}
+
+// reportIfAbandoned raises the alarm when this unacked delivery was the LAST
+// one JetStream will make.
+//
+// Past MaxDeliver the message is dropped and the character is left
+// retired-but-not-evicted: session live, still at the old location, no leave
+// emitted. Nothing else observes that. There is no ErrHandler for it
+// (jetstream.ConsumeErrHandler reports consume-loop errors, not delivery
+// exhaustion) and the MAX_DELIVERIES advisory has no subscriber, so without
+// this the only trace is scattered redelivery lines that never say "and this
+// one is gone". The handler is the one place that knows both the delivery
+// count and WHICH character was abandoned.
+func (r *reactor) reportIfAbandoned(ctx context.Context, msg jetstream.Msg) {
+	meta, err := msg.Metadata()
+	if err != nil {
+		// Not a JetStream message (or metadata is unparsable). Nothing to
+		// report, and this is not itself worth an error line.
+		return
+	}
+	if !isFinalDelivery(meta.NumDelivered, r.cfg.MaxDeliver) {
+		return
+	}
+	errutil.LogErrorContext(ctx,
+		"retirement fanout ABANDONED: MaxDeliver exhausted, the character stays retired but not evicted",
+		oops.Code("RETIREMENT_FANOUT_ABANDONED").
+			With("subject", msg.Subject()).
+			With("event_id", msg.Headers().Get(eventbus.HeaderMsgID)).
+			With("num_delivered", meta.NumDelivered).
+			With("max_deliver", r.cfg.MaxDeliver).
+			Errorf("retirement fanout exhausted its delivery budget"),
+	)
+}
+
+// isFinalDelivery reports whether a delivery that is about to go unacked is the
+// last JetStream will make. maxDeliver <= 0 means unlimited, so nothing is ever
+// final.
+func isFinalDelivery(numDelivered uint64, maxDeliver int) bool {
+	if maxDeliver <= 0 {
+		return false
+	}
+	return numDelivered >= uint64(maxDeliver)
 }
 
 // handleDecoded gates on the HEADER, then decodes, then processes one message.
