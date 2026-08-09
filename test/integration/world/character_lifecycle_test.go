@@ -247,6 +247,40 @@ var _ = Describe("INV-WORLD-6: retirement preserves the name reservation", func(
 		Expect(reclaim("Reaped Name")).NotTo(HaveOccurred(),
 			"auth.CharacterReapingService is the second name-releasing path INV-WORLD-6 enumerates")
 	})
+
+	// The spec above establishes the boundary against a status written by direct
+	// SQL, which was the only way to reach the retired state when it was written.
+	// Phase 3 shipped world.Service.RetireCharacter, so the reservation now has a
+	// PRODUCTION writer that could release the name — and a soft retire that quietly
+	// freed it would hand the name to a stranger while every payload that already
+	// denormalized the display name still points at the original character
+	// (ROADMAP success criterion 1, IDENT-04).
+	//
+	// This is deliberately NOT annotated `// Verifies: INV-WORLD-6`: the registry
+	// entry is already bound to the paired spec above, and the rename half of its
+	// summary is a CONFIRMED defect filed separately (RESEARCH §6.3) rather than
+	// something this spec proves. Claiming the binding here would widen a claim
+	// this spec does not carry.
+	It("keeps the name reserved when the retire runs through the production RetireCharacter command", func() {
+		charID := insertCharacterWithStatus(ctx, playerID, locID, "Commanded Name", "active")
+		Expect(reclaim("Commanded Name")).To(HaveOccurred(),
+			"control: the name is reserved while the character is active")
+
+		var startVersion int
+		Expect(env.pool.QueryRow(ctx, `SELECT version FROM characters WHERE id = $1`, charID.String()).
+			Scan(&startVersion)).To(Succeed())
+
+		Expect(env.worldService.RetireCharacter(ctx, world.HumanCaller(adminSubject), charID, startVersion)).
+			To(Succeed(), "the authorized retire command must commit")
+
+		retired, err := env.Characters.Get(ctx, charID)
+		Expect(err).NotTo(HaveOccurred(), "the row survives a soft retire")
+		Expect(retired.Status).To(Equal(world.StatusRetired))
+		Expect(retired.Name).To(Equal("Commanded Name"), "the retire command MUST NOT touch the name")
+
+		Expect(reclaim("Commanded Name")).To(HaveOccurred(),
+			"the soft retire command MUST NOT release the reservation — only a tombstone-emitting hard delete may")
+	})
 })
 
 var _ = Describe("Character lifecycle columns", func() {

@@ -32,4 +32,4 @@ with `nats: Authorization Violation`. The fourth failure is
 
 **Disposition:** out of plan 03-03's scope (SCOPE BOUNDARY — the failures are not caused by
 this plan's changes, and the fix is in the natstest helper, not in the world domain). Filed as
-a GitHub issue; see plan 03-03's SUMMARY for the number.
+**holomush/holomush#4953**.
