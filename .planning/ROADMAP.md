@@ -397,7 +397,7 @@ unverified seams, and timer-driven jobs (Phase 3's `last_active_at` flusher) car
 event, so what they present as per-execution context is an open question that MUST NOT be invented
 by a planner.
 
-**Plans:** 2/5 plans executed
+**Plans:** 3/5 plans executed
 
 Plans:
 **Wave 1**
@@ -410,7 +410,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02.2-03-PLAN.md — The exhaustive `action.*` audit + D-60 `action` namespace registration
+- [x] 02.2-03-PLAN.md — The exhaustive `action.*` audit + D-60 `action` namespace registration
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
