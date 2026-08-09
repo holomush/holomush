@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid/v2"
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -22,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/holomush/holomush/internal/world/worldtest"
@@ -6535,4 +6537,161 @@ func TestWorldService_UpdateCharacterPreferences(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_PREFERENCES_UPDATE_FAILED")
 	})
+}
+
+// newDeniedCharacterWriteProbe builds a service whose engine denies every
+// request, over a mock character repository. It is the composition-axis fixture:
+// the engine, the resource and the operation are held constant across every
+// subtest, so the ONLY thing that varies is the caller's principal kind — which
+// is exactly the axis the composed deny code is supposed to key off.
+func newDeniedCharacterWriteProbe(t *testing.T) *world.Service {
+	t.Helper()
+
+	return world.NewService(world.ServiceConfig{
+		CharacterRepo: worldtest.NewMockCharacterRepository(t),
+		Engine:        policytest.DenyAllEngine(),
+	})
+}
+
+// TestCharacterDenyCodeCarriesThePrincipalKindForJobCallers pins D-58: a denial
+// names BOTH dimensions — which kind of principal was denied, and which kind of
+// resource — so alerting can tell "a job was denied on a character" from "a
+// player was denied on a character" without parsing log attributes.
+//
+// The human row is the no-regression control. Without it, a change that
+// unconditionally prefixed every deny code would pass the job rows and silently
+// break the six shipped entity codes that internal/command/errors.go's
+// exact-match maps use to render player-facing text.
+func TestCharacterDenyCodeCarriesThePrincipalKindForJobCallers(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.MustParse("01ARZ3NDEKTSV4RRFFQ69G5FB1")
+
+	tests := []struct {
+		name     string
+		caller   world.Caller
+		wantCode string
+	}{
+		{
+			name: "an event-driven job denied on a character is JOB_CHARACTER_ACCESS_DENIED",
+			caller: world.JobCaller("fixture", world.Provenance{
+				EventID:   "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+				EventType: "fixture_triggered",
+				Subject:   charID.String(),
+			}),
+			wantCode: "JOB_CHARACTER_ACCESS_DENIED",
+		},
+		{
+			// The qualifier keys off the principal KIND, not off whether
+			// provenance happens to be present: a scheduled job carries no
+			// per-execution attributes at all and still reports as a job.
+			name:     "a scheduled job denied on a character is also JOB_CHARACTER_ACCESS_DENIED",
+			caller:   world.ScheduledJobCaller("fixture"),
+			wantCode: "JOB_CHARACTER_ACCESS_DENIED",
+		},
+		{
+			name:     "a human caller denied on a character is still the bare CHARACTER_ACCESS_DENIED",
+			caller:   world.HumanCaller(access.CharacterSubject("01ARZ3NDEKTSV4RRFFQ69G5FAW")),
+			wantCode: "CHARACTER_ACCESS_DENIED",
+		},
+		{
+			name:     "a system caller denied on a character is still the bare CHARACTER_ACCESS_DENIED",
+			caller:   world.SystemCaller(),
+			wantCode: "CHARACTER_ACCESS_DENIED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newDeniedCharacterWriteProbe(t)
+
+			err := svc.UpdateCharacterDescription(ctx, tt.caller, charID, "retired")
+
+			require.Error(t, err)
+			// errutil.AssertErrorCode resolves the DEEPEST oops code in the
+			// chain, which IS the code under test here: checkAccess's deny
+			// return wraps exactly one oops node over the plain errors.New
+			// sentinel world.ErrPermissionDenied, and a plain sentinel is not
+			// an OopsError, so the recursion stops at this node by
+			// construction. The ErrorIs pairing below is what pins that
+			// construction — it distinguishes the deny branch from the three
+			// evaluation-failure branches, which wrap ErrAccessEvaluationFailed.
+			// (.claude/rules/grpc-errors.md:58,:65 prescribes a different,
+			// non-compiling spelling with an inverted rationale — drifted rule,
+			// tracked as GitHub issue #4949. The rule is wrong, not this test.)
+			errutil.AssertErrorCode(t, err, tt.wantCode)
+			require.ErrorIs(t, err, world.ErrPermissionDenied)
+		})
+	}
+}
+
+// TestJobEvaluationFailureCodeStaysUnqualifiedByPrincipalKind pins the other
+// half of D-58: the qualifier is on the DENY signal only.
+//
+// Leaving the failure code alone is load-bearing, not incidental.
+// internal/command/errors.go's entityAccessEvalFailedCodes map is an EXACT-match
+// table over the six entity prefixes; a JOB_-qualified failure code would fall
+// through it to the generic fallback, degrading the message a player sees when
+// the engine itself is unhealthy.
+func TestJobEvaluationFailureCodeStaysUnqualifiedByPrincipalKind(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.MustParse("01ARZ3NDEKTSV4RRFFQ69G5FB1")
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: worldtest.NewMockCharacterRepository(t),
+		Engine:        policytest.NewErrorEngine(errors.New("engine unavailable")),
+	})
+
+	err := svc.UpdateCharacterDescription(ctx, charID3Job(), charID, "retired")
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
+	require.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+}
+
+// charID3Job returns the job caller the evaluation-failure test drives, kept out
+// of the test body so the assertion above reads as one line about the code.
+func charID3Job() world.Caller {
+	return world.JobCaller("fixture", world.Provenance{
+		EventID:   "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+		EventType: "fixture_triggered",
+		Subject:   "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+	})
+}
+
+// TestJobDenialDoesNotIncrementTheEngineFailureCounter pins D-58's metrics
+// split, and threat T-02.2-12 with it.
+//
+// holomush_engine_failures_total counts EVALUATION failures — the engine being
+// unhealthy. A denial is the engine working correctly. If denials landed in that
+// counter, a policy-drift incident (someone shipped a seed that denies a live
+// job) would page as an infrastructure incident and alerting would route it to
+// the wrong responder.
+//
+// The positive control is what gives the negative teeth: it proves the counter
+// this test watches is the one checkAccess actually writes, on the same
+// operation label, so "it did not move" cannot be satisfied by watching a
+// counter nothing touches.
+func TestJobDenialDoesNotIncrementTheEngineFailureCounter(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.MustParse("01ARZ3NDEKTSV4RRFFQ69G5FB1")
+	counter := observability.EngineFailureCounter("character_access_check")
+
+	// Positive control: an evaluation FAILURE on the same path must move it.
+	failSvc := world.NewService(world.ServiceConfig{
+		CharacterRepo: worldtest.NewMockCharacterRepository(t),
+		Engine:        policytest.NewErrorEngine(errors.New("engine unavailable")),
+	})
+	beforeControl := promtestutil.ToFloat64(counter)
+	require.Error(t, failSvc.UpdateCharacterDescription(ctx, charID3Job(), charID, "retired"))
+	require.Equal(t, beforeControl+1, promtestutil.ToFloat64(counter),
+		"control: an evaluation failure MUST increment holomush_engine_failures_total on the "+
+			"character_access_check operation, or the no-increment assertion below is vacuous")
+
+	// The property under test: a plain denial must NOT move it.
+	before := promtestutil.ToFloat64(counter)
+	require.Error(t, newDeniedCharacterWriteProbe(t).
+		UpdateCharacterDescription(ctx, charID3Job(), charID, "retired"))
+	assert.Equal(t, before, promtestutil.ToFloat64(counter),
+		"a policy denial MUST NOT increment holomush_engine_failures_total: that counter means "+
+			"the engine is unhealthy, and a denial means it is working")
 }

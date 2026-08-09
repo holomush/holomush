@@ -28,6 +28,17 @@ import "context"
 // and no exported constructor that accepts an attribute map (JobCaller derives
 // its three keys from a typed Provenance).
 
+// MapWorldErrorForTest exposes grpc_server.go's unexported oops-code → gRPC
+// status classifier to the external test package.
+//
+// The seam exists because the classification of a JOB_-qualified deny code
+// cannot be driven through the gRPC surface: every GRPCServer method builds a
+// HumanCaller from the request's subject_id, so no request shape can produce a
+// job principal. Asserting the suffix rule by re-implementing strings.HasSuffix
+// in a test would prove only that the test agrees with itself, so the real
+// mapper is called instead.
+func MapWorldErrorForTest(err error) error { return mapWorldError(err) }
+
 // SubjectForTest returns the caller's verbatim ABAC subject string.
 func (c Caller) SubjectForTest() string { return c.subject }
 

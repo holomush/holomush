@@ -526,8 +526,13 @@ func TestJobCallerWritesOnlyTheAggregateItsProvenanceNames(t *testing.T) {
 		// (a) The write is NOT denied. The call still terminates in an error —
 		// the probe wires no mutator, so it stops at CHARACTER_UPDATE_FAILED —
 		// which is expected and is not a denial.
+		// RETARGETED by plan 02.2-02 (D-58), together with the deny half below:
+		// checkAccess now composes the deny code from the principal kind, so a
+		// JobCaller can no longer produce the unqualified entity-only form at
+		// all. Left un-retargeted this negative would go quietly VACUOUS rather
+		// than red — asserting the absence of a string production cannot emit.
 		if oopsErr, ok := oops.AsOops(err); ok {
-			require.NotEqual(t, "CHARACTER_ACCESS_DENIED", oopsErr.Code(),
+			require.NotEqual(t, "JOB_CHARACTER_ACCESS_DENIED", oopsErr.Code(),
 				"a live fixture job MUST be permitted to write the character its provenance names")
 		}
 
@@ -551,7 +556,14 @@ func TestJobCallerWritesOnlyTheAggregateItsProvenanceNames(t *testing.T) {
 		err := svc.UpdateCharacterDescription(context.Background(), caller, charID, "retired")
 
 		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+		// RETARGETED by plan 02.2-02 (D-58) from the unqualified entity-only
+		// code: checkAccess composes it from the principal kind now. This
+		// stayed an EXACT code comparison on purpose: it was NOT softened to a
+		// suffix/substring match, skipped, or deleted. A loosened match would
+		// let the deny pass for reasons other than the provenance mismatch,
+		// which is the one thing this subtest exists to prove — and instance
+		// scoping is the phase's load-bearing claim.
+		errutil.AssertErrorCode(t, err, "JOB_CHARACTER_ACCESS_DENIED")
 		// Pins that the DENY branch produced the code, not an evaluation
 		// failure that happens to classify nearby.
 		require.ErrorIs(t, err, world.ErrPermissionDenied)

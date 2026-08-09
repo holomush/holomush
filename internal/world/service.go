@@ -196,6 +196,8 @@ func KnownEntityPrefixes() []string {
 // Returns nil if allowed, or an error with appropriate oops error codes:
 //
 //   - ErrPermissionDenied       → oops.Code("{entityPrefix}_ACCESS_DENIED")
+//   - ErrPermissionDenied       → oops.Code("{principalKind}_{entityPrefix}_ACCESS_DENIED")
+//     when the caller carries a non-zero principalKind (today: JOB)
 //   - ErrAccessEvaluationFailed → oops.Code("{entityPrefix}_ACCESS_EVALUATION_FAILED")
 //   - all other errors          → oops.Code("{entityPrefix}_ACCESS_EVALUATION_FAILED")
 //
@@ -203,13 +205,46 @@ func KnownEntityPrefixes() []string {
 // Unknown errors (context errors, DB failures, etc.) are classified as evaluation
 // failures rather than denials to avoid poisoning metrics and user feedback.
 //
-// Metrics: calls observability.RecordEngineFailure in all error paths. The
-// holomush_engine_failures_total counter uses a package-level Prometheus var
-// that is not exported; metric increments are verified by integration tests.
+// The DENY code alone composes both dimensions (02.2-CONTEXT D-58), so alerting
+// can distinguish a job denied on a character from a player denied on a
+// character without parsing log attributes. Two contracts are deliberately
+// preserved by the composition:
+//
+//   - The _ACCESS_DENIED SUFFIX. grpc_server.go:169 classifies on it, so the
+//     principal kind is a prefix; a trailing qualifier would silently downgrade
+//     every job denial to codes.Internal.
+//   - KnownEntityPrefixes() and internal/command/errors.go's exact-match code
+//     maps are NOT extended with JOB_ variants. Those maps drive PLAYER-FACING
+//     message text, and a background job's denial is never rendered to a player.
+//
+// The EVALUATION-FAILURE codes stay unqualified for the same reason: their
+// exact-match map must keep resolving when the engine is unhealthy.
+//
+// Metrics: calls observability.RecordEngineFailure on the evaluation-failure
+// paths ONLY — the malformed-request, engine-error and infra-failure branches.
+// The plain denial return below deliberately does NOT call it: the
+// holomush_engine_failures_total counter counts evaluation failures, so a
+// denial counted there would make a policy-drift incident look like an
+// infrastructure incident and misroute alerting. The counter uses a
+// package-level Prometheus var, reachable for assertions through
+// observability.EngineFailureCounter.
 func (s *Service) checkAccess(ctx context.Context, caller Caller, action, resource string, prefix entityPrefix) error {
 	metricKey := strings.ToLower(string(prefix)) + "_access_check"
 	failCode := string(prefix) + "_ACCESS_EVALUATION_FAILED"
 	denyCode := string(prefix) + "_ACCESS_DENIED"
+	// D-58: qualify the DENY code with the principal kind. The zero-value
+	// principalKind — every HumanCaller and SystemCaller — leaves the code
+	// byte-identical to before, so the six shipped entity codes are unchanged.
+	//
+	// The qualifier is a PREFIX, and the suffix is composed from the single
+	// literal above rather than respelled per principal kind. Both alternatives
+	// were considered and rejected: "CHARACTER_ACCESS_DENIED_JOB" breaks
+	// grpc_server.go:169's suffix classification outright, and carrying the
+	// dimension as a bare oops.With("principal_kind", …) attribute is exactly
+	// the log-attribute parsing D-58 exists to rule out.
+	if caller.principalKind != "" {
+		denyCode = string(caller.principalKind) + "_" + denyCode
+	}
 
 	subject := caller.subject
 
