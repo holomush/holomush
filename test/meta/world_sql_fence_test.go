@@ -54,6 +54,18 @@ import (
 // FOR UPDATE serialization with player_repo.MarkReaping. It is an intentional,
 // durable auth-table-read-on-the-world-conn exception a future layering pass MUST
 // NOT "fix away"; it is orthogonal to this mutation fence and does not weaken it.
+//
+// SECOND durable layering exception (D-34, plan 03-01): CharacterRepository.SetStatus
+// WRITES the same auth players table on the world tx connection — `UPDATE players
+// SET default_character_id = NULL WHERE default_character_id = $1` — inside the same
+// transaction as a soft retire's status write. It EXTENDS the reaping-guard precedent
+// above from a locking READ to a WRITE, and it is likewise intentional and durable: a
+// soft retire leaves the row (and so the FK's ON DELETE SET NULL never fires), so
+// without the clear the login paths would read a pointer to a retired character. It
+// is outside this fence's scope for the same reason the reaping guard is — `players`
+// is an AUTH table and is deliberately not in fencedWorldTables — so it needs no
+// allowlist entry here. A future layering pass MUST NOT "fix" either exception away
+// without replacing the atomicity they provide.
 
 // fencedWorldTables is the CORE/WORLD-table set the fence covers. scene_participants
 // is DELIBERATELY absent (round-4 C5 / D-05). entity_properties STAYS IN

@@ -450,6 +450,29 @@ func (r *CharacterRepository) UpdatePreferences(ctx context.Context, characterID
 // Rename owns its envelope because it has an out-of-Service caller (the
 // operator CLI); SetStatus has none, so writing one here would emit TWO
 // envelopes per command.
+//
+// # D-34: the same-transaction default-character clear
+//
+// On a RETIRE the method also clears players.default_character_id for any
+// player pointing at this character, inside the SAME transaction as the status
+// write. The FK is ON DELETE SET NULL, so it self-heals on a hard delete only;
+// a soft retire would otherwise leave the login paths (the telnet gateway
+// handler and the web auth handlers) reading a pointer to a retired character.
+// The statement is idempotent — no read-modify-write — so a retry or a
+// redelivery is safe, and a refused CAS aborts the transaction before it runs,
+// so a stale writer never moves the pointer. Unretire does NOT restore it: the
+// old value is not preserved anywhere, and the player re-selects a default.
+//
+// This is a WRITE to the auth players table on the world tx connection, and it
+// deliberately WIDENS an exception that already exists: the reaping guard
+// (internal/world/postgres/reaping_guard.go) takes a locking READ of the same
+// table on the same connection, documented in the doc block of
+// test/meta/world_sql_fence_test.go as an intentional, durable
+// auth-table-on-the-world-conn exception. D-34 extends that precedent from a
+// read to a write. It is deliberate, not accidental layering drift; players is
+// not a fenced world table, so no fence allowlist entry is involved. The write
+// MUST stay on the world tx connection (txFromContext) and MUST NOT reach for
+// the auth pool — the two-pool boundary claims no atomicity across it.
 func (r *CharacterRepository) SetStatus(
 	ctx context.Context,
 	characterID ulid.ULID,
@@ -482,6 +505,17 @@ func (r *CharacterRepository) SetStatus(
 				With("character_id", characterID.String()).
 				With("status", string(status)).
 				Wrap(err)
+		}
+		// D-34: clear the default-character pointer in the SAME transaction as
+		// the status write, on a retire only.
+		if status == world.StatusRetired {
+			if _, clearErr := tx.Exec(txCtx,
+				`UPDATE players SET default_character_id = NULL WHERE default_character_id = $1`,
+				characterID.String()); clearErr != nil {
+				return oops.Code("CHARACTER_RETIRE_DEFAULT_CLEAR_FAILED").
+					With("character_id", characterID.String()).
+					Wrap(clearErr)
+			}
 		}
 		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, characterID, false, newVersion-1, newVersion)
 		return nil
