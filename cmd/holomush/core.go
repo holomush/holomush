@@ -908,7 +908,23 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			// reason the reactor declares DependsOn(Bootstrap).
 			StartLocationID: bootstrapSub.StartLocationID,
 		}),
-		CharacterActivity: charactivity.NewSubsystem(charactivity.Config{Logger: slog.Default()}),
+		CharacterActivity: charactivity.NewSubsystem(charactivity.Config{
+			Logger:    slog.Default(),
+			JetStream: eventBusSub,
+			// The flusher's write is INV-WORLD-4's fourth sanctioned
+			// out-of-world writer, and the only envelope-exempt one. It is
+			// injected as a closure over the pool — resolved per flush, never
+			// here, because dbSub.Pool() PANICS before the database
+			// subsystem's Prepare — so internal/charactivity holds no fenced
+			// SQL and imports no database driver.
+			Writer: func(ctx context.Context, characterID ulid.ULID, lastActiveNanos int64) error {
+				return worldpostgres.UpdateCharacterLastActive(ctx, dbSub.Pool(), characterID, lastActiveNanos)
+			},
+			// THE SAME registry instance abacSub reads (D-68 option A+D: every
+			// background consumer declares an identity and a capability class,
+			// whether or not anything consumes it at an Evaluate call today).
+			Jobs: jobRegistry,
+		}),
 	}) {
 		orch.Register(sub)
 	}

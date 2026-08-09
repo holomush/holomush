@@ -33,13 +33,13 @@ type fakeEntry struct {
 	rev   uint64
 }
 
-func (e fakeEntry) Bucket() string                   { return BucketName }
-func (e fakeEntry) Key() string                      { return e.key }
-func (e fakeEntry) Value() []byte                    { return e.value }
-func (e fakeEntry) Revision() uint64                 { return e.rev }
-func (e fakeEntry) Created() time.Time               { return time.Time{} }
-func (e fakeEntry) Delta() uint64                    { return 0 }
-func (e fakeEntry) Operation() jetstream.KeyValueOp  { return jetstream.KeyValuePut }
+func (e fakeEntry) Bucket() string                  { return BucketName }
+func (e fakeEntry) Key() string                     { return e.key }
+func (e fakeEntry) Value() []byte                   { return e.value }
+func (e fakeEntry) Revision() uint64                { return e.rev }
+func (e fakeEntry) Created() time.Time              { return time.Time{} }
+func (e fakeEntry) Delta() uint64                   { return 0 }
+func (e fakeEntry) Operation() jetstream.KeyValueOp { return jetstream.KeyValuePut }
 
 // fakeLister replays a fixed key list, exactly as jetstream's KeyLister does —
 // including the duplicate keys its own doc warns about under churn.
@@ -466,8 +466,8 @@ func (c *fakeConsumeContext) Stop() {
 	defer c.mu.Unlock()
 	c.stopped = true
 }
-func (c *fakeConsumeContext) Drain()                            {}
-func (c *fakeConsumeContext) Closed() <-chan struct{}           { return nil }
+func (c *fakeConsumeContext) Drain()                  {}
+func (c *fakeConsumeContext) Closed() <-chan struct{} { return nil }
 
 // newFakeWiredSubsystem builds a Subsystem whose two acquisition seams yield
 // fakes, so the whole Prepare/Activate/Stop contract runs without a live
