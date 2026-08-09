@@ -28,6 +28,7 @@ import (
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	"github.com/holomush/holomush/internal/bootstrap"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/charactivity"
 	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/command"
@@ -46,6 +47,7 @@ import (
 	"github.com/holomush/holomush/internal/logging"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/retirement"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
@@ -890,6 +892,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		RekeyCheckpointSweep: rekeyCheckpointSweepSub,
 		OutboxRelay:          outboxRelaySub,
 		BlockList:            blockListSub,
+		RetirementReactor:    retirement.NewSubsystem(retirement.Config{Logger: slog.Default()}),
+		CharacterActivity:    charactivity.NewSubsystem(charactivity.Config{Logger: slog.Default()}),
 	}) {
 		orch.Register(sub)
 	}
@@ -1225,6 +1229,13 @@ type productionSubsystemSet struct {
 	// (IDENT-07, 02-05). Bootstrap declares a DependsOn edge on it, so it
 	// prepares before any character-name admission can run.
 	BlockList lifecycle.Subsystem
+	// RetirementReactor owns the character-retirement fanout (IDENT-04,
+	// 03-02/03-04): an event-driven reactor consuming character_retired.
+	// DependsOn Database + EventBus + World + Sessions + Bootstrap.
+	RetirementReactor lifecycle.Subsystem
+	// CharacterActivity owns the last_active_at JetStream KV (IDENT-10,
+	// 03-02/03-05). DependsOn Database + EventBus.
+	CharacterActivity lifecycle.Subsystem
 }
 
 // productionSubsystems returns the ordered list of subsystems registered
@@ -1269,6 +1280,12 @@ func productionSubsystems(s productionSubsystemSet) []lifecycle.Subsystem {
 		// OutboxRelaySubsystem (MODEL-04, 05-07): DependsOn Database + EventBus;
 		// registered after eventBusSub so the relay starts once the bus is up.
 		s.OutboxRelay,
+		// The retirement reactor (IDENT-04) and the character-activity KV
+		// (IDENT-10) both consume off the bus. This SLICE position is
+		// cosmetic per the doc comment above; the asserted order lives in
+		// cmd/holomush/core_topo_order_test.go.
+		s.RetirementReactor,
+		s.CharacterActivity,
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/admin/socket"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/charactivity"
 	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/eventbus"
@@ -25,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/lifecycle"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/retirement"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -43,7 +45,7 @@ func (s stubSubsystem) Prepare(_ context.Context) error    { return nil }
 func (s stubSubsystem) Activate(_ context.Context) error   { return nil }
 func (s stubSubsystem) Stop(_ context.Context) error       { return nil }
 
-// allStubs returns the full 18-element stub list in production order.
+// allStubs returns the full 20-element stub list in production order.
 // Callers that only care about presence can use this; callers that care about
 // position should build the slice inline so the ordering is explicit.
 //
@@ -56,12 +58,17 @@ func (s stubSubsystem) Stop(_ context.Context) error       { return nil }
 // Index 5 (SubsystemCharacterNameBlockList) was added in Phase 2 02-05
 // (IDENT-07): Bootstrap declares DependsOn on it, so it prepares before any
 // character-name admission.
+// Indices 18-19 (SubsystemRetirementReactor, SubsystemCharacterActivity) were
+// added in Phase 3 03-02 (IDENT-04 / IDENT-10).
 //
-// NOTE: the array type is FIXED-SIZE. Adding a subsystem without widening all
-// three occurrences below is a COMPILE error in this package, not a failing
-// length assertion.
-func allStubs() [18]stubSubsystem {
-	return [18]stubSubsystem{
+// NOTE: the array type is FIXED-SIZE. Widen ALL THREE occurrences below when
+// adding a subsystem. Beware the partial-widening failure mode observed in
+// 03-02: a NEW productionSubsystemSet FIELD that this array does not cover
+// still compiles — the field is simply left nil, and the first test to call
+// ID() on it panics with a nil dereference instead of failing an assertion.
+// The array size only forces a compile error for changes to the array itself.
+func allStubs() [20]stubSubsystem {
+	return [20]stubSubsystem{
 		{id: lifecycle.SubsystemDatabase},
 		{id: lifecycle.SubsystemTLS},
 		{id: lifecycle.SubsystemABAC},
@@ -80,12 +87,14 @@ func allStubs() [18]stubSubsystem {
 		{id: lifecycle.SubsystemAdminSocket},
 		{id: lifecycle.SubsystemRekeyCheckpointSweep},
 		{id: lifecycle.SubsystemOutboxRelay},
+		{id: lifecycle.SubsystemRetirementReactor},
+		{id: lifecycle.SubsystemCharacterActivity},
 	}
 }
 
-// setFromStubs builds a productionSubsystemSet from allStubs()'s 18-element
+// setFromStubs builds a productionSubsystemSet from allStubs()'s 20-element
 // array, mirroring the field order documented on allStubs.
-func setFromStubs(s [18]stubSubsystem) productionSubsystemSet {
+func setFromStubs(s [20]stubSubsystem) productionSubsystemSet {
 	return productionSubsystemSet{
 		Database:             s[0],
 		TLS:                  s[1],
@@ -105,6 +114,8 @@ func setFromStubs(s [18]stubSubsystem) productionSubsystemSet {
 		AdminSocket:          s[15],
 		RekeyCheckpointSweep: s[16],
 		OutboxRelay:          s[17],
+		RetirementReactor:    s[18],
+		CharacterActivity:    s[19],
 	}
 }
 
@@ -123,8 +134,8 @@ func TestProductionSubsystemsIncludesCluster(t *testing.T) {
 	if !found {
 		t.Fatal("productionSubsystems does not include SubsystemCluster")
 	}
-	if len(subs) != 18 {
-		t.Errorf("productionSubsystems returned %d subsystems; want 18 after 02-05 block-list registration", len(subs))
+	if len(subs) != 20 {
+		t.Errorf("productionSubsystems returned %d subsystems; want 20 after 03-02 retirement-reactor + character-activity registration", len(subs))
 	}
 }
 
@@ -150,6 +161,8 @@ func TestSubsystemAdminSocketConstantExists(t *testing.T) {
 		lifecycle.SubsystemRekeyCheckpointSweep,
 		lifecycle.SubsystemOutboxRelay,
 		lifecycle.SubsystemCharacterNameBlockList,
+		lifecycle.SubsystemRetirementReactor,
+		lifecycle.SubsystemCharacterActivity,
 	}
 	seen := make(map[lifecycle.SubsystemID]bool)
 	for _, id := range ids {
@@ -289,8 +302,8 @@ func TestProductionSubsystemsIncludesRekeyCheckpointSweep(t *testing.T) {
 	if sweepIdx <= auditProjIdx {
 		t.Errorf("sweep (%d) must run after AuditProjection (%d)", sweepIdx, auditProjIdx)
 	}
-	if len(subs) != 18 {
-		t.Errorf("productionSubsystems returned %d subsystems; want 18 after 02-05 block-list registration", len(subs))
+	if len(subs) != 20 {
+		t.Errorf("productionSubsystems returned %d subsystems; want 20 after 03-02 retirement-reactor + character-activity registration", len(subs))
 	}
 }
 
@@ -379,13 +392,13 @@ func (s *phaseRecordingStub) Activate(_ context.Context) error {
 }
 func (s *phaseRecordingStub) Stop(_ context.Context) error { return nil }
 
-// realProductionSubsystemGraphForPropertyTest constructs every one of the 18
+// realProductionSubsystemGraphForPropertyTest constructs every one of the 20
 // production subsystem types with a minimal/zero-value config and reads
 // each one's real DependsOn() LIVE — the identical construction
 // realProductionSubsystemGraph (core_topo_order_test.go) uses, duplicated
 // here only because that helper returns a plain dep map, not constructed
 // subsystem instances, and both call sites independently need "one
-// authoritative list of the 18 production types" without hand-copying deps
+// authoritative list of the 20 production types" without hand-copying deps
 // between them.
 func realProductionSubsystemGraphForPropertyTest(t *testing.T) map[lifecycle.SubsystemID][]lifecycle.SubsystemID {
 	t.Helper()
@@ -416,14 +429,16 @@ func realProductionSubsystemGraphForPropertyTest(t *testing.T) map[lifecycle.Sub
 		socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{}),
 		dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{}),
 		worldsetup.NewOutboxRelaySubsystem(worldsetup.OutboxRelaySubsystemConfig{}),
+		retirement.NewSubsystem(retirement.Config{}),
+		charactivity.NewSubsystem(charactivity.Config{}),
 	}
 
 	graph := make(map[lifecycle.SubsystemID][]lifecycle.SubsystemID, len(subs))
 	for _, s := range subs {
 		graph[s.ID()] = s.DependsOn()
 	}
-	require.Len(t, graph, 18,
-		"expected exactly the 18 production subsystems (productionSubsystemSet); "+
+	require.Len(t, graph, 20,
+		"expected exactly the 20 production subsystems (productionSubsystemSet); "+
 			"a subsystem was added or removed without updating this test's construction list")
 	return graph
 }
