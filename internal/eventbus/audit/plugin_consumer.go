@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/consumer"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -128,11 +129,11 @@ func NewPluginConsumerManager(js jetstream.JetStream, opts ...PluginConsumerMana
 // wrap — both surfaces target eventbus.StreamName ("EVENTS") on the
 // same JetStream, so log-search and dashboard panels can filter by a
 // single `stream` field across both audit-consumer-create call sites.
-func wrapPluginConsumerCreateError(err error, pluginName, consumer string) error {
+func wrapPluginConsumerCreateError(err error, pluginName, consumerName string) error {
 	return oops.Code("AUDIT_PLUGIN_CONSUMER_CREATE_FAILED").
 		With("stream", eventbus.StreamName).
 		With("plugin", pluginName).
-		With("consumer", consumer).
+		With("consumer", consumerName).
 		With("nats_err", err.Error()).
 		Wrap(err)
 }
@@ -181,7 +182,7 @@ func (m *PluginConsumerManager) Add(ctx context.Context, cfg PluginConsumerConfi
 	}
 
 	name := pluginDurableName(cfg.PluginName)
-	// Route through createConsumerWithRetry so plugin Add() shares the
+	// Route through consumer.CreateWithRetry so plugin Add() shares the
 	// JetStream-warmup retry behavior newProjection guards against —
 	// same RPC, same js, same EVENTS stream. Prophylactic: no flake has
 	// been observed on the plugin path (l015's empirical observation
@@ -191,7 +192,7 @@ func (m *PluginConsumerManager) Add(ctx context.Context, cfg PluginConsumerConfi
 	// the host projection's consumer create in production wiring, so
 	// warmup is typically already absorbed by the time we get here
 	// (holomush-ghg1 follow-up to l015).
-	cons, err := createConsumerWithRetry(ctx, func(ctx context.Context) (jetstream.Consumer, error) {
+	cons, err := consumer.CreateWithRetry(ctx, func(ctx context.Context) (jetstream.Consumer, error) {
 		return m.js.CreateOrUpdateConsumer(ctx, eventbus.StreamName, jetstream.ConsumerConfig{
 			Durable:        name,
 			Name:           name,

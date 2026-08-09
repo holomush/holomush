@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/samber/oops"
 )
 
 // CreateBackoffs is the retry schedule for CreateOrUpdateConsumer.
@@ -64,6 +63,25 @@ var CreateBackoffs = []time.Duration{
 // world.JobCaller), so NOTHING is stamped here today — this pointer exists
 // so a future reader looking for the stamp site finds where it actually
 // lives rather than concluding it was lost.
-func CreateWithRetry(_ context.Context, _ func(context.Context) (jetstream.Consumer, error)) (jetstream.Consumer, error) {
-	return nil, oops.Code("CONSUMER_CREATE_NOT_IMPLEMENTED").Errorf("not implemented")
+func CreateWithRetry(ctx context.Context, create func(context.Context) (jetstream.Consumer, error)) (jetstream.Consumer, error) {
+	var lastErr error
+	for attempt := 0; attempt <= len(CreateBackoffs); attempt++ {
+		cons, err := create(ctx)
+		if err == nil {
+			return cons, nil
+		}
+		lastErr = err
+		if attempt == len(CreateBackoffs) {
+			break
+		}
+		if ctx.Err() != nil {
+			return nil, lastErr
+		}
+		select {
+		case <-time.After(CreateBackoffs[attempt]):
+		case <-ctx.Done():
+			return nil, lastErr
+		}
+	}
+	return nil, lastErr
 }
