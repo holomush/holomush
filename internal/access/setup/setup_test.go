@@ -5,13 +5,17 @@ package setup_test
 
 import (
 	"context"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
+	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/jobs"
 )
@@ -101,10 +105,15 @@ func TestJobRegistrySeamIsOneSharedTypeAcrossBothConfigs(t *testing.T) {
 //
 // What this proves is that the exact call BuildABACStack makes —
 // attribute.Register(schemaReg, "action", attribute.ActionNamespaceSchema()) —
-// yields a registry in which every audited key resolves. What it deliberately
-// does NOT claim is that the registration protects anything today: on this tree
-// the production compiler is built on a separate, never-populated schema, so the
-// registration is a no-op until phase plan 02.2-04 wires the two together.
+// yields a registry in which every audited key resolves.
+//
+// As of 02.2-04 that registration is LOAD-BEARING: BuildABACStack now builds its
+// compiler on schemaReg.Schema(), so a key missing from the audited set below
+// hard-errors at cache.Reload and fails boot. (Before 02.2-04 the compiler was
+// built on a separate, never-populated schema and this registration was a no-op.)
+// The two tests that pin the wiring itself are
+// TestBuildABACStackReloadsTheCacheAfterTheActionRegistration and
+// TestCacheReloadNamesBothThePolicyAndTheUndeclaredActionKey, below.
 func TestActionNamespaceIsRegisteredWithTheAuditedKeySet(t *testing.T) {
 	t.Parallel()
 
@@ -129,7 +138,170 @@ func TestActionNamespaceIsRegisteredWithTheAuditedKeySet(t *testing.T) {
 		"job.trigger_subject",
 	} {
 		assert.True(t, schemaReg.IsRegistered("action", key),
-			"action.%s MUST be registered: once 02.2-04 wires the compiler to this registry, "+
-				"an undeclared key referenced by any compiled policy hard-errors and fails boot", key)
+			"action.%s MUST be registered: the compiler is wired to this registry, so an "+
+				"undeclared key referenced by any compiled policy hard-errors and fails boot", key)
 	}
+}
+
+// --- The 02.2-04 wiring (D-66) ---
+
+// actionGatePolicyStore is a minimal store.PolicyStore serving a fixed policy
+// list. Only ListEnabled is exercised — Cache.Reload calls nothing else — but the
+// remaining methods are stubbed rather than omitted because the interface is the
+// contract, and a future caller reaching for one should get a zero value here
+// rather than a compile break in an unrelated test.
+type actionGatePolicyStore struct{ policies []*policystore.StoredPolicy }
+
+func (s actionGatePolicyStore) ListEnabled(_ context.Context) ([]*policystore.StoredPolicy, error) {
+	return s.policies, nil
+}
+
+func (actionGatePolicyStore) Create(_ context.Context, _ *policystore.StoredPolicy) error { return nil }
+
+func (actionGatePolicyStore) Get(_ context.Context, _ string) (*policystore.StoredPolicy, error) {
+	return nil, nil
+}
+
+func (actionGatePolicyStore) GetByID(_ context.Context, _ string) (*policystore.StoredPolicy, error) {
+	return nil, nil
+}
+
+func (actionGatePolicyStore) Update(_ context.Context, _ *policystore.StoredPolicy) error { return nil }
+
+func (actionGatePolicyStore) Delete(_ context.Context, _ string) error { return nil }
+
+func (actionGatePolicyStore) CreateBatch(_ context.Context, _ []*policystore.StoredPolicy) error {
+	return nil
+}
+
+func (actionGatePolicyStore) DeleteBySource(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+
+func (actionGatePolicyStore) ReplaceBySource(_ context.Context, _, _ string, _ []*policystore.StoredPolicy) error {
+	return nil
+}
+
+func (actionGatePolicyStore) List(_ context.Context, _ policystore.ListOptions) ([]*policystore.StoredPolicy, error) {
+	return nil, nil
+}
+
+// TestCacheReloadNamesBothThePolicyAndTheUndeclaredActionKey is ROADMAP criterion
+// 3's proof at the grain an operator experiences it: the reload that
+// BuildABACStack performs fails, and the failure text is sufficient on its own to
+// locate and fix the offending row without reading Go source.
+//
+// The two naming halves come from different files and would regress
+// independently — cache.go composes `%q (id=%s)` around the policy, compiler.go
+// names the key — so both are asserted in one test. A message that loses either
+// half goes red here.
+func TestCacheReloadNamesBothThePolicyAndTheUndeclaredActionKey(t *testing.T) {
+	t.Parallel()
+
+	// The exact registry composition BuildABACStack's compiler is now built on,
+	// as far as `action` is concerned.
+	schemaReg := attribute.NewSchemaRegistry()
+	require.NoError(t, attribute.Register(schemaReg, "action", attribute.ActionNamespaceSchema()))
+	compiler := policy.NewCompiler(schemaReg.Schema())
+
+	store := actionGatePolicyStore{policies: []*policystore.StoredPolicy{{
+		ID:      "01JQ00000000000000000000B1",
+		Name:    "seed:undeclared-action-key",
+		Source:  "seed",
+		DSLText: `permit(principal, action, resource) when { action.not_declared == "x" };`,
+		Enabled: true,
+	}}}
+
+	err := policy.NewCache(store, compiler).Reload(context.Background())
+
+	require.Error(t, err, "an undeclared action.* key MUST fail the reload — silently "+
+		"default-denying is the failure mode D-67 exists to prevent")
+	got := err.Error()
+	assert.Contains(t, got, "seed:undeclared-action-key", "the failure MUST name the offending policy")
+	assert.Contains(t, got, "01JQ00000000000000000000B1", "the failure MUST name the policy's DB id")
+	assert.Contains(t, got, "action.not_declared", "the failure MUST name the offending key")
+}
+
+// TestEveryShippedSeedCompilesUnderTheLiveActionGate is the regression half of
+// 02.2-04: turning a dead branch into a boot gate is only safe if the corpus the
+// gate now sees is clean. It iterates the WHOLE corpus — sampling would let a
+// single bad seed reach a deployment.
+//
+// The registry is `action` ONLY, and that is the CORRECT scope, not a weaker
+// substitute for "every production provider's schema". The compiler validates by
+// DSL ROOT (principal | resource | action | env), never by provider name, so
+// adding provider schemas would change nothing about which references get
+// checked: no provider registers a namespace named `resource` or `principal`, so
+// every reference under those roots is skipped either way. `action` is the only
+// branch this test can exercise and the only one it needs to.
+//
+// (The full provider set is also unobtainable here: the only thing that builds it
+// is BuildABACStack, which opens a SQL bridge and pings it, and hand-registering
+// the providers would recreate the hardcoded-mirror drift hazard
+// seed_coverage_test.go warns about. Do not "strengthen" this test into that
+// shape.)
+func TestEveryShippedSeedCompilesUnderTheLiveActionGate(t *testing.T) {
+	t.Parallel()
+
+	compiler := policy.NewCompiler(attribute.NewActionOnlySchemaRegistry().Schema())
+
+	seeds := policy.SeedPolicies()
+	require.NotEmpty(t, seeds, "control: an empty corpus would make this test vacuous")
+
+	for _, seed := range seeds {
+		t.Run(seed.Name, func(t *testing.T) {
+			_, _, err := compiler.Compile(seed.DSLText)
+			require.NoError(t, err,
+				"shipped seed %q MUST compile under the live action gate — if this is an "+
+					"unregistered action.* key, that is a REAL finding: fix the seed or add the "+
+					"key to the audit, do NOT widen the schema to make this pass", seed.Name)
+		})
+	}
+}
+
+// TestBuildABACStackReloadsTheCacheAfterTheActionRegistration pins research
+// Pitfall 2 (threat T-02.2-18) as a SOURCE-ORDER property.
+//
+// A source-order assertion is legitimate here because the hazard IS source order
+// and no runtime seam exposes it: BuildABACStack opens a SQL bridge and pings it,
+// so the unit tier cannot call it, and by the time it returns both steps have
+// already run in whatever order the file happens to declare. Compiling the boot
+// snapshot BEFORE the providers and the `action` schema register would validate
+// boot against an empty registry while every later poller/invalidation reload
+// validated against a populated one — a bad policy would pass boot and then kill
+// the first reload, which is strictly worse than the uniform no-op it replaced.
+//
+// Comment lines are skipped deliberately: prose in this file's neighbours names
+// both call sites, and a gate that a comment can satisfy is not a gate. The
+// exactly-one requirements are what make the position comparison meaningful.
+func TestBuildABACStackReloadsTheCacheAfterTheActionRegistration(t *testing.T) {
+	t.Parallel()
+
+	src, err := os.ReadFile("setup.go")
+	require.NoError(t, err, "go test runs with the package directory as cwd")
+
+	var registerLine, reloadLine, registerHits, reloadHits int
+	for i, raw := range strings.Split(string(src), "\n") {
+		line := strings.TrimSpace(raw)
+		if strings.HasPrefix(line, "//") {
+			continue
+		}
+		if strings.Contains(line, `attribute.Register(schemaReg, "action"`) {
+			registerHits++
+			registerLine = i + 1
+		}
+		if strings.Contains(line, "cache.Reload(") {
+			reloadHits++
+			reloadLine = i + 1
+		}
+	}
+
+	require.Equal(t, 1, registerHits,
+		"expected exactly one non-comment `action` registration in setup.go, found %d", registerHits)
+	require.Equal(t, 1, reloadHits,
+		"expected exactly one non-comment cache.Reload call in setup.go, found %d", reloadHits)
+	assert.Greater(t, reloadLine, registerLine,
+		"cache.Reload (line %d) MUST run AFTER the action registration (line %d), or boot compiles "+
+			"against an empty schema while every later reload compiles against a populated one",
+		reloadLine, registerLine)
 }
