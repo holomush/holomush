@@ -63,6 +63,11 @@ const (
 	// character_updated because the census bijection is one-producer-of-record
 	// and character_updated already belongs to UpdateCharacterDescription.
 	KindCharacterRetired = "character_retired"
+	// KindCharacterUnretired is the reversal of KindCharacterRetired. It is a
+	// SEPARATE kind rather than a second producer of character_retired because
+	// the census bijection is one-producer-of-record, and separate kinds are
+	// what let a consumer react to the two directions differently.
+	KindCharacterUnretired = "character_unretired"
 )
 
 // PayloadField describes one field of a kind's intent-level, new-values-only
@@ -121,6 +126,7 @@ var registry = func() map[string]KindSchema {
 		{Kind: KindCharacterMoved, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: movePayload},
 		{Kind: KindCharacterPreferencesUpdate, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterPreferencesPayload},
 		{Kind: KindCharacterRetired, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterLifecyclePayload},
+		{Kind: KindCharacterUnretired, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterLifecyclePayload},
 	}
 	m := make(map[string]KindSchema, len(entries))
 	for _, e := range entries {

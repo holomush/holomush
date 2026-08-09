@@ -958,6 +958,26 @@ func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterI
 			With("current_version", char.Version).
 			Wrap(ErrConcurrentEdit)
 	}
+	// (4) Lifecycle guard, AFTER the version precheck. The switch is exhaustive
+	// over the closed vocabulary with a DENYING default arm (INV-WORLD-5): a
+	// fourth value added to Status later is refused by the same code path that
+	// refuses an unknown one, rather than silently acquiring whichever answer a
+	// shorthand predicate happened to give.
+	switch char.Status {
+	case StatusActive, StatusIdle:
+		// Both are legal exits into retired. v0.13 ships no transition INTO
+		// idle (D-43), but the missing transition is the inbound one — a row
+		// already in idle must still be retirable.
+	case StatusRetired:
+		return oops.Code("CHARACTER_ALREADY_RETIRED").
+			With("character_id", characterID.String()).
+			Errorf("character %s is already retired", characterID)
+	default:
+		return oops.Code("CHARACTER_RETIRE_FAILED").
+			With("character_id", characterID.String()).
+			With("status", string(char.Status)).
+			Errorf("character %s carries an unrecognized lifecycle status", characterID)
+	}
 	if s.mutator == nil {
 		return oops.Code("CHARACTER_RETIRE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
@@ -983,13 +1003,102 @@ func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterI
 	return nil
 }
 
-// UnretireCharacter returns a retired character to play. STUB — implemented in
-// the GREEN half of plan 03-01 Task 2.
-func (s *Service) UnretireCharacter(_ context.Context, _ Caller, characterID ulid.ULID, expectedVersion int) error {
-	return oops.Code("CHARACTER_UNRETIRE_FAILED").
-		With("character_id", characterID.String()).
-		With("expected_version", expectedVersion).
-		Errorf("UnretireCharacter not implemented")
+// UnretireCharacter returns a retired character to play: it writes
+// characters.status = active, bumps the version, and emits exactly one
+// character_unretired envelope in the SAME transaction. It is the reversal that
+// makes retirement a soft, recoverable operation (IDENT-04).
+//
+// It runs the SAME guard chain as RetireCharacter, in the same order, for the
+// same reasons — see RetireCharacter's doc comment, including why the two
+// bodies are deliberately parallel rather than factored into a helper. The
+// differences are exactly three: the ABAC action is "unretire" (D-40 splits it
+// from "retire" precisely so a policy may grant one without the other), the
+// target status is active, and the lifecycle guard refuses everything that is
+// not already retired.
+//
+// # It does NOT restore players.default_character_id
+//
+// Retire clears that pointer in its own transaction (D-34) and the old value is
+// not preserved anywhere, so unretire cannot put it back. The asymmetry is by
+// design: the player re-selects a default. Do not "fix" this by stashing the
+// prior value — that would make retire's clear no longer a clear.
+//
+// An already-active (or idle) character is a typed error rather than a silent
+// success: reporting success for a transition that did not happen would let a
+// caller believe it moved a character it did not move.
+func (s *Service) UnretireCharacter(ctx context.Context, caller Caller, characterID ulid.ULID, expectedVersion int) error {
+	// (0) Reject an absent/zero/negative caller version BEFORE any read.
+	if expectedVersion <= 0 {
+		return oops.Code("CHARACTER_VERSION_REQUIRED").
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			Errorf("unretire requires a caller-supplied expected_version >= 1")
+	}
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").Errorf("character repository not configured")
+	}
+	// (1) Authorization. D-39: no ownership predicate in Go — policy is the control.
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, caller, "unretire", resource, prefixCharacter); err != nil {
+		return err
+	}
+	// (2) Read: Version arms the precheck, Status arms the lifecycle guard.
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", characterID)
+		}
+		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+	// (3) Version precheck — BEFORE the lifecycle guard, so a stale caller
+	// racing a COMPLETED unretire sees the conflict rather than
+	// CHARACTER_NOT_RETIRED (which would report the racing writer's outcome as
+	// though the stale view were authoritative).
+	if char.Version != expectedVersion {
+		return oops.Code(CodeConcurrentEdit).
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			With("current_version", char.Version).
+			Wrap(ErrConcurrentEdit)
+	}
+	// (4) Lifecycle guard: exhaustive over the closed vocabulary, denying default.
+	switch char.Status {
+	case StatusRetired:
+		// The only state unretire transitions FROM.
+	case StatusActive, StatusIdle:
+		return oops.Code("CHARACTER_NOT_RETIRED").
+			With("character_id", characterID.String()).
+			With("status", string(char.Status)).
+			Errorf("character %s is not retired", characterID)
+	default:
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").
+			With("character_id", characterID.String()).
+			With("status", string(char.Status)).
+			Errorf("character %s carries an unrecognized lifecycle status", characterID)
+	}
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildCharacterLifecyclePayload(characterID, StatusActive)
+	if err != nil {
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").Wrapf(err, "build character lifecycle payload %s", characterID)
+	}
+	// (5) The status write and its ONE envelope commit or roll back together.
+	// The CAS carries the CALLER's expectedVersion, never char.Version.
+	intent := s.buildIntent(kindCharacterUnretired, wmodel.AggregateCharacter, characterID, caller.subject, payload)
+	if _, err := s.mutator.setCharacterStatus(ctx, intent, characterID, StatusActive, expectedVersion); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				With("expected_version", expectedVersion).
+				Wrap(err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "unretire character %s", characterID)
+		}
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").Wrapf(err, "unretire character %s", characterID)
+	}
+	return nil
 }
 
 // UpdateCharacterPreferences persists a character's whole preferences bag
