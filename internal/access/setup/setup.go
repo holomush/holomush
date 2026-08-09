@@ -401,6 +401,14 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	// (attribute/schema.go:96-99), so relative CONSTRUCTION order against the
 	// registrations does not matter — only relative COMPILE order does, which is
 	// what step 12 is positioned for.
+	//
+	// Sharing the live pointer means this compiler reads the same map that
+	// attribute.Resolver's plugin-driven RegisterProvider/UnregisterProvider
+	// writes, and the poller below compiles on its own goroutine. That is safe by
+	// construction: types.AttributeSchema guards its map internally (see its doc
+	// comment). Do NOT swap this for a snapshot to "avoid sharing" — the sharing
+	// is what makes boot and steady state validate identically, and it is the
+	// whole point of this line.
 	compiler := policy.NewCompiler(schemaReg.Schema())
 
 	// 12. Cache, with the initial load.

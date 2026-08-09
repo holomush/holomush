@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/samber/oops"
 )
@@ -354,8 +355,44 @@ func (at AttrType) String() string {
 }
 
 // AttributeSchema defines the valid attributes and their types.
-// Task 6 will extend this with full namespace/attribute registration.
+//
+// GOROUTINE SAFETY. Every method on this type is safe for concurrent use: the
+// namespace map is guarded by mu, and every accessor below — there are no
+// others, and nothing outside this file touches the map — takes it. Callers may
+// register, replace, remove and read from different goroutines without external
+// synchronisation.
+//
+// WHY THE LOCK IS HERE and not left to the caller. Until phase 02.2-04 the
+// production policy compiler held its own private, never-populated schema, so
+// the only holder of a POPULATED one was attribute.SchemaRegistry and the
+// question did not arise. 02.2-04 built the compiler on the LIVE registry
+// (internal/access/setup/setup.go) to make boot and steady state validate
+// identically. That is correct, and it means one map is now reachable from two
+// directions: attribute.Resolver's RegisterProvider/UnregisterProvider (driven
+// by plugin load and unload) writes it, and the policy cache's compiler reads it
+// on every reload — including the poller's, which runs on its own goroutine.
+//
+// Those two do not currently overlap, and WHY they do not is the reason this
+// lock is necessary rather than optional: all schema writes happen inside
+// PluginSubsystem.Prepare, plugin loading is sequential, Manager.UnloadPlugin
+// has no production caller, and lifecycle.Orchestrator holds a global barrier so
+// no Activate — and therefore no poller goroutine — starts until every Prepare
+// has returned. The safety is entirely a property of boot-phase ordering that
+// nothing pins. A runtime plugin hot-reload, a first caller of UnloadPlugin, or
+// concurrency inside LoadAll each removes that accident, and the result is
+// `fatal error: concurrent map read and map write` — an unrecoverable process
+// abort, not a race-detector warning CI would flag first. The lock removes the
+// dependency on that ordering.
+//
+// A NamespaceSchema handed to Register/Replace, or returned by GetNamespace, is
+// NOT copied. Its Attributes map is treated as immutable once registered: every
+// producer in the tree builds it fresh and hands it over (see
+// plugins.ConvertProtoSchema), and evolution swaps the whole pointer via
+// [AttributeSchema.Replace] rather than mutating in place. Mutating an
+// already-registered NamespaceSchema would escape this lock — build a new one
+// and Replace instead.
 type AttributeSchema struct {
+	mu         sync.RWMutex
 	namespaces map[string]*NamespaceSchema
 }
 
@@ -371,20 +408,27 @@ func NewAttributeSchema() *AttributeSchema {
 	}
 }
 
-// Register adds a namespace schema. Full implementation in Task 12.
+// Register adds a namespace schema. Safe for concurrent use.
 func (s *AttributeSchema) Register(namespace string, schema *NamespaceSchema) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.namespaces[namespace] = schema
 	return nil
 }
 
 // HasNamespace returns true if the given namespace has been registered.
+// Safe for concurrent use.
 func (s *AttributeSchema) HasNamespace(namespace string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	_, ok := s.namespaces[namespace]
 	return ok
 }
 
-// IsRegistered checks if a namespace+key pair exists. Full implementation in Task 12.
+// IsRegistered checks if a namespace+key pair exists. Safe for concurrent use.
 func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	ns, ok := s.namespaces[namespace]
 	if !ok {
 		return false
@@ -394,9 +438,14 @@ func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
 }
 
 // GetNamespace returns the NamespaceSchema for the given namespace, or nil.
-// NOT goroutine-safe: callers must ensure schema evolution (UpdateNamespace/RemoveNamespace)
-// does not run concurrently with policy evaluation that reads the schema.
+// Safe for concurrent use.
+//
+// The returned pointer is the registered one, not a copy. Read it; do not
+// mutate its Attributes map — that would escape this type's lock. See the
+// [AttributeSchema] doc comment.
 func (s *AttributeSchema) GetNamespace(namespace string) *NamespaceSchema {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	ns, ok := s.namespaces[namespace]
 	if !ok {
 		return nil
@@ -404,15 +453,19 @@ func (s *AttributeSchema) GetNamespace(namespace string) *NamespaceSchema {
 	return ns
 }
 
-// Replace replaces an existing namespace schema.
+// Replace replaces an existing namespace schema. Safe for concurrent use.
 // Callers MUST validate the schema before calling — use SchemaRegistry.UpdateNamespace instead.
 func (s *AttributeSchema) Replace(namespace string, schema *NamespaceSchema) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.namespaces[namespace] = schema
 }
 
-// Remove deletes a namespace from the schema.
+// Remove deletes a namespace from the schema. Safe for concurrent use.
 // Callers MUST validate removal safety — use SchemaRegistry.RemoveNamespace instead.
 func (s *AttributeSchema) Remove(namespace string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.namespaces, namespace)
 }
 
