@@ -109,7 +109,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       until the identity model gains an approval dimension, which does not exist. Rationale:
       `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-44.
 
-- [ ] **IDENT-04**: A character can be **soft-retired** (admin-driven in v0.13; player self-retire
+- [x] **IDENT-04**: A character can be **soft-retired** (admin-driven in v0.13; player self-retire
       deferred beyond v0.13); the character leaves active play, its record and name are preserved, and
       the operation is reversible.
 
@@ -369,13 +369,13 @@ Which phases cover which requirements. Filled during roadmap creation.
 | IDENT-02 | Phase 4 | Pending |
 | IDENT-02a | Phase 4 | Pending |
 | IDENT-03 | Backlog 999.20 | Pending |
-| IDENT-04 | Phase 3 | Pending |
+| IDENT-04 | Phase 3 | Complete |
 | IDENT-05 | Phase 5 | Pending |
 | IDENT-06 | Phase 2 | Pending |
 | IDENT-07 | Phase 2 | Pending |
 | IDENT-08 | Phase 2 | Pending |
 | IDENT-09 | Phase 2 | Pending |
-| IDENT-10 | Phase 3 | Pending |
+| IDENT-10 | Phase 3 | Complete |
 | PROFILE-01 | Phase 5 | Pending |
 | PROFILE-02 | Phase 5 | Pending |
 | PROFILE-03 | Phase 4 | Pending |

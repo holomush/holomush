@@ -4,17 +4,17 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 03
 current_phase_name: world-character-commands
-status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-08-09T22:26:36.730Z"
+status: verifying
+stopped_at: Completed 03-06-PLAN.md (last plan of phase 03)
+last_updated: "2026-08-09T23:01:16.603Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 02.2 complete — UAT passed, security verified, transitioned to Phase 03
 progress:
   total_phases: 9
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 40
-  completed_plans: 39
-  percent: 56
+  completed_plans: 40
+  percent: 67
 ---
 
 # Project State
@@ -36,8 +36,8 @@ without rework.
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 03 (world-character-commands) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 98%)
+Status: Phase complete — ready for verification
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
 Last activity: 2026-08-09 — Phase 03 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -256,6 +256,7 @@ no action needed.
 | Phase 03 P03 | 35m | 2 tasks | 4 files |
 | Phase 03 P04 | 50m | 2 tasks | 11 files |
 | Phase 03 P05 | 70m | 3 tasks | 15 files |
+| Phase 03 P06 | 55m | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -541,6 +542,8 @@ the next milestone yet.
 - [Phase ?]: 03-05: interlock 0.4-3 fired on the ANSWERED branch — 02.2's D-68 (option A+D) names the last_active_at flusher, so it registers job identity character_activity with writes [character] and stamps no per-execution attributes
 - [Phase ?]: 03-05: INV-WORLD-4 amended THREE->FOUR; the atomicity clause is NARROWED to world-state writers with the activity flusher named as the sole envelope-exempt operational-column writer. Whether that becomes a CLASS is deferred until a second one appears
 - [Phase ?]: 03-05: the charactivity KV seam declares DeleteRevision(ctx,key,revision) rather than jetstream's variadic KVDeleteOpt, because deleteOpts is unexported and a fake could not otherwise observe the guarded revision
+- [Phase ?]: Phase 03 harness now boots the REAL outbox relay and retirement reactor (WithOutboxRelay/WithRetirementReactor); one shared world.Service and one shared jobs.Registry mirror cmd/holomush
+- [Phase ?]: IDENT-04 and IDENT-10 closed in 03-06 with the last_active_at operational-column writer named as the one argued INV-WORLD-4 exemption
 
 ### Pending Todos
 
@@ -602,12 +605,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-09T22:26:28.567Z
+Last session: 2026-08-09T23:01:16.588Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 03-05-PLAN.md
+Stopped at: Completed 03-06-PLAN.md (last plan of phase 03)
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
