@@ -182,17 +182,25 @@ rejected:
   peer. This is the same reasoning that makes the liveness gate resolve to
   nothing rather than to a placeholder.
 
-Applied to the `last_active_at` flusher, the concrete case: it **registers a
-`job:` identity and its declared capability class** in `jobs.Registry` at
-subsystem Start and unregisters at Stop, exactly like every other background
-consumer, and it carries **no per-execution attributes** because it is
-timer-driven.
+Applied to the `last_active_at` flusher, the concrete case — **note the tense:
+that flusher does not exist yet.** It arrives with Phase 3, and this is the
+shape it is required to take: it **will register a `job:` identity and its
+declared capability class** in `jobs.Registry` at subsystem Start and
+unregister at Stop, exactly like every other background consumer, and it will
+carry **no per-execution attributes** because it is timer-driven.
 
-Separately — and this is a fact about its current write path, not a reason to
-skip the identity — that flusher's write today lands at the `INV-WORLD-4`
-out-of-world writer boundary and crosses no ABAC chokepoint, so nothing
-currently *consumes* that identity at an `Evaluate` call. It still participates
-in the registry lifecycle, so the moment it (or anything else sharing its
+Today `jobs.Registry` has **no production writer at all**. `cmd/holomush`
+constructs the registry and hands it to the ABAC job attribute provider, but
+nothing calls `Register` on it (see the comment at `cmd/holomush/core.go:403`).
+That is the intended state, not an omission: an empty registry means every job
+resolves to no attributes and every job-gating seed default-denies. Fail-closed
+is the correct posture for a principal whose consumers have not shipped.
+
+Separately — and this is a fact about the flusher's planned write path, not a
+reason to skip the identity — that write lands at the `INV-WORLD-4`
+out-of-world writer boundary and crosses no ABAC chokepoint, so nothing will
+*consume* that identity at an `Evaluate` call on day one. It participates in
+the registry lifecycle anyway, so the moment it (or anything else sharing its
 subsystem) does cross a chokepoint, the identity and the declared class are
 already in place and already correct.
 
