@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 02.2
-current_phase_name: background-job-authorization-model
-status: verifying
+current_phase: 03
+current_phase_name: World Character Commands
+status: planning
 stopped_at: Completed 02.2-05-PLAN.md (final plan of phase 02.2)
-last_updated: "2026-08-09T17:37:50.872Z"
+last_updated: "2026-08-09T19:53:19.821Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 02.2 execution started
+last_activity_desc: Phase 02.2 complete — UAT passed, security verified, transitioned to Phase 03
 progress:
   total_phases: 9
   completed_phases: 5
@@ -21,24 +21,24 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-07)
+See: .planning/PROJECT.md (updated 2026-08-09)
 
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 02.2 — background-job-authorization-model
-complete character identity surface (creation, management, public profiles with privacy) and stand up the
-`RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
+**Current focus:** Phase 03 — World Character Commands (`Rename` / soft `Retire`). The milestone goal is
+unchanged: complete the character identity surface (creation, management, public profiles with privacy) and
+stand up the `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces
+without rework.
 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 02.2 (background-job-authorization-model) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Progress: [█████████░] 85% (1/6 phases)
-Last activity: 2026-08-09 — Phase 02.2 execution started
-`binding: pending`, 9 amendments applied, 3 verification gaps closed
+Phase: 03 — World Character Commands
+Plan: Not started
+Status: Ready to plan
+Progress: [█████████████████░░░] 34/40 plans (85%)
+Last activity: 2026-08-09 — Phase 02.2 complete (UAT 2/2, security verified), transitioned to Phase 03
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
 (`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
@@ -109,7 +109,7 @@ no action needed.
 
 **Velocity:**
 
-- Total plans completed: 72
+- Total plans completed: 77
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -126,6 +126,7 @@ no action needed.
 | 07 | 11 | - | - |
 | 01.1 | 7 | - | - |
 | 02.1 | 3 | - | - |
+| 02.2 | 5 | - | - |
 
 **Recent Trend:**
 
@@ -297,6 +298,10 @@ the next milestone yet.
 - [Phase 07]: rev3 — 07-09's ~20 pre-orchestrator live-value reads are settled by HOISTING core.go:705-1060 whole into a memoized (sync.Once) `cryptoWiring` builder in package main; the block's body moves verbatim so the dbSub.Pool()/authSub.Hasher()/abacSub.Resolver() reads inside it simply execute post-Start. No 18th subsystem; no repo signature churn. THE RULE: every cryptoWiring consumer must declare DependsOn ⊇ {Database, Auth, ABAC, EventBus} — the first consumer to resolve the provider builds it.
 - [Phase 07]: rev3 — `deps.TLSCertEnsurer` (deps.go:53,71) is a live test seam that breaks at compile time when ensureTLSCerts is deleted; the body becomes exported `tls.EnsureCerts` with the SAME signature so the Deps field type is unchanged.
 - [Phase 07]: rev3 — the promised `Seq == 0` → BeforeID pagination fallback DOES NOT EXIST (bus.go:87,94; hot_jetstream.go:334; cold_postgres.go:125 — BeforeID is a tripwire for a NONZERO seq). Policy settled: zero seq means "no cursor, read the tail" (status quo); reject-as-stale and ID→seq resolution both rejected.
+- [Phase 02.2]: D-67 — an undeclared `action.*` attribute key is now a HARD BOOT FAILURE with no runtime override (no env kill switch, no seed-vs-DB conditional; `compiler.go:197-202`). Chosen over silent default-deny, which gives a typo'd policy no signal at all. Operator cost is real and accepted (AR-02.2-04): upgrades of any deployment carrying operator- or plugin-authored policy rows MUST run the pre-flight query first.
+- [Phase 02.2]: the `job:` principal is liveness-gated at the provider — an unregistered job resolves to `(nil, nil)` so a stale/dead job cannot retain authority, and instance scope comes from the triggering event's provenance (D-55) carried by a TYPED `world.JobCaller`, never a `map[string]any` (which would have opened a second door onto the host-vouched `action.dispatch_location`).
+- [Phase 02.2]: mechanism shipped with a FIXTURE job only (D-52) — `jobs.Registry` has no production writer yet and the empty registry is intended fail-closed. `job:retirement` / `job:activity-flush` and their grants are Phase 3's. INV-ACCESS-13 bound; INV-ACCESS-14 (consumer-boundary stamping) deliberately `binding: pending` — no consumer wrapper exists in-tree to assert against.
+- [Phase 02.2]: plugin-installed policy rows are a THIRD policy source D-67's original analysis never enumerated; they are now compiled at install so a bad row fails plugin load rather than persisting and bricking every later cache reload.
 - [Phase 07]: rev3 — Go evaluates deferred ARGUMENTS at registration, so `defer orch.StopAll(shutdownCtx)` would expire ~5s into uptime and cancel every graceful stop. The closure form (core.go:255-261 telemetry / :356-362 observability) is the in-repo precedent and the mandated shape.
 - [Phase ?]: 06-05: OPS-04 audit-DLQ replay resolves game_id MIRRORING the server (--game-id override -> core.game_id via config.Load(...,core) -> persisted DB), closing the F3 external-NATS subject-prefix mismatch; tautological embedded-NATS test replaced with a divergent-game natstest test driving the real resolver seam
 - [Phase ?]: 07-01: internal/grpc/client.go extracted verbatim into new leaf package internal/grpcclient; telnet closure dropped 47->10 holomush/internal/ packages, closing the gateway.go client-import gap RESEARCH.md Pitfall-4 missed
@@ -534,6 +539,10 @@ None yet.
 - 02-07: PROFILE-11's characters.description half is NOT discharged in Phase 2 — D-29 defers seed:profile-public-read-character to Phase 4, to land with the characterToProto projection narrowing. EXT-07's admin section registry is still 02-09's.
 - BLOCKING pre-merge: abac-reviewer (/holomush-dev:review-abac) has NOT reviewed the Phase 2 diff. D-05 makes it mandatory. Brief is written verbatim in 02-11-SUMMARY.md; owner is the orchestrator/human.
 - MAINTAINER DECISION: ROADMAP success criterion 4 — the in-world-description half is deferred to Phase 4 by D-29. Three options stated in 02-11-SUMMARY.md, none selected. Criterion 1 is settled by D-30 and MUST NOT be touched.
+- [Phase 02.2] DEPLOYMENT PRECONDITION (AR-02.2-04): UAT test 2 passed *vacuously* — there are no deployed instances holding data, so the D-67 pre-flight query was never actually executed. It MUST be run before the first upgrade of any instance whose `access_policies` table carries operator- or plugin-authored rows; an undeclared `action.*` key there is an unrecoverable boot failure. Query and remedy: `02.2-UAT.md` test 2 and `contributing/explanation/background-job-authorization.md`.
+- [Phase 02.2] Five compiler-construction sites in the integration tiers still skip the `action` gate (WR-05: `world_suite_test.go:243`, `access_suite_test.go:214`, `abac_widget_test.go:283`/`:426`, `binary_plugin_test.go:457`), so a typo'd `action.*` key can compile clean there. Test-tier only — production still fails loudly. The sharper half is that `action_schema.go:92-95` and `setup.go:374-379` claim the gate is "identical at every compilation site", which is now inaccurate.
+- [Phase 02.2] Two concurrency findings on `jobs.Registry`, neither blocking: the liveness read is two calls under separate RLocks (WR-02 — fails closed either way, but INV-ACCESS-13 clause 1 is not concurrency-exact as phrased), and `Register` is silently last-writer-wins with no duplicate check (WR-03 — a second registration can replace a security-gating capability class). Both sit inside the D-53 in-process out-of-scope boundary.
+- [Phase 02.2] Four abac-reviewer Low findings filed, not fixed: check-then-act in `SchemaRegistry.Register`; `attribute.Resolver`'s own maps unsynchronized (pre-existing); three undeclared action keys at `eventbus/authguard/guard.go:134`; `reservedActionKeys` still a one-entry denylist rather than an allowlist.
 
 ### Quick Tasks Completed
 
@@ -573,11 +582,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-09T17:37:43.885Z
-100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
-v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
-Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02.2-05-PLAN.md (final plan of phase 02.2)
+Last session: 2026-08-09T20:20:00Z
+Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
+`human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
+`threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
+Branch `v013-phase-03` is still UNPUSHED.
+Stopped at: Phase 02.2 complete, ready to plan Phase 03
+Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.

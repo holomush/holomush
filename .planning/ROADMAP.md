@@ -403,7 +403,7 @@ unverified seams, and timer-driven jobs (Phase 3's `last_active_at` flusher) car
 event, so what they present as per-execution context is an open question that MUST NOT be invented
 by a planner.
 
-**Plans:** 5/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
