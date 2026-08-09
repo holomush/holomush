@@ -28,6 +28,12 @@ import (
 type activityKV interface {
 	Put(ctx context.Context, key string, value []byte) (uint64, error)
 	Get(ctx context.Context, key string) (jetstream.KeyValueEntry, error)
+	// Create writes a key only while it does not exist. Losing the race
+	// returns jetstream.ErrKeyExists.
+	Create(ctx context.Context, key string, value []byte) (uint64, error)
+	// Update writes a key only while its latest revision is still the given
+	// one — the buffer-side counterpart of DeleteRevision's guard.
+	Update(ctx context.Context, key string, value []byte, revision uint64) (uint64, error)
 	// Delete removes a key unconditionally. Reserved for keys that can NEVER
 	// become flushable (see drainKey).
 	Delete(ctx context.Context, key string) error
@@ -46,6 +52,14 @@ func (j jsKV) Put(ctx context.Context, key string, value []byte) (uint64, error)
 
 func (j jsKV) Get(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
 	return j.kv.Get(ctx, key) //nolint:wrapcheck // the caller codes it
+}
+
+func (j jsKV) Create(ctx context.Context, key string, value []byte) (uint64, error) {
+	return j.kv.Create(ctx, key, value) //nolint:wrapcheck // the caller codes it
+}
+
+func (j jsKV) Update(ctx context.Context, key string, value []byte, revision uint64) (uint64, error) {
+	return j.kv.Update(ctx, key, value, revision) //nolint:wrapcheck // the caller codes it
 }
 
 func (j jsKV) Delete(ctx context.Context, key string) error {

@@ -5,6 +5,8 @@ package charactivity
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"strconv"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -81,11 +83,65 @@ func (l *listener) record(ctx context.Context, data []byte) {
 		return
 	}
 
-	if _, err := l.kv.Put(ctx, id.String(), []byte(strconv.FormatInt(nanos, 10))); err != nil {
-		errutil.LogErrorContext(ctx, "character activity listener could not buffer an activity timestamp",
-			oops.Code("CHARACTER_ACTIVITY_BUFFER_FAILED").With("character_id", id.String()).Wrap(err),
-			"bucket", BucketName)
+	l.buffer(ctx, id, nanos)
+}
+
+// buffer records one activity timestamp, MONOTONICALLY.
+//
+// An unconditional Put would let an older event destroy a newer buffered value.
+// Delivery is at-least-once and unordered: a message whose AckWait expired
+// after a later one was already handled is redelivered, and its older
+// timestamp would overwrite the newer one at a FRESH revision. The flusher
+// would then write the older value, the database predicate
+// (last_active_at < $2, internal/world/postgres/activity.go:66) would absorb it
+// as a no-op, and the newer timestamp would be gone entirely — leaving
+// last_active_at behind by the delta until the character next acts. That
+// exceeds the "bounded by up to one flush interval, BY CONSTRUCTION" claim in
+// the package doc, so the guard belongs here and not only at the database.
+//
+// The write is revision-conditional for the same reason the flusher's delete
+// is: a concurrent writer that already advanced the key must win, and losing
+// that race is harmless because the value that won is the newer one.
+func (l *listener) buffer(ctx context.Context, id ulid.ULID, nanos int64) {
+	key := id.String()
+	val := []byte(strconv.FormatInt(nanos, 10))
+
+	entry, err := l.kv.Get(ctx, key)
+	switch {
+	case errors.Is(err, jetstream.ErrKeyNotFound):
+		// Nothing buffered. Create rather than Put so a concurrent first
+		// writer is detected instead of clobbered.
+		if _, createErr := l.kv.Create(ctx, key, val); createErr != nil {
+			if errors.Is(createErr, jetstream.ErrKeyExists) {
+				// Someone else buffered first. Their value is at least as
+				// fresh as ours was when we read; the next event re-buffers.
+				return
+			}
+			l.logBufferFailure(ctx, id, createErr)
+		}
+	case err != nil:
+		l.logBufferFailure(ctx, id, err)
+	default:
+		// An UNPARSABLE buffered value is not newer than anything — fall
+		// through and cure it, exactly as the flusher's revision-conditional
+		// drop of the same value would.
+		if prev, perr := strconv.ParseInt(string(entry.Value()), 10, 64); perr == nil && prev >= nanos {
+			return // an older (or duplicate) redelivery MUST NOT clobber newer buffered activity
+		}
+		if _, updErr := l.kv.Update(ctx, key, val, entry.Revision()); updErr != nil {
+			// The key moved under us, which means a concurrent writer stored a
+			// value we have no reason to believe is staler than ours. Dropping
+			// this one is the safe answer; the next event re-buffers.
+			slog.DebugContext(ctx, "character activity listener left a buffered value that changed under it",
+				"character_id", key, "revision", entry.Revision())
+		}
 	}
+}
+
+func (l *listener) logBufferFailure(ctx context.Context, id ulid.ULID, err error) {
+	errutil.LogErrorContext(ctx, "character activity listener could not buffer an activity timestamp",
+		oops.Code("CHARACTER_ACTIVITY_BUFFER_FAILED").With("character_id", id.String()).Wrap(err),
+		"bucket", BucketName)
 }
 
 // workerContext returns the context the Consume callback runs its Put under.

@@ -65,6 +65,9 @@ type fakeKV struct {
 	// beforeDelete runs inside DeleteRevision before the revision comparison —
 	// the seam that interleaves a concurrent listener Put mid-flush.
 	beforeDelete func()
+	// beforeGet runs inside Get before the lookup — the seam that interleaves
+	// a concurrent write between the listener's read and its guarded write.
+	beforeGet func()
 
 	listErr error
 	putErr  error
@@ -88,6 +91,11 @@ func (k *fakeKV) Put(_ context.Context, key string, value []byte) (uint64, error
 }
 
 func (k *fakeKV) Get(_ context.Context, key string) (jetstream.KeyValueEntry, error) {
+	if k.beforeGet != nil {
+		hook := k.beforeGet
+		k.beforeGet = nil
+		hook()
+	}
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	e, ok := k.entries[key]
@@ -95,6 +103,42 @@ func (k *fakeKV) Get(_ context.Context, key string) (jetstream.KeyValueEntry, er
 		return nil, jetstream.ErrKeyNotFound
 	}
 	return e, nil
+}
+
+// Create models jetstream's create-only write: it refuses an existing key with
+// ErrKeyExists rather than overwriting it.
+func (k *fakeKV) Create(_ context.Context, key string, value []byte) (uint64, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.putErr != nil {
+		return 0, k.putErr
+	}
+	if _, ok := k.entries[key]; ok {
+		return 0, jetstream.ErrKeyExists
+	}
+	k.nextRev++
+	k.entries[key] = fakeEntry{key: key, value: value, rev: k.nextRev}
+	return k.nextRev, nil
+}
+
+// Update models jetstream's revision-conditional write: the server refuses it
+// when the stored revision is no longer the one the caller read.
+func (k *fakeKV) Update(_ context.Context, key string, value []byte, revision uint64) (uint64, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.putErr != nil {
+		return 0, k.putErr
+	}
+	e, ok := k.entries[key]
+	if !ok {
+		return 0, jetstream.ErrKeyNotFound
+	}
+	if e.rev != revision {
+		return 0, errors.New("wrong last sequence")
+	}
+	k.nextRev++
+	k.entries[key] = fakeEntry{key: key, value: value, rev: k.nextRev}
+	return k.nextRev, nil
 }
 
 func (k *fakeKV) Delete(_ context.Context, key string) error {
@@ -281,6 +325,94 @@ func TestListenerAbsorbsAPutFailure(t *testing.T) {
 		newTestListener(kv).record(context.Background(),
 			eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, core.NewULID(), time.Now()))
 	})
+}
+
+// TestListenerNeverReplacesABufferedTimestampWithAnOlderOne is the buffer's own
+// monotonic guard.
+//
+// Delivery is at-least-once and unordered, so a message whose AckWait expired
+// after a later one was already handled comes back with an OLDER timestamp. An
+// unconditional Put would store it at a fresh revision; the flusher would then
+// write it, the database's own last_active_at < $2 predicate would absorb it as
+// a no-op, and the newer value would be gone -- leaving the column behind by
+// the delta until the character next acts.
+func TestListenerNeverReplacesABufferedTimestampWithAnOlderOne(t *testing.T) {
+	ctx := context.Background()
+	charID := core.NewULID()
+	newer := time.Unix(0, 1_700_000_000_000_000_000).UTC()
+	older := newer.Add(-time.Hour)
+
+	kv := newFakeKV()
+	l := newTestListener(kv)
+
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, newer))
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, older))
+
+	e, ok := kv.snapshot()[charID.String()]
+	require.True(t, ok)
+	assert.Equal(t, strconv.FormatInt(newer.UnixNano(), 10), string(e.value),
+		"an older redelivery MUST NOT clobber newer buffered activity")
+}
+
+func TestListenerAdvancesABufferedTimestampToANewerOne(t *testing.T) {
+	ctx := context.Background()
+	charID := core.NewULID()
+	older := time.Unix(0, 1_700_000_000_000_000_000).UTC()
+	newer := older.Add(time.Hour)
+
+	kv := newFakeKV()
+	l := newTestListener(kv)
+
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, older))
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, newer))
+
+	e, ok := kv.snapshot()[charID.String()]
+	require.True(t, ok)
+	assert.Equal(t, strconv.FormatInt(newer.UnixNano(), 10), string(e.value),
+		"newer activity MUST advance the buffered value")
+}
+
+// TestListenerLeavesABufferedValueThatChangedBetweenItsReadAndItsWrite pins the
+// revision guard on the buffer write: a concurrent writer that already advanced
+// the key wins, and losing that race is harmless because the winner is newer.
+func TestListenerLeavesABufferedValueThatChangedBetweenItsReadAndItsWrite(t *testing.T) {
+	ctx := context.Background()
+	charID := core.NewULID()
+	base := time.Unix(0, 1_700_000_000_000_000_000).UTC()
+
+	kv := newFakeKV()
+	l := newTestListener(kv)
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, base))
+
+	// A concurrent writer lands between this listener's Get and its Update.
+	interposed := strconv.FormatInt(base.Add(2*time.Hour).UnixNano(), 10)
+	kv.beforeGet = func() {
+		_, err := kv.Put(ctx, charID.String(), []byte(interposed))
+		require.NoError(t, err)
+	}
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, base.Add(time.Hour)))
+
+	e, ok := kv.snapshot()[charID.String()]
+	require.True(t, ok)
+	assert.Equal(t, interposed, string(e.value),
+		"the write is revision-conditional, so the concurrent writer's value survives")
+}
+
+func TestListenerCuresAnUnparsableBufferedValue(t *testing.T) {
+	ctx := context.Background()
+	charID := core.NewULID()
+	at := time.Unix(0, 1_700_000_000_000_000_000).UTC()
+
+	kv := newFakeKV()
+	_, err := kv.Put(ctx, charID.String(), []byte("not a number"))
+	require.NoError(t, err)
+
+	newTestListener(kv).record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, at))
+
+	e, ok := kv.snapshot()[charID.String()]
+	require.True(t, ok)
+	assert.Equal(t, strconv.FormatInt(at.UnixNano(), 10), string(e.value),
+		"an unparsable buffered value is not newer than anything and MUST be cured")
 }
 
 // ---------------------------------------------------------------------------
