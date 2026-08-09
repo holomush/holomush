@@ -443,6 +443,28 @@ func TestStopJoinsBothProducersBeforeTheFinalDrain(t *testing.T) {
 	assert.Empty(t, kv.snapshot())
 }
 
+// TestStopAfterPrepareOnlyPerformsNoDatabaseWrite pins the activated/joined
+// split. The orchestrator's rollback path calls Stop on every subsystem it has
+// already PREPARED when some other subsystem fails, so a never-activated
+// charactivity must not flush: a failed boot has no business issuing one
+// UPDATE characters per buffered key.
+func TestStopAfterPrepareOnlyPerformsNoDatabaseWrite(t *testing.T) {
+	ctx := context.Background()
+	kv := newFakeKV()
+	id := core.NewULID()
+	_, err := kv.Put(ctx, id.String(), []byte("1000"))
+	require.NoError(t, err)
+
+	w := &recordingWriter{}
+	s := newFakeWiredSubsystem(t, kv, w.write)
+	require.NoError(t, s.Prepare(ctx))
+	// Activate deliberately NOT called — this is the rollback shape.
+	require.NoError(t, s.Stop(ctx))
+
+	assert.Empty(t, w.recorded(), "a subsystem that never activated MUST NOT write to characters")
+	assert.Len(t, kv.snapshot(), 1, "and MUST leave the durable buffer intact for the next boot")
+}
+
 func TestActivateRegistersTheJobAndStopUnregistersIt(t *testing.T) {
 	ctx := context.Background()
 	reg := &fakeJobRegistry{}

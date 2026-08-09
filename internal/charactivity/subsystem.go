@@ -424,8 +424,18 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 		s.cancel()
 		s.cancel = nil
 	}
-	joined := s.done == nil
-	if s.done != nil {
+	// ACTIVATED and JOINED are distinct states, and conflating them is a bug.
+	// s.done is nil both when Activate never ran AND after a successful join,
+	// so treating nil as "joined" made a subsystem that only reached Prepare
+	// run a full drain — listing every key in the bucket and issuing one
+	// UPDATE characters per key. That is exactly the state the orchestrator's
+	// rollback path produces (internal/lifecycle/orchestrator.go:77-83 calls
+	// rollback -> Stop on everything already prepared) when some OTHER
+	// subsystem fails to prepare or activate. A failed boot MUST NOT mutate
+	// characters.
+	activated := s.done != nil
+	joined := false
+	if activated {
 		select {
 		case <-s.done:
 			joined = true
@@ -438,7 +448,7 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 
 	// One last drain, on a context detached from the (already cancelled)
 	// producer context — and ONLY once both producers are known to be gone.
-	if joined && kv != nil {
+	if activated && joined && kv != nil {
 		drainCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stopTimeout)
 		(&flusher{cfg: s.cfg, kv: kv}).drain(drainCtx)
 		cancel()
