@@ -33,7 +33,19 @@ func (p poolProvider) Pool() *pgxpool.Pool { return p.pool }
 // cmd/holomush/core.go:380 uses). It returns the started subsystem; callers read
 // Engine()/AttributeResolver()/PluginProvider()/AuditLogger() and the poller is
 // stopped via t.Cleanup.
-func startRealABAC(t *testing.T, ctx context.Context, pool *pgxpool.Pool) *abacsetup.ABACSubsystem {
+//
+// jobRegistry is the harness's single background-job liveness registry, passed
+// through verbatim exactly as cmd/holomush/core.go passes its one instance. It
+// is what lets a job subsystem booted by another option (WithRetirementReactor)
+// be seen as RUNNING by this engine's job attribute provider — without it every
+// job-gating seed default-denies, which would make a denial spec pass for the
+// wrong reason and its paired positive control fail.
+func startRealABAC(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	jobRegistry attribute.JobRegistry,
+) *abacsetup.ABACSubsystem {
 	t.Helper()
 
 	// Seed first: the subsystem's Start → BuildABACStack → cache.Reload reads
@@ -63,8 +75,9 @@ func startRealABAC(t *testing.T, ctx context.Context, pool *pgxpool.Pool) *abacs
 	)
 
 	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
-		DB:       poolProvider{pool: pool},
-		Registry: lifecycle.NewReadinessRegistry(),
+		DB:          poolProvider{pool: pool},
+		Registry:    lifecycle.NewReadinessRegistry(),
+		JobRegistry: jobRegistry,
 	})
 	require.NoError(t, abacSub.Prepare(ctx), "startRealABAC: ABAC subsystem prepare")
 	require.NoError(t, abacSub.Activate(ctx), "startRealABAC: ABAC subsystem activate")

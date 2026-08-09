@@ -175,9 +175,14 @@ func WithPluginConfigOverrides(overrides map[string]map[string]string) StartOpti
 // pluginDeps is the minimal set of already-built harness objects startPlugins
 // needs. Start passes these in so this helper stays decoupled from the Server.
 type pluginDeps struct {
-	pool           *pgxpool.Pool
-	connStr        string
-	engine         policytypes.AccessPolicyEngine
+	pool    *pgxpool.Pool
+	connStr string
+	engine  policytypes.AccessPolicyEngine
+	// worldSvc is the ONE world.Service Start constructed (newWorldService).
+	// Threading it rather than rebuilding one here keeps a single instance —
+	// and a single ServiceConfig wiring — shared by the plugin subsystem and by
+	// WithRetirementReactor's reactor surface.
+	worldSvc       *world.Service
 	sessionStore   session.Access
 	verbReg        *core.VerbRegistry
 	playerRepo     auth.PlayerRepository
@@ -260,21 +265,19 @@ func startPlugins(t *testing.T, ctx context.Context, d pluginDeps) *pluginsetup.
 		require.NoError(t, copyTree(abs, dstSub), "startPlugins: stage extra plugin dir")
 	}
 
-	// WorldService — mirror internal/world/setup/subsystem.go. The OutboxWriter is
-	// injected (05-07) so whole-system tests that perform world writes routed
-	// through mutate() do not hit a nil OutboxWriter. The relay itself is a
-	// separate subsystem not started by this harness.
-	worldSvc := world.NewService(world.ServiceConfig{
-		LocationRepo:  worldpostgres.NewLocationRepository(d.pool),
-		ExitRepo:      worldpostgres.NewExitRepository(d.pool),
-		ObjectRepo:    worldpostgres.NewObjectRepository(d.pool),
-		SceneRepo:     worldpostgres.NewSceneRepository(d.pool),
-		CharacterRepo: worldpostgres.NewCharacterRepository(d.pool),
-		PropertyRepo:  worldpostgres.NewPropertyRepository(d.pool),
-		Engine:        d.engine,
-		Transactor:    worldpostgres.NewTransactor(d.pool),
-		OutboxWriter:  worldpostgres.NewOutboxStore(d.pool),
-	})
+	// WorldService — the SINGLE instance Start built (newWorldService, mirroring
+	// internal/world/setup/subsystem.go). Its OutboxWriter is injected (05-07) so
+	// whole-system tests that perform world writes routed through mutate() do not
+	// hit a nil OutboxWriter.
+	//
+	// The relay that DRAINS those outbox rows to JetStream is a separate
+	// subsystem, and this harness does not start it by default — with ONE
+	// exception: WithOutboxRelay() boots the real
+	// setup.NewOutboxRelaySubsystem inside Start, which is what makes the
+	// world-write → envelope → bus → consumer chain observable end to end
+	// (the retirement suite's premise). Without that option the outbox rows are
+	// written and simply never published.
+	worldSvc := d.worldSvc
 
 	// AdminDeps — all 5 caller-supplied fields required (handlers.RegisterAdmin
 	// panics on nil; subsystem.go calls it unconditionally). PluginLister is set

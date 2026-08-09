@@ -92,18 +92,21 @@ import (
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/jobs"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/pgnanos"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/presence"
+	"github.com/holomush/holomush/internal/retirement"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
+	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	channelv1 "github.com/holomush/holomush/pkg/proto/holomush/channel/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
@@ -204,6 +207,36 @@ type Server struct {
 	// exercises the real JoinFocus → SetConnectionFocus path (holomush-5rh.8.26).
 	focusCoord focus.Coordinator
 
+	// worldSvc is the ONE world.Service this harness constructs (newWorldService).
+	// It is always built — construction touches no live resource — and is shared
+	// by the plugin subsystem and by WithRetirementReactor's reactor surface, so
+	// there is exactly one ServiceConfig wiring in the harness and no chance of
+	// the reactor writing through a differently-configured service than the one
+	// a spec retires through. Exposed via World().
+	worldSvc *world.Service
+
+	// verbRegistry is the bootstrapped verb registry the harness's publishers
+	// stamp rendering metadata from. Retained so options that build an
+	// additional publisher (WithRetirementReactor's presence emitter) wrap the
+	// SAME registry the CoreServer's publisher does — a frame with nil Rendering
+	// is dropped by the gateway (INV-EVENTBUS-6).
+	verbRegistry *core.VerbRegistry
+
+	// jobRegistry is the ONE background-job liveness registry, mirroring
+	// cmd/holomush/core.go: the SAME instance the ABAC subsystem's JobProvider
+	// reads and the retirement reactor registers into. A second instance would
+	// report the job as not running and every world write it makes would
+	// silently default-deny. Always constructed (it has no dependencies); empty
+	// unless a job subsystem registers, which is the correct fail-closed state.
+	jobRegistry *jobs.Registry
+
+	// retirementStartLoc is the location WithRetirementReactor created as the
+	// fanout's move destination. Zero unless that option was passed. It is
+	// DELIBERATELY distinct from guestStartLocationID: characters are seeded at
+	// the guest start location, so a retirement move to the same location would
+	// hit the reactor's already-there skip gate and be unobservable.
+	retirementStartLoc ulid.ULID
+
 	// cmdRegistry is the registry the dispatcher was actually built against —
 	// the default empty one, the compiled-in set under WithBuiltinCommands, or
 	// the plugin subsystem's registry when WithInTreePlugins adopted it. Unlike
@@ -246,6 +279,11 @@ type startConfig struct {
 	characterActivityStorage jetstream.StorageType
 	// characterActivityFlushInterval shortens the production five-minute tick.
 	characterActivityFlushInterval time.Duration
+	// outboxRelay boots the real world outbox relay subsystem (WithOutboxRelay).
+	outboxRelay bool
+	// retirementReactor boots the real retirement reactor subsystem
+	// (WithRetirementReactor).
+	retirementReactor bool
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -506,13 +544,26 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 
 	pe := cfg.accessEngine
 
+	// The ONE background-job liveness registry, constructed unconditionally
+	// exactly as cmd/holomush/core.go does. It is handed to the real ABAC
+	// subsystem below AND to any job subsystem an option boots, so a job's
+	// declared liveness is visible to the engine that gates its writes. An empty
+	// registry fails closed (every job-gating seed default-denies), so building
+	// it on every path costs nothing and changes nothing.
+	jobRegistry := jobs.NewRegistry()
+
 	// Real seeded ABAC engine (opt-in). Overrides the allow-all default and is
 	// retained for the plugin layer's resolver/pluginProvider threading below.
 	var abacSub *abacsetup.ABACSubsystem
 	if cfg.withRealABAC {
-		abacSub = startRealABAC(t, ctx, pool)
+		abacSub = startRealABAC(t, ctx, pool, jobRegistry)
 		pe = abacSub.Engine()
 	}
+
+	// The ONE world.Service. Built here rather than inside startPlugins so the
+	// plugin subsystem and WithRetirementReactor share a single instance built
+	// from a single ServiceConfig — see the Server.worldSvc field comment.
+	worldSvc := newWorldService(pool, pe)
 
 	// VerbRegistry must exist before plugins load (they register verbs). It is
 	// also required by the locationFollower's synthetic location_state emit path
@@ -567,6 +618,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			pool:                  pool,
 			connStr:               connStr,
 			engine:                pe,
+			worldSvc:              worldSvc,
 			sessionStore:          sessionStoreInst,
 			verbReg:               verbRegistry,
 			playerRepo:            playerRepo,
@@ -825,6 +877,9 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		guestStartLocationID: guestLocID,
 		focusCoord:           focusCoord,
 		cmdRegistry:          cmdRegistry,
+		worldSvc:             worldSvc,
+		jobRegistry:          jobRegistry,
+		verbRegistry:         verbRegistry,
 	}
 
 	// Plugin-crypto links 3+4 (Task 8): the audit projection (PluginConsumerManager
@@ -870,8 +925,127 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	if cfg.characterActivity {
 		srv.startCharacterActivity(ctx, cfg)
 	}
+	// The relay must be live BEFORE the reactor's durable consumer exists only
+	// in the sense that both must be live before a spec acts; the two options
+	// are orthogonal and neither implies the other, so each is booted on its own
+	// flag. Relay first mirrors the production start order (OutboxRelay depends
+	// on Database + EventBus; RetirementReactor additionally on World +
+	// Sessions + Bootstrap).
+	if cfg.outboxRelay {
+		srv.startOutboxRelay(ctx)
+	}
+	if cfg.retirementReactor {
+		srv.startRetirementReactor(ctx)
+	}
 
 	return srv
+}
+
+// newWorldService builds the harness's world.Service, mirroring
+// internal/world/setup/subsystem.go's ServiceConfig verbatim — including the
+// OutboxWriter, without which every world write routed through mutate() hits a
+// nil writer (05-07).
+func newWorldService(pool *pgxpool.Pool, engine types.AccessPolicyEngine) *world.Service {
+	return world.NewService(world.ServiceConfig{
+		LocationRepo:  worldpg.NewLocationRepository(pool),
+		ExitRepo:      worldpg.NewExitRepository(pool),
+		ObjectRepo:    worldpg.NewObjectRepository(pool),
+		SceneRepo:     worldpg.NewSceneRepository(pool),
+		CharacterRepo: worldpg.NewCharacterRepository(pool),
+		PropertyRepo:  worldpg.NewPropertyRepository(pool),
+		Engine:        engine,
+		Transactor:    worldpg.NewTransactor(pool),
+		OutboxWriter:  worldpg.NewOutboxStore(pool),
+	})
+}
+
+// startOutboxRelay boots the REAL world outbox relay subsystem over the
+// harness's pool and embedded bus (WithOutboxRelay).
+//
+// It goes through the production Prepare/Activate/Stop contract rather than
+// driving outbox.Relay directly, so a spec observes the same lease acquisition,
+// the same LISTEN/NOTIFY waker and the same drain loop production runs. This is
+// what turns a committed outbox row into a published bus event — the link every
+// downstream event-driven subsystem depends on and that this harness previously
+// left unstarted.
+func (s *Server) startOutboxRelay(ctx context.Context) {
+	s.t.Helper()
+	gameID := s.bus.Bus.GameID()
+	sub := worldsetup.NewOutboxRelaySubsystem(worldsetup.OutboxRelaySubsystemConfig{
+		DB:       poolProvider{pool: s.pool},
+		EventBus: s.bus.Bus,
+		GameID:   func() string { return gameID },
+	})
+	require.NoError(s.t, sub.Prepare(ctx), "integrationtest.Start: prepare outbox relay subsystem")
+	require.NoError(s.t, sub.Activate(ctx), "integrationtest.Start: activate outbox relay subsystem")
+	s.t.Cleanup(func() {
+		if err := sub.Stop(context.Background()); err != nil {
+			s.t.Logf("integrationtest.Start: outbox relay subsystem Stop: %v", err)
+		}
+	})
+}
+
+// startRetirementReactor boots the REAL retirement reactor subsystem
+// (WithRetirementReactor) with production-SHAPED dependencies resolved from the
+// harness stack.
+//
+// Two of those dependencies are deliberately NOT the harness's own:
+//
+//   - The presence emitter is a fresh presence.NewEmitter over the bus
+//     publisher, rendering-wrapped exactly as production's is. The harness's own
+//     presenceEmitter publishes into &noopPublisher{}, so the reactor's leave and
+//     session_ended emissions would be unobservable through it — the opposite of
+//     what this option exists for.
+//   - The move destination is a location created here, DISTINCT from
+//     guestStartLocationID. Characters are seeded at the guest start location, so
+//     a destination equal to it would hit the reactor's already-there skip gate
+//     and the move would correctly emit nothing.
+//
+// Everything else is the harness's real stack: the same session store, the same
+// world.Service a spec retires through, the same job registry the ABAC engine
+// reads, and the embedded JetStream the durable consumer is created against.
+//
+// WHICH ENGINE A SPEC NEEDS. Under the default allow-all engine the reactor's
+// world calls pass the ABAC chokepoint trivially — correct for observing the
+// FANOUT, and honest about what it does not prove. A spec asserting the job's
+// authorization (the instance fence: provenance for aggregate X must not
+// authorize a write to aggregate Y) MUST pass WithRealABAC(), which seeds the
+// production corpus including seed:job-retirement-instance-scoped; the job's
+// liveness comes from this subsystem registering into the shared registry that
+// option's ABAC subsystem reads.
+func (s *Server) startRetirementReactor(ctx context.Context) {
+	s.t.Helper()
+
+	// The move destination. Persistent so it survives the whole spec.
+	startLoc := idgen.New()
+	_, err := s.locRepo.Create(ctx, &world.Location{
+		ID:           startLoc,
+		Name:         "Retirement Hall",
+		Description:  "Where retired characters are set down.",
+		Type:         world.LocationTypePersistent,
+		ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
+	})
+	require.NoError(s.t, err, "integrationtest.Start: create retirement start location")
+	s.retirementStartLoc = startLoc
+
+	sub := retirement.NewSubsystem(retirement.Config{
+		JetStream: jsHandle{js: s.bus.JS},
+		Sessions:  s.sessionStore,
+		Presence: presence.NewEmitter(
+			eventbus.NewRenderingPublisher(s.bus.Bus.Publisher(), s.verbRegistry),
+			s.bus.Bus.GameID,
+		),
+		World:           s.worldSvc,
+		Jobs:            s.jobRegistry,
+		StartLocationID: func() ulid.ULID { return startLoc },
+	})
+	require.NoError(s.t, sub.Prepare(ctx), "integrationtest.Start: prepare retirement reactor subsystem")
+	require.NoError(s.t, sub.Activate(ctx), "integrationtest.Start: activate retirement reactor subsystem")
+	s.t.Cleanup(func() {
+		if err := sub.Stop(context.Background()); err != nil {
+			s.t.Logf("integrationtest.Start: retirement reactor subsystem Stop: %v", err)
+		}
+	})
 }
 
 // startCharacterActivity boots the real charactivity subsystem against the
@@ -1572,6 +1746,29 @@ func (s *Server) Pool() *pgxpool.Pool {
 // same store the harness uses (holomush-rsoe6, Task 13).
 func (s *Server) SessionStore() session.Store {
 	return s.sessionStore
+}
+
+// World returns the harness's single world.Service — the SAME instance the
+// plugin subsystem was given and the same one WithRetirementReactor hands the
+// reactor. A spec that retires a character through this service therefore
+// exercises the identical write path the reactor later reads and moves through;
+// there is no second, differently-configured service.
+func (s *Server) World() *world.Service {
+	return s.worldSvc
+}
+
+// RetirementStartLocation returns the location WithRetirementReactor created as
+// the retirement fanout's move destination. It is distinct from the guest start
+// location the harness seeds characters at, which is what makes the move
+// observable rather than a no-op the reactor correctly skips.
+//
+// Panics when WithRetirementReactor was not passed: a zero ULID here would
+// silently turn a move assertion into an assertion about nothing.
+func (s *Server) RetirementStartLocation() ulid.ULID {
+	if s.retirementStartLoc.Compare(ulid.ULID{}) == 0 {
+		s.t.Fatalf("integrationtest: RetirementStartLocation() requires WithRetirementReactor()")
+	}
+	return s.retirementStartLoc
 }
 
 // BackdateGuestPlayer sets a guest player's updated_at to the given time.
