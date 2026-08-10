@@ -203,7 +203,10 @@ func (l *listener) tryBuffer(ctx context.Context, id ulid.ULID, key string, val 
 			// is NOT contention and no re-read cures it. Re-read anyway (the
 			// loop is bounded at three), but carry the error so an exhausted
 			// loop reports the real cause instead of blaming contention.
-			return false, updErr
+			// Wrapped bare: logBufferFailure applies the
+			// CHARACTER_ACTIVITY_BUFFER_FAILED code at the reporting site, and
+			// coding it twice would bury the diagnostic one level deeper.
+			return false, oops.Wrap(updErr)
 		}
 		return true, nil
 	}
