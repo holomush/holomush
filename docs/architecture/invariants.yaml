@@ -2314,9 +2314,9 @@ invariants:
 
   # -- v0.13 background-job authorization model (milestone v0.13, Phase 02.2).
   # Born canonical; no legacy tokens. INV-ACCESS-13 is bound by the phase's own
-  # tests; INV-ACCESS-14 is the D-55 stamping contract, deliberately left pending
-  # because Phase 02.2 ships a fixture job only (D-52) and has no consumer
-  # wrapper to assert against. Phase 3 owns binding it.
+  # tests; INV-ACCESS-14 is the D-55 stamping contract, which Phase 02.2 left
+  # pending for want of a consumer wrapper to assert against and Phase 3 bound
+  # once the D-46 wrapper and the retirement handler boundary landed.
   - id: INV-ACCESS-13
     scope: INV-ACCESS
     origin_spec: ".planning/phases/02.2-background-job-authorization-model/02.2-CONTEXT.md"
@@ -2340,8 +2340,8 @@ invariants:
       is scope drift plus handler bugs (D-53). The stamping contract -- that the provenance triple is fixed from the delivered
       message before handler logic runs and cannot be altered by the handler -- is deliberately NOT part of this entry: Phase
       02.2 ships a fixture job only (D-52) and its tests construct world.JobCaller directly, so binding that clause here would
-      be a partial-binding false-green. It is registered separately as INV-ACCESS-14 with binding: pending, for Phase 3 to
-      bind."
+      be a partial-binding false-green. It is registered separately as INV-ACCESS-14, which Phase 3 bound against the
+      retirement consumer boundary."
     binding: bound
     asserted_by:
       - "internal/access/policy/attribute/job_provider_test.go"
@@ -2354,11 +2354,19 @@ invariants:
       action.job.trigger_event_type and action.job.trigger_subject -- is stamped at the consumer boundary from the delivered
       message, before any handler logic runs, and the handler cannot alter it (D-55). This is what keeps INV-ACCESS-13's instance-scope
       conjunct from being tautological: the resource is whatever the handler independently derives, so the two sides of the
-      comparison have independent provenance. binding: pending is deliberate and is NOT a backfill oversight -- Phase 02.2
-      ships a fixture job only (D-52) and its tests construct world.JobCaller by hand, so no message, no consumer wrapper
-      and no handler boundary exists in-tree to assert this against. Phase 3 owns binding it when the D-46 neutral-package
-      consumer wrapper lands."
-    binding: pending
+      comparison have independent provenance. Phase 3 bound this, as 02.2 said it would: the D-46 neutral-package consumer
+      wrapper landed (internal/eventbus/consumer/consumer.go), and with it the handler boundary (retirement/reactor.go's
+      newDelivery) that stamps the triple from the delivered message's headers and subject before process runs. The binding
+      test spans the WHOLE boundary -- wire bytes in, the Caller the world calls authorize under out -- because the two
+      halves asserted separately do NOT compose: process's delivery is hand-built in its own test, so a handler that
+      re-derived or overwrote the provenance between the stamp and its use leaves both halves green. Spanning the boundary
+      is what makes the third clause (the handler cannot alter it) genuinely falsifiable rather than argued from
+      construction. The non-tautology clause is carried by
+      TestNewDeliveryDerivesTheCharacterIndependentlyOfTheSubject, which pins the resource to the body decode while the
+      provenance comes from the transport subject."
+    binding: bound
+    asserted_by:
+      - "internal/retirement/reactor_test.go"
 
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the

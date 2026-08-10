@@ -340,6 +340,44 @@ func TestProcessAuthorizesEveryWorldCallAsTheRetirementJobCarryingTheProvenanceT
 	require.Equal(t, want, f.world.moves[0].Caller, "the move MUST run as the job")
 }
 
+// TestHandleDecodedAuthorizesUnderProvenanceStampedFromTheDeliveredMessage is
+// the INV-ACCESS-14 binding: it spans the WHOLE consumer boundary, from wire
+// bytes to the Caller the world calls authorize under.
+//
+// The two halves were already covered separately —
+// TestNewDeliveryDerivesTheCharacterFromThePayloadAndTheProvenanceFromTheSubject
+// proves the stamp is read off the delivered message, and
+// TestProcessAuthorizesEveryWorldCallAsTheRetirementJobCarryingTheProvenanceTriple
+// proves process passes a delivery's provenance through unaltered. Neither
+// pins the COMPOSITION: process's delivery there is hand-built, so a
+// handleDecoded that re-derived or overwrote the provenance between the stamp
+// and its use would leave both green. That is exactly the "the handler cannot
+// alter it" clause, so it needs an assertion that starts at the message.
+//
+// Verifies: INV-ACCESS-14
+func TestHandleDecodedAuthorizesUnderProvenanceStampedFromTheDeliveredMessage(t *testing.T) {
+	f := newFixture(t)
+	want := world.JobCaller(JobName, world.Provenance{
+		EventID:   f.eventID.String(),
+		EventType: eventTypeCharacterRetired,
+		Subject:   f.charID.String(),
+	})
+
+	require.Equal(t, ack, f.reactor.handleDecoded(
+		context.Background(),
+		"events."+testGameID+".character."+f.charID.String(),
+		retiredHeaders(f.eventID),
+		retiredWireEvent(t, f.eventID, f.charID),
+	))
+
+	require.Len(t, f.world.getCallers, 1)
+	require.Equal(t, want, f.world.getCallers[0],
+		"the status read MUST authorize under provenance stamped from the delivered message")
+	require.Len(t, f.world.moves, 1)
+	require.Equal(t, want, f.world.moves[0].Caller,
+		"and so MUST the move — the handler alters nothing between the stamp and its use")
+}
+
 // --- idempotency under at-least-once redelivery ------------------------
 
 func TestProcessSkipsBothNotificationsWhenRedeliveryFindsNoSessionToEnd(t *testing.T) {
