@@ -65,9 +65,15 @@ type fakeKV struct {
 	// beforeDelete runs inside DeleteRevision before the revision comparison —
 	// the seam that interleaves a concurrent listener Put mid-flush.
 	beforeDelete func()
-	// beforeGet runs inside Get before the lookup — the seam that interleaves
-	// a concurrent write between the listener's read and its guarded write.
-	beforeGet func()
+	// afterGet runs inside Get AFTER the lookup has captured its entry — the
+	// seam that interleaves a concurrent write into the window between the
+	// listener's read and its revision-conditional write.
+	//
+	// AFTER, not before, is the whole point: a hook that fires before the
+	// lookup lands its write ahead of the read, so the listener sees the
+	// interposed value and settles at the monotonic early exit without ever
+	// reaching Update. That made the revision guard unfalsifiable.
+	afterGet func()
 
 	listErr error
 	putErr  error
@@ -91,19 +97,20 @@ func (k *fakeKV) Put(_ context.Context, key string, value []byte) (uint64, error
 }
 
 func (k *fakeKV) Get(_ context.Context, key string) (jetstream.KeyValueEntry, error) {
-	// Same capture-under-lock/invoke-after-unlock shape as DeleteRevision: the
-	// hook re-enters this fake, so the mutex must not be held across it.
+	// The entry is captured under the lock (a real Get returns a SNAPSHOT at
+	// its own revision, which is exactly what the caller's later Update is
+	// conditioned on), and the hook is invoked after releasing it: the hook
+	// re-enters this fake, so holding the mutex across it would deadlock.
 	k.mu.Lock()
-	hook := k.beforeGet
-	k.beforeGet = nil
+	hook := k.afterGet
+	k.afterGet = nil
+	e, ok := k.entries[key]
 	k.mu.Unlock()
+
 	if hook != nil {
 		hook()
 	}
 
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	e, ok := k.entries[key]
 	if !ok {
 		return nil, jetstream.ErrKeyNotFound
 	}
@@ -387,6 +394,12 @@ func TestListenerAdvancesABufferedTimestampToANewerOne(t *testing.T) {
 // TestListenerLeavesABufferedValueThatChangedBetweenItsReadAndItsWrite pins the
 // revision guard on the buffer write: a concurrent writer that already advanced
 // the key wins, and losing that race is harmless because the winner is newer.
+//
+// The interposed write lands via afterGet, so it really does fall in the window
+// BETWEEN the listener's read and its write. A beforeGet seam would land it
+// ahead of the read, and the listener would settle at the monotonic early exit
+// without ever calling Update — leaving this guard untested and green even
+// against an unconditional Put.
 func TestListenerLeavesABufferedValueThatChangedBetweenItsReadAndItsWrite(t *testing.T) {
 	ctx := context.Background()
 	charID := core.NewULID()
@@ -396,9 +409,11 @@ func TestListenerLeavesABufferedValueThatChangedBetweenItsReadAndItsWrite(t *tes
 	l := newTestListener(kv)
 	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, base))
 
-	// A concurrent writer lands between this listener's Get and its Update.
+	// A concurrent writer lands between this listener's Get and its Update, and
+	// stores a value NEWER than the one the listener is holding — so only the
+	// revision check, not the monotonic check, can refuse the listener's write.
 	interposed := strconv.FormatInt(base.Add(2*time.Hour).UnixNano(), 10)
-	kv.beforeGet = func() {
+	kv.afterGet = func() {
 		_, err := kv.Put(ctx, charID.String(), []byte(interposed))
 		require.NoError(t, err)
 	}
