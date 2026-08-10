@@ -7,6 +7,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
@@ -20,10 +21,26 @@ import (
 
 // --- lifecycle fakes ---------------------------------------------------
 
+// fakeConsumeContext models the REAL jetstream.ConsumeContext teardown
+// contract, which the subsystem's join depends on.
+//
+// Stop() IS NOT A BARRIER: in nats.go it only flags the subscription and
+// returns while the dispatch goroutine is still running the handler. A fake
+// that closed Closed() synchronously inside Stop would assert the opposite
+// contract, and every lifecycle test would then pass with the
+// <-cc.Closed() join deleted from Activate outright — which is exactly what
+// this fake used to do.
+//
+// Closed() is the real barrier, signalled only once the in-flight handler has
+// returned, so a test can finally observe the ordering Activate's doc block
+// claims: the job's ABAC liveness outlives the last process().
 type fakeConsumeContext struct {
 	mu      sync.Mutex
 	stopped bool
 	closed  chan struct{}
+	// inFlight, when set, stands in for a process() that is STILL MID-FANOUT
+	// when Stop is called.
+	inFlight func()
 }
 
 func newFakeConsumeContext() *fakeConsumeContext {
@@ -32,11 +49,23 @@ func newFakeConsumeContext() *fakeConsumeContext {
 
 func (f *fakeConsumeContext) Stop() {
 	f.mu.Lock()
-	defer f.mu.Unlock()
-	if !f.stopped {
-		f.stopped = true
-		close(f.closed)
+	already := f.stopped
+	f.stopped = true
+	inFlight := f.inFlight
+	f.mu.Unlock()
+	if already {
+		return
 	}
+	// Deliberately NOT synchronous, and deliberately not joined by Stop: the
+	// real Stop returns while the handler is still running, and only the
+	// subscription's closed handler — modelled by close(f.closed) below —
+	// fires after it has returned.
+	go func() {
+		if inFlight != nil {
+			inFlight()
+		}
+		close(f.closed)
+	}()
 }
 
 func (f *fakeConsumeContext) Drain() { f.Stop() }
@@ -66,17 +95,25 @@ func (f *fakeConsumer) Consume(handler jetstream.MessageHandler, _ ...jetstream.
 }
 
 // fakeJobs records the liveness declarations the subsystem makes.
+//
+// It is mutex-guarded because Unregister is reached from Stop while an
+// in-flight handler (modelled on the consume context's own goroutine) may
+// still be marking the same log — which is the whole ordering this package
+// needs to be able to assert.
 type fakeJobs struct {
+	mu         sync.Mutex
 	registered map[string][]string
 	registerEr error
 	// events records the registration ORDER so it can be checked against
-	// consumer startup.
+	// consumer startup and against handler completion.
 	events []string
 }
 
 func newFakeJobs() *fakeJobs { return &fakeJobs{registered: map[string][]string{}} }
 
 func (f *fakeJobs) Register(name string, writes []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.events = append(f.events, "register:"+name)
 	if f.registerEr != nil {
 		return f.registerEr
@@ -86,8 +123,34 @@ func (f *fakeJobs) Register(name string, writes []string) error {
 }
 
 func (f *fakeJobs) Unregister(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.events = append(f.events, "unregister:"+name)
 	delete(f.registered, name)
+}
+
+// mark appends an arbitrary ordering marker to the same log the liveness
+// declarations land in, so a handler's completion is orderable against them.
+func (f *fakeJobs) mark(event string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, event)
+}
+
+func (f *fakeJobs) recorded() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.events...)
+}
+
+func (f *fakeJobs) declared() map[string][]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make(map[string][]string, len(f.registered))
+	for name, writes := range f.registered {
+		out[name] = writes
+	}
+	return out
 }
 
 // newLifecycleSubsystem builds a Subsystem with every effect surface wired to
@@ -286,7 +349,7 @@ func TestActivateDeclaresTheJobLiveBeforeAnyMessageCanBeDelivered(t *testing.T) 
 	require.Equal(t, 0, cons.calls, "Prepare MUST NOT start consuming")
 
 	require.NoError(t, s.Activate(ctx))
-	require.Equal(t, []string{"register:" + JobName}, jobsReg.events)
+	require.Equal(t, []string{"register:" + JobName}, jobsReg.recorded())
 	require.Equal(t, 1, cons.calls)
 	require.NoError(t, s.Stop(ctx))
 }
@@ -300,8 +363,44 @@ func TestActivateDeclaresOnlyTheCharacterWriteCapabilityClass(t *testing.T) {
 	require.NoError(t, s.Prepare(ctx))
 	require.NoError(t, s.Activate(ctx))
 
-	require.Equal(t, map[string][]string{JobName: {"character"}}, jobsReg.registered)
+	require.Equal(t, map[string][]string{JobName: {"character"}}, jobsReg.declared())
 	require.NoError(t, s.Stop(ctx))
+}
+
+// TestStopJoinsAnInFlightHandlerBeforeRetractingTheJobsLiveness is the
+// ordering Activate's <-cc.Closed() barrier exists for, and the one nothing in
+// this package could previously falsify.
+//
+// Stop() alone is not a barrier: a process() can still be mid-fanout when it
+// returns. If Stop went straight on to unregisterJob(), that still-running
+// MoveCharacter would lose its ABAC attributes mid-flight, and classifyWorldError
+// would ack the resulting deny as terminal — permanently abandoning a
+// half-applied fanout (session already deleted, character never moved).
+//
+// The in-flight marker MUST therefore land before the unregister, not after.
+func TestStopJoinsAnInFlightHandlerBeforeRetractingTheJobsLiveness(t *testing.T) {
+	ctx := context.Background()
+	jobsReg := newFakeJobs()
+	s, cons, _ := newLifecycleSubsystemWithJobs(t, jobsReg)
+	require.NoError(t, s.Prepare(ctx))
+	require.NoError(t, s.Activate(ctx))
+
+	cons.cc.mu.Lock()
+	cons.cc.inFlight = func() {
+		// A process() that was already mid-fanout when Stop was called. The
+		// sleep is what makes the ordering claim falsifiable rather than
+		// accidentally satisfied by goroutine scheduling.
+		time.Sleep(20 * time.Millisecond)
+		jobsReg.mark("handler-finished")
+	}
+	cons.cc.mu.Unlock()
+
+	require.NoError(t, s.Stop(ctx))
+
+	require.Equal(t,
+		[]string{"register:" + JobName, "handler-finished", "unregister:" + JobName},
+		jobsReg.recorded(),
+		"the job's ABAC liveness MUST outlive the last in-flight process()")
 }
 
 func TestStopRetractsTheJobsLivenessDeclaration(t *testing.T) {
@@ -311,7 +410,7 @@ func TestStopRetractsTheJobsLivenessDeclaration(t *testing.T) {
 	require.NoError(t, s.Activate(ctx))
 	require.NoError(t, s.Stop(ctx))
 
-	require.Empty(t, jobsReg.registered, "a stopped reactor MUST resolve to no job attributes")
+	require.Empty(t, jobsReg.declared(), "a stopped reactor MUST resolve to no job attributes")
 }
 
 // TestActivateRetractsTheJobDeclarationWhenConsumeFails keeps a failed boot
@@ -323,7 +422,7 @@ func TestActivateRetractsTheJobDeclarationWhenConsumeFails(t *testing.T) {
 	require.NoError(t, s.Prepare(ctx))
 
 	require.Error(t, s.Activate(ctx))
-	require.Empty(t, jobsReg.registered)
+	require.Empty(t, jobsReg.declared())
 }
 
 func TestActivateFailsWhenTheJobRegistrationIsRejected(t *testing.T) {
