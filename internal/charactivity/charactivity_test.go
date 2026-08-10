@@ -647,12 +647,61 @@ func TestStopJoinsBothProducersBeforeTheFinalDrain(t *testing.T) {
 // Stop's <-s.done wait and the shutdown goroutine's <-cc.Closed() wait start at
 // essentially the same instant: Stop cancels runCtx, and the goroutine's
 // <-runCtx.Done() returns immediately. Give the two the same budget and their
-// timers expire together, so the join can never observe the barrier resolving —
-// under a wedged handler the final drain is then skipped or not on a coin flip.
+// timers expire together, so the join can never observe the barrier resolving.
 // Collapsing these back to one constant is the regression this guards.
+//
+// The margin does NOT by itself decide the drain: the barrier goroutine returns
+// on its timeout arm too, so s.done closes either way. That distinction is
+// s.barrierOK's, covered by TestStopSkipsTheFinalDrainWhenTheBarrierWasAbandoned.
 func TestTheJoinBudgetStrictlyOutlastsTheBarrierBudget(t *testing.T) {
 	require.Greater(t, stopTimeout, barrierTimeout,
 		"the outer join MUST outlast the inner barrier, or it can never observe it resolving")
+}
+
+// TestStopSkipsTheFinalDrainWhenTheBarrierWasAbandoned is the corrected R2b
+// claim, exercised on the path that actually reaches it.
+//
+// TestStopJoinsBothProducersBeforeTheFinalDrain covers the arm where the
+// barrier RESOLVES. It cannot cover this one: its inFlight hook sleeps 20ms,
+// three orders of magnitude inside the barrier. On a genuinely wedged handler
+// the barrier goroutine LOGS AND RETURNS, wg.Wait completes, done closes — so
+// inferring the barrier's outcome from the join concludes "joined" and runs the
+// final drain under a live listener, which is precisely what R2b forbids.
+//
+// Here the handler outlives a shortened barrier, so the drain must be skipped
+// and the buffer left intact for the next boot.
+func TestStopSkipsTheFinalDrainWhenTheBarrierWasAbandoned(t *testing.T) {
+	ctx := context.Background()
+	kv := newFakeKV()
+	id := core.NewULID()
+	_, err := kv.Put(ctx, id.String(), []byte("1000"))
+	require.NoError(t, err)
+
+	w := &recordingWriter{}
+	s := newFakeWiredSubsystem(t, kv, w.write)
+	s.barrier = 10 * time.Millisecond
+	require.NoError(t, s.Prepare(ctx))
+	require.NoError(t, s.Activate(ctx))
+
+	cons, ok := s.cons.(*fakeConsumer)
+	require.True(t, ok, "the fake wiring installs a fakeConsumer")
+	handlerDone := make(chan struct{})
+	cons.cc.mu.Lock()
+	cons.cc.inFlight = func() {
+		// A listener handler still live well past the barrier's budget.
+		time.Sleep(200 * time.Millisecond)
+		close(handlerDone)
+	}
+	cons.cc.mu.Unlock()
+
+	require.NoError(t, s.Stop(ctx))
+
+	assert.Empty(t, w.recorded(),
+		"the final drain MUST NOT run while a listener handler may still be Putting")
+	assert.Len(t, kv.snapshot(), 1,
+		"and the buffered value MUST survive for the next boot to flush")
+
+	<-handlerDone
 }
 
 // TestStopAfterPrepareOnlyPerformsNoDatabaseWrite pins the activated/joined

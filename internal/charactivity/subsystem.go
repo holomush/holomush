@@ -34,16 +34,24 @@ import (
 // to return. Mirrors the outbox relay subsystem's budget.
 const barrierTimeout = 5 * time.Second
 
-// stopTimeout bounds how long Stop waits to JOIN that goroutine.
+// stopTimeout bounds how long Stop waits to JOIN that goroutine. It is a LAST
+// RESORT, not the gate on the final drain.
 //
-// It MUST be strictly larger than barrierTimeout. Both waits start at
-// essentially the same instant — Stop cancels runCtx, and the goroutine's
-// <-runCtx.Done() returns immediately — so equal budgets expire together and
-// the outer join can NEVER observe the inner barrier resolving. Under a wedged
-// handler the outcome would then be settled by whichever timer the runtime
-// happens to fire first rather than by the barrier, and the final drain would
-// be skipped on a coin flip. The margin is what makes the join deterministic.
+// It MUST be strictly larger than barrierTimeout so the join can observe the
+// barrier resolving rather than expiring alongside it. The consequence of that
+// ordering is that this arm is nearly unreachable: the barrier goroutine
+// returns on BOTH of its arms, so done closes within barrierTimeout + ε
+// whether or not a handler is wedged. What is left for this arm to catch is
+// the residual case where a producer never exited at all — the flush ticker
+// wedged inside a drain, say. Whether the LISTENER was joined is a different
+// question, answered by s.barrierOK.
 const stopTimeout = barrierTimeout + time.Second
+
+// drainTimeout bounds the shutdown drain. It was previously stopTimeout reused
+// as a second budget, which coupled the join's deadline to the drain's for no
+// reason: they bound unrelated work, and a change to either silently moved the
+// other.
+const drainTimeout = 5 * time.Second
 
 // BucketName is the JetStream KV bucket the listener buffers into. It is the
 // repo's FIRST KV bucket; the name is a durable, not-safely-renamable
@@ -190,7 +198,22 @@ type Subsystem struct {
 	cancel context.CancelFunc
 	// done guards Activate and is closed when the listener wrapper and the
 	// flush ticker have BOTH exited. Nil until Activate has run.
+	//
+	// It records GOROUTINE EXIT, not handler join: the barrier goroutine
+	// returns on both of its arms, so done closes even when a listener handler
+	// outlived the barrier. Gating the final drain on it alone reintroduces
+	// exactly the activated-vs-joined conflation one level down — see
+	// barrierOK.
 	done chan struct{}
+	// barrierOK is closed ONLY on the arm where cc.Closed() resolved, i.e.
+	// only when no listener handler is in flight. It is the drain's real
+	// precondition: R2b promises the final drain cannot race a listener Put,
+	// and only this signal can prove that.
+	barrierOK chan struct{}
+	// barrier overrides barrierTimeout. Zero in production; package tests
+	// shorten it so the abandoned-barrier path is reachable in a unit test
+	// rather than only after five real seconds.
+	barrier time.Duration
 
 	// createKV and createConsumer are the acquisition seams. Nil in
 	// production, where Prepare builds the real bucket and durable consumer;
@@ -381,10 +404,14 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 	}
 	s.cc = cc
 
-	// done closes only after BOTH producers have exited, which is what makes
-	// Stop's join real (R2b).
+	// done closes only after BOTH producers have exited; barrierOK records
+	// whether the listener's in-flight handler was actually joined. The drain
+	// needs the second fact, not the first (R2b).
 	done := make(chan struct{})
 	s.done = done
+	barrierOK := make(chan struct{})
+	s.barrierOK = barrierOK
+	budget := s.barrierBudget()
 	f := &flusher{cfg: s.cfg, kv: s.kv}
 	go func() {
 		defer close(done)
@@ -408,15 +435,19 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 			// is in flight.
 			select {
 			case <-cc.Closed():
-			case <-time.After(barrierTimeout):
+				// No handler is in flight, so the final drain cannot race a
+				// listener Put. This is the ONLY arm that establishes R2b's
+				// precondition — the timeout arm below returns too, so
+				// goroutine exit proves nothing.
+				close(barrierOK)
+			case <-time.After(budget):
 				// A handler is wedged. Bounded rather than blocking shutdown
 				// forever; the buffer is durable, so the next boot flushes it.
-				// Logged because an abandoned barrier is the precondition for
-				// the skipped final drain below, and a silent arm leaves an
-				// operator with nothing to correlate that against.
+				// barrierOK is deliberately left OPEN, which is what makes Stop
+				// skip the final drain rather than run it under a live handler.
 				slog.WarnContext(runCtx,
 					"character activity listener barrier timed out; a handler may still be in flight",
-					"subsystem", s.ID().String(), "timeout", barrierTimeout.String())
+					"subsystem", s.ID().String(), "timeout", budget.String())
 			}
 		}()
 		go func() {
@@ -431,10 +462,19 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 	return nil
 }
 
-// Stop halts both producers, JOINS them, and only then runs one final drain,
-// so no listener Put can race the shutdown flush (R2b). Both guards are reset
-// so a legitimate Prepare/Activate retry after Stop reattaches the bucket and
-// relaunches the loops rather than short-circuiting on torn-down state.
+// Stop halts both producers and runs one final drain ONLY when both were
+// observably joined; a barrier timeout SKIPS the drain (R2b).
+//
+// The conditional is the guarantee, not a caveat on it. Stop cannot promise
+// "no listener Put races the shutdown flush" unconditionally, because the
+// barrier is bounded: a handler wedged past barrierTimeout is abandoned rather
+// than waited on forever. What Stop can promise — and what R2b actually needs —
+// is that the drain never runs while such a handler may still be live. Skipping
+// is safe: the buffer is durable, so the next boot flushes it.
+//
+// Both guards are reset so a legitimate Prepare/Activate retry after Stop
+// reattaches the bucket and relaunches the loops rather than short-circuiting
+// on torn-down state.
 func (s *Subsystem) Stop(ctx context.Context) error {
 	kv := s.kv
 
@@ -452,13 +492,14 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 	// subsystem fails to prepare or activate. A failed boot MUST NOT mutate
 	// characters.
 	activated := s.done != nil
-	joined := false
+	exited := false
 	if activated {
 		select {
 		case <-s.done:
-			joined = true
+			exited = true
 		case <-time.After(stopTimeout):
-			// A producer is wedged past even the barrier's own budget.
+			// Last resort only: the barrier goroutine returns on both of its
+			// arms, so reaching here means a producer never exited at all.
 			// Skipping the final drain is the safe answer: the buffer is
 			// durable, so the next boot flushes it. Logged because a shutdown
 			// that silently skips its drain is otherwise indistinguishable
@@ -470,10 +511,31 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 		s.done = nil
 	}
 
+	// JOINED is a stronger fact than EXITED, and conflating them is the same
+	// bug as conflating ACTIVATED with JOINED one level up. The barrier
+	// goroutine returns on its timeout arm too, so s.done closing proves only
+	// that it stopped waiting — NOT that the listener handler finished. Only
+	// barrierOK proves the latter, and only the latter licenses the drain.
+	joined := false
+	if s.barrierOK != nil {
+		select {
+		case <-s.barrierOK:
+			joined = true
+		default:
+			// A handler outlived the barrier. Skip the drain, exactly as the
+			// outer arm above already says is the safe answer under a wedged
+			// producer — the buffer is durable.
+			slog.WarnContext(ctx,
+				"character activity listener outlived its barrier; skipping the final drain",
+				"subsystem", s.ID().String(), "barrier_timeout", s.barrierBudget().String())
+		}
+		s.barrierOK = nil
+	}
+
 	// One last drain, on a context detached from the (already cancelled)
 	// producer context — and ONLY once both producers are known to be gone.
-	if activated && joined && kv != nil {
-		drainCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stopTimeout)
+	if activated && exited && joined && kv != nil {
+		drainCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), drainTimeout)
 		(&flusher{cfg: s.cfg, kv: kv}).drain(drainCtx)
 		cancel()
 	}
@@ -483,6 +545,15 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 	s.cons = nil
 	s.kv = nil
 	return nil
+}
+
+// barrierBudget returns the Closed() barrier's budget: the production constant
+// unless a package test shortened it.
+func (s *Subsystem) barrierBudget() time.Duration {
+	if s.barrier > 0 {
+		return s.barrier
+	}
+	return barrierTimeout
 }
 
 // unregisterJob drops the job's liveness declaration, so a stopped job's
