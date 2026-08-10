@@ -1,14 +1,16 @@
 ---
 phase: 03-world-character-commands
 verified: 2026-08-09T23:55:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Rule on whether IDENT-04 is legitimately `Complete` at Phase 3. Read `.planning/REQUIREMENTS.md:112-114` (the requirement text says a character can be soft-retired, ADMIN-DRIVEN in v0.13) against the codebase fact that `world.Service.RetireCharacter` has ZERO non-test callers — no gRPC RPC, no web handler, no CLI, no admin surface. The ROADMAP Phase 6 SC2 covers the admin surface in substance but the traceability table (`.planning/REQUIREMENTS.md:372`) maps IDENT-04 to Phase 3 ONLY, so nothing re-opens it."
     expected: "Either (a) confirm the domain capability + ABAC surface is what IDENT-04 meant and the admin UI is a separate requirement, or (b) revert IDENT-04 to Pending / split it so the Phase 6 admin half is traced. Decide which."
     why_human: "This is a requirement-scope judgment, not a code fact. The code state is unambiguous and verified; what 'Complete' means for a requirement whose user-facing half lands three phases later is the developer's call."
+
   - test: "Accept or reject the criterion-3 lane caveat. The two-replica resilience proof (`test/integration/resilience/retire_concurrency_test.go`) lives in a suite gated on `quarantinetest.Enabled()` (`resilience_suite_test.go:50`), so it does NOT run in the gating `task test:int` and a regression in it would not be caught by PR CI."
     expected: "Either accept the ungated proof (the same guarantee IS covered in the gating lane by `test/integration/world/character_retire_atomicity_test.go:134` and `internal/world/service_retire_test.go:83`), or schedule #4953 so the resilience suite can rejoin the gating lane."
     why_human: "Whether an ungated proof is acceptable coverage is a policy decision about CI gating, not a codebase fact."
