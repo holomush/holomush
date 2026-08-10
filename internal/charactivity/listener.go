@@ -124,10 +124,22 @@ func (l *listener) buffer(ctx context.Context, id ulid.ULID, nanos int64) {
 	key := id.String()
 	val := []byte(strconv.FormatInt(nanos, 10))
 
+	var lastErr error
 	for attempt := 0; attempt < bufferAttempts; attempt++ {
-		if l.tryBuffer(ctx, id, key, val, nanos) {
+		settled, err := l.tryBuffer(ctx, id, key, val, nanos)
+		if settled {
 			return
 		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		// NOT contention: a transport failure, a deleted bucket or a cancelled
+		// context, which no amount of re-reading cures. Distinguishing it
+		// matters because the give-up line below is invisible at the default
+		// level, so folding the two together left a persistent failure confined
+		// to already-buffered keys logging nothing an operator would ever see.
+		l.logBufferFailure(ctx, id, lastErr)
+		return
 	}
 	// Sustained contention on ONE character's key. Debug, not error: the buffer
 	// is best-effort by construction and the next event this character causes
@@ -146,9 +158,12 @@ const bufferAttempts = 3
 // tryBuffer performs one compare-and-set pass over the buffered value.
 //
 // It reports whether the outcome is SETTLED — stored, deliberately skipped as
-// not-newer, or failed in a way no re-read can cure. A false return means only
-// that the key moved under this pass and re-reading is warranted.
-func (l *listener) tryBuffer(ctx context.Context, id ulid.ULID, key string, val []byte, nanos int64) bool {
+// not-newer, or failed in a way no re-read can cure — and, when NOT settled,
+// the error that refused the write. A nil error alongside a false return is a
+// pure revision refusal (the key moved); a non-nil one is an infrastructure
+// failure the caller escalates once the attempts are spent, rather than
+// reporting every exhausted loop as contention.
+func (l *listener) tryBuffer(ctx context.Context, id ulid.ULID, key string, val []byte, nanos int64) (bool, error) {
 	entry, err := l.kv.Get(ctx, key)
 	switch {
 	case errors.Is(err, jetstream.ErrKeyNotFound):
@@ -159,28 +174,38 @@ func (l *listener) tryBuffer(ctx context.Context, id ulid.ULID, key string, val 
 				// Someone else buffered between our read and our Create. Their
 				// value may well be OLDER than ours — they raced us from the
 				// same absent state — so re-read rather than assume we lost.
-				return false
+				return false, nil
 			}
 			l.logBufferFailure(ctx, id, createErr)
 		}
-		return true
+		return true, nil
 	case err != nil:
 		l.logBufferFailure(ctx, id, err)
-		return true
+		return true, nil
 	default:
 		// An UNPARSABLE buffered value is not newer than anything — fall
 		// through and cure it, exactly as the flusher's revision-conditional
 		// drop of the same value would.
 		if prev, perr := strconv.ParseInt(string(entry.Value()), 10, 64); perr == nil && prev >= nanos {
-			return true // an older (or duplicate) redelivery MUST NOT clobber newer buffered activity
+			return true, nil // an older (or duplicate) redelivery MUST NOT clobber newer buffered activity
 		}
 		if _, updErr := l.kv.Update(ctx, key, val, entry.Revision()); updErr != nil {
-			// The key moved between the Get and the Update: a concurrent write
-			// OR the flusher's delete of the very revision we read. Which one
-			// it was is only knowable by re-reading.
-			return false
+			if errors.Is(updErr, jetstream.ErrKeyExists) {
+				// A pure REVISION refusal — the key moved between the Get and
+				// the Update: a concurrent write OR the flusher's delete of the
+				// very revision we read. Which one it was is only knowable by
+				// re-reading, and exhausting the attempts on it is contention,
+				// not failure. (nats.go surfaces a wrong-last-sequence publish
+				// as ErrKeyExists, matched by error code 10071.)
+				return false, nil
+			}
+			// Anything else — transport down, bucket deleted, ctx cancelled —
+			// is NOT contention and no re-read cures it. Re-read anyway (the
+			// loop is bounded at three), but carry the error so an exhausted
+			// loop reports the real cause instead of blaming contention.
+			return false, updErr
 		}
-		return true
+		return true, nil
 	}
 }
 

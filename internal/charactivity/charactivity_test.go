@@ -4,8 +4,10 @@
 package charactivity
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 	"sync"
 	"testing"
@@ -77,6 +79,11 @@ type fakeKV struct {
 
 	listErr error
 	putErr  error
+	// alwaysConflict makes every Update refuse with a revision conflict, as a
+	// writer that wins the race on every pass would. Distinct from putErr,
+	// which models an infrastructure failure — the listener treats the two
+	// differently and only a fake that can produce BOTH can prove it.
+	alwaysConflict bool
 
 	lastLister *fakeLister
 }
@@ -145,8 +152,17 @@ func (k *fakeKV) Update(_ context.Context, key string, value []byte, revision ui
 	if !ok {
 		return 0, jetstream.ErrKeyNotFound
 	}
-	if e.rev != revision {
-		return 0, errors.New("wrong last sequence")
+	if k.alwaysConflict || e.rev != revision {
+		// jetstream.ErrKeyExists, NOT a bare errors.New: nats.go implements
+		// Update as a publish with WithExpectLastSequencePerSubject, so a
+		// revision conflict comes back as an *APIError carrying error code
+		// 10071 (wrong last sequence), which ErrKeyExists matches on. The
+		// listener discriminates a revision refusal from an infrastructure
+		// failure on exactly that comparison, so a fake returning an opaque
+		// error would make every conflict look like a transport failure —
+		// and the escalation test below would pass against a listener that
+		// blamed contention for everything.
+		return 0, jetstream.ErrKeyExists
 	}
 	k.nextRev++
 	k.entries[key] = fakeEntry{key: key, value: value, rev: k.nextRev}
@@ -423,6 +439,68 @@ func TestListenerLeavesABufferedValueThatChangedBetweenItsReadAndItsWrite(t *tes
 	require.True(t, ok)
 	assert.Equal(t, interposed, string(e.value),
 		"the write is revision-conditional, so the concurrent writer's value survives")
+}
+
+// TestListenerReportsAnInfrastructureFailureOnTheUpdatePathRatherThanBlamingContention
+// separates the two ways the bounded retry can run out of attempts.
+//
+// A revision refusal is contention: best-effort by construction, logged at
+// Debug. A transport failure, a deleted bucket or a cancelled context is NOT,
+// and no re-read cures it — but it exits the loop by the same door. Folding
+// them together meant CHARACTER_ACTIVITY_BUFFER_FAILED was unreachable from the
+// Update path entirely, so a persistent failure confined to already-buffered
+// keys logged nothing above Debug and attributed itself to contention.
+func TestListenerReportsAnInfrastructureFailureOnTheUpdatePathRatherThanBlamingContention(t *testing.T) {
+	// slog.SetDefault is process-global: this test MUST NOT call t.Parallel().
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx := context.Background()
+	charID := core.NewULID()
+	base := time.Unix(0, 1_700_000_000_000_000_000).UTC()
+
+	kv := newFakeKV()
+	l := newTestListener(kv)
+	// Seed a buffered value so the listener takes the Update path, not Create.
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, base))
+
+	// A bucket-wide outage: every write fails, and not with a revision conflict.
+	kv.putErr = errors.New("nats: connection closed")
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, base.Add(time.Hour)))
+
+	assert.Contains(t, logBuf.String(), "CHARACTER_ACTIVITY_BUFFER_FAILED",
+		"a real write failure MUST reach the operator, not be filed as contention")
+	assert.NotContains(t, logBuf.String(), "gave up buffering under contention")
+}
+
+// TestListenerStillTreatsAnExhaustedRevisionRaceAsContention is the other half:
+// escalating a pure revision conflict to ERROR would make an ordinary,
+// self-healing race look like an outage.
+func TestListenerStillTreatsAnExhaustedRevisionRaceAsContention(t *testing.T) {
+	// slog.SetDefault is process-global: this test MUST NOT call t.Parallel().
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx := context.Background()
+	charID := core.NewULID()
+	base := time.Unix(0, 1_700_000_000_000_000_000).UTC()
+
+	kv := newFakeKV()
+	l := newTestListener(kv)
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, base))
+
+	// A writer that wins the race on EVERY pass, always storing something
+	// older than the listener's value so the monotonic exit never settles it.
+	kv.alwaysConflict = true
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, base.Add(time.Hour)))
+
+	assert.Contains(t, logBuf.String(), "gave up buffering under contention")
+	assert.NotContains(t, logBuf.String(), "CHARACTER_ACTIVITY_BUFFER_FAILED",
+		"a revision race is contention, not an outage")
 }
 
 // TestListenerRebuffersItsValueWhenTheFlusherDeletedTheKeyItRead is the
