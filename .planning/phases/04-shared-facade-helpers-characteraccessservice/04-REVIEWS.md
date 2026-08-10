@@ -1,7 +1,7 @@
 ---
 phase: 4
-reviewers: [codex]
-reviewed_at: 2026-08-10T19:43:48Z
+reviewers: [codex, claude]
+reviewed_at: 2026-08-10T23:06:35Z
 plans_reviewed: [04-01-PLAN.md, 04-02-PLAN.md, 04-03-PLAN.md, 04-04-PLAN.md, 04-05-PLAN.md, 04-06-PLAN.md, 04-07-PLAN.md, 04-08-PLAN.md, 04-09-PLAN.md]
 source_grounding: true
 ---
@@ -1876,3 +1876,121 @@ preferred edit (one derived predicate reusing a shipped helper), and fix H2 by i
 default (three sentences). All three are edits to a single task in a single plan and none changes the
 phase's shape. Carry M1, L1, L2, L3, L4 as documented accepted risk if the loop must close now — none
 of them can cause an incorrect implementation, only an over-stated one.
+
+---
+
+# Cross-AI Plan Review — Phase 4 · Cycle 6
+
+**Reviewer:** claude (headless Claude CLI, model pinned `claude-fable-5` via `review.models.claude`;
+lane explicitly selected by the user with `--claude`, overriding the runtime-independence skip — the
+lane ran as a fresh non-interactive session with full repo read access) + orchestrator
+source-grounding pass on the one new finding.
+**Reviewed at:** 2026-08-10T23:06Z.
+**Plans reviewed:** all nine, with a disposition audit of cycle 5's eight open findings and a fresh
+pass over the seven plans cycle 5 did not re-audit.
+**Scope note:** the nine PLAN.md files are byte-identical to their cycle-5 state — the only commits
+since `b97d049a1` are the cycle-5 review (`764cd047b`) and the handoff record (`e0734e1f8`). This
+cycle is therefore a verification cycle, not a fix-disposition cycle: nothing could have been
+resolved on disk, and nothing was.
+Trend (total unresolved, per the handoff §5 accounting): 8 → 6 → 2 → 6 → 8 → **9** (3 HIGH + 6
+actionable non-HIGH; the rise is one net-new MEDIUM in `04-05`, not regression in previously audited
+material — the eight cycle-5 findings carry over unchanged because no plan was edited).
+
+## Claude Review
+
+## 1. Summary
+
+The nine plans are unchanged since cycle 5, and my independent verification confirms that all eight open findings are still real — none was fixed on disk, and none was overstated in a way that would justify rejection. The plans' factual grounding is otherwise excellent: every anchor I spot-checked in the seven plans cycle 5 did not re-audit is accurate at HEAD (`resolvePlayerSessionWithRepo` at `internal/grpc/auth_handlers.go:174`; the 24/21 call-site counts and the 5 guest-literal assertions; the 116/16/81 and 36/28/27 heading counts; `AppSchemaVersion = 2` at `internal/world/outbox/taxonomy.go:27`; `propertyWriter` at `mutator.go:156`; `CharacterDirectoryResource` at `prefix.go:273`; the seeds at `seed.go:39` and `:575`; the viewerTwins pattern count of 5; next-free ids INV-ACCESS-15 and INV-PRIVACY-12). I found one genuinely new issue: **04-05 Task 3 cannot flip INV-PRIVACY-9 to `bound` as scoped**, because the binding meta-test requires a `// Verifies:` annotation in a test file that no plan adds and that sits outside 04-05's `files_modified`. The remaining risk is concentrated in 04-08 (the census plan, wave 6) — the rest of the phase is execution-ready.
+
+## 2. Cycle-5 Disposition Audit
+
+| Finding | Verdict | Evidence |
+|---|---|---|
+| **H1** (04-08 mutual-unsatisfiability) | **CONFIRMED** | `04-08-PLAN.md:355-360` instructs "check them in as a literal set rather than leaving them as prose"; the Task 2 acceptance criterion at `:485` requires "the two public-audience RPC names appear in the file only inside the comment explaining their deliberate exclusion." A Go set literal `{"GetCharacterProfile", "ListCharacterDirectory"}` is not "only inside the comment" — an executor cannot satisfy both. No edit since cycle 5 (`git log` tip for plans is `b97d049a1`). |
+| **H2** (partition universe filter fails open) | **CONFIRMED** | The filter at `04-08-PLAN.md:346-352`/`:473` accepts only the unary shape (2 params, first `context.Context`; 2 results, second `error`). A server-streaming handler — `(req, stream) error`, the shape at `internal/grpc/subscribe_handler.go` — is outside the universe, so a future streaming RPC on `CharacterAccessServer` that references neither gate ships GREEN, directly contradicting must-haves truth 3 ("a new owner-audience RPC added later that bypasses the gate fails the census"). Also real: a proto-declared RPC with no hand-written handler is served by the promoted `Unimplemented` stub, which produces no `FuncDecl` in walked files. Severity is honest at HIGH because the truth statement claims universality; the *current* Phase-4 surface is all-unary, so exposure is future-dated. |
+| **H3** (public-audience literal is a one-line bypass) | **CONFIRMED** | The rebuttal at `04-08-PLAN.md:411-415` ("moving a name into it… immediately fails the guest-gate comparison it just left") holds only for a name *moved out of* the owner-audience expected set. For a **new** ungated handler, adding its name to `publicAudienceRPCs` greens the partition, and no other assertion touches it: the guest-gate comparison never sees it (not in derived, not in expected) and the public literal has no derived counterpart (nothing asserts a public member does *not* reference the gate, or has any public-read property at all). The must-haves truth "adding a member… MOVES an RPC from one audited bucket to the other and both buckets are compared by set equality" is false for a net-new name — the public "bucket" has no independent audit. |
+| **M1** (04-06 "live consumers" overstated) | **CONFIRMED** | `NewPropertyCapability` has zero non-test constructions: `rg -n 'NewPropertyCapability' --type go` hits only `cap_property.go:47` (the declaration) and two test files. `PropertyCapability` appears in no production file outside `cap_property.go`. The command-layer interface method (`internal/command/types.go:70`) has no production caller — the only production call of `.UpdateCharacterDescription(` outside world/grpc is the hostfunc adapter at `cap_property.go:140`, itself unreachable. So `04-06:407-420`'s "two live in-tree consumers inherit the new rejection" and the "realistic behavior change is ANSI escapes in a description" claim describe compile-time couplings, not runtime paths, and the acceptance criteria at `:474`/`:675` gate nothing behavioral. |
+| **L1** (`\r` permitted, plan says "newline and tab") | **CONFIRMED** | `internal/world/validation.go:189-191`: `if unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t'` — the doc comment at `:187-188` even says "other than newline, carriage return, and tab." 04-06 says "newline and tab" in its truths, behaviors, and `read_first`. Concrete failure mechanism worth stressing: 04-06 Task 2's behavior "one containing a control character other than newline or tab is rejected" — an executor who picks `\r` as the test's control character writes a test that is **permanently RED against correct code**. Cheap fix, real landmine. |
+| **L2** (two counts lack the comment filter) | **CONFIRMED** | `04-08-PLAN.md:152` (`rg -o 'func (serviceReceiverName\|bodyReferencesSelector)\(' … \| wc -l` = 2) and `:477` (`rg -o 'func bodyReferencesSelector\(' test/meta/ \| wc -l` = 1) carry no `rg -v '^\s*//'` prefix, unlike the three counts at `:474`. Practical risk is low (a comment containing a literal `func bodyReferencesSelector(` is unlikely), but the plan itself makes filter discipline load-bearing elsewhere, so the inconsistency invites the exact drift it lectures about. |
+| **L3** (banned-token grep case-fragile) | **CONFIRMED** | `04-08-PLAN.md:481`: `rg -n 'exempt\|Exempt\|allowlist'` misses `Allowlist`, `AllowList`, `ALLOWLIST`, `EXEMPT`, `allow-list`. Fix is one flag: `rg -in 'exempt\|allow.?list'`. |
+| **L4** (ROADMAP "8 plans" vs 9) | **CONFIRMED** | `.planning/ROADMAP.md:484`: `**Plans**: 8 plans`; the enumeration below lists 04-01 through 04-09 (nine). A cosmetic count, but it is a tool-parsed artifact — per rule `a32nfcekfc` the fix should go through GSD tooling, not a hand edit. |
+
+## 3. New Concerns
+
+- **MEDIUM — 04-05 Task 3 cannot bind INV-PRIVACY-9 within its declared file set.** `test/meta/invariant_registry_test.go:222` fails a `binding: bound` entry unless at least one `// Verifies: INV-PRIVACY-9` annotation exists in a `*_test.go` file (`registryVerifiesRE` at `:163`; repo walk at `:254`). 04-05 Task 3's `<files>` are only `docs/architecture/invariants.yaml` + `invariants.md`, its action says to list `test/integration/access/character_profile_read_test.go` in `asserted_by` — but **no plan instructs adding the annotation to that file**: 04-01 creates the spec with no `Verifies` comment (its Task 1 has no such step; 04-04 Task 2 even bans `Verifies: INV-PRIVACY-10` but is silent on -9), and `character_profile_read_test.go` is absent from 04-05's `files_modified` (which lists only `viewer_alt_linkage_test.go`, correctly annotated for INV-ACCESS-15 in Task 2). Executed as written, `TestEveryRegistryInvariantHasBinding` goes RED at 04-05 Task 3's verify step and the executor must deviate outside the plan's file set. Fix: add the annotation instruction to 04-01 Task 1 (above the differential spec) or add the file + step to 04-05 Task 3.
+- **LOW — 04-06's `\r` wording actively breaks a mandated test** (elevation of L1's mechanism, not a new defect): the integration-tier behavior in 04-06 Task 3 ("invalid UTF-8 and a control character other than newline or tab are each rejected against the real service") is unsatisfiable if the fixture uses `\r`, since `ValidateDescription` accepts it. Any fix for L1 should update all seven occurrences plus 04-04's echo of `ValidateDescription`'s rules in Task 1's action ("control-characters-except-newline-and-tab").
+
+No other new issues found. Targeted re-verification of the seven plans cycle 5 skipped turned up accurate anchors throughout (see Summary); 04-09's unusually dense citation set (fence test, three-directional census, `propertyWriter` pre-existing at `mutator.go:156/:171`, `seed:player-self-access` at `seed.go:39-43`) all checks out, and its character-resource-gate correction (HIGH-2 from cycle 3) is correctly reflected.
+
+## 4. Suggestions
+
+- **H1**: delete the `:485` acceptance criterion or rewrite it as "the two public-audience RPC names appear only in the public-audience literal and its adjacent comment" — the literal is the intended home post-partition; the criterion is a fossil from the pre-partition revision.
+- **H3**: give the public-audience literal a derived counterpart: assert each member's body does **not** reference `resolveAndGate`/`ownedCharacterForMutation` *and* does reference the public read pipeline (e.g. `resolveViewerIdentity` or `evaluateGate` as a selector) — that makes adding a name to the literal impose scrutiny instead of removing it, and makes the "cannot become an excusal list" truth actually true.
+- **H2**: either widen the universe filter to include the streaming shape (and let streaming handlers fail classification loudly), or scope the truth statement honestly: "every exported **unary** handler…" plus a comment stating that a first streaming RPC on this facade must extend the filter. The Unimplemented-promotion escape is adequately covered by Task 3's descriptor census and can be noted rather than closed.
+- **M1**: soften `04-06:407-420` to "compile-time couplings; no production caller today" and drop or demote the `:474`/`:675` criteria to a plain "these packages still compile and their tests pass."
+- **L1/L2/L3/L4**: mechanical — s/newline and tab/newline, carriage return, and tab/ (7+ sites across 04-06 and 04-04); add the `rg -v '^\s*//'` prefix at `04-08:152`/`:477`; `rg -i` for the banned tokens; correct the ROADMAP plan count via GSD tooling.
+- **New MEDIUM**: add "annotate the differential spec with `// Verifies: INV-PRIVACY-9`" to 04-01 Task 1 (cheapest — the file is being created there) and note it in 04-05 Task 3's read-first.
+
+## 5. Risk Assessment
+
+**Overall: MEDIUM.** The phase's substance — extraction, ABAC seeds, facade, write path, domain command — is well-grounded, decision-compliant, and internally consistent; five review cycles have burned out the correctness-level defects in waves 1–4. The residual risk is concentrated in two places: **04-08** (wave 6), where H1 is an execution blocker (an executor hits two contradictory instructions and must improvise) and H2/H3 leave criterion 1's headline guarantee weaker than its must-haves claim; and the **new 04-05 binding gap**, which produces a mid-wave-3 RED requiring an out-of-scope file edit.
+
+Execution-ready as written: **04-01, 04-02, 04-03 (wave 1), 04-04 + 04-09 (wave 2), 04-06 (wave 4, with the `\r` wording caveat), 04-07 (wave 5)**. Needs a fix pass before execution: **04-05** (one annotation instruction) and **04-08** (H1 mandatory; H2/H3 strongly recommended since the census is the phase's durable enforcement artifact). None of the findings undermines the phase goals themselves — criteria 2–6 are fully covered by plans that are ready now.
+
+`★ Insight ─────────────────────────────────────`
+The recurring failure shape across all six cycles is the same one: a *checked-in expected set* is only as strong as the derived side that audits it. The guest-gate literal works because membership is derived from what handler bodies actually reference; the public-audience literal (H3) and the `bound` flag on INV-PRIVACY-9 (new finding) both fail the same test — they assert classification without a mechanism that derives it. When reviewing census-style plans, ask of every literal: "what recomputes this from the code?"
+`─────────────────────────────────────────────────`
+
+---
+
+## Orchestrator source-grounding pass — Cycle 6
+
+Scope: the claude lane's cycle-5 disposition audit re-verified all eight prior findings against
+source at HEAD and CONFIRMED each (table above, with per-row evidence). The orchestrator
+independently re-verified the single **net-new** finding before accepting it, plus the lane's
+unchanged-plans premise.
+
+| Claim | Status | Evidence |
+|---|---|---|
+| Plans unchanged since cycle 5 | VERIFIED | `git log --oneline -- …/04-08-PLAN.md` tip is `b97d049a1`; post-cycle-5 commits (`764cd047b`, `e0734e1f8`) touch only `04-REVIEWS.md` / `04-HANDOFF.md`; working tree clean for the phase dir |
+| `bound` registry entries require a `// Verifies:` annotation in a `*_test.go` file | VERIFIED | `test/meta/invariant_registry_test.go` — `registryVerifiesRE` (`//\s*Verifies:\s*(INV-[A-Z]+-\d+)`) and `checkRegistryBindings`: a non-pending entry with `len(bindings[e.ID]) == 0` produces "no test binding found (expected at least one `// Verifies: …` comment in a *_test.go file)" |
+| 04-05 Task 3 flips `INV-PRIVACY-9` to `bound` with `asserted_by: test/integration/access/character_profile_read_test.go` | VERIFIED | `04-05:291-298` ("set the binding to bound and list that spec file in asserted_by"), criterion at `:323`; `must_haves` artifact row at `:44` |
+| No plan instructs adding `// Verifies: INV-PRIVACY-9` to that file | VERIFIED | `rg -n 'Verifies' 04-01-PLAN.md` → no match (04-01 creates the differential spec with no annotation step); `04-04:311` bans a `Verifies:` annotation for INV-PRIVACY-10 and is silent on -9; `character_profile_read_test.go` absent from 04-05 `files_modified` (`04-05:7-15` lists `viewer_alt_linkage_test.go` only) |
+| Consequence: `TestEveryRegistryInvariantHasBinding` RED at 04-05 Task 3's verify step, fix requires an out-of-file-set edit | VERIFIED (mechanism) | Follows from the two rows above; the RED fires in the meta-test lane 04-05 Task 3 itself runs |
+
+The new finding is CONFIRMED as a genuine plan gap (MEDIUM): the cheapest closure is a one-line
+annotation instruction in 04-01 Task 1 (which creates the file) plus a read-first note in 04-05
+Task 3, exactly as the lane suggests.
+
+## Consensus Summary — Cycle 6
+
+Two independent reviewers across cycles 5 and 6 (codex `gpt-5`-class at `xhigh`, claude
+`claude-fable-5`) now agree on the full open set. No divergent views: the claude lane's disposition
+audit CONFIRMED all eight codex findings with independent evidence, adjusted no severities, and
+rejected none.
+
+### Agreed Concerns (open)
+
+- **H1 (04-08)** — `:485` vs `:355-360` mutually unsatisfiable; executor cannot satisfy both. One-line fix.
+- **H2 (04-08)** — census universe filter fails OPEN (streaming shape, embedded-`playerGate` promotion, value receivers, `Unimplemented` promotion escape it); contradicts the must-haves universality claim. Fix: invert the default (universe = every exported method; unknown shapes fail closed) or honestly narrow the claim to unary handlers.
+- **H3 (04-08)** — public-audience literal has no derived counterpart; adding a net-new ungated handler's name to it is a one-line all-green bypass; `:33`/`:414` assert the opposite. Fix: derive public membership from `resolveViewerIdentity` / not-gate-referencing predicates.
+- **M1 (04-06)** — "two live in-tree consumers" is factually wrong (both are compile-time couplings with zero production call paths); criterion at `:474`/`:675` is a non-gate.
+- **M2 (04-05, NEW this cycle)** — INV-PRIVACY-9 cannot flip to `bound` as scoped: no plan adds the `// Verifies:` annotation the binding meta-test requires, and the annotated file is outside 04-05's `files_modified`.
+- **L1 (04-06, + one echo in 04-04)** — `\r` is permitted by `validation.go:191`; "newline and tab" wording in 7+ places makes a mandated control-character test permanently RED if the executor picks `\r`.
+- **L2 (04-08)** — counts at `:152`/`:477` lack the comment filter.
+- **L3 (04-08)** — banned-token grep case-fragile; use `rg -i`.
+- **L4 (ROADMAP)** — `.planning/ROADMAP.md:484` "8 plans" vs 9 enumerated.
+
+### Divergent Views
+
+None. Cycle 6 independently confirmed cycle 5's open set and added one finding in a plan
+(04-05) whose census-adjacent task cycle 5 did not re-audit.
+
+### Execution-readiness (joint position)
+
+Waves 1–2 (04-01, 04-02, 04-03, 04-04, 04-09) and wave 5 (04-07) are execution-ready as written;
+04-06 (wave 4) is ready with the `\r` wording caveat. **04-05 needs a one-line fix pass**
+(annotation instruction) before its wave-3 slot, and **04-08 Task 2 (wave 6) remains blocked** on
+H1 (mandatory) with H2/H3 strongly recommended. Risk: claude assesses MEDIUM overall (down from
+codex's HIGH in cycle 5, reflecting that all residual risk is concentrated in one wave-6 task plus
+one one-line binding gap, with waves 1–5 substance verified sound across two independent reviewers).
