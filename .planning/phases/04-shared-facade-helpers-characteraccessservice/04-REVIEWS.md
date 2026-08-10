@@ -1550,3 +1550,329 @@ assertion or one corrected `must_have`.
 
 Waves 1-3 remain unblocked; every finding lands in wave 4 (`04-06`) or wave 6 (`04-08`). Execution of
 waves 1-3 may begin, but `04-06` and `04-08` should not be executed until these three are incorporated.
+
+---
+
+# Cross-AI Plan Review — Phase 4 · Cycle 5 (closing cycle)
+
+**Reviewers:** codex (`gpt-5`-class, `model_reasoning_effort=xhigh`, read-only sandbox, full repo
+access) + orchestrator source-grounding pass + a dedicated adversarial pass against `04-08`'s
+partition.
+**Reviewed at:** 2026-08-10.
+**Plans reviewed:** all nine; material re-audit scoped to `04-06-PLAN.md` and `04-08-PLAN.md`.
+**Scope note:** the loop was extended twice past its `--max-cycles 3`. Trend: 8 → 6 → 2 → 3 → **3**.
+
+## What actually changed since cycle 4
+
+`git show --stat b97d049a1` touches exactly **two** plans — `04-06-PLAN.md` (+284/−…) and
+`04-08-PLAN.md` (+199/−…). The other seven are byte-identical to their cycle-4 state
+(`git diff 66b41c330..HEAD --name-only` lists only those two). No re-audit of the seven was
+performed and none is claimed.
+
+## Cycle-4 disposition audit
+
+| Cycle-4 finding | Disposition | Evidence |
+|---|---|---|
+| **NEW-HIGH-1** — description write performs no validation | **FULLY RESOLVED** *(the fix; its justification is not — see M1)* | New Task 2 at `04-06:361-495` routes `service.go:862`'s bare `char.Description = description` through `char.SetDescription` with `oops.Code("CHARACTER_INVALID").Wrap(err)`, positioned after `checkAccess` (`service.go:849`) and after the repository read (`:852`). Task count 2 → 3; `files_modified` gains `internal/world/service.go` + `service_test.go`; GH #4954 cited 13×. |
+| **NEW-HIGH-2** — accepted receiver-type set never enumerated | **FULLY RESOLVED** | `04-08:212-222` enumerates it once: facade `{"CharacterAccessServer"}`, web `{"Handler"}`. `sceneaccess_service.go` reframed "**SHAPE PRECEDENT ONLY … it is NOT a census member**" at `:180`; exclusion consequence at `:227-237`; criterion pinning `SceneAccessServer` to the comment at `:471`. |
+| **NEW-HIGH-3** — census could not detect a wholly ungated RPC | **PARTIALLY RESOLVED** | The partition (`04-08:344-369`) genuinely closes the attack it was built for, and RED demo (d) at `:451-461` proves it. But it closes only the *unary, concrete, `CharacterAccessServer`-receiver* case — see **H2** and **H3**. |
+| **MEDIUM** — interface count (third, not fifth) | **FULLY RESOLVED** | `04-06:131`, `:166-176` now say "**two**" pre-existing and "**third**"; the fence sentence at `:216-220` was made count-independent ("**Adding an interface does not weaken the fence, at any count**"). Verified: `04-07` is `wave: 5`, `depends_on: [… "04-06"]`. |
+| **LOW** — `skip` dropped from the banned-token list | **FULLY RESOLVED** | `04-08:481` bans `exempt\|Exempt\|allowlist` only; `:482` records the reason at length. rg regex is valid Rust-regex (bare `\|`). |
+| **LOW** — comment-filter discipline on counting criteria | **PARTIALLY RESOLVED** | Landed on `04-08:474-475` (three counts) and `04-06:344`. Two counting criteria were missed — see **L2**. |
+
+Two of cycle 4's six fixes carry a defect **created by the fix itself** — H1 and H3 both exist only
+because `b97d049a1` added the public-audience literal. That is the fifth consecutive cycle exhibiting
+the pattern.
+
+---
+
+## Codex Review
+
+### Summary
+
+> Five of the six cycle-4 fixes are resolved. The description-validation change is sound and its
+> compatibility cost is adequately covered. […] The audience partition, however, still has one
+> structural blind spot: a newly declared proto RPC inherited from the generated
+> `UnimplementedCharacterAccessServiceServer` has no `*ast.FuncDecl` on `CharacterAccessServer`, so
+> it is absent from the AST-derived universe and can remain ungated without failing the partition.
+> This blocks execution because it contradicts criterion 1's future-RPC guarantee.
+
+### Codex's HIGH — adjudicated PARTIALLY UPHELD, and superseded by H2
+
+Codex's mechanism claim is **VERIFIED**: `04-08:432` states "This census parses `internal/grpc` and
+`internal/web` with `go/ast`", `:274` resolves members via `*ast.FuncDecl`, and the universe is scoped
+to the receiver literal `{"CharacterAccessServer"}` (`:220`). Promoted methods are therefore invisible,
+and `SceneAccessServer` embeds `UnimplementedSceneAccessServiceServer` at
+`internal/grpc/sceneaccess_service.go:47` as the precedent.
+
+Two corrections to codex's framing:
+
+1. **The specific case codex constructs is inert.** An RPC declared in the proto and left
+   unimplemented is satisfied by the embedded `Unimplemented…Server` and returns `codes.Unimplemented`
+   — it serves no data. The moment anyone implements it, a `*ast.FuncDecl` with receiver
+   `*CharacterAccessServer` appears and the partition fires. So this variant alone is not a
+   data-exposure hole.
+2. **ROADMAP criterion 1 is not the criterion it breaks.** Criterion 1 is scoped to "every
+   **character-returning** RPC", and that scope is proven by **Task 3**, which derives from the
+   *global proto registry* (`04-08:522-527`), not from source AST — so it sees a proto-declared
+   RPC regardless of promotion and goes RED in the extra direction unless its inventory row lands in
+   the same change (D-72). The claim codex's case actually falsifies is `04-08`'s own broader `<done>`
+   at `:492` ("the audience partition proves the character facade has **no RPC outside those two
+   audiences**").
+
+Codex's finding is nonetheless **correct in kind**, and the dedicated adversarial pass found two
+further escapes from the same root cause, one of which is live rather than inert. All are consolidated
+as **H2** below.
+
+---
+
+## Current concerns
+
+### H1 — HIGH — `04-08:485` and `04-08:355-360` are mutually unsatisfiable. **BLOCKS EXECUTION.**
+
+The cycle-4 edit added, in Task 2 step 2:
+
+> **`04-08:355-360`** — "… `GetCharacterProfile` and `ListCharacterDirectory` … **check them in as a
+> literal set** rather than leaving them as prose, because the partition now consumes them."
+
+The acceptance criteria of the *same task* still carry the pre-cycle-4 line, untouched by `b97d049a1`:
+
+> **`04-08:485`** — "The two public-audience RPC names appear in the file **only inside the comment**
+> explaining their deliberate exclusion."
+
+An executor cannot satisfy both. With `autonomous: true` this resolves one of two ways, and both are
+bad: it declines to write the literal — which deletes the entire NEW-HIGH-3 fix — or it writes the
+literal and reports the task's own acceptance criterion failed.
+
+**Minimum edit:** rewrite `:485` to "The two public-audience RPC names appear in the public-audience
+literal and its neighbouring comment, and in no other set literal."
+
+### H2 — HIGH — The partition's universe filter fails OPEN; four handler shapes escape it. **BLOCKS 04-08 Task 2** (wave 6 only).
+
+The filter, verbatim at `04-08:346-352`:
+
+> collect every method on `*CharacterAccessServer` that is exported AND has the RPC-handler shape:
+> **exactly two parameters, the first `context.Context`, and exactly two results of which the second
+> is `error`**.
+
+Anything not matching that shape is **silently outside the audit** rather than failing closed. Four
+escapes, in descending order of realism:
+
+1. **Server-streaming handler — a shape already shipped twice in the same package.**
+   `internal/grpc/server.go:559` and `internal/grpc/subscribe_handler.go:272` are both
+   `func (…) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[…]) error` —
+   two params whose first is *not* `context.Context`, and **one** result. A
+   `WatchMyCharacters` on the character facade in that shape references no gate, enters no derived
+   set, and never enters the universe: union = 6, universe = 6, disjointness holds → **census GREEN
+   with a live ungated streaming RPC on the facade.**
+2. **Method promoted from an embedded type — live, and created by the cycle-4 NEW-HIGH-2 fix.**
+   `04-02:105` embeds `playerGate` as a **bare embedded field**. An exported RPC-shaped method added
+   to `playerGate` in `internal/grpc/player_gate.go` is promoted onto `*CharacterAccessServer`,
+   satisfies the generated interface, and serves real data — but its `*ast.FuncDecl` receiver is
+   `*playerGate`, which the now-pinned one-member receiver set excludes by construction. `04-08:247-249`
+   actively celebrates promotion (D-78), so this is plausible drift, not exotica.
+3. **Value receiver.** `04-08:108`/`:120` specify a **pointer** receiver only. The precedent being
+   generalized accepts both: `test/meta/world_envelope_census_test.go:146-150` unwraps `*ast.StarExpr`
+   *if present* and then matches the `*ast.Ident`. `func (s CharacterAccessServer) Foo(ctx, req) (resp, error)`
+   is in `*CharacterAccessServer`'s method set and is registrable.
+4. **Generated `Unimplemented…Server` promotion** — codex's case; inert, see above.
+
+The plan's own in-tree precedent is **looser and better**: `test/meta/world_caller_census_test.go:38-42`
+defines its universe as "an exported `*Service` method whose FIRST FLATTENED parameter's type
+expression is `context.Context`" — no param-count, no result-shape — and its header states that this
+predicate excludes lifecycle setters "**without growing an exemption list**". The tighter filter buys
+nothing over the precedent and is what opens the hole. Relatedly, `world_caller_census_test.go:62-64`
+records that **flattening is load-bearing** ("packs two parameters into one `*ast.Field`, so
+`Params.List[1]` is not parameter 1"); `04-08` says "exactly two parameters" and never mentions it.
+
+**Minimum edit — invert the default.** Universe = **every exported method** on the accepted receiver;
+require each to land in owner ∪ public ∪ a checked-in `nonHandlerMethods` literal (empty for this
+facade today; `WithSceneDEKAdder`-shaped setters would go there). Unknown shapes then fail **closed**.
+If the shape filter is kept instead, it must at minimum admit `(req, stream) error`, accept value
+receivers, use flattened param counting, and assert that `CharacterAccessServer`'s embedded-field set
+equals a checked-in literal.
+
+### H3 — HIGH — The public-audience literal is a working one-line bypass of the partition, and `04-08:33` asserts it is not. **BLOCKS, or must be carried as documented accepted risk.**
+
+The partition compares `universe == owner ∪ public` and `owner ∩ public == ∅`. The **owner** literal
+has a derived counterpart (methods whose bodies reference the guest-gate selector) and is compared by
+set equality against it. The **public** literal has **no derived counterpart** — nothing in Task 2's
+behaviors (`04-08:188-197`) derives public-audience membership from a handler body.
+
+Consequence: a new exported RPC-shaped handler referencing neither gate goes RED in the partition's
+extra group — and **the cheapest green is one line adding its name to `publicAudienceRPCs`**. After
+that edit: guest-gate comparison 4 vs 4 GREEN, ownership 3 vs 3 GREEN, disjointness GREEN (it was
+never in owner), partition 7 vs 7 GREEN. Nothing fires.
+
+The plan asserts the opposite twice, and both statements are false for this case:
+
+> **`04-08:33`** (a `must_haves` truth) — "The partition's public-audience literal is not [an excusal
+> list] and cannot become one … adding a member to it does not silence a failure, it MOVES an RPC from
+> one audited bucket to the other **and both buckets are compared by set equality**."
+>
+> **`04-08:414`** — "… it relocates the RPC into the other audited bucket and **immediately fails the
+> guest-gate comparison it just left**."
+
+Both are true only for **moving an existing owner-audience member** (which stays in the derived
+guest-gate set and so breaks that comparison). They are false for a **new** handler that was never in
+the guest-gate literal: it leaves nothing, so nothing fails. And "both buckets are compared by set
+equality" is simply not the case — only the owner bucket is compared against a derived set; the public
+bucket appears only inside the union.
+
+There is a partial backstop: a new RPC *returning character data* is caught by Task 3's registry-derived
+descriptor census unless its inventory row is added too. That covers ROADMAP criterion 1's actual scope
+but not `04-08`'s broader claim, and it is the same "visible literal edit" shape (D-72) — so it narrows
+the risk rather than eliminating it.
+
+**Minimum edit (preferred — cheap and grounded):** give the public bucket its own derived predicate
+using the *shipped* `bodyReferencesSelector`. Both public handlers reference `s.resolveViewerIdentity`
+on their own receiver (`04-01:306`, `04-07:328`) and must NOT reference the guest gate (D-73).
+Assert: every public-audience member references `resolveViewerIdentity` and references neither
+`resolveAndGate` nor `ownedCharacter`. That converts the literal from an unaudited classification into
+an audited bucket and makes `:33` and `:414` true as written.
+**Minimum edit (fallback):** correct `:33` and `:414` and record the bypass as accepted risk.
+
+### M1 — MEDIUM — `04-06`'s "Consumers that inherit the new rejection" paragraph is factually wrong, and the acceptance criterion built on it is vacuous. **ACCEPTABLE RISK** (does not block; the code change stays correct).
+
+`04-06:407-420` claims Task 2 "tightens a **shipped** command with **two live in-tree consumers**
+outside Phase 4, and both inherit the new `CHARACTER_INVALID` where the write previously succeeded."
+Neither is live:
+
+- **`internal/command/types.go:70`** is an interface *declaration* with **zero call sites**.
+  `rg -n 'UpdateCharacterDescription' internal/command/` returns only `:69` (its doc comment) and
+  `:70` (the declaration). The plan glosses it "i.e. the in-world `@desc`-style path" — there is no
+  such command: `rg -ni '"desc"\|@desc\|"describe"' internal/command/` returns **no match**. An
+  uncalled interface method cannot inherit a runtime rejection.
+- **`internal/plugin/hostfunc/cap_property.go:140`** is the only non-test call site of
+  `.UpdateCharacterDescription(` in the tree — but the capability that owns it is **never constructed
+  in production**: `rg -n 'NewPropertyCapability'` returns `cap_property.go:47` (the declaration) and
+  `cap_property_test.go:83`, `:95` (tests) and nothing else.
+
+Two consequences:
+
+1. **The added acceptance criterion is a non-gate.** `04-06:474` asserts
+   "`task test -- ./internal/plugin/... ./internal/command/...` is green. This is **NOT redundant** …
+   without this line a red test there would first surface at `task pr-prep`." It cannot go red:
+   `internal/plugin/hostfunc`'s tests drive a `mockPropertyAccess` (`cap_property_test.go:68`) that
+   never reaches `world.Service`, and `internal/command` never calls the method. A change to the
+   command's *body* is unobservable in both packages. Same text at `:675`.
+2. **`<reversibility>` at `04-06:488-493`** — the block cycle 4 rewrote "to be evidence-backed" —
+   states "both are covered by this task's acceptance criteria, so the claim is **evidence-backed
+   rather than assumed**." The evidence is wrong.
+
+**This is not a re-raise of the settled signature-ABI decision.** The *same two citations* at
+`04-06:544-550` justify rejecting option (b) (extending the signature), and that rejection remains
+**sound**: those couplings are **compile-time** — `internal/command/types.go:110`
+(`_ WorldService = (*world.Service)(nil)`) and `cap_property.go:34` (`PropertyAccess`) — and a
+signature change breaks them regardless of call sites. The error is confined to Task 2's **runtime**
+claim, which propagates only through actual calls.
+
+Risk direction: the change is **safer** than the plan says, not riskier — live production blast
+radius today is zero.
+
+**Minimum edit:** at `:407-420`, replace "two live in-tree consumers" with "two compile-time-coupled
+surfaces, neither reached in production today (`NewPropertyCapability` has no production constructor;
+`types.go:70` has no caller)"; restate `:474`/`:675` as a **compile** check rather than a behaviour
+gate; correct `:488-493`.
+
+### L1 — LOW — `ValidateDescription` permits `\r`; `04-06` says "newline or tab" in seven places. **ACCEPTABLE RISK.**
+
+`internal/world/validation.go:191`: `if unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t'`.
+Carriage return **is** allowed. The plan says "control characters other than newline and tab" at
+`04-06:28`, `:157`, `:272`, `:371`, `:381`, `:423`, `:519` — and `:371` is the `read_first` **summary
+of that very function**, so it is a wrong source summary, not loose prose.
+
+Two concrete failure modes: (a) Task 2's behaviour at `:381` ("a control character other than newline
+or tab is rejected") — an executor choosing `\r` writes a test that fails and stays red; (b) `:28` and
+`:272` promise the facade applies "the same rule" to the profile prose caps, so an implementer
+transcribing from the prose builds a facade **stricter** than the domain, splitting a rule the plan
+says is single-sourced.
+
+**Minimum edit:** "newline, carriage return, or tab" in those seven places, or one parenthetical at `:371`.
+
+### L2 — LOW — Two of `04-08`'s counting criteria lack the comment filter; one is false-GREEN. **ACCEPTABLE RISK.**
+
+Cycle 4 added the filter to the three counts at `04-08:474-475`. Two more were missed:
+
+- **`04-08:152`** — `rg -o 'func (serviceReceiverName\|bodyReferencesSelector)\(' … \| wc -l` returns 2,
+  **unfiltered**. False-GREEN direction: if a helper were deleted and any comment mentioned it, the
+  count still reads 2.
+- **`04-08:477`** — `rg -o 'func bodyReferencesSelector\(' test/meta/ \| wc -l` returns 1, unfiltered.
+  False-RED direction only (a doc comment quoting the signature inflates it).
+
+### L3 — LOW — `04-08:481`'s banned-token grep is case-fragile. **ACCEPTABLE RISK.**
+
+`exempt|Exempt|allowlist` misses `EXEMPT`, `Allowlist`, `AllowList`, `allow_list`. Use
+`rg -i 'exempt|allow[-_ ]?list'`.
+
+### L4 — LOW — `.planning/ROADMAP.md:484` says "**Plans**: 8 plans"; the Phase-4 block enumerates 9. **ACCEPTABLE RISK.**
+
+`04-09` was promoted out of `04-06`'s objective (`04-06:74-80`) and the header count was never
+updated. `04-03` already carries `.planning/ROADMAP.md` in `files_modified`, so the one-word fix is
+in scope.
+
+---
+
+## Verification coverage
+
+Drift-guard authority for this repo is `intel` (`gsd-tools drift-guard authority --raw`), under which
+`AMBIGUOUS` → MEDIUM and `MISSING` → needs-acknowledgement — **neither hard-blocks**. **REFUTED** rows
+are escalated above `AMBIGUOUS` deliberately: a plan asserting a mechanism that source contradicts is
+a stronger failure than an unresolvable citation. Symbols under each plan's "Artifacts this phase
+produces" are excluded from this table and are recorded UNCHECKABLE at the end.
+
+| Claim / symbol | Cited at | Status | Evidence |
+|---|---|---|---|
+| `char.Description = description` is a bare, unvalidated assignment | `04-06:38`, `:366` | VERIFIED | `internal/world/service.go:862`; `rg -n 'char\.Description\s*=' internal/world/service.go` → exactly one match |
+| Validation must sit after `checkAccess` and after the read (non-oracle) | `04-06:428-434` | VERIFIED | `checkAccess` `service.go:849`; repo read `:852`; assignment `:862` |
+| `UpdateLocation` precedent: `checkAccess` → `Validate` → `oops.Code("LOCATION_INVALID").Wrap` | `04-06:372` | VERIFIED | `service.go:364`, `:367`, `:368` |
+| `Character.SetDescription` is the shipped validating setter; doc comment says application code must use it | `04-06:369` | VERIFIED | `internal/world/character.go:95-108`; delegates to `ValidateDescription` at `:102` |
+| `SetDescription` has zero production callers; `internal/property` hits are a different method | `04-06:369` | VERIFIED | Only non-test hit is `internal/property/definition_description.go:41`, whose interface is `entity_mutator.go:32` (6-param entity-mutator method) |
+| `ValidateDescription`: empty early-return, UTF-8, byte-measured 4000 cap, control chars | `04-06:371` | VERIFIED | `internal/world/validation.go:96`, `:100`, `:103` (`len(desc)`), `:106`; `MaxDescriptionLength = 4000` at `:21` |
+| …"control characters other than **newline and tab**" | `04-06:371` (+6 more) | **REFUTED (minor)** | `validation.go:191` also permits `'\r'` — L1 |
+| ANSI escape sequences are the realistic rejection case | `04-06:418-424` | VERIFIED | ESC `U+001B` satisfies `unicode.IsControl` and is not `\n`/`\r`/`\t` |
+| `CHARACTER_INVALID` is unused; `CHARACTER_INVALID_NAME` is a different auth-side code | `04-06:403-405` | VERIFIED | Bare code has no hits; `CHARACTER_INVALID_NAME` at `internal/auth/character_service.go:303`. `OBJECT_INVALID` analogue at `service.go:636`, `:643`, `:646` |
+| `internal/plugin/hostfunc/cap_property.go:140` is a **live** consumer | `04-06:412`, `:474`, `:488`, `:675` | **REFUTED** | Real call site, but `NewPropertyCapability` has **no production constructor** (`cap_property.go:47` decl; `cap_property_test.go:83`, `:95` only) — M1 |
+| `internal/command/types.go:70` is a **live** consumer / "the in-world `@desc`-style path" | `04-06:415-416`, `:474`, `:488`, `:675` | **REFUTED** | Declaration only; zero call sites in `internal/command/`; no `desc`/`@desc`/`describe` command exists — M1 |
+| The same two surfaces make the **signature** load-bearing outside `world` | `04-06:544-550` | VERIFIED | Compile-time: `internal/command/types.go:110` `_ WorldService = (*world.Service)(nil)`; `cap_property.go:34` `PropertyAccess` — settled rejection of option (b) stands |
+| Only two facade interfaces exist at wave 4; `04-07` is wave 5 and depends on `04-06` | `04-06:131`, `:166-172` | VERIFIED | `04-07` frontmatter `wave: 5`, `depends_on: ["04-01","04-04","04-05","04-06"]` |
+| No new wave collision from the added task | `04-06:6` | VERIFIED | `internal/world/service.go` touched by 04-01 (W1), 04-09 (W2), 04-06 (W4) — strictly sequential, both declared in `depends_on`. `service_test.go` is 04-06's alone; 04-09 uses `service_profile_test.go` |
+| ROADMAP criterion 4 requires over-cap rejection **server-side** | `04-06:398-400` | VERIFIED | `.planning/ROADMAP.md`, Phase 4 Success Criteria 4 |
+| Accepted receiver sets: facade `{"CharacterAccessServer"}`, web `{"Handler"}` | `04-08:220-221` | VERIFIED | `internal/web` non-test receivers: `*Handler` (53), `*cookieWriter` (5), `*Server` (3 — `Start`/`Stop`/`Addr` at `internal/web/server.go:180,200,205`), `*reconnectDedup` (1). `var _ webv1connect.WebServiceHandler = (*Handler)(nil)` at `internal/web/handler.go:155`. No second server type carries handlers |
+| Scene facade carries 24 `s.resolveAndGate(` / 21 `s.ownedCharacter(` | `04-08:180`, `:229-231` | VERIFIED | `rg -o … internal/grpc/sceneaccess_service.go \| wc -l` → 24 and 21 exactly |
+| Census parses with `go/ast` and imports neither package | `04-08:432-436` | VERIFIED | `rg -n 'holomush/internal/grpc"' test/meta/` exits 1 |
+| Gateway-boundary argument for the un-partitioned web half | `04-08:25`, `:376-381` | VERIFIED | `.claude/rules/gateway-boundary.md:19-27`; complete `internal/holomush` import set across non-test `internal/web/` is `gatewaymetrics`, `sessionlease`, `telemetry`, `ulidgen` — no store/world/access/auth. `Handler` fields (`handler.go:141-152`) are gRPC clients only |
+| Derived universe is exactly six | `04-08:344-369` | VERIFIED | `GetCharacterProfile` (04-01), `ListMyCharacters`+`GetMyCharacter` (04-05), `UpdateCharacterProfile`+`UpdateCharacterDescription` (04-06), `ListCharacterDirectory` (04-07) = 4 owner + 2 public |
+| "the partition proves the facade has **no RPC outside those two audiences**" | `04-08:492`, `:24` | **REFUTED** | Shape/receiver filter fails open — streaming (`internal/grpc/server.go:559`, `subscribe_handler.go:272`), embedded promotion (`04-02:105`), value receiver (`world_envelope_census_test.go:146-150`) — H2 |
+| "the public-audience literal … cannot become [an excusal list]" | `04-08:33`, `:414` | **REFUTED** | Public bucket has no derived counterpart; a new handler added to it turns every assertion green — H3 |
+| `:485` (names in comment only) vs `:356-360` (check in as a literal) | `04-08` | **REFUTED (self-contradiction)** | Mutually unsatisfiable; `:485` untouched by `b97d049a1` — H1 |
+| `s\.ownedCharacter\(` cannot match `ownedCharacterForMutation(` | `04-08:474` | VERIFIED | Literal `(` after the name |
+| Banned-token rg regexes are valid Rust-regex | `04-08:480`, `:481`, `:575` | VERIFIED | Bare `\|` alternation throughout; no `\\\|` |
+| ROADMAP Phase-4 plan count | `.planning/ROADMAP.md:484` | **REFUTED** | Says 8; block enumerates 9 — L4 |
+| Runtime behaviour of unwritten Phase-4 code | all plans | UNCHECKABLE | Phase-created artifacts; not treated as verified anywhere above |
+
+## Risk Assessment
+
+**HIGH**, and — unlike cycles 1–4 — **the residual is concentrated in one plan and one task**.
+
+`04-06` is **execution-ready**. Its cycle-4 fix is correct, correctly positioned, and correctly
+grounded in ROADMAP criterion 4; the only findings against it (M1, L1) are wrong-justification and
+wrong-prose defects that make the change look *riskier and better-tested than it is*, in that order.
+Neither blocks.
+
+`04-08` **Task 2 is not ready.** H1 is an outright unsatisfiable instruction pair introduced by the
+cycle-4 edit. H2 and H3 are the same root defect seen from two sides: the partition audits only the
+shapes it recognises and only the bucket it derives, so both an unrecognised shape and an unaudited
+bucket leave it green. Three independent reviewers found three different escapes from H2 in one cycle,
+which is the strongest available signal that the filter should fail closed rather than be enumerated
+tighter.
+
+**Waves 1–5 are unblocked** (`04-01` … `04-07`, `04-09`). Every blocking finding lands in `04-08`,
+which is wave 6 and the last plan in the phase — so execution may begin immediately and the three
+HIGHs can be resolved while waves 1–5 run.
+
+**Recommended disposition for the closing cycle:** fix H1 (one line, unambiguous), fix H3 by the
+preferred edit (one derived predicate reusing a shipped helper), and fix H2 by inverting the universe
+default (three sentences). All three are edits to a single task in a single plan and none changes the
+phase's shape. Carry M1, L1, L2, L3, L4 as documented accepted risk if the loop must close now — none
+of them can cause an incorrect implementation, only an over-stated one.
