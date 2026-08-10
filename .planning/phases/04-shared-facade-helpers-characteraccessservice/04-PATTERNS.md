@@ -345,7 +345,7 @@ Sequence: nil-client guard → `CodeUnimplemented` · token from the **header**,
 		},
 ```
 
-The `seed.go:786-854` comment block is the **documentation form** to imitate: it states what is being added, why it is additive (permits combine disjunctively), what was **rejected** and why, and what the shipped code must *not* do. Phase 4's D-29-closing entry should extend that same block (it already ends with *"It moves to Phase 4, to land with the projection narrowing that makes it safe"*) rather than starting a new one. Ship at a **new `SeedVersion`**; edit no shipped policy.
+The `seed.go:786-854` comment block is the **documentation form** to imitate: it states what is being added, why it is additive (permits combine disjunctively), what was **rejected** and why, and what the shipped code must *not* do. Phase 4's D-29-closing entry should extend that same block (it already ends with *"It moves to Phase 4, to land with the projection narrowing that makes it safe"*) rather than starting a new one. Ship at **`SeedVersion: 1`** — `SeedVersion` is **per-policy, not a global counter**: `internal/access/policy/bootstrap.go:91` compares `*existing.SeedVersion < seed.SeedVersion` against that policy's *own* stored row as an upgrade trigger, so a brand-new policy has no prior row and starts at 1 (every Phase-2 addition does: `seed.go:578`, `:652`, `:658`). Edit no shipped policy.
 
 Verified: nothing else needs to register the `read_description` action token (Research C-1).
 
@@ -559,7 +559,7 @@ func AssertErrorCode(t testing.TB, err error, code string) {
 
 ### Additive ABAC seeding
 **Source:** `seed.go:794-799` — *"permits combine disjunctively (combineDecisions, engine.go), so adding a permit widens without editing a shipped policy and without an upgrade path that could collide with an admin-customized row."*
-**Apply to:** both new permits. New `SeedVersion`; never edit a shipped entry.
+**Apply to:** both new permits. `SeedVersion: 1` (per-policy, not a global counter — see the note above); never edit a shipped entry.
 
 ### Hand-registering a `.planning`-origin invariant (D-71)
 **Source:** `docs/architecture/invariants.yaml:2177-2178` — *"Hand-registered (D-07): the orphan check walks only docs/superpowers/specs/, so a .planning/-origin spec's INV ids are never auto-caught."*
