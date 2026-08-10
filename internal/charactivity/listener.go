@@ -102,10 +102,53 @@ func (l *listener) record(ctx context.Context, data []byte) {
 // The write is revision-conditional for the same reason the flusher's delete
 // is: a concurrent writer that already advanced the key must win, and losing
 // that race is harmless because the value that won is the newer one.
+//
+// It is a bounded RETRY rather than a single pass, because "the key moved" and
+// "the key moved to something newer" are not the same fact. The interleaving
+// that makes the difference load-bearing is the flusher's:
+//
+//  1. This listener Gets the key at revision N, holding a NEWER timestamp.
+//  2. The flusher drains that same revision N — it writes the OLDER value to
+//     the column and DeleteRevision(key, N) succeeds, so the key is gone.
+//  3. This listener's Update at revision N is refused by the server.
+//
+// Treating that refusal as "someone stored something at least as fresh" drops
+// the newer timestamp outright and leaves last_active_at behind by the delta
+// until the character next acts — the very loss the monotonic guard above
+// exists to prevent, merely relocated. Re-reading lands on the ErrKeyNotFound
+// branch instead, where Create restores it (and nats.go's Create retries past
+// the delete marker itself, jetstream/kv.go:1074). A genuinely newer concurrent
+// value settles the retry at the monotonic early exit on the next pass, so the
+// loop converges rather than spinning.
 func (l *listener) buffer(ctx context.Context, id ulid.ULID, nanos int64) {
 	key := id.String()
 	val := []byte(strconv.FormatInt(nanos, 10))
 
+	for attempt := 0; attempt < bufferAttempts; attempt++ {
+		if l.tryBuffer(ctx, id, key, val, nanos) {
+			return
+		}
+	}
+	// Sustained contention on ONE character's key. Debug, not error: the buffer
+	// is best-effort by construction and the next event this character causes
+	// re-buffers.
+	slog.DebugContext(ctx, "character activity listener gave up buffering under contention",
+		"character_id", key, "attempts", bufferAttempts)
+}
+
+// bufferAttempts bounds the compare-and-set retry. Each refusal means the key
+// moved between the read and the write, and a re-read either finds a newer
+// value (settled at the monotonic exit) or an absent/older one (settled by
+// Create/Update). Three passes is slack for a flusher tick and a redelivery
+// landing on the same key at once; it is NOT a spin-until-success loop.
+const bufferAttempts = 3
+
+// tryBuffer performs one compare-and-set pass over the buffered value.
+//
+// It reports whether the outcome is SETTLED — stored, deliberately skipped as
+// not-newer, or failed in a way no re-read can cure. A false return means only
+// that the key moved under this pass and re-reading is warranted.
+func (l *listener) tryBuffer(ctx context.Context, id ulid.ULID, key string, val []byte, nanos int64) bool {
 	entry, err := l.kv.Get(ctx, key)
 	switch {
 	case errors.Is(err, jetstream.ErrKeyNotFound):
@@ -113,28 +156,31 @@ func (l *listener) buffer(ctx context.Context, id ulid.ULID, nanos int64) {
 		// writer is detected instead of clobbered.
 		if _, createErr := l.kv.Create(ctx, key, val); createErr != nil {
 			if errors.Is(createErr, jetstream.ErrKeyExists) {
-				// Someone else buffered first. Their value is at least as
-				// fresh as ours was when we read; the next event re-buffers.
-				return
+				// Someone else buffered between our read and our Create. Their
+				// value may well be OLDER than ours — they raced us from the
+				// same absent state — so re-read rather than assume we lost.
+				return false
 			}
 			l.logBufferFailure(ctx, id, createErr)
 		}
+		return true
 	case err != nil:
 		l.logBufferFailure(ctx, id, err)
+		return true
 	default:
 		// An UNPARSABLE buffered value is not newer than anything — fall
 		// through and cure it, exactly as the flusher's revision-conditional
 		// drop of the same value would.
 		if prev, perr := strconv.ParseInt(string(entry.Value()), 10, 64); perr == nil && prev >= nanos {
-			return // an older (or duplicate) redelivery MUST NOT clobber newer buffered activity
+			return true // an older (or duplicate) redelivery MUST NOT clobber newer buffered activity
 		}
 		if _, updErr := l.kv.Update(ctx, key, val, entry.Revision()); updErr != nil {
-			// The key moved under us, which means a concurrent writer stored a
-			// value we have no reason to believe is staler than ours. Dropping
-			// this one is the safe answer; the next event re-buffers.
-			slog.DebugContext(ctx, "character activity listener left a buffered value that changed under it",
-				"character_id", key, "revision", entry.Revision())
+			// The key moved between the Get and the Update: a concurrent write
+			// OR the flusher's delete of the very revision we read. Which one
+			// it was is only knowable by re-reading.
+			return false
 		}
+		return true
 	}
 }
 

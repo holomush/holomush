@@ -425,6 +425,45 @@ func TestListenerLeavesABufferedValueThatChangedBetweenItsReadAndItsWrite(t *tes
 		"the write is revision-conditional, so the concurrent writer's value survives")
 }
 
+// TestListenerRebuffersItsValueWhenTheFlusherDeletedTheKeyItRead is the
+// counterpart to the test above, and the one the revision guard alone got
+// wrong: not every refused Update means "somebody stored something newer".
+//
+// The flusher's drain reads a key at revision N, writes that (older) value to
+// the column, and DeleteRevision(key, N) -- which SUCCEEDS, because N is still
+// the stored revision. A listener holding a NEWER timestamp that read the same
+// revision N then has its Update refused for a key that no longer exists. If
+// that refusal is treated as "we lost the race to a fresher value", the newer
+// timestamp is dropped and last_active_at stays behind by the delta until the
+// character next acts -- the exact loss the monotonic guard exists to prevent,
+// merely relocated. The bounded retry re-reads and lands on Create instead.
+func TestListenerRebuffersItsValueWhenTheFlusherDeletedTheKeyItRead(t *testing.T) {
+	ctx := context.Background()
+	charID := core.NewULID()
+	base := time.Unix(0, 1_700_000_000_000_000_000).UTC()
+	newer := base.Add(time.Hour)
+
+	kv := newFakeKV()
+	l := newTestListener(kv)
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, base))
+
+	// The flusher drains the very revision this listener is about to write
+	// against: it lands between the Get and the Update, and its delete succeeds.
+	read, err := kv.Get(ctx, charID.String())
+	require.NoError(t, err)
+	kv.afterGet = func() {
+		require.NoError(t, kv.DeleteRevision(ctx, charID.String(), read.Revision()))
+	}
+
+	l.record(ctx, eventBytes(t, eventbusv1.ActorKind_ACTOR_KIND_CHARACTER, charID, newer))
+
+	e, ok := kv.snapshot()[charID.String()]
+	require.True(t, ok,
+		"a flusher delete of the read revision MUST NOT swallow the newer timestamp")
+	assert.Equal(t, strconv.FormatInt(newer.UnixNano(), 10), string(e.value),
+		"the retry re-reads onto the absent branch and re-creates the newer value")
+}
+
 func TestListenerCuresAnUnparsableBufferedValue(t *testing.T) {
 	ctx := context.Background()
 	charID := core.NewULID()
