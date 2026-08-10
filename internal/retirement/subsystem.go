@@ -36,15 +36,18 @@ import (
 // return. Mirrors the outbox relay subsystem's budget.
 const barrierTimeout = 5 * time.Second
 
-// stopTimeout bounds how long Stop waits to JOIN that goroutine.
+// stopTimeout bounds how long Stop waits to JOIN that goroutine. It is a LAST
+// RESORT, not the mechanism that reports a wedged fanout.
 //
-// It MUST be strictly larger than barrierTimeout. Both waits start at
-// essentially the same instant — Stop cancels runCtx, and the goroutine's
-// <-runCtx.Done() returns immediately — so equal budgets expire together and
-// the outer join can NEVER observe the inner barrier resolving. That matters
-// here more than anywhere: Stop proceeds to unregisterJob() either way, so an
-// outer timeout that fires alongside (rather than after) the barrier silently
-// reverts the very guarantee the barrier was added for.
+// It MUST be strictly larger than barrierTimeout so the join can observe the
+// barrier resolving rather than expiring alongside it. The consequence of that
+// ordering, though, is that this arm is nearly unreachable: the goroutine's
+// only blocking wait is the barrier itself, so s.done closes within
+// barrierTimeout + ε on every path, wedged handler or not. What is left for
+// this arm to catch is the residual case where the goroutine never scheduled at
+// all. It therefore MUST NOT carry the report for the common wedged-fanout
+// case — that is s.barrierOK's job, which is signalled by the arm that can
+// actually observe it.
 const stopTimeout = barrierTimeout + time.Second
 
 // Config configures the retirement reactor subsystem.
@@ -145,6 +148,17 @@ type Subsystem struct {
 	// done guards Activate and is closed when the consume loop exits. Nil
 	// until Activate has run.
 	done chan struct{}
+	// barrierOK is closed by the shutdown goroutine ONLY on the arm where
+	// cc.Closed() resolved — that is, only when no handler is in flight. It is
+	// what lets Stop distinguish "the goroutine exited" (which s.done records,
+	// and which is true on BOTH arms) from "the handler was joined". Without it
+	// Stop can only infer the barrier's outcome from its own join, and the join
+	// succeeds either way.
+	barrierOK chan struct{}
+	// barrier overrides barrierTimeout. Zero in production; package tests
+	// shorten it so the abandoned-barrier path is reachable in a unit test
+	// rather than only after five real seconds.
+	barrier time.Duration
 
 	// createConsumer is the consumer-create seam. Nil in production, where
 	// Prepare builds the real durable consumer through
@@ -298,6 +312,9 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 
 	done := make(chan struct{})
 	s.done = done
+	barrierOK := make(chan struct{})
+	s.barrierOK = barrierOK
+	budget := s.barrierBudget()
 	go func() {
 		defer close(done)
 		<-runCtx.Done()
@@ -319,16 +336,19 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 		// join rather than a flag read.
 		select {
 		case <-cc.Closed():
-		case <-time.After(barrierTimeout):
+			// The barrier resolved: no handler is in flight, so Stop's
+			// unregisterJob() cannot strip ABAC attributes out from under a
+			// live process(). Signalling that to Stop is the ONLY way it can
+			// tell this arm from the one below — s.done closes on both.
+			close(barrierOK)
+		case <-time.After(budget):
 			// A handler is wedged. Bounded rather than blocking shutdown
 			// forever; the unacked message is redelivered on the next boot.
-			// Logged because abandoning this barrier is precisely what lets
-			// unregisterJob() retract liveness under a live process(), and a
-			// silent arm leaves the resulting half-applied fanout with no
-			// shutdown-side evidence at all.
+			// barrierOK is deliberately left OPEN, which is what makes Stop
+			// report the liveness retraction that follows.
 			slog.WarnContext(runCtx,
 				"retirement reactor barrier timed out; a fanout may still be in flight",
-				"subsystem", s.ID().String(), "timeout", barrierTimeout.String())
+				"subsystem", s.ID().String(), "timeout", budget.String())
 		}
 	}()
 
@@ -348,21 +368,46 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 		select {
 		case <-s.done:
 		case <-time.After(stopTimeout):
-			// The join was abandoned past even the barrier's own budget, and
-			// unregisterJob() below runs anyway — so a still-running
-			// MoveCharacter is about to lose its ABAC attributes. That is the
-			// half-applied-fanout window, and it MUST NOT be silent.
+			// Last resort only: the goroutine's sole blocking wait is the
+			// barrier, so reaching here means it never scheduled at all. The
+			// wedged-fanout case does NOT come through this arm — it joins
+			// cleanly and is reported by the barrierOK check below.
 			slog.WarnContext(ctx,
-				"retirement reactor shutdown join timed out; retracting job liveness under a possible in-flight fanout",
+				"retirement reactor shutdown goroutine never exited within its budget",
 				"subsystem", s.ID().String(), "timeout", stopTimeout.String())
 		}
 		s.done = nil
+	}
+
+	// Report the consequence from the place that can observe it. A successful
+	// join proves only that the goroutine exited; barrierOK proves the handler
+	// was joined. When it is still open, unregisterJob() below is about to
+	// retract the job's ABAC liveness under a possibly-live MoveCharacter —
+	// the half-applied-fanout window, and it MUST NOT be silent.
+	if s.barrierOK != nil {
+		select {
+		case <-s.barrierOK:
+		default:
+			slog.WarnContext(ctx,
+				"retirement reactor retracting job liveness under a possible in-flight fanout",
+				"subsystem", s.ID().String(), "barrier_timeout", s.barrierBudget().String())
+		}
+		s.barrierOK = nil
 	}
 	s.unregisterJob()
 	s.cc = nil
 	s.cons = nil
 	s.reactor = nil
 	return nil
+}
+
+// barrierBudget returns the Closed() barrier's budget: the production constant
+// unless a package test shortened it.
+func (s *Subsystem) barrierBudget() time.Duration {
+	if s.barrier > 0 {
+		return s.barrier
+	}
+	return barrierTimeout
 }
 
 // unregisterJob drops the job's liveness declaration, so a stopped reactor's

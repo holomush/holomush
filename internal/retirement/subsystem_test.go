@@ -4,7 +4,9 @@
 package retirement
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -296,12 +298,78 @@ func TestStopStopsTheConsumeContext(t *testing.T) {
 // Stop's <-s.done wait and the shutdown goroutine's <-cc.Closed() wait start at
 // essentially the same instant: Stop cancels runCtx, and the goroutine's
 // <-runCtx.Done() returns immediately. Give the two the same budget and their
-// timers expire together, so the join can never observe the barrier resolving —
-// and since Stop proceeds to unregisterJob() either way, the liveness guarantee
-// the barrier exists for reverts under exactly the condition it was written for.
+// timers expire together, so the join can never observe the barrier resolving.
+//
+// The margin is what makes the join deterministic — and it is ALSO what makes
+// the outer arm a last resort rather than the wedged-fanout report: the
+// goroutine's only blocking wait is the barrier, so it always exits first. The
+// wedged case is reported off s.barrierOK instead, which is what
+// TestStopReportsTheLivenessRetractionWhenTheBarrierWasAbandoned covers.
 func TestTheJoinBudgetStrictlyOutlastsTheBarrierBudget(t *testing.T) {
 	require.Greater(t, stopTimeout, barrierTimeout,
 		"the outer join MUST outlast the inner barrier, or it can never observe it resolving")
+}
+
+// TestStopReportsTheLivenessRetractionWhenTheBarrierWasAbandoned covers the
+// case that the outer stopTimeout arm was written for and cannot reach.
+//
+// Because the shutdown goroutine's only blocking wait IS the barrier, s.done
+// closes within barrierTimeout + ε on every path. So under a genuinely wedged
+// fanout Stop's join SUCCEEDS, and inferring the barrier's outcome from the
+// join can only ever conclude "fine". unregisterJob() then retracts the job's
+// ABAC liveness one line later, under a live MoveCharacter, silently.
+//
+// s.barrierOK is the signal that distinguishes the two: closed only on the arm
+// where cc.Closed() resolved. This test wedges the handler past a shortened
+// barrier and asserts Stop says so.
+func TestStopReportsTheLivenessRetractionWhenTheBarrierWasAbandoned(t *testing.T) {
+	// slog.SetDefault is process-global: this test MUST NOT call t.Parallel().
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx := context.Background()
+	s, cons := newLifecycleSubsystem(t)
+	s.barrier = 10 * time.Millisecond
+	require.NoError(t, s.Prepare(ctx))
+	require.NoError(t, s.Activate(ctx))
+
+	handlerDone := make(chan struct{})
+	cons.cc.mu.Lock()
+	cons.cc.inFlight = func() {
+		// A fanout still mid-flight well past the barrier's budget.
+		time.Sleep(200 * time.Millisecond)
+		close(handlerDone)
+	}
+	cons.cc.mu.Unlock()
+
+	require.NoError(t, s.Stop(ctx))
+
+	require.Contains(t, logBuf.String(),
+		"retirement reactor retracting job liveness under a possible in-flight fanout",
+		"a join that succeeded while the barrier was abandoned MUST still report the retraction")
+
+	<-handlerDone // keep the fake's goroutine from outliving the log capture
+}
+
+// TestStopStaysSilentAboutLivenessWhenTheBarrierResolved is the other half:
+// the retraction warning MUST NOT fire on the ordinary path, or it is noise an
+// operator learns to ignore.
+func TestStopStaysSilentAboutLivenessWhenTheBarrierResolved(t *testing.T) {
+	// slog.SetDefault is process-global: this test MUST NOT call t.Parallel().
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx := context.Background()
+	s, _ := newLifecycleSubsystem(t)
+	require.NoError(t, s.Prepare(ctx))
+	require.NoError(t, s.Activate(ctx))
+	require.NoError(t, s.Stop(ctx))
+
+	require.NotContains(t, logBuf.String(), "retracting job liveness")
 }
 
 // TestStopResetsBothGuardsSoRetryWorks is the guard-reset contract: Stop is
