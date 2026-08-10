@@ -998,3 +998,183 @@ are empty both before the edit and after any commit: `04-07:341`, `04-04:213`, `
 symbols/claims were individually re-resolved this cycle; three MISSING seams, one
 intra-plan contradiction, two unsatisfiable criteria and eight vacuous criteria were
 found, and each is escalated into a finding above.
+
+---
+
+# Cross-AI Plan Review — Phase 4 · Cycle 3 (final)
+
+**Reviewer:** Codex (`--codex`), source-grounded (`plan_review.source_grounding: true`), plus an
+independent orchestrator re-grounding pass.
+**Reviewed at:** 2026-08-10
+**Plans reviewed:** 04-01 … 04-09 (all nine), with `04-CONTEXT.md`, `04-PATTERNS.md`,
+`04-RESEARCH.md`, `.planning/REQUIREMENTS.md` and the ROADMAP Phase-4 section in prompt.
+**Loop position:** cycle 3 of 3. Trend 8 → 6 → **2**.
+
+## Cycle-2 disposition audit
+
+Every cycle-2 finding was re-grounded against source, not against the plan's own claim.
+
+| # | Cycle-2 finding | Verdict | Evidence |
+|---|---|---|---|
+| HIGH-A | No viewer-identity seam before wave 3 | **FULLY RESOLVED** | `04-01:243` places both auth repositories on the constructor; `04-01:252-282` declares `viewerIdentity` + `resolveViewerIdentity`; `04-01:331-345` updates **both** wiring sites and `04-01`'s `files_modified` lists `cmd/holomush/sub_grpc.go` and `internal/testsupport/integrationtest/harness.go`. The dependencies are genuinely in scope: `policyEngine := s.cfg.ABAC.Engine()` at `cmd/holomush/sub_grpc.go:352`, `authPlayerRepo`/`authPlayerSessionRepo` at `:356-357`, harness `accessEngine: pe` at `harness.go:876`. The deliberate non-use of the guest-denying gate is real: `sceneaccess_service.go:144-146` returns `PermissionDenied` for `player.IsGuest`. |
+| HIGH-B | §9.2 directory gate had no evaluator seam | **FULLY RESOLVED** | `04-07:270` declares the one-method seam; `04-07:288-291` names both wiring files; `04-07:170` carries both in `<files>`. The signature matches `(*policy.Engine).Evaluate` and is byte-identical to the shipped precedent `profilevis.PolicyEvaluator` at `internal/access/profilevis/profilevis.go:99-101`. The DENY-with-`infra:`-id-and-**nil**-error shape is real (`policytest/helpers.go:120-131`) and the handling precedent is `profilevis.evaluate` (`:234-273`). |
+| MEDIUM-C | `04-04:209-210` unsatisfiable | **FULLY RESOLVED** | Receiver-qualified and comment-filtered at `04-04:232`; counts call expressions, not declarations. |
+| MEDIUM-D | plain `proto.Marshal` map determinism | **FULLY RESOLVED** | Primary claim moved to `proto.Equal`; byte equality scoped to `proto.MarshalOptions{Deterministic: true}`; the criterion-2 sentinel scan's retention of plain `Marshal` carries its stated reason. |
+| MEDIUM-E | `04-07` seed meta-test contradiction + vacuous criterion | **FULLY RESOLVED** | The file is read-only in `04-07`; `:427` is a source-state check; the seven sibling vacuous forms across `04-01/04-04/04-08/04-09` are swept. |
+| LOW-F | `04-02` implementation-first | **FULLY RESOLVED** | `04-02:121` records the verbatim-refactor carve-out as a bounded decision with its three grounds and requires the pre-existing suite green before new assertions. |
+
+**Post-cycle-2 corrections, re-verified:**
+
+| Correction | Verdict | Evidence |
+|---|---|---|
+| `SeedVersion: 7` → `1` | **VERIFIED** | `04-01:356` asserts `SeedVersion: 1`; propagated to `04-PATTERNS.md:348` and `:562`. `internal/access/policy/bootstrap.go:91` — `*existing.SeedVersion < seed.SeedVersion` — is a **per-policy** compare, so a brand-new policy correctly starts at 1. |
+| `sceneaccess_service.go:144-146` guest denial | **VERIFIED** | `if player.IsGuest {` at `:144`, `status.Error(codes.PermissionDenied, "guests cannot access scenes")` at `:145`. |
+| `profilevis.go:99-101` | **VERIFIED** | `type PolicyEvaluator interface {` `:99`, `Evaluate(...)` `:100`, `}` `:101`. |
+| `04-07` `NewInfraFailureEngine` two-method rationale | **VERIFIED** | `policytest/helpers.go` declares `Evaluate` and `CanPerformAction`; the two-method type satisfies the one-method seam, and `04-07:205` now says exactly that. |
+| `04-05:179` struct-shape check | **VERIFIED** | Rewritten to `rg -n -A 12 'type CharacterAccessServer struct'` asserting a bare embedded `playerGate` and no duplicate direct fields, with the reason the occurrence count was false stated inline. |
+| `04-02` guest literal "five occurrences across two files" | **VERIFIED** | `internal/web/scene_handlers_test.go` and `internal/web/status_interceptor_test.go`. |
+| `harness.go:1197` accessor correction | **NOT PROPAGATED** (non-blocking) | `04-01:344` and `04-07:287` still cite `AccessEngine()` at `:1191`. `:1191` is that method's **doc-comment first line**; the `func` is at `:1197`. Harmless to an executor — recorded, not raised as a finding. |
+
+## Concerns
+
+### HIGH-1 — The routing census cannot see the mutations' ownership check, and `04-06` asserts that it can
+
+`04-06:190-200` requires both mutation handlers to call a new unexported helper
+`ownedCharacterForMutation`, which in turn calls the embedded `s.ownedCharacter` and rewrites
+its `NotFound` into `CHARACTER_NOT_OWNED`/`PermissionDenied`. `04-06:200` then claims
+"04-08's routing census [is] untouched — the helper routes THROUGH the gate".
+
+That claim is false against `04-08`'s own predicate. `04-08:187-193` defines membership as:
+"a method routes … through ownership when it likewise references the ownership method name"
+**as a selector on its own receiver**. `UpdateCharacterProfile` and `UpdateCharacterDescription`
+will reference `s.ownedCharacterForMutation`, not `s.ownedCharacter`. The predicate inspects the
+handler's own body and does not follow the call — the same structural limitation `04-09:104`
+documents for the world-envelope census's `bodyReferencesSelector` detector.
+
+Consequences, all bad:
+- If both mutations are in the checked-in expected ownership set, the census is **permanently RED**
+  even when the code is correct.
+- If they are omitted to make it green, criterion 1's set-equality proof silently **excludes the two
+  write surfaces** — the highest-risk RPCs in the phase.
+- A later edit deleting `s.ownedCharacter` from the wrapper leaves both mutations ungated with the
+  census still green.
+
+`04-08` compounds this by never naming the members of its "checked-in expected set" — no plan text
+lists `UpdateCharacterProfile`/`UpdateCharacterDescription` as expected members, so the conflict is
+invisible until execution. Its RED demonstration (`04-08:218-221`) also exercises only the
+**guest-gate** predicate ("temporarily delete the guest-gate call"), never the ownership predicate.
+
+**PLAN.md change needed (`04-08`, with a one-line cross-reference in `04-06`):**
+1. Derive and assert exactly one approved wrapper, `ownedCharacterForMutation`, and assert its own
+   body directly references `s.ownedCharacter`.
+2. Count an exported handler as ownership-routed when it references **either** `ownedCharacter`
+   **or** that verified wrapper as a selector on its own receiver.
+3. Enumerate the expected owner-audience set explicitly in `04-08`, including both mutations.
+4. Add a second RED demonstration that deletes `s.ownedCharacter` from the **wrapper** and captures
+   the failure verbatim — the guest-gate RED does not exercise this predicate.
+5. Amend `04-06:200`'s "untouched" sentence to point at the wrapper-aware predicate instead.
+
+### HIGH-2 — `04-06`'s only domain seam is a dangling referent, and its two wiring sites are outside its `files_modified`
+
+`04-06` refers three times to "the facade's **mutate-side narrow interface**" —
+`04-06:244` ("the write half needs `UpdateCharacterDescription` added to the mutate-side
+interface"), `:264` ("add the method to the facade's mutate-side narrow interface"), and `:397`
+(artifacts). **No such interface exists in any plan.** Exhaustively, the phase declares four narrow
+consumer-side interfaces and no more: `characterAccessWorldReader` and
+`characterAccessProfileVisibility` (`04-01:235-236`, both read-only —
+`ListPropertiesByParent` + `GetCharacterDescription`, and `Reachable` + `VisibleAttributes`),
+`characterAccessPolicyEvaluator` (`04-07:270`), and `characterAccessDirectoryReader` (`04-07:267`).
+Neither wave-2/3/5 plan (`04-04`, `04-05`, `04-07`) introduces a mutate-side type, and `04-09` is
+domain-side only (`files_modified` = `internal/world/**` exclusively).
+
+So `04-06` — the whole of criterion 4, at wave 4 — reaches `world.Service.UpdateCharacterDescription`
+(`internal/world/service.go:844`) and 04-09's new `UpdateCharacterProfileAttributes` through a seam
+that no plan declares, whose production satisfier is never named, and whose injection is never
+specified. The plan leaves the executor to choose between two materially different shapes:
+
+- **(i) a new interface + field + constructor parameter** — which requires editing
+  `cmd/holomush/sub_grpc.go` and `internal/testsupport/integrationtest/harness.go`. **Neither
+  appears in `04-06`'s `files_modified`** (it lists exactly four files: `characteraccess_service.go`,
+  `characteraccess_write.go`, `characteraccess_write_test.go`,
+  `test/integration/access/character_write_test.go`). Every sibling plan that added a constructor
+  parameter — `04-01:23-24`, `04-05:12-13`, `04-07:20-21` — correctly lists both. `04-06` is the
+  only one that does not, and it is the only one that needs a new dependency at wave 4. Executing
+  (i) under this scope contract puts `task build` red with no in-scope file to fix it in.
+- **(ii) widening `characterAccessWorldReader`** with write methods — zero wiring, because
+  `*world.Service` already satisfies both — but contradicts the type's name, its `04-01:237-239`
+  doc-comment contract, and `04-06`'s own "mutate-side" wording.
+
+This is a load-bearing substrate seam deferred to execution time — the exact failure mode
+`.claude/rules/references/plan-review-learnings.md` records as a blocking plan gap, and the same
+family as cycle-2's HIGH-A and HIGH-B.
+
+Secondary, same fix: `04-06` Task 2's `<files>` block (`:236`) omits
+`internal/grpc/characteraccess_service.go`, the file its own `<action>` at `:264` edits.
+
+**PLAN.md change needed (`04-06`):**
+1. Name the interface explicitly (e.g. `characterAccessWorldMutator`), give its exact method set —
+   `UpdateCharacterDescription(ctx, world.Caller, ulid.ULID, string) error` per `service.go:844`,
+   plus 04-09's profile-attribute command with its `expectedVersion` parameter — and state that
+   `*world.Service` is the satisfier at both sites.
+2. Add `cmd/holomush/sub_grpc.go` and `internal/testsupport/integrationtest/harness.go` to
+   `files_modified`, and state that the same `*world.Service` value 04-01 already passes for
+   `characterAccessWorldReader` is passed again (one added argument, no new construction site —
+   `04-01:345`'s own rule).
+3. Add `internal/grpc/characteraccess_service.go` to Task 2's `<files>`.
+4. Add an acceptance criterion asserting the interface is declared with exactly those methods and
+   that `task build` is green at both wiring files.
+
+*Verified as NOT a defect while checking this:* the facade-side version compare in `04-06`'s
+option (a) **is** implementable — `playerGate.ownedCharacter` returns `*world.Character`
+(`sceneaccess_service.go:107-125`) and `CharacterRepository.ListByPlayer` selects the `version`
+column (`internal/world/postgres/character_repo.go:340-351`), so `char.Version` is populated. The
+narrowing has a real value to compare against.
+
+## Settled positions — not re-raised
+
+`INV-PRIVACY-10` pending; no new Phase-4 exposure audit (D-77); criterion 5 via compile fence
+(D-79); `read_description` unregistered in `action_schema.go`; `04-06`'s TOCTOU narrowing;
+`04-02`'s verbatim-refactor carve-out; HIGH-A's no-wave-change resolution under D-83
+(`04-CONTEXT.md:283-291` reads as claimed — re-read this cycle).
+
+## Verification coverage
+
+Symbols excluded from grounding when listed under a plan's "Artifacts this phase produces".
+
+| Symbol / claim | Cited at | Result | Evidence |
+|---|---|---|---|
+| `policyEngine` in scope at production wiring | `04-01:343`, `04-07:282` | VERIFIED | `cmd/holomush/sub_grpc.go:352` — `policyEngine := s.cfg.ABAC.Engine()` |
+| `authPlayerRepo` / `authPlayerSessionRepo` in scope | `04-01:338-341` | VERIFIED | `cmd/holomush/sub_grpc.go:356-357` |
+| `authCharRepo := bootstrapsetup.NewCharRepoAdapter(pool, charRepo)` | `04-07:186` | VERIFIED | `cmd/holomush/sub_grpc.go:446` |
+| harness `accessEngine` field assignment | `04-01:344`, `04-07:287` | VERIFIED | `internal/testsupport/integrationtest/harness.go:876` — `accessEngine: pe` |
+| `AccessEngine()` accessor at `:1191` | `04-01:344`, `04-07:287` | AMBIGUOUS | Doc comment begins `:1191`; `func (s *Server) AccessEngine()` is at `:1197`, `return s.accessEngine` at `:1198`. Non-misleading; recorded only. |
+| harness `NewSceneAccessServer` constructor idiom at `:1173` | `04-07:187` | VERIFIED | `internal/testsupport/integrationtest/harness.go:1173`, `requirePlugins` `:1174`, `t.Fatalf` `:1176`, `holoGRPC.NewSceneAccessServer(` `:1178` |
+| guest denial `sceneaccess_service.go:144-146` | `04-01:279`, `04-05:29` | VERIFIED | `:144` `if player.IsGuest {`, `:145` `PermissionDenied` |
+| `ownedCharacter` returns `*world.Character` incl. version | `04-02:74`, `04-06:186` | VERIFIED | `internal/grpc/sceneaccess_service.go:107-125` |
+| `ListByPlayer` selects `version`; stamps only `CHARACTER_LIST_FAILED` | `04-02:281` | VERIFIED | `internal/world/postgres/character_repo.go:340-351` |
+| `resolvePlayerSessionWithRepo` package-level | `04-01:264` | VERIFIED | `internal/grpc/auth_handlers.go:174` |
+| `NewSceneAccessServer` signature unchanged ⇒ callers compile | `04-02:106-110` | VERIFIED (incomplete citation) | Direct constructions are `cmd/holomush/sub_grpc.go`, `harness.go:1178` **and `internal/testsupport/integrationtest/session.go:719`** — a third direct site the plan does not name. Harmless because the signature is unchanged; `session.go:1004` and `test/integration/scenes/scene_name_resolution_test.go:101` go through the zero-arg harness method. |
+| `profilevis.PolicyEvaluator` one-method shape | `04-07:176` | VERIFIED | `internal/access/profilevis/profilevis.go:99-101` |
+| `profilevis.evaluate` three-outcome collapse | `04-07:176` | VERIFIED | `internal/access/profilevis/profilevis.go:234-273` |
+| DENY + `infra:` id + nil error is real | `04-07:205` | VERIFIED | `internal/access/policy/policytest/helpers.go:120-131` (declares `Evaluate` and `CanPerformAction`) |
+| `bootstrap.go:91` per-policy SeedVersion compare | `04-PATTERNS.md:348`, `04-01:356` | VERIFIED | `internal/access/policy/bootstrap.go:91` |
+| `world.Service.UpdateCharacterDescription` signature, no `expectedVersion` | `04-06:32`, `:240`; `04-09:106` | VERIFIED | `internal/world/service.go:844` |
+| `worldMutator.propertyWriter` already injected | `04-09:94` | VERIFIED | `internal/world/mutator.go` (field + `newWorldMutator` injection) |
+| The phase's four narrow interfaces are exhaustive | derived | VERIFIED | `rg -o 'characterAccess[A-Za-z]*' *-PLAN.md \| sort -u` yields exactly `characterAccessWorldReader`, `characterAccessProfileVisibility`, `characterAccessPolicyEvaluator`, `characterAccessDirectoryReader` |
+| A "mutate-side narrow interface" is declared somewhere | `04-06:244`, `:264`, `:397` | **MISSING** | No declaration in any plan — HIGH-2 |
+| `04-08` expected owner-audience set names the mutations | `04-08:208-211` | **MISSING** | `rg -n 'UpdateCharacterProfile\|UpdateCharacterDescription' 04-08-PLAN.md` returns nothing — HIGH-1 |
+| `world.CharacterDescription` / `world.Service.GetCharacterDescription` absent at HEAD | `04-01:235` | MISSING, **expected** | Phase-created artifacts (`04-01:195-197`, `:539`); `internal/world/service.go` and `internal/world/character.go` are in `04-01`'s `files_modified` |
+| All `CharacterAccessServer` symbols absent at HEAD | all plans | MISSING, **expected** | Phase-created artifacts |
+| Runtime behaviour of unwritten code | — | UNCHECKABLE | Not treated as verified anywhere above |
+
+A clean line here never means "nothing was checked". Twenty-four symbols/claims were individually
+re-resolved this cycle against source; two blocking gaps were found and both are escalated above.
+
+## Risk Assessment
+
+**MEDIUM-HIGH.** Both remaining findings are localized, mechanical, and confined to two plans
+(`04-06`, `04-08`) in waves 4 and 6 — nothing in waves 1-3 is blocked, so execution can begin.
+Neither is an architectural error: HIGH-1 is a predicate that must learn one approved wrapper name,
+HIGH-2 is a seam that must be named and two `files_modified` entries that must be added. Left
+unfixed, HIGH-1 makes criterion 1's proof either permanently red or silently incomplete over the
+two write RPCs, and HIGH-2 puts `task build` red at wave 4 with no in-scope file to repair it in.
