@@ -515,6 +515,19 @@ func TestProcessAcksAnUndecodableBodyRatherThanRedeliveringItForever(t *testing.
 func TestHandleDecodedAcksAForeignEventTypeWithoutDecodingItsBody(t *testing.T) {
 	f := newFixture(t)
 
+	// PROCESS-GLOBAL STATE. errutil.LogErrorContext logs through slog's
+	// default, so capturing the poison line means swapping that default for
+	// the duration of this test. The restore below makes it safe SEQUENTIALLY
+	// only:
+	//
+	//	CONSTRAINT: no test in package retirement may call t.Parallel() while
+	//	this test exists. A parallel sibling would run against whichever
+	//	handler happened to be installed.
+	//
+	// Removing the constraint means giving errutil a logger-and-context
+	// variant so the reactor could route this through its own cfg.Logger; the
+	// existing errutil.LogError takes a logger but no ctx, which the repo's
+	// logging rule forbids wherever a ctx is in scope.
 	capture := &errorLogCapture{}
 	old := slog.Default()
 	slog.SetDefault(slog.New(capture))
