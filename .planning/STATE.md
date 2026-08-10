@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 03
-current_phase_name: world-character-commands
-status: verifying
+current_phase: 4
+current_phase_name: Shared Facade Helpers & `CharacterAccessService`
+status: planning
 stopped_at: Completed 03-06-PLAN.md (last plan of phase 03)
-last_updated: "2026-08-09T23:01:16.603Z"
-last_activity: 2026-08-09
-last_activity_desc: Phase 02.2 complete — UAT passed, security verified, transitioned to Phase 03
+last_updated: "2026-08-10T13:47:16.995Z"
+last_activity: 2026-08-10
+last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
   total_phases: 9
   completed_phases: 6
@@ -34,11 +34,11 @@ without rework.
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 03 (world-character-commands) — EXECUTING
-Plan: 6 of 6
-Status: Phase complete — ready for verification
+Phase: 4 — Shared Facade Helpers & `CharacterAccessService`
+Plan: Not started
+Status: Ready to plan
 Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
-Last activity: 2026-08-09 — Phase 03 execution started
+Last activity: 2026-08-10 — Phase 03 complete, transitioned to Phase 4
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
 (`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
@@ -109,7 +109,7 @@ no action needed.
 
 **Velocity:**
 
-- Total plans completed: 77
+- Total plans completed: 74
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -119,7 +119,7 @@ no action needed.
 |-------|-------|-------|----------|
 | 01 | 10 | - | - |
 | 02 | 7 | - | - |
-| 03 | 9 | - | - |
+| 03 | 6 | - | - |
 | 04 | 4 | - | - |
 | 05 | 16 | - | - |
 | 06 | 5 | - | - |
@@ -544,6 +544,9 @@ the next milestone yet.
 - [Phase ?]: 03-05: the charactivity KV seam declares DeleteRevision(ctx,key,revision) rather than jetstream's variadic KVDeleteOpt, because deleteOpts is unexported and a fake could not otherwise observe the guarded revision
 - [Phase ?]: Phase 03 harness now boots the REAL outbox relay and retirement reactor (WithOutboxRelay/WithRetirementReactor); one shared world.Service and one shared jobs.Registry mirror cmd/holomush
 - [Phase ?]: IDENT-04 and IDENT-10 closed in 03-06 with the last_active_at operational-column writer named as the one argued INV-WORLD-4 exemption
+- [Phase ?]: Phase 3: character ownership is policy text, not a Go predicate (D-39/D-40) — retire/unretire are distinct ABAC actions, admin-only in v0.13 via the pre-existing bare-action admin seed; no new human-principal grant shipped.
+- [Phase ?]: Phase 3: the first production job: consumer is instance-scoped by its triggering event (D-54) — seed:job-retirement-instance-scoped binds BOTH action.job.trigger_event_type and action.job.trigger_subject == resource.id.
+- [Phase ?]: Phase 3: IDENT-04 ruled Complete as a DOMAIN capability; the admin-reachable half is ADMIN-05 (Phase 6), conditional on a Phase 6 traceability link being added.
 
 ### Pending Todos
 
@@ -566,6 +569,8 @@ None yet.
 - [Phase 02.2] Two concurrency findings on `jobs.Registry`, neither blocking: the liveness read is two calls under separate RLocks (WR-02 — fails closed either way, but INV-ACCESS-13 clause 1 is not concurrency-exact as phrased), and `Register` is silently last-writer-wins with no duplicate check (WR-03 — a second registration can replace a security-gating capability class). Both sit inside the D-53 in-process out-of-scope boundary.
 - [Phase 02.2] Four abac-reviewer Low findings filed, not fixed: check-then-act in `SchemaRegistry.Register`; `attribute.Resolver`'s own maps unsynchronized (pre-existing); three undeclared action keys at `eventbus/authguard/guard.go:134`; `reservedActionKeys` still a one-entry denylist rather than an allowlist.
 - The two-replica resilience suite is fully red on the nightly lane (4 pre-existing failures; natstest.Conn dials a scoped NATS env without credentials) — filed as holomush/holomush#4953, not fixed in 03-03
+- [Phase 3] AR-03-04: the TWO-REPLICA retire-concurrency proof (test/integration/resilience/retire_concurrency_test.go) is gated on quarantinetest.Enabled(), so it does not run in the required Integration Test lane — and it is currently RED where it does run. Ruled SCHEDULED-not-accepted at UAT: holomush/holomush#4953 must close for the resilience suite to rejoin the gating lane. The single-process guarantee IS covered in CI; only the two-replica case is unwatched.
+- [Phase 3] IDENT-04 traceability gap: the requirement is marked Complete and traced to Phase 3 ONLY, but its admin-reachable half is ADMIN-05 (Phase 6) — world.Service.RetireCharacter has zero non-test callers today. If ADMIN-05 slips or is rescoped, nothing flags that a Complete requirement has no user-reachable path. The GSD traceability writer cannot add the row (phase.complete reported 'no matching row found' for IDENT-04/IDENT-10 despite REQUIREMENTS.md:372 existing) — same standing writer gap as AUTHZ-01 in Phase 02.1.
 
 ### Quick Tasks Completed
 
@@ -605,7 +610,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-09T23:01:16.588Z
+Last session: 2026-08-10T13:47:11.253Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.

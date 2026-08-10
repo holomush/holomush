@@ -81,7 +81,7 @@ home, with both designed to absorb the deferred portal surfaces without rework.
 
 - [x] **Phase 1: Portal SPEC** — settle every shape decision whose cost explodes after code exists, and discharge PROJECT.md's Out-of-Scope precondition — completed 2026-08-01 (6/6 plans; `01-SPEC.md`, 16 sections; 9 amendments applied; 4 issues opened)
 - [ ] **Phase 2: ABAC & Schema Vocabulary** — admin-section + public-profile policy, name normalization + unique index, character lifecycle column
-- [ ] **Phase 3: World Character Commands** — domain-layer soft `RetireCharacter`/`UnretireCharacter` + the retirement reactor, version-guarded and outbox-emitting (`RenameCharacter` moved to 999.20, 2026-08-06)
+- [x] **Phase 3: World Character Commands** — domain-layer soft `RetireCharacter`/`UnretireCharacter` + the retirement reactor, version-guarded and outbox-emitting (`RenameCharacter` moved to 999.20, 2026-08-06) (completed 2026-08-10)
 - [ ] **Phase 4: Shared Facade Helpers & `CharacterAccessService`** — one guest/ownership gate; character read/write BFF with privacy enforced by absence
 - [ ] **Phase 5: Character Identity UI & Public Profiles** — creation identity card, multi-alt management, public profile page, per-field visibility
 - [ ] **Phase 6: Admin Portal Shell & Character Administration** — ABAC-gated `/admin`, character administration, six deferred sections registered and denied-after-gate
@@ -546,7 +546,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1. Channels Subsystem | v0.11 | 6/6 | In Progress|  |
 | 2. Scenes Lineage Completion | v0.11 | 13/13 | In Progress|  |
-| 3. Platform Hardening & Deployment Scaling | v0.11 | 6/6 | In Progress|  |
+| 3. Platform Hardening & Deployment Scaling | v0.11 | 6/6 | Complete    | 2026-08-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
