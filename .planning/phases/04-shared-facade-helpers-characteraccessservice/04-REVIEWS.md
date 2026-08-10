@@ -526,3 +526,475 @@ feeds a HIGH finding above.
 48 Go symbols, 2 proto RPCs, 5 seed policies and 4 explicit `path:line` citations
 were resolved individually; 3 MISSING and 1 AMBIGUOUS were found and each is
 escalated into a finding above.
+
+---
+
+# Cross-AI Plan Review — Phase 4 · Cycle 2
+
+**Reviewed:** 2026-08-10 · **Reviewer lane:** `codex` (`--codex`, source-grounded) ·
+**Plans:** `04-01`…`04-09` at commit `3f06a8447`
+
+Cycle 1 (above) raised 5 HIGH + 3 actionable non-HIGH. All eight were incorporated
+into PLAN.md. This cycle audits whether each landed in **executable** plan content
+— task steps, behaviors, acceptance criteria — rather than in prose only, and
+hunts for defects introduced **by** the fixes.
+
+## Codex Review
+
+## Summary
+
+Cycle 2 resolves all eight cycle-1 findings in executable plan content. The deepest
+repairs — HIGH-2 through HIGH-5 — match the live repository mechanisms. However,
+two new dependency/wiring gaps prevent the plans from being executable as written:
+the public profile path has no dependency capable of resolving authenticated viewer
+sessions before Wave 3, and the directory handler has no dependency capable of
+evaluating its new directory-resource ABAC gate. I also found a medium-risk
+protobuf determinism assertion that tests behavior the default marshaler does not
+guarantee. Overall verdict: HIGH risk until the two missing seams are planned
+explicitly.
+
+## Cycle-1 disposition audit (Codex verdicts)
+
+| Finding | Verdict | Evidence |
+|---|---|---|
+| HIGH-1 uniform NotFound masked infra failure | RESOLVED | Live helper returns `NotFound` for malformed/non-owned and `Internal` for `ListByPlayer` failure (`internal/grpc/sceneaccess_service.go:109`, `:114`). `04-02` Task 2 now tests two-way authorization opacity separately from the `Internal` path; acceptance criteria require both the code and the message inequality. |
+| HIGH-2 create gated on nonexistent property resource | RESOLVED | `04-09` Task 1 now requires one `checkAccess(write, access.CharacterResource(...), prefixCharacter)` before the read, matching `internal/access/prefix.go:201` and avoiding `PropertyResource`, whose provider requires an existing row. The first-write test starts with zero property rows. |
+| HIGH-3 nonexistent visibility default / unspecified row construction | RESOLVED | Repository passes `p.Visibility` straight into SQL (`internal/world/postgres/property_repo.go:60`); the "defaults" helper handles only restricted lists (`:178`). `04-09` now specifies every created field including explicit `Visibility: "public"`, plus stored-field assertions and preservation of ID/Owner/Visibility on update. |
+| HIGH-4 false "no directory resource is seeded" premise | RESOLVED | Singleton constructor at `internal/access/prefix.go:271`; character-scoped seed at `internal/access/policy/seed.go:567`. `04-07` Task 2 recognises both, adds a viewer-scoped floor, and tests that the gate precedes enumeration. |
+| HIGH-5 visibility result carried no values | RESOLVED | `profilevis.Property` is `{ID string, Name string}` (`internal/access/profilevis/profilevis.go:103`); `world.EntityProperty.ID` is a ULID and `Value` is `*string` (`internal/world/property.go:16`). `04-04` Task 1 builds `byID[prop.ID.String()]` and the evaluator input from the same `ListPropertiesByParent` slice, then uses the evaluator result solely as an admissibility set. D-79 is preserved: the only source remains the narrow world-service interface. |
+| MEDIUM-1 missing directory enumeration seam | RESOLVED | `ListAll(ctx) ([]*world.Character, error)` at `internal/auth/character_service.go:38`; production and harness satisfiers at `internal/bootstrap/setup/adapters.go:151` and `internal/testsupport/integrationtest/harness.go:1903`. `04-07` declares and wires the exact narrow seam. |
+| MEDIUM-2 mutation denial vs §9.6 | RESOLVED | SPEC rows cited correctly (`01-SPEC.md:2218`, `:2219`, `:2223`). `ListByPlayer` stamps only `CHARACTER_LIST_FAILED` (`internal/world/postgres/character_repo.go:340`), so nonexistent and non-owned ids genuinely collapse before the facade maps mutations to uniform `PermissionDenied`. |
+| LOW-1 grep-absence as compile-fence proof | RESOLVED | `04-01` Task 2 makes the recorded compiler failure the evidence-bearing gate and labels grep as diagnostic; `04-07` repeats the distinction. |
+
+## New Concerns
+
+### HIGH — Public viewer identity cannot be resolved in Waves 1–2
+
+`04-01` defines `CharacterAccessServer` with only two dependencies — a narrow world
+reader and a profile-visibility evaluator (`04-01-PLAN.md:208-209`) — and a
+constructor taking them positionally. It then says `GetCharacterProfile` should
+"resolve the viewer tier", but no session or player repository is held and no
+resolver dependency is declared.
+
+This becomes an ordering failure in `04-04`, which is wave 2, `depends_on: ["04-01"]`
+only, and whose behaviors require guest and player rungs (`04-04-PLAN.md:109`,
+`:248`, `:249`). The three authentication repositories do not reach
+`CharacterAccessServer` until `04-05` Task 1 (wave 3), where the server embeds
+`playerGate` (`04-05-PLAN.md:113`, `:363`).
+
+The existing resolution path proves the dependencies are necessary: `resolveAndGate`
+calls the session repository and then `playerRepo.GetByID`
+(`internal/grpc/sceneaccess_service.go:130`, `:139`). Public reads cannot reuse
+`resolveAndGate` because it *denies* guests (INV-SCENE-64), yet they must still
+distinguish anonymous / guest / player.
+
+Consequences: wave 1 can implement anonymous only; `04-04` cannot execute its
+guest/player positive controls with the planned server shape; and the
+`player_session_token` field on `GetCharacterProfileRequest`
+(`04-01-PLAN.md:188`) has no planned consumer until wave 3.
+
+### HIGH — The new directory ABAC gate has no evaluator seam
+
+`04-07` correctly adds `seed:viewer-directory-list-characters` and mandates ONE
+decision on `access.CharacterDirectoryResource()` before `ListAll`
+(`04-07-PLAN.md:252`). But `CharacterAccessServer` holds no dependency exposing a
+raw `Evaluate`.
+
+Its visibility dependency exposes only `Reachable` and `VisibleAttributes`
+(`04-01-PLAN.md:209`). `profilevis.Evaluator`'s exported method set is exactly
+`Reachable` (`internal/access/profilevis/profilevis.go:130`), `AttributeVisible`
+(`:157`) and `VisibleAttributes` (`:199`) — `evaluate` (`:234`) and `check` (`:278`)
+are unexported. `04-07`'s own artifacts list adds only
+`characterAccessDirectoryReader` and its constructor parameter; no access-engine
+interface, parameter, or wiring appears anywhere in `04-01`…`04-09`
+(`rg -n 'Evaluate\(|policy\.Engine|types\.AccessRequest'` over the plan set returns
+only the prose at `04-07-PLAN.md:252`).
+
+**This defect was introduced by the HIGH-4 fix**: the fix added the gate but not the
+means to call it. It is security-sensitive — an executor improvising with
+`Reachable` alone recreates exactly the §9.2 substitution HIGH-4 was raised to
+remove.
+
+### MEDIUM — The `04-04` join's "exactly one call site" criteria are unsatisfiable as written
+
+`04-04-PLAN.md:209` requires `rg -n 'ListPropertiesByParent' internal/grpc/characteraccess_service.go`
+to return "exactly one call site", and `:210` the same for `VisibleAttributes`.
+Both symbols are also **declared** in that same file: `04-01-PLAN.md:208-209` puts
+`characterAccessWorldReader` and `characterAccessProfileVisibility` at the head of
+`internal/grpc/characteraccess_service.go`, and `04-01-PLAN.md:450` confirms both
+types and `GetCharacterProfile` live there. Each grep therefore returns at least two
+matches — the interface method declaration and the call — before any doc comment is
+counted.
+
+The intent (one enumeration, two views) is right; the command cannot express it.
+This is the brittle-grep class cycle-1's LOW-1 named, reintroduced by the HIGH-5 fix.
+
+### MEDIUM — Default protobuf marshaling does not guarantee deterministic map bytes
+
+`PublicCharacter.profile` is `map<string, string>` (`04-01-PLAN.md:187`).
+`04-04-PLAN.md:38` (a must-have truth) and `:115` (a behavior) require two calls to
+`proto.Marshal` to produce identical bytes and treat that as proof that map
+iteration order cannot reach the wire.
+
+The pinned implementation documents determinism as **opt-in**:
+`google.golang.org/protobuf v1.36.11` (`go.mod:58`) declares
+`MarshalOptions.Deterministic` with the doc "Setting this option guarantees that
+repeated serialization of the same message will return the same bytes"
+(`proto/encode.go:25-40`). Plain `proto.Marshal` establishes no such contract, so
+the test can pass accidentally and proves nothing about production ConnectRPC
+encoding. (`04-07`'s analogous claim is safe — its response carries a *sorted
+repeated* field, not a map. `04-04`'s D-80 sentinel `assert.NotContains` uses at
+`:247-249` are also unaffected: byte *absence* does not depend on ordering.)
+
+### MEDIUM — `04-07` declares the seed meta-test file as modified and simultaneously requires it unmodified
+
+`04-07-PLAN.md:16` (`files_modified`) and `:168` (Task 2 `<files>`) both list
+`internal/access/policy/seed_profile_visibility_test.go`, while the acceptance
+criterion at `:341` requires
+`git status --porcelain internal/access/policy/seed_profile_visibility_test.go`
+to be **empty**. The executor cannot satisfy both.
+
+Worse, the criterion is diff-shaped and passes vacuously after commit — precisely
+the failure mode `04-02-PLAN.md:131` and `:134` diagnose and immunise against
+("`git diff --stat` is empty after any commit and so proves nothing about whether
+those assertions were edited"). The same vacuous form survives elsewhere and should
+be swept in the same edit: `04-04-PLAN.md:213` and `:214` (a verbatim **duplicate**
+of one another, an artifact of the HIGH-5 edit), `04-09-PLAN.md:300`, `:301`, `:407`,
+`04-08-PLAN.md:134`, and `04-01-PLAN.md:280`.
+
+*Not* in scope of this finding: the regenerate-then-check forms
+(`04-01:277`, `04-04:387`, `04-07:146`, `04-05:297`) and the
+temporary-change-was-reverted forms (`04-05:226`, `04-08:231`, `:322`) are sound —
+they run a generator or a revert first, so a non-empty result is real evidence.
+
+### LOW — `04-02` remains implementation-first
+
+`04-02` Task 1 moves the helpers (`type="auto"`), Task 2 adds their direct tests
+(`tdd="true"`). This is in tension with the repo's tests-before-implementation rule.
+Mitigating: Task 1 is a byte-identical struct move under method promotion with
+existing coverage through `./internal/grpc/` and `./internal/web/`, so there is no
+new behavior to drive. Either move the gate tests ahead of the extraction (targeting
+`SceneAccessServer` first, then retargeting the same assertions to `playerGate`), or
+record the refactor carve-out explicitly in the plan.
+
+## Suggestions
+
+1. **Add a public-viewer resolution seam in `04-01`, before `04-04`.** Either give
+   `CharacterAccessServer` the session/player repositories immediately with an
+   optional-session resolver that does **not** guest-gate, or declare a narrow
+   `characterAccessViewerResolver`. Test all three outcomes in `04-01`: missing
+   token → anonymous; guest session → guest with player id; non-guest session →
+   player with player id. Keep `playerGate` for the owner surfaces — its guest
+   denial makes it unusable for the public read — but do not postpone the
+   repositories the public surface needs to wave 3.
+2. **Add a directory-gate evaluator dependency in `04-07`.** Prefer a narrow
+   consumer interface, e.g. `Evaluate(ctx, types.AccessRequest) (types.Decision, error)`;
+   wire the production ABAC engine and the harness engine into
+   `NewCharacterAccessServer`; add it to `04-07`'s artifacts list. Add acceptance
+   criteria proving deny, evaluation-failure and permit are distinguishable and that
+   both deny and failure occur **before** `ListAll`.
+3. **Rewrite `04-04:209-210` as source-state checks that can pass.** e.g.
+   `rg -o 'r\.ListPropertiesByParent\(' internal/grpc/characteraccess_service.go | wc -l`
+   returns 1 (a receiver-qualified call, which the interface declaration cannot
+   match), or scope the count with `--no-filename` over the handler function body.
+   Count occurrences with `-o | wc -l`, not `-c`.
+4. **Narrow the `04-04` determinism claim.** Either marshal with
+   `proto.MarshalOptions{Deterministic: true}` and state that the test validates
+   logical projection determinism under deterministic test encoding — not production
+   wire-byte stability — or compare messages semantically and assert deterministic
+   ordering only for the repeated gallery field. Do not claim ordinary protobuf map
+   encoding is byte-stable.
+5. **Resolve the `04-07` files_modified contradiction** (drop the seed meta-test file
+   from `:16` and `:168` if it genuinely is not edited) and replace `:341` with a
+   source-state check — e.g. assert `viewerTwins` still holds exactly five entries
+   and that the new policy name does not carry the `seed:viewer-property-` prefix.
+   Sweep the sibling vacuous forms listed in that finding.
+6. **Decide `04-02`'s TDD posture explicitly** — reorder, or record the
+   verbatim-refactor carve-out in the plan so it is a decision rather than an
+   omission.
+
+## Risk Assessment
+
+**Overall risk: HIGH.** The cycle-1 corrections are substantive and well grounded;
+none has regressed. But two new missing dependency seams sit directly on
+authorization-critical paths. One prevents the tier model from functioning for
+authenticated viewers in the wave where it is tested; the other leaves the new
+directory ABAC gate impossible to call without unplanned architecture. These are
+execution blockers, not documentation polish. After those are wired — and the
+protobuf determinism assertion narrowed — the plan set should be close to
+convergence.
+
+---
+
+## Consensus Summary — Cycle 2
+
+**Single-reviewer cycle.** Only the Codex lane was selected (`--codex`), so there is
+no cross-reviewer agreement signal. As in cycle 1, every Codex finding was
+**independently re-verified against source by the orchestrator** before being
+recorded, and the orchestrator ran its own adversarial pass over the fixes. Two
+findings below (MEDIUM — unsatisfiable "exactly one call site" greps; MEDIUM —
+`04-07` files_modified contradiction) are **orchestrator-originated**, not Codex's.
+
+### Cycle-1 dispositions — orchestrator re-verification
+
+All eight cycle-1 findings are **FULLY RESOLVED**. Each was re-grounded:
+
+- **HIGH-1** — `04-02-PLAN.md:25` states the truth as a **two-way** authorization
+  equality; `:26` states the `Internal` truth separately and cites the caller that
+  depends on it. Task 2's behaviors at `:167-168` and acceptance criteria at
+  `:210-211` carry both. Live code confirms the split: `internal/grpc/sceneaccess_service.go:112`
+  (unparseable → `NotFound`), `:115-117` (`ListByPlayer` error → `slog.ErrorContext`
+  + `Internal`), `:124` (not owned → `NotFound`), and the depending caller's comment
+  and `if status.Code(err) == codes.Internal` branch at `:695-706` — **all citations
+  exact**. The `24`/`21` call-site counts in `:23` and `:129-130` are correct at HEAD
+  (`rg -o … | wc -l` returns 24 and 21; `-c` agrees, so no one-line-two-calls trap).
+  The guest literal count of 5 (`:134`) is correct.
+- **HIGH-2** — `04-09-PLAN.md` Task 1 guard 3 gates on
+  `access.CharacterResource(characterID.String())` with `prefixCharacter`, copying
+  `internal/world/service.go:848-850` **verbatim and exactly** (`resource :=
+  access.CharacterResource(...)` at `:848`, `s.checkAccess(ctx, subjectID, "write",
+  resource, prefixCharacter)` at `:849`). The rejected alternative is documented with
+  correct grounding: `access.PropertyResource` takes a property id
+  (`internal/access/prefix.go:255`) and `PropertyProvider.ResolveResource` fetches
+  the row and fails closed with `PROPERTY_FETCH_FAILED`
+  (`internal/access/policy/attribute/property.go:87`, `:97`, `:100`). The deciding
+  policy `seed:player-self-access` is `permit(principal is character, action in
+  ["read","write"], resource is character) when { resource.character.id ==
+  principal.character.id }` (`internal/access/policy/seed.go:39-42`) — correct for a
+  character subject writing its own character. 01-SPEC §9.3 assigns exactly this gate
+  at `:2019`.
+- **HIGH-3** — the seven-row construction table is present and every cell is grounded.
+  `idgen.New()` exists (`internal/idgen/id.go:35`). `applyVisibilityDefaults` returns
+  early unless already `restricted` and fills only `VisibleTo`/`ExcludedFrom`
+  (`internal/world/postgres/property_repo.go:180-191`). `p.Visibility` is passed
+  explicitly into the INSERT (`:60-65`), so the column `DEFAULT 'public'` at
+  `internal/store/migrations/000001_baseline.sql:361` never applies and the CHECK at
+  `:362` rejects an empty string. `updated_at` is SQL-side `NOW()` (`:56-62`), matching
+  the table's `CreatedAt` note. The `Visibility: "public"` choice is justified against
+  `seed:viewer-property-public-read` (`seed.go:756-760`, `visibility == "public"`) and
+  `Owner` against `seed:property-owner-write` (`:129-133`) / `seed:property-private-read`
+  (`:117-121`). The update-preserves-`ID`/`Owner`/`Visibility`/`CreatedAt` rule is stated.
+- **HIGH-4** — the false premise is withdrawn in-plan and the correction is grounded:
+  `access.CharacterDirectoryResource()` at `internal/access/prefix.go:273`,
+  `seed:directory-list-characters` at `internal/access/policy/seed.go:574-579` with
+  `SeedVersion: 1` at `:578`. The `SeedVersion: 1` reasoning is **correct**:
+  `internal/access/policy/bootstrap.go:91` is exactly
+  `if !opts.SkipSeedMigrations && existing.SeedVersion != nil && *existing.SeedVersion < seed.SeedVersion {`
+  — a per-policy upgrade trigger, so a brand-new policy has no prior row and ships at 1.
+  The seed meta-tests are genuinely unaffected: `TestExactlyTheFiveReadSideRowKeyedPoliciesHaveAViewerTwin`
+  scopes on the `seed:viewer-property-` prefix (`seed_profile_visibility_test.go:421-447`),
+  which the new name does not carry; `TestSeedPropertyOwnerWriteHasNoViewerTwin`
+  (`:452-466`) does sweep every `seed:viewer-` policy but requires only a scoped action
+  clause with no `write`/`delete`, which `action in ["list_character_directory"]`
+  satisfies; `TestNoPhase2SeedIntroducesACharacterResourceTypePermit` (`:692`) pins the
+  `character` resource **type** and its own doc comment states `character_directory` is
+  a different type. The twin does not over-grant: it mirrors `seed:profile-reachable`'s
+  clearing-set shape (`seed.go:678-681`) and permits one read-like action on one
+  singleton resource.
+- **HIGH-5** — the two-view join is real and the type bridge is correct.
+  `profilevis.Property` is `{ID string; Name string}` (`internal/access/profilevis/profilevis.go:106-115`);
+  `world.EntityProperty.ID` is `ulid.ULID` (`internal/world/property.go:16-17`), so
+  `byID` keyed on `.String()` matches `Property.ID` exactly.
+  `VisibleAttributes` returns `map[string]Property` keyed on `prop.Name` and populated
+  only from the caller-supplied slice (`profilevis.go:199-222`), so iterating its values
+  and looking `.ID` up in `byID` is sound, and the "id in the visible map, absent from
+  `byID` → `codes.Internal`" rule is well-founded. Criterion 5 holds — both views come
+  from the single `ListPropertiesByParent` call, the plan bans a second enumeration,
+  bans widening `profilevis.Property`, and bans any repository reach. The D-79 compile
+  fence is untouched: the narrow interfaces still name no `ListByParent`
+  (`04-01-PLAN.md:210-212`, `:278`). The threat register carries the join as T-04-17
+  (`04-04-PLAN.md:428`).
+- **MEDIUM-1** — `characterAccessDirectoryReader { ListAll(ctx) ([]*world.Character, error) }`
+  is the **verbatim** signature of `auth.CharacterRepository.ListAll`
+  (`internal/auth/character_service.go:41`). Satisfiers exist without new production
+  code: `bootstrapsetup.CharRepoAdapter.ListAll` (`internal/bootstrap/setup/adapters.go:151`),
+  already built as `authCharRepo` at `cmd/holomush/sub_grpc.go:446`; and the harness's
+  `authCharRepoAdapter.ListAll` (`internal/testsupport/integrationtest/harness.go:1903`).
+  The plan's "pass `s.charRepo` in the harness" instruction is correct —
+  `Server.charRepo` is typed `auth.CharacterRepository` (`harness.go:138`) and is
+  already passed to `NewSceneAccessServer` at `:1181`.
+- **MEDIUM-2** — the gate error matrix (`04-02-PLAN.md:223-269`) is the phase's single
+  source of truth and its citations are right. 01-SPEC §9.6's table header is at `:2214`;
+  `CHARACTER_NOT_FOUND` → `NotFound` at `:2218`; `CHARACTER_NOT_OWNED` → `PermissionDenied`,
+  scoped to *"An `owner`-audience mutation"*, at `:2219`; `CHARACTER_PROFILE_NOT_FOUND`
+  at `:2223`. **The "no SPEC amendment needed" claim holds.** `CHARACTER_NOT_FOUND` is
+  stamped only on by-id fetch/update paths — `internal/world/postgres/character_repo.go:53`,
+  `:169`, `:253`, `:288`, `:377`, `:421`, `:527`, an **exact** match for the plan's list —
+  while `ownedCharacter` resolves through `ListByPlayer` (`character_repo.go:339-350`),
+  whose only stamp is `CHARACTER_LIST_FAILED` at `:345`. A nonexistent id is therefore
+  indistinguishable from a non-owned one **by construction**, and the plan explicitly
+  scopes the delete-after-authorization race out.
+- **LOW-1** — demoted correctly. `04-07-PLAN.md:344-347` reclassifies the
+  `rg -n 'ListByParent'` check as "**Diagnostic, not a gate**… a smoke alarm" over the
+  deliberate-compile-failure demonstration; `04-01` makes the recorded compiler
+  diagnostic the evidence-bearing gate.
+
+### Agreed Concerns (cycle 2) — most severe first
+
+Both HIGHs were raised by Codex and independently confirmed by the orchestrator.
+
+1. **HIGH — no viewer-identity resolution seam before wave 3.** Confirmed:
+   `04-01-PLAN.md:208-209` declares exactly two dependencies and `:450` lists exactly
+   those two types plus `resolveViewerTier`/`mapProfileError` as the file's artifacts;
+   `04-04` is `wave: 2`, `depends_on: ["04-01"]`, and its behaviors at `:109`, `:248`,
+   `:249` demand guest and player rungs; the session/player repositories arrive only at
+   `04-05` (`wave: 3`) via the embedded `playerGate` (`04-05-PLAN.md:113`, `:363`).
+   **Strengthening the finding:** even wave 3 does not obviously supply the seam —
+   `playerGate.resolveAndGate` *denies* guests with `PermissionDenied`
+   (INV-SCENE-64), and the public read must yield a **guest** rung, so the public path
+   needs a resolver that `resolveAndGate` cannot be.
+2. **HIGH — the §9.2 directory gate has no evaluator seam, and the gap was created by
+   the HIGH-4 fix.** Confirmed: `profilevis.Evaluator` exports only `Reachable`
+   (`internal/access/profilevis/profilevis.go:130`), `AttributeVisible` (`:157`) and
+   `VisibleAttributes` (`:199`) — `evaluate` (`:234`) and `check` (`:278`) are
+   unexported; `04-07`'s artifacts list adds only `characterAccessDirectoryReader`; and
+   a plan-set-wide search for `Evaluate(`, `policy.Engine` or `types.AccessRequest`
+   returns only the prose instruction at `04-07-PLAN.md:252`. The natural improvisation
+   — gate on `Reachable` — reinstates precisely the substitution HIGH-4 removed.
+3. **MEDIUM (orchestrator) — `04-04:209-210`'s "exactly one call site" greps cannot
+   pass.** `ListPropertiesByParent` and `VisibleAttributes` are *declared* in the same
+   file the criteria search (`04-01-PLAN.md:208-209`, `:450`), so each grep returns ≥2.
+4. **MEDIUM — plain `proto.Marshal` gives no map determinism guarantee**
+   (`04-04-PLAN.md:38`, `:115` vs `google.golang.org/protobuf@v1.36.11 proto/encode.go:25-40`,
+   `go.mod:58`; the field is `map<string, string> profile = 4` at `04-01-PLAN.md:187`).
+5. **MEDIUM (orchestrator) — `04-07` declares the seed meta-test file modified (`:16`,
+   `:168`) while requiring it clean (`:341`)**, on a criterion that is additionally
+   vacuous post-commit; plus the sibling vacuous forms at `04-04:213`/`:214` (a verbatim
+   duplicate pair), `04-09:300`/`:301`/`:407`, `04-08:134`, `04-01:280`.
+6. **LOW — `04-02`'s implementation-then-test ordering** is in tension with the repo's
+   TDD rule, mitigated by the move being byte-identical with existing coverage.
+
+### Divergent Views
+
+None — single-reviewer cycle. Where the orchestrator's verification extended a Codex
+finding (the guest-denial property of `resolveAndGate` under HIGH #1) or originated a
+finding Codex did not raise (#3 and #5), that is marked inline.
+
+### Not Re-Litigated
+
+The five adjudicated positions supplied to the reviewer — `INV-PRIVACY-10` staying
+`binding: pending` (01-SPEC `:1855-1867`); no new Phase-4 exposure audit (D-77,
+GH #4937); criterion 5 enforced by the D-79 narrow-interface compile fence; no
+`action_schema.go` registration for `read_description`; and `04-06`'s facade-side
+version compare as a knowing TOCTOU narrowing — were **not** challenged with contrary
+evidence and stand.
+
+---
+
+## Verification coverage (source-grounding pass) — Cycle 2
+
+`plan_review.source_grounding` is `true`. Effective authority adapter:
+`gsd-tools drift-guard authority --raw` → **`intel`**. Severity mapping under that
+authority: `VERIFIED` → none; `MISSING` → needs-acknowledgement (no hard block);
+`AMBIGUOUS` → MEDIUM; `UNCHECKABLE` → INFO.
+
+**Scope.** Cycle 1 verified the full symbol corpus (74 file paths, 48 Go symbols, 2
+proto RPCs, 5 seed policies). This cycle re-verified **every symbol touched by a
+cycle-1 fix**, plus the symbols the new findings turn on. Symbols under each plan's
+*"Artifacts this phase produces"* section are excluded — they do not exist at HEAD.
+
+### VERIFIED — symbols and claims introduced or re-cited by the cycle-1 fixes
+
+| Symbol / claim | Cited | Resolved at | Status |
+| --- | --- | --- | --- |
+| `ownedCharacter` three-branch shape | `04-02:26`, `:190-197` | `internal/grpc/sceneaccess_service.go:112` / `:115-117` / `:124` | VERIFIED |
+| depending caller's `Internal` branch + comment | `04-02:26`, `:195` | `internal/grpc/sceneaccess_service.go:695-706` | VERIFIED (exact) |
+| 24 `s.resolveAndGate(` / 21 `s.ownedCharacter(` | `04-02:23`, `:129-130` | measured `rg -o … \| wc -l` → 24 / 21 | VERIFIED |
+| `guests cannot access scenes` × 5 | `04-02:134` | `rg -o … internal/web/ \| wc -l` → 5 | VERIFIED |
+| 01-SPEC §9.6 rows | `04-02:245-250` | `01-SPEC.md:2214` (header), `:2218`, `:2219`, `:2223` | VERIFIED (corrected citations are right) |
+| `CHARACTER_NOT_FOUND` stamp sites | `04-02:254-256` | `internal/world/postgres/character_repo.go:53,169,253,288,377,421,527` | VERIFIED (exact set) |
+| `ListByPlayer` stamps only `CHARACTER_LIST_FAILED` | `04-02:255-256` | `internal/world/postgres/character_repo.go:339-350`, code at `:345` | VERIFIED |
+| `access.CharacterResource` / `prefixCharacter` gate shape | `04-09` Task 1 guard 3 | `internal/world/service.go:848-850` | VERIFIED (exact) |
+| `seed:player-self-access` | `04-09` guard 3 | `internal/access/policy/seed.go:38-43` | VERIFIED |
+| 01-SPEC §9.3 `write` on `character:<id>` | `04-09` guard 3 | `01-SPEC.md:2019` | VERIFIED |
+| `access.PropertyResource` takes a property id | `04-09` rejection rationale | `internal/access/prefix.go:253-259` | VERIFIED |
+| `PropertyProvider.ResolveResource` fails closed | `04-09` rejection rationale | `internal/access/policy/attribute/property.go:87`, `:97`, `:100` | VERIFIED |
+| `idgen.New()` | `04-09` construction table | `internal/idgen/id.go:35` | VERIFIED |
+| `applyVisibilityDefaults` scope | `04-09:196-199` | `internal/world/postgres/property_repo.go:180-191` | VERIFIED |
+| explicit `p.Visibility` in INSERT | `04-09:199` | `internal/world/postgres/property_repo.go:60-65` | VERIFIED |
+| SQL-side `NOW()` for `updated_at` | `04-09` construction table | `internal/world/postgres/property_repo.go:56-62` | VERIFIED |
+| `visibility` DEFAULT + CHECK | `04-09:199-200` | `internal/store/migrations/000001_baseline.sql:361-362` | VERIFIED |
+| `seed:viewer-property-public-read` | `04-09` construction table | `internal/access/policy/seed.go:755-760` | VERIFIED |
+| `seed:property-owner-write` / `-private-read` | `04-09` construction table | `internal/access/policy/seed.go:128-133` / `:116-121` | VERIFIED |
+| `s.mutator` routing shapes | `04-09` "exported Service command" | `internal/world/service.go:340-349`, `:859-871` | VERIFIED |
+| `access.CharacterDirectoryResource()` | `04-07:180`, `:238` | `internal/access/prefix.go:271-273` | VERIFIED |
+| `seed:directory-list-characters` + `SeedVersion: 1` | `04-07:181-182`, `:246` | `internal/access/policy/seed.go:574-579`, `:578` | VERIFIED |
+| per-policy `SeedVersion` upgrade compare | `04-07:243-246` | `internal/access/policy/bootstrap.go:91` | VERIFIED (exact) |
+| `seed:profile-reachable` clearing-set shape | `04-07:183-184` | `internal/access/policy/seed.go:677-682` | VERIFIED |
+| `viewerTwins` prefix scoping | `04-07:177` | `seed_profile_visibility_test.go:421-447` | VERIFIED |
+| `TestSeedPropertyOwnerWriteHasNoViewerTwin` sweeps `seed:viewer-` | `04-07:177` | `seed_profile_visibility_test.go:452-466` | VERIFIED — new seed passes (scoped action, no write/delete) |
+| `TestNoPhase2SeedIntroducesACharacterResourceTypePermit` | `04-07:178` | `seed_profile_visibility_test.go:675-692` | VERIFIED — `character_directory` explicitly excluded |
+| `auth.CharacterRepository.ListAll` signature | `04-07:304-307` | `internal/auth/character_service.go:38-41` | VERIFIED (verbatim) |
+| production + harness `ListAll` satisfiers | `04-07:308-312` | `internal/bootstrap/setup/adapters.go:151`; `internal/testsupport/integrationtest/harness.go:1903` | VERIFIED |
+| `cmd/holomush/sub_grpc.go:446` `authCharRepo` | `04-07:309` | exact line | VERIFIED |
+| harness `Server.charRepo` is `auth.CharacterRepository` | `04-07:312` | `internal/testsupport/integrationtest/harness.go:138`, passed at `:1181` | VERIFIED |
+| `profilevis.Property` is `{ID, Name}` | `04-04:141` | `internal/access/profilevis/profilevis.go:106-115` | VERIFIED |
+| `world.EntityProperty.ID` is `ulid.ULID`, `Value *string` | `04-04` join | `internal/world/property.go:16-23` | VERIFIED — the `.String()` bridge is type-correct |
+| `VisibleAttributes` returns the admissibility set | `04-04:141-144` | `internal/access/profilevis/profilevis.go:199-222`, keyed on `prop.Name` | VERIFIED |
+
+### MISSING — 3 (severity: needs-acknowledgement; no hard block)
+
+Each feeds a finding above. None is a stale citation; each is a **seam the plans
+require but do not declare**, or a guarantee the cited dependency does not make.
+
+1. **A viewer-identity resolution seam on `CharacterAccessServer` before wave 3.**
+   `04-01-PLAN.md:208-209`/`:450` declare exactly two dependencies; no session
+   repository, player repository, or resolver interface appears until `04-05:113`
+   (wave 3). → HIGH #1.
+2. **An ABAC-engine seam capable of evaluating the §9.2 directory gate.** No
+   `Evaluate`-bearing interface, constructor parameter, or wiring exists anywhere in
+   `04-01`…`04-09`; `profilevis.Evaluator` exports no generic `Evaluate`
+   (`internal/access/profilevis/profilevis.go:130`, `:157`, `:199`; `:234` and `:278`
+   unexported). → HIGH #2.
+3. **A determinism guarantee from plain `proto.Marshal`.**
+   `google.golang.org/protobuf@v1.36.11 proto/encode.go:25-40` documents
+   `MarshalOptions.Deterministic` as the opt-in that carries the guarantee; the default
+   path makes no such promise. → MEDIUM #4.
+
+### AMBIGUOUS — 0
+
+### Contradictions found within the plan set — 1 (severity: MEDIUM)
+
+- `04-07-PLAN.md:16` and `:168` list
+  `internal/access/policy/seed_profile_visibility_test.go` as modified; `:341` requires
+  its `git status --porcelain` to be empty. → MEDIUM #5.
+
+### Unsatisfiable acceptance criteria — 2 (severity: MEDIUM)
+
+- `04-04-PLAN.md:209` and `:210` — the searched symbols are declared in the searched
+  file (`04-01-PLAN.md:208-209`, `:450`), so neither grep can return one match. → MEDIUM #3.
+
+### Vacuous acceptance criteria — 8 (severity: MEDIUM, one finding)
+
+Diff/status-shaped criteria whose purpose is to prove a file was **not** edited, which
+are empty both before the edit and after any commit: `04-07:341`, `04-04:213`, `:214`
+(duplicate pair), `04-09:300`, `:301`, `:407`, `04-08:134`, `04-01:280`. Explicitly
+**excluded** as sound: the regenerate-then-check forms (`04-01:277`, `04-04:387`,
+`04-07:146`, `04-05:297`) and the revert-then-check forms (`04-05:226`, `04-08:231`,
+`:322`). → MEDIUM #5.
+
+### UNCHECKABLE / skipped — and why
+
+- **Third-party and stdlib identifiers** — `status.Code`, `status.Convert`,
+  `codes.*`, `proto.Marshal`, `require.Equal`, `assert.NotContains`. Out of repo scope;
+  each is a member of a pinned dependency in `go.mod`. The one exception is
+  `proto.MarshalOptions`, which was read directly at
+  `google.golang.org/protobuf@v1.36.11 proto/encode.go:25-40` because a finding turns
+  on its contract. Severity INFO.
+- **Generated TypeScript surfaces** under `web/src/lib/connect/holomush/**` — not
+  re-enumerated this cycle; unchanged from cycle 1. Severity INFO.
+- **Cycle-1's already-verified corpus** — the 74 file paths and the symbol tables above
+  were verified in cycle 1 and were not re-walked in full; only symbols a cycle-1 fix
+  touched or a cycle-2 finding depends on were re-resolved. Severity INFO.
+- **`TestEveryAttributeAnewSeedReferencesIsSuppliedByARegisteredProvider`**
+  (`seed_profile_visibility_test.go:933`) iterates a hardcoded `phase02SeedNames` list,
+  so the new `seed:viewer-directory-list-characters` is **not** swept into it. This is
+  not a break — `principal.viewer.tier` is supplied by
+  `attribute.NewViewerTierProvider()` and is already exercised by
+  `seed:profile-reachable` — but the new seed inherits no automatic attribute-supply
+  guard. Noted, not raised. Severity INFO.
+
+**A clean line in this section never means "nothing was checked."** Thirty-three
+symbols/claims were individually re-resolved this cycle; three MISSING seams, one
+intra-plan contradiction, two unsatisfiable criteria and eight vacuous criteria were
+found, and each is escalated into a finding above.
