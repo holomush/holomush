@@ -487,14 +487,31 @@ Plans:
 **Sketch findings** (must be answered in this phase): **A3** — `AdminSearchCharacters` (§9.2) currently "searches names" (character names); the admin list needs it extended to player usernames. **A2's RPC half** — the list RPC must accept a sort key for the joined `players.username`. **Admin rename census decision** (see Phase 3). Source: `.planning/sketches/002-*/README.md`.
 
 Plans:
+**Wave 1**
 
 - [ ] 04-01-PLAN.md — Tracer: an anonymous off-location visitor reads a character's name and in-world description end to end (proto slice, `read_description` seeds, facade, web proxy, wiring)
 - [ ] 04-02-PLAN.md — Extract `resolveAndGate` and `ownedCharacter` onto one embedded `playerGate`
 - [ ] 04-03-PLAN.md — Amend 01-SPEC §9.3/§9.4.2 for the struck `RenameCharacter` row; record the three sketch verdicts
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 04-04-PLAN.md — The viewer-filtered property slice, marshaled-bytes absence, tier exhaustiveness, and the remaining Phase-4 proto surface
+- [ ] 04-09-PLAN.md — The profile-attribute domain write: taxonomy kind, mutator seam, and the guarded `world.Service` command (runs at wave 2, before 04-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 04-05-PLAN.md — The owner audience (`ListMyCharacters`, `GetMyCharacter`) and the alt-linkage invariant
-- [ ] 04-06-PLAN.md — The write path: profile-attribute domain write, mask allowlist, byte caps, and the description edit
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 04-06-PLAN.md — The write facade: mask allowlist, byte caps, version guard, and the description edit
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 04-07-PLAN.md — `ListCharacterDirectory` and the removal of `WebListAllCharacters`
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 04-08-PLAN.md — The routing census and the descriptor-derived character-returning RPC census
 
 ### Phase 5: Character Identity UI & Public Profiles

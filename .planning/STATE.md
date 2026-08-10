@@ -4,15 +4,15 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 4
 current_phase_name: Shared Facade Helpers & `CharacterAccessService`
-status: planning
+status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-08-10T17:31:55.443Z"
+last_updated: "2026-08-10T19:24:27.187Z"
 last_activity: 2026-08-10
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 40
+  total_plans: 49
   completed_plans: 40
   percent: 67
 ---
@@ -36,7 +36,7 @@ without rework.
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 4 — Shared Facade Helpers & `CharacterAccessService`
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
 Last activity: 2026-08-10 — Phase 03 complete, transitioned to Phase 4
 
