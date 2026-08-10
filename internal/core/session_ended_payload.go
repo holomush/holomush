@@ -5,8 +5,15 @@ package core
 
 // SessionEndedPayload is the JSON payload for session_ended events.
 //
-// Emitted on the character's own stream (character:{ID}) when a session
-// terminates for any reason. Subscribers filter on SessionID to determine
+// Emitted on the character's own subject (events.<game_id>.character.<id>) when
+// a session terminates for any reason. The publish site
+// (internal/presence/session_ended.go) emits the domain-relative
+// character.<id>, which eventbus.Qualify prefixes; the dot form is load-bearing
+// for the retirement reactor's consumer filter and its positional aggregate
+// parse. Colon-style subjects were eradicated (holomush-rops) — the only
+// surviving colon usage is the ABAC policy DSL's type prefix.
+//
+// Subscribers filter on SessionID to determine
 // whether the termination is for their own session; a non-matching
 // session_ended is forwarded verbatim for audit/UX value but does NOT
 // terminate the Subscribe stream.
