@@ -1178,3 +1178,375 @@ Neither is an architectural error: HIGH-1 is a predicate that must learn one app
 HIGH-2 is a seam that must be named and two `files_modified` entries that must be added. Left
 unfixed, HIGH-1 makes criterion 1's proof either permanently red or silently incomplete over the
 two write RPCs, and HIGH-2 puts `task build` red at wave 4 with no in-scope file to repair it in.
+
+---
+
+# Cross-AI Plan Review — Phase 4 · Cycle 4 (closing cycle)
+
+**Reviewers:** codex (`gpt-5`-class, `model_reasoning_effort=xhigh`, read-only sandbox, full repo
+access) + orchestrator source-grounding pass.
+**Reviewed at:** 2026-08-10.
+**Plans reviewed:** all nine; material re-audit scoped to `04-06-PLAN.md` and `04-08-PLAN.md`.
+**Scope note:** the loop was extended one cycle past its max. Trend across cycles: 8 → 6 → 2 → **3**.
+
+## What actually changed since cycle 3
+
+`git diff 494e91256..HEAD -- .planning/phases/04-.../` touches **five** plans, not two:
+
+| Plan | Lines | Change |
+|---|---|---|
+| `04-06-PLAN.md` | +137 | cycle-3 HIGH-1 + HIGH-2 fixes |
+| `04-08-PLAN.md` | +160 | cycle-3 HIGH-1 fix |
+| `04-01-PLAN.md` | ±1 | citation drift: `AccessEngine()` `:1191` → `:1197` |
+| `04-07-PLAN.md` | ±1 | same citation |
+| `04-02-PLAN.md` | +6 | scene-facade construction sites 2 → 3, naming `session.go:719` |
+
+The three citation fixes are **VERIFIED correct**: `internal/testsupport/integrationtest/harness.go:1197`
+is `func (s *Server) AccessEngine() types.AccessPolicyEngine`, and the third scene construction site is
+`internal/testsupport/integrationtest/session.go:719` (`facade := holoGRPC.NewSceneAccessServer(`),
+alongside `cmd/holomush/sub_grpc.go:826` and `harness.go:1178`. The other four plans are byte-identical
+to their cycle-3 state.
+
+## Cycle-3 disposition audit
+
+| Cycle-3 finding | Disposition | Evidence |
+|---|---|---|
+| **HIGH-1** — routing census blind to the mutation wrapper | **FULLY RESOLVED** *(as scoped)* | `04-08:207-247` adds the one-member `ownershipWrapperMethods` literal, the wrapper-integrity assertion that runs before the comparison, the two-shape membership rule, and the 4/3/4 enumeration; `04-08:322-336` adds RED demos (b) and (c). `04-06:274-289` replaces the false "untouched" sentence with an explicit "NOT untouched" paragraph pinning the name and receiver. |
+| **HIGH-2** — dangling mutate-side seam + missing wiring files | **FULLY RESOLVED** | `04-06:139-190` declares `characterAccessWorldMutator` with exactly two methods, names `*world.Service` as satisfier, and moves both wiring files into Task 1's `<files>`; frontmatter `files_modified` 4 → 6. |
+
+Both cycle-3 findings are closed. The three findings below are **new**, and two of the three are
+defects **created by** the cycle-3 fixes — the pattern every prior cycle exhibited.
+
+---
+
+## Codex Review
+
+### Summary
+
+> Cycle 4 is not converged. Fix B's mutate-side interface and wiring are sound, and fix A correctly
+> handles the two current mutation handlers through a verified wrapper. However, fix A still cannot
+> detect a newly added owner RPC that bypasses every gate, and 04-06 incorrectly assumes
+> `world.Service.UpdateCharacterDescription` performs validation. Both are release-blocking.
+
+### Verdict on cycle-3 fix A — BROKEN (as an unqualified claim); SOUND for the attack it was asked to close
+
+Codex confirms the wrapper repair itself:
+
+- The wrapper assertion reuses the shipped selector predicate, which checks `<receiver>.<method>` in
+  the method's own AST body (`test/meta/world_envelope_census_test.go:162`).
+- The wrapper must exist exactly once and call `s.ownedCharacter` **before** the ownership comparison
+  (`04-08:230-234`).
+- The 4/3/4 sets are correct for Phase 4, with `ListMyCharacters` correctly excluded from the
+  ownership set (`04-08:276-283`).
+
+Codex's three attack outcomes, which the orchestrator re-derived independently and **concurs with**:
+
+1. A future owner handler calling `ownedCharacterForMutation` but skipping `resolveAndGate` **does**
+   fail — the ownership-derived set gains a member absent from the 3-member literal.
+2. Gutting the wrapper **does** fail, at the integrity assertion — and only there, which is exactly
+   the asymmetry RED demo (c) is designed to exhibit (`04-08:330-335`).
+3. A future owner handler bypassing **both** gates appears in **no** derived set. The static 4/3 sets
+   are unchanged and the census passes. → see NEW-HIGH-3.
+
+### Verdict on cycle-3 fix B — SOUND
+
+- `UpdateCharacterDescription`'s signature is exactly `(context.Context, Caller, ulid.ULID, string) error`
+  (`internal/world/service.go:844`).
+- `04-09:218-221` specifies `UpdateCharacterProfileAttributes` with `Caller`, character ULID, expected
+  version, and the attribute map — matching `04-06:153-163`'s interface shape.
+- `04-06` `depends_on` includes `04-09` (`04-06:6`), so `*world.Service` carries both methods at the
+  wave-4 commit.
+- Production and harness each already retain one `*world.Service`; threading it through a second narrow
+  interface is valid, and declaring both methods in Task 1 while Task 2 only consumes one is a sound
+  task boundary.
+
+### Second-order claims
+
+1. **VERIFIED as planned topology.** `session.go` constructs only `NewSceneAccessServer`; the character
+   facade does not exist at HEAD, so the final two-site count is an execution-time check.
+2. **VERIFIED narrowly.** No fourth shared helper is needed; `bodyReferencesSelector` is package-visible
+   in `package meta` and performs exactly the required check. The precedent parses source rather than
+   importing `internal/grpc`. *(Does not close the universe gap.)*
+3. **VERIFIED.** Waves unchanged; no same-wave `files_modified` collision. Wave 2 is the only
+   multi-plan implementation wave: `04-04` owns gRPC/proto, `04-09` owns `internal/world`.
+
+### Codex concerns
+
+- **HIGH — routing census has a false-negative universe.** A wholly ungated new RPC is absent from all
+  predicate-derived sets, leaving the static expected sets unchanged. Walking all exported methods only
+  supplies an anti-vacuity count; the plan never asserts that every `CharacterAccessService` method
+  belongs to an audience partition (`04-08:179`, `:305`).
+- **HIGH — description validation does not exist on the mandated domain path.** `04-06:406-408` says
+  `ValidateDescription` already runs and forbids re-implementing validation. In reality
+  `UpdateCharacterDescription` assigns `char.Description` directly and calls the mutator without
+  validation (`internal/world/service.go:863`); the repository writes the value straight into the UPDATE
+  (`internal/world/postgres/character_repo.go:150-153`). The validated path is `Character.SetDescription`
+  (`internal/world/character.go:102`), which the service does not call. The planned 4001-byte,
+  invalid-UTF-8 and control-character tests cannot pass under the prescribed implementation.
+- **LOW — 04-06 describes future-wave interfaces as already present.** It says four interfaces exist
+  before `04-06`, two of them from `04-07` (`04-06:141`) — but `04-07` is wave 5 and depends on `04-06`
+  (`04-07:5-6`). At execution time the mutator is the **third** interface, not the fifth.
+
+### Codex risk assessment — HIGH
+
+> The current plan can falsely certify a future completely ungated owner RPC, and the mandated
+> description path presently accepts input the plan claims it rejects.
+
+---
+
+## Orchestrator source-grounding pass
+
+Independent verification, run in parallel with Codex and before reading its output.
+
+### Confirmations of the cycle-3 fixes
+
+- `bodyReferencesSelector` — `test/meta/world_envelope_census_test.go:162`,
+  `func bodyReferencesSelector(body *ast.BlockStmt, recv, field string) bool`, `package meta`
+  (`:4`). Exactly one declaration across `test/meta/` (`rg -o 'func bodyReferencesSelector\(' test/meta/ | wc -l` → `1`).
+- The predicate compares `sel.Sel.Name == field` **exactly** (`:174`), so `s.ownedCharacterForMutation`
+  does **not** match `ownedCharacter`. This is precisely why the wrapper set is necessary, and it also
+  means the wrapper set cannot accidentally widen via prefix collision. The plan's reasoning is correct.
+- `04-08:347`'s trailing-`(` note is correct: `rg -o 's\.ownedCharacter\('` cannot match
+  `s.ownedCharacterForMutation(`, and the `func (s *CharacterAccessServer) ownedCharacterForMutation(`
+  declaration has no `s.` prefix, so the "returns 2" count is right.
+- `test/meta` has **no** transitive dependency on `internal/grpc`:
+  `go list -deps -test ./test/meta/ | rg -c 'holomush/internal/grpc'` → no match, and
+  `rg -n 'holomush/internal/grpc' test/meta/` → no match. The three RED demos are parse-reds, as claimed.
+- `internal/world/postgres/character_repo.go:342` — `ListByPlayer` selects `version`, so
+  `04-06:399-401`'s "no second read is needed" is grounded.
+- `SceneAccessServer.ownedCharacter` returns `codes.NotFound` / `codes.Internal`
+  (`internal/grpc/sceneaccess_service.go:109-125`) exactly as `04-06`'s read_first states.
+- Intra-wave `files_modified` collision check re-run across all nine plans: **zero**. Wave map is
+  W1 {01,02,03} · W2 {04,09} · W3 {05} · W4 {06} · W5 {07} · W6 {08}; the only multi-plan
+  implementation wave (W2) partitions cleanly into `internal/grpc`+proto (04-04) vs `internal/world` (04-09).
+- The wave-2 proto-ahead-of-handler ordering compiles: the repo pattern embeds
+  `sceneaccessv1.UnimplementedSceneAccessServiceServer` (`internal/grpc/sceneaccess_service.go:48`),
+  so `04-04` may declare all four owner RPCs in the proto at wave 2 while `04-05`/`04-06` implement
+  them at waves 3/4. **Not a finding.**
+- `04-06:158-161`'s "transcribe verbatim from `04-09-SUMMARY.md`, which is authoritative" correctly
+  absorbs the residual risk that `04-09` never pins its signature in-plan. `expectedVersion int` matches
+  the shipped `RetireCharacter`/`UnretireCharacter` convention (`internal/world/service.go:929`, `:1029`),
+  and `04-09`'s "empty string removes the row" truth is consistent with `04-06`'s `map[string]string`
+  "(empty string means delete)". **Not a finding.**
+
+### New findings
+
+#### NEW-HIGH-1 — `world.Service.UpdateCharacterDescription` performs **no** validation; `04-06` Task 2 is built on a false premise
+
+*Independently found by Codex and by the orchestrator. Highest-confidence finding this cycle.*
+
+`04-06:406-408` states the handler "does not re-implement validation — `ValidateDescription` already
+runs on that path, so IDENT-02a inherits the 4000-byte cap, the UTF-8 check and the control-character
+rejection for free (D-82)." The corresponding `must_haves` truth (`04-06:35`) asserts the write
+"inherits that path's validation."
+
+**Source refutes this at HEAD:**
+
+- `internal/world/service.go:863` — `char.Description = description`. A bare field assignment. No
+  `SetDescription`, no `ValidateDescription`, anywhere in the method (`:844-880`).
+- `internal/world/character.go:102-107` — `func (c *Character) SetDescription(desc string) error` is
+  the validating setter, and its own doc comment (`:98-101`) says *"Direct field access to Description
+  is acceptable for repository hydration from the database. This setter should be used by application
+  code to ensure validation."* The service violates that contract.
+- `SetDescription` has **zero production callers**:
+  `rg -n 'SetDescription\(' --glob '!*_test.go' internal/ plugins/ cmd/` matches only the declaration
+  and the unrelated `internal/property/entity_mutator.go` location/object mutators.
+- The mutator does not validate either: `worldMutator.updateCharacter`
+  (`internal/world/mutator.go:287-291`) forwards straight to `characterWriter.Update`.
+- `internal/world/postgres/character_repo.go:150-153` — `UPDATE characters SET description = $2 …`
+  with `char.Description` passed verbatim.
+- `ValidateDescription` itself is real and does implement all three checks
+  (`internal/world/validation.go:96-110`) — it is simply never reached from this path.
+
+**Consequence, concrete.** `04-06` Task 2's behaviors (`:361`, `:363`) require "a description exceeding
+4000 bytes is rejected with an invalid-argument status" and "invalid UTF-8 and a control character
+other than newline or tab are each rejected", asserted at the unit tier against a **domain double**
+(`:365`). A double of a domain method that does not validate cannot produce those rejections, and the
+same action text forbids the only other available site ("does not re-implement validation"). The task
+is unsatisfiable as written. `internal/world/service.go` is **not** in `04-06`'s `files_modified`
+(6 entries, none in `internal/world/`), so there is no in-scope file to repair it in — the identical
+shape as cycle-3's HIGH-2.
+
+**Required PLAN.md change.** Add `internal/world/service.go` and `internal/world/service_test.go` (or
+the existing character-service test file) to `04-06` Task 2's `<files>` and to the plan's
+`files_modified`; replace the direct assignment at `service.go:863` with `char.SetDescription(description)`,
+returning the `*world.ValidationError`; place the 4000/4001-byte, invalid-UTF-8, control-character and
+empty-input boundary tests at the **world** layer, and keep the facade's job as the generic
+validation-error → `codes.InvalidArgument` mapping it already describes. Collision check: `04-06` is
+the sole wave-4 plan and `04-09` (wave 2) is the only other plan touching `internal/world/service.go`,
+so the addition is collision-free. State in the plan that this is a **pre-existing repo gap** the web
+write surface is the first caller to expose, not a Phase-4 regression.
+
+#### NEW-HIGH-2 — `04-08` Task 2 never enumerates the accepted facade receiver-type set, and cycle-3's 4/3/4 pin makes the wrong guess fatal
+
+*Orchestrator finding; Codex reached the same conclusion as its Suggestion 3.*
+
+`04-08` refers to "the accepted facade-type set" / "accepted receiver types" **five times**
+(`:176`, `:179`, `:198-199`, `:231`, `:503`) and never enumerates it. Two independent signals point the
+implementer at the **wrong** answer:
+
+- Task 2's `<read_first>` (`:166`) lists `internal/grpc/sceneaccess_service.go` — *"the second facade
+  embedding the same gate"*.
+- Task 1 specifies the helper as *"a facade-aware receiver-name predicate taking a **set** of accepted
+  receiver type names"* (`:503`, `:104-109`) — the entire point of generalizing away from
+  `serviceReceiverName`'s single hard-coded name is that more than one is expected.
+
+**Ground truth at HEAD:** `internal/grpc/sceneaccess_service.go` contains **24** `s.resolveAndGate(`
+call sites and **21** `s.ownedCharacter(` call sites (`rg -n 's\.resolveAndGate\(' internal/grpc/ | wc -l`
+→ 24, `:164` through `:1009`). If `SceneAccessServer` is in the accepted set, the derived guest-gate set
+is ≈28 against the newly-pinned 4-member literal and the ownership set ≈24 against the 3-member literal —
+the census is **permanently RED with ~45 extra members**, and `04-08:350`'s new criterion ("member counts
+4 / 3 / 4") forecloses the previously self-correcting escape of deriving the expected sets from whatever
+universe was walked.
+
+The worse branch is not the RED: it is an implementer resolving the RED by **widening the expected sets**
+with 24 scene entries, which converts the census into a snapshot of the scene facade and destroys the
+character-audience reasoning the file header is supposed to carry. Nothing in the plan forbids that.
+
+Evidence the author intended character-only: all three enumerated sets contain only
+`CharacterAccessServer`/`Handler` names (`:276-286`); the deliberate-exclusion reasoning names only the
+**two character** public-audience RPCs (`:288-290`, `:356`) and never mentions the scene facade at all.
+
+**Required PLAN.md change.** One sentence in `04-08` Task 2's `<action>`: the accepted facade
+receiver-type set is exactly `{"CharacterAccessServer"}`, and `sceneaccess_service.go` is in
+`<read_first>` only as the *shape* precedent for gate promotion, not as a census member. Optionally add
+an acceptance criterion pinning the literal.
+
+#### NEW-HIGH-3 — the routing census cannot detect a wholly ungated new RPC, but `04-08`'s `must_haves` claims it can
+
+*Codex finding; orchestrator concurs after independent derivation.*
+
+`04-08:24` states as a truth: *"A new owner-audience RPC added later that skips the gate fails the
+census rather than shipping."* The census cannot deliver that. Membership on **both** halves is derived
+by "does this method's body reference the gate name" (`:198-205`); comparison is against static literals
+(`:276-286`). A new exported method on `*CharacterAccessServer` that references **neither** gate name is
+in **neither** the derived set nor the expected set → symmetric difference is empty → **GREEN**.
+
+The census structurally cannot assert a full partition either, because the two public-audience RPCs are
+legitimate non-members (`:180`, `:356`) — so "every exported method is a member" is false by design and
+the plan supplies no third bucket.
+
+The residual coverage is Task 3's descriptor census, which catches any new **character-returning** RPC
+by set equality against the checked-in inventory. That is enough for the ROADMAP's *literal* criterion 1
+("a census with set equality over every character-returning RPC"), but **not** for `04-08`'s own broader
+`must_have`. A future write RPC returning a non-character-shaped response — precisely the class
+`UpdateCharacterProfile`/`UpdateCharacterDescription` are in, and the class the cycle-3 fix's own framing
+("Phase 4's two write RPCs are inside criterion 1's proof") invites a reader to believe is now closed —
+escapes both censuses.
+
+Note this is a **pre-existing** structural limit; what is new is that the cycle-3 fix added a `must_have`
+(`:24` is older, but `:25-26` amplify it) asserting a guarantee the mechanism does not provide.
+
+**Required PLAN.md change — either is acceptable, and the second is cheap:**
+
+- *(preferred)* Derive the RPC universe from the service descriptor (Task 3 already loads
+  `protoregistry.GlobalFiles`) and assert an exact **audience partition**: `descriptor methods ==
+  public ∪ owner`, with `public = {GetCharacterProfile, ListCharacterDirectory}` and `owner` the
+  4-member set the guest-gate literal already names. Derive the guest-gate expectation **from** the owner
+  partition rather than as an independent literal, and add a fourth RED demonstration that adds a wholly
+  ungated exported handler. This makes the `must_have` true.
+- *(minimum)* Downgrade the `must_have` at `:24` to what the mechanism actually proves — a new
+  owner-audience RPC that reaches *one* gate but not the other, or that routes through an unapproved
+  indirection, fails; a **character-returning** RPC added anywhere fails via Task 3 — and record the
+  residual (an ungated, non-character-returning facade RPC) as a named, accepted limit with a GitHub
+  issue, the way `04-06` handles its TOCTOU narrowing.
+
+### Actionable non-HIGH
+
+- **MEDIUM — `04-06` Task 1 `<read_first>` names two interfaces that do not exist at wave 4.**
+  `04-06:141` tells the implementer to read "the four narrow consumer-side interfaces the phase declares
+  before this plan", attributing `characterAccessDirectoryReader` and `characterAccessPolicyEvaluator` to
+  `04-07`. `04-07` is **wave 5** and `depends_on` includes `04-06` (`04-07:5-6`); those two interfaces are
+  declared in `04-07` (`:55-58`, `:176`) and `04-05` declares none. At `04-06`'s commit only
+  `characterAccessWorldReader` and `characterAccessProfileVisibility` (`04-01:235-236`, `:540`) exist, so
+  `characterAccessWorldMutator` is the **third** interface, not the fifth. *Fix:* correct the count and the
+  attribution in `04-06:139-145` and in the "A fifth interface does not weaken the fence" sentence
+  (`04-06:~190`). The D-79 fence argument itself survives unchanged — it is about the *absence* of
+  property-repository methods, not about the count.
+- **LOW — two `04-08` Task 2 acceptance criteria pull against each other.** `:353` forbids the words
+  `exempt` / `Exempt` / `skip` / `allowlist` *"anywhere in this file, in code or in a comment"*, while
+  `:266-267` instructs the implementer to *"state this reasoning in the file header"* for the
+  three-count argument that sits immediately beside the "No exemption list" paragraph (`:305-310`), and
+  `:350` asks for a comment explaining why `ListMyCharacters` is absent from the ownership set — whose
+  most natural phrasing uses "skipped". *Fix:* add a one-line note that the header reasoning must be
+  phrased without those four tokens, or drop `skip` from the banned list (it is the weakest of the four).
+- **LOW — the comment-filtering idiom `rg -v '^\s*//'` filters only whole-line comments.** The counting
+  criteria at `04-08:347` (4 / 2 / 1), `04-06:311` (12) and `04-06:439` (2) can still be inflated by a
+  **trailing** `// …` comment on a code line or by a `/* … */` block, which is exactly the rationale-comment
+  vector the filter was added to close. *Fix:* say so explicitly ("no trailing or block comment may
+  contain the counted token") or count with `gofmt`-stripped input. Non-blocking — the risk is a
+  false-GREEN count, not a false-RED.
+
+## Consensus
+
+### Agreed strengths (both reviewers)
+
+- The cycle-3 wrapper mechanism is genuinely sound for the three attacks it was asked to close:
+  closed one-name literal, verified-not-trusted integrity assertion, derived-side-only additivity.
+  The "rename a rogue helper to `ownedCharacterForMutation`" attack is closed by the *declared exactly
+  once* clause (`04-08:176`), which neither reviewer initially expected to be load-bearing.
+- Fix B's seam is correct end to end: signature verbatim at `internal/world/service.go:844`, satisfier
+  `*world.Service` already in scope at both sites, `depends_on` carries `04-09`, and the Task-1-declares /
+  Task-2-consumes boundary keeps every commit self-green. The declared variance from the cycle-3
+  review's own fix item 3 is **sound**, not a dodge.
+- All three second-order claims verified.
+
+### Agreed concerns
+
+- **NEW-HIGH-1** (description validation) — found independently by both, with identical `path:line`
+  evidence. Blocking.
+- **NEW-HIGH-3** / **NEW-HIGH-2** — Codex ranks the universe gap HIGH and the receiver-set ambiguity a
+  suggestion; the orchestrator ranks the receiver-set ambiguity HIGH (it produces a permanently-RED or
+  silently-degraded census at execution) and concurs on the universe gap. Both are listed HIGH here.
+
+### Divergent views
+
+- **Severity of the receiver-set ambiguity.** Codex treats it as an implementation-time clarification
+  (Suggestion 3); the orchestrator escalates it because cycle-3's new 4/3/4 pin removed the degree of
+  freedom that previously let a wrong guess self-correct. The remediation is identical either way — one
+  sentence — so the divergence does not change the required edit.
+- **Whether NEW-HIGH-3 is a *plan* defect or a *criterion* defect.** Codex frames it as the plan failing
+  criterion 1; the orchestrator notes the ROADMAP criterion is scoped to *character-returning* RPCs and is
+  satisfied by Task 3, so the defect is in `04-08`'s own broader `must_have`. This matters for the fix:
+  the minimum remedy is to correct the claim, not necessarily to build the partition.
+
+## Verification coverage
+
+| Claim / symbol | Cited at | Status | Evidence |
+|---|---|---|---|
+| `bodyReferencesSelector` exists, `package meta`, exact-name compare | `04-08:164`, `:349` | VERIFIED | `test/meta/world_envelope_census_test.go:162`; `package meta` `:4`; `sel.Sel.Name == field` `:174`; one declaration in `test/meta/` |
+| `test/meta` does not import/depend on `internal/grpc` | `04-08:318-320` | VERIFIED | `rg -n 'holomush/internal/grpc' test/meta/` → none; `go list -deps -test ./test/meta/ \| rg -c 'holomush/internal/grpc'` → none |
+| `world.Service.UpdateCharacterDescription` signature verbatim | `04-06:154-156` | VERIFIED | `internal/world/service.go:844` |
+| `world.Service.UpdateCharacterDescription` **validates** its input | `04-06:35`, `:406-408` | **REFUTED** | `service.go:863` bare assignment; `mutator.go:287-291`; `postgres/character_repo.go:150-153`; `character.go:102` `SetDescription` has zero production callers — NEW-HIGH-1 |
+| `UpdateCharacterProfileAttributes` shape from `04-09` | `04-06:157-163` | VERIFIED (by construction) | `04-09:218-221`; `expectedVersion int` matches `service.go:929`, `:1029`; `04-06:158-161` defers verbatim to `04-09-SUMMARY.md` |
+| `04-06` `depends_on` includes `04-09` | `04-06:6` | VERIFIED | `depends_on: ["04-02", "04-04", "04-05", "04-09"]` |
+| Scene facade has three construction sites | `04-02:106-113` | VERIFIED | `cmd/holomush/sub_grpc.go:826`, `harness.go:1178`, `session.go:719` |
+| `session.go` names no `CharacterAccessServer` | `04-06:299` | VERIFIED (at HEAD) | `rg -n 'CharacterAccessServer' internal/testsupport/integrationtest/session.go` → no match |
+| `AccessEngine()` at `harness.go:1197` | `04-01:344`, `04-07:287` | VERIFIED | `func (s *Server) AccessEngine() types.AccessPolicyEngine` at `:1197`; `accessEngine: pe` at `:876` |
+| `ListByPlayer` selects `version` | `04-06:399-401` | VERIFIED | `internal/world/postgres/character_repo.go:342` |
+| `ownedCharacter` returns NotFound / Internal | `04-06:114` | VERIFIED | `internal/grpc/sceneaccess_service.go:109-125` |
+| Accepted facade receiver-type set | `04-08:176`, `:179`, `:198`, `:231`, `:503` | **AMBIGUOUS** | Never enumerated; `read_first:166` + plural-set helper point at `SceneAccessServer`, which carries 24 `s.resolveAndGate(` / 21 `s.ownedCharacter(` — NEW-HIGH-2 |
+| "A new owner-audience RPC that skips the gate fails the census" | `04-08:24` | **REFUTED** | Derived-set membership + static-literal comparison ⇒ a doubly-ungated method is in neither set (`04-08:198-205`, `:276-286`) — NEW-HIGH-3 |
+| Four facade interfaces exist before `04-06` | `04-06:141` | **REFUTED** | `characterAccessDirectoryReader` / `characterAccessPolicyEvaluator` are declared in `04-07` (wave 5, `depends_on` 04-06); only `04-01:235-236`'s two exist at wave 4 |
+| No wave moved; zero intra-wave `files_modified` collision | claimed | VERIFIED | W1{01,02,03} W2{04,09} W3{05} W4{06} W5{07} W6{08}; W2 partitions `internal/grpc`+proto vs `internal/world` |
+| Wave-2 proto-ahead-of-handler compiles | derived | VERIFIED | `Unimplemented…ServiceServer` embedding precedent, `internal/grpc/sceneaccess_service.go:48` |
+| `s\.ownedCharacter\(` cannot match the wrapper call | `04-08:347` | VERIFIED | Literal `(` after `ownedCharacter`; declaration has no `s.` prefix |
+| Runtime behaviour of unwritten Phase-4 code | all plans | UNCHECKABLE | Phase-created artifacts; not treated as verified anywhere above |
+
+Drift-guard authority for this repo is `intel` (`gsd-tools drift-guard authority --raw`), under which
+`AMBIGUOUS` → MEDIUM and `MISSING` → needs-acknowledgement, neither hard-blocking. The two **REFUTED**
+rows are escalated above `AMBIGUOUS` deliberately: a plan asserting a mechanism that source contradicts
+is a stronger failure than an unresolvable citation.
+
+## Risk Assessment
+
+**HIGH.** Three findings, all localized to two plans, none architectural — but one of them
+(NEW-HIGH-1) makes `04-06` Task 2 unsatisfiable as written with no in-scope file to repair it in, and
+it exposes a real pre-existing data-integrity gap: the in-world description write path accepts
+over-cap, invalid-UTF-8 and control-character input today, and Phase 4 is the first surface to open it
+to the web. NEW-HIGH-2 costs one sentence and, unfixed, yields either a permanently-red census at
+wave 6 or a census silently widened to 45 scene entries. NEW-HIGH-3 costs either one partition
+assertion or one corrected `must_have`.
+
+Waves 1-3 remain unblocked; every finding lands in wave 4 (`04-06`) or wave 6 (`04-08`). Execution of
+waves 1-3 may begin, but `04-06` and `04-08` should not be executed until these three are incorporated.
