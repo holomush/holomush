@@ -274,7 +274,19 @@ func (r *reactor) reportIfAbandoned(ctx context.Context, msg jetstream.Msg) {
 
 // isFinalDelivery reports whether a delivery that is about to go unacked is the
 // last JetStream will make. maxDeliver <= 0 means unlimited, so nothing is ever
-// final.
+// final (which is also what makes the uint64 conversion below safe).
+//
+// ASSUMPTION, and the alarm's one known imprecision: maxDeliver is the value
+// THIS PROCESS was configured with (r.cfg.MaxDeliver), not the value on the
+// durable consumer. CreateOrUpdateConsumer will happily RAISE an existing
+// consumer's MaxDeliver, so a restart carrying a different config leaves the
+// two out of step — and the alarm can then fire on a message JetStream will in
+// fact redeliver (false alarm) or stay silent on one it will not (missed
+// alarm). Closing that gap means reading the effective value off the consumer
+// (cons.CachedInfo().Config.MaxDeliver) at Activate and threading it in, which
+// would widen consumeStarter beyond the single Consume method it exists to
+// keep narrow. Deliberately deferred: the alarm is a diagnostic, not a
+// control-flow gate, and it is only imprecise across a config CHANGE.
 func isFinalDelivery(numDelivered uint64, maxDeliver int) bool {
 	if maxDeliver <= 0 {
 		return false
