@@ -75,7 +75,7 @@ type projection struct {
 // which is what makes this crash-safe.
 //
 // The CreateOrUpdateConsumer call is wrapped in a bounded retry to absorb
-// transient JetStream warmup races (see consumer.CreateBackoffs — D-46
+// transient JetStream warmup races (see consumer.DefaultBackoffs — D-46
 // moved that schedule and its retry loop to the neutral
 // internal/eventbus/consumer package so the retirement reactor and the
 // character-activity listener can share it without importing the audit

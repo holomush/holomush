@@ -184,7 +184,7 @@ func TestDecodeULIDStringRejectsInvalid(t *testing.T) {
 // shortBackoffs is the per-call schedule this package's one retry-touching
 // test passes so it does not pay the production schedule's wall time.
 //
-// It is an OPTION, not a swap of consumer.CreateBackoffs. Mutating that
+// It is an OPTION, not a swap of consumer.DefaultBackoffs. Mutating that
 // exported var from here made a package-level constraint owned by
 // internal/eventbus/consumer ("MUST NOT call t.Parallel()") binding on a
 // second package that never restated it.

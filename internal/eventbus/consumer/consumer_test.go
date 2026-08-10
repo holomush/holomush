@@ -15,11 +15,11 @@ import (
 
 // shortBackoffs is the per-call schedule the retry tests pass so they do
 // not pay the production schedule's wall time. The SHAPE (number of
-// retries) matches CreateBackoffs so attempt counts match the production
+// retries) matches defaultBackoffs so attempt counts match the production
 // path; only the per-step sleep shrinks.
 //
 // Passed as an option rather than swapped into the package-level
-// CreateBackoffs: a global swap needed a t.Cleanup restore, which made
+// defaultBackoffs: a global swap needed a t.Cleanup restore, which made
 // "MUST NOT call t.Parallel()" a constraint on every test that used it.
 var shortBackoffs = []time.Duration{1 * time.Millisecond, 2 * time.Millisecond}
 
@@ -58,7 +58,25 @@ func TestCreateWithRetryGivesUpAfterBudgetExhausted(t *testing.T) {
 	}, WithBackoffs(shortBackoffs...))
 	require.ErrorIs(t, err, permanent, "final error MUST be the underlying NATS error so the caller can surface it")
 	require.Equal(t, 1+len(shortBackoffs), attempts, "should attempt initial call + one per backoff entry")
-	require.Len(t, CreateBackoffs, 2, "the shared default MUST be untouched by a per-call override")
+	// CONTENTS, not just length: a length check passes even when both
+	// durations have been swapped for different values, which is precisely
+	// the mutation this assertion exists to catch.
+	require.Equal(t,
+		[]time.Duration{100 * time.Millisecond, 250 * time.Millisecond},
+		DefaultBackoffs(),
+		"the shared default MUST be untouched by a per-call override")
+}
+
+// TestDefaultBackoffsHandsBackACopySoACallerCannotMutateTheSharedSchedule is
+// the reason the schedule is unexported with an accessor rather than an
+// exported slice carrying a doc line that asks nicely.
+func TestDefaultBackoffsHandsBackACopySoACallerCannotMutateTheSharedSchedule(t *testing.T) {
+	got := DefaultBackoffs()
+	require.NotEmpty(t, got)
+	got[0] = 99 * time.Hour
+
+	require.Equal(t, 100*time.Millisecond, DefaultBackoffs()[0],
+		"mutating the returned slice MUST NOT reach the shared default")
 }
 
 func TestCreateWithRetryRespectsCancelledContext(t *testing.T) {

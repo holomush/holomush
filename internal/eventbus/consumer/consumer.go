@@ -13,12 +13,13 @@ package consumer
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// CreateBackoffs is the retry schedule for CreateOrUpdateConsumer.
+// defaultBackoffs is the retry schedule for CreateOrUpdateConsumer.
 // Sized to absorb JetStream's brief warmup window where the meta-leader
 // is elected and the events stream is queryable but the consumer-create
 // RPC can still return "no responders" or context-deadline errors under
@@ -29,16 +30,24 @@ import (
 // jitter, short enough that a real permanent failure (config mismatch,
 // stream missing) still fails fast within the surrounding test timeout.
 //
-// It is the DEFAULT, and nothing mutates it. A test that needs a
-// microsecond schedule passes WithBackoffs to the call it is driving
-// rather than swapping this slice: a package-level swap had to be
-// restored via t.Cleanup, which made "MUST NOT call t.Parallel()" a
-// constraint every test in every package that reached for it had to
-// honour — and it was stated in only one of them.
-var CreateBackoffs = []time.Duration{
+// It is UNEXPORTED so nothing can mutate it. It used to be exported with
+// a doc line asserting "nothing mutates it" — a convention, not a
+// constraint: any package could still assign to it, and the guard that
+// was supposed to protect it only checked the slice's LENGTH, so swapping
+// both durations passed. A package-level swap also had to be restored via
+// t.Cleanup, which made "MUST NOT call t.Parallel()" a constraint every
+// test in every package that reached for it had to honour — and it was
+// stated in only one of them. A test that needs a microsecond schedule
+// passes WithBackoffs to the call it is driving.
+var defaultBackoffs = []time.Duration{
 	100 * time.Millisecond,
 	250 * time.Millisecond,
 }
+
+// DefaultBackoffs returns a COPY of the default retry schedule, so a caller
+// can inspect or extend it without being able to change what CreateWithRetry
+// actually uses.
+func DefaultBackoffs() []time.Duration { return slices.Clone(defaultBackoffs) }
 
 // CreateOption tunes a single CreateWithRetry call.
 type CreateOption func(*createOptions)
@@ -48,13 +57,13 @@ type createOptions struct {
 }
 
 // WithBackoffs overrides the retry schedule for ONE call, leaving the
-// shared CreateBackoffs default untouched. This is the seam tests use to
+// shared default untouched. This is the seam tests use to
 // avoid paying the production schedule's wall time.
 func WithBackoffs(backoffs ...time.Duration) CreateOption {
 	return func(o *createOptions) { o.backoffs = backoffs }
 }
 
-// CreateWithRetry invokes create with bounded retries from CreateBackoffs.
+// CreateWithRetry invokes create with bounded retries from defaultBackoffs.
 // Returns the first success, the last error after the budget is exhausted,
 // or the last error if ctx is cancelled mid-backoff. Retries on any
 // non-nil error — the cost of retrying a truly permanent error (config
@@ -82,7 +91,7 @@ func CreateWithRetry(
 	create func(context.Context) (jetstream.Consumer, error),
 	opts ...CreateOption,
 ) (jetstream.Consumer, error) {
-	o := createOptions{backoffs: CreateBackoffs}
+	o := createOptions{backoffs: defaultBackoffs}
 	for _, opt := range opts {
 		opt(&o)
 	}
