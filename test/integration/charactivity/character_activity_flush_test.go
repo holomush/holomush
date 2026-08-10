@@ -128,9 +128,19 @@ var _ = Describe("Character activity", func() {
 
 			// SYNCHRONOUS, before any await: the emit path itself performed no
 			// database write — the deciding property of D-42. Publish has
-			// returned, so anything the emit path was going to write is
+			// returned, so anything the EMIT PATH was going to write is
 			// already written. This is the assertion that used to sit AFTER a
 			// polling wait, where a tick landing in between failed it outright.
+			//
+			// It is not, however, race-FREE, and should not be read as such:
+			// the column it reads is also written by the ASYNCHRONOUS pipeline
+			// (publish-ack -> listener delivery -> KV write -> a flush tick
+			// that could be imminent). The residual window is microseconds to
+			// a few milliseconds rather than the previous unbounded one, and a
+			// synchronous emit-path write would fail this deterministically —
+			// which is what the assertion is for. The structural proof of the
+			// same property is the version/outbox pair asserted below, which
+			// carries no timing dependence at all.
 			Expect(lastActiveAt()).To(Equal(world.NeverActive),
 				"the emit path MUST NOT touch Postgres; only the flush writes the column")
 
