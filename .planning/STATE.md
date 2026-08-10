@@ -5,8 +5,8 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 4
 current_phase_name: Shared Facade Helpers & `CharacterAccessService`
 status: planning
-stopped_at: Completed 03-06-PLAN.md (last plan of phase 03)
-last_updated: "2026-08-10T13:47:16.995Z"
+stopped_at: Phase 4 context gathered
+last_updated: "2026-08-10T17:31:55.443Z"
 last_activity: 2026-08-10
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
@@ -610,13 +610,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-10T13:47:11.253Z
+Last session: 2026-08-10T17:31:55.415Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 03-06-PLAN.md (last plan of phase 03)
-Resume file: None
+Stopped at: Phase 4 context gathered
+Resume file: .planning/phases/04-shared-facade-helpers-characteraccessservice/04-CONTEXT.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
