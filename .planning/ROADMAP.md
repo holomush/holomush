@@ -481,14 +481,21 @@ Plans:
 5. The profile read path is built **exclusively** from the viewer-filtered property slice — a direct `PropertyReader.ListByParent`/`PropertyRepository.ListByParent` call from the facade fails the build or the test — and the proto ships the media shape now, empty: `ProfileImage{media_id, alt_text, content_warning}` + `primary_image` + `repeated gallery [max_items = 10]`.
 6. An off-location viewer can **read** a character's in-world description where `seed:player-character-colocation` previously **denied** it — the half of Phase 2's criterion 4 deferred here by D-29. It ships only together with the criterion-2 projection narrowing, so the read path returns `description` without `PlayerId` or `LocationId`, and only after an audit establishes exactly which existing character descriptions it exposes. A permit of the bare shape `permit(principal is character, action in ["read"], resource is character)` — unconditional, gating the whole `CharacterInfo` projection — does **not** satisfy this criterion.
 
-**Plans**: TBD
+**Plans**: 8 plans
 **UI hint**: no
 
 **Sketch findings** (must be answered in this phase): **A3** — `AdminSearchCharacters` (§9.2) currently "searches names" (character names); the admin list needs it extended to player usernames. **A2's RPC half** — the list RPC must accept a sort key for the joined `players.username`. **Admin rename census decision** (see Phase 3). Source: `.planning/sketches/002-*/README.md`.
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 4`)
+- [ ] 04-01-PLAN.md — Tracer: an anonymous off-location visitor reads a character's name and in-world description end to end (proto slice, `read_description` seeds, facade, web proxy, wiring)
+- [ ] 04-02-PLAN.md — Extract `resolveAndGate` and `ownedCharacter` onto one embedded `playerGate`
+- [ ] 04-03-PLAN.md — Amend 01-SPEC §9.3/§9.4.2 for the struck `RenameCharacter` row; record the three sketch verdicts
+- [ ] 04-04-PLAN.md — The viewer-filtered property slice, marshaled-bytes absence, tier exhaustiveness, and the remaining Phase-4 proto surface
+- [ ] 04-05-PLAN.md — The owner audience (`ListMyCharacters`, `GetMyCharacter`) and the alt-linkage invariant
+- [ ] 04-06-PLAN.md — The write path: profile-attribute domain write, mask allowlist, byte caps, and the description edit
+- [ ] 04-07-PLAN.md — `ListCharacterDirectory` and the removal of `WebListAllCharacters`
+- [ ] 04-08-PLAN.md — The routing census and the descriptor-derived character-returning RPC census
 
 ### Phase 5: Character Identity UI & Public Profiles
 
