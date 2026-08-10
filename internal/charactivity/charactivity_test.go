@@ -641,6 +641,20 @@ func TestStopJoinsBothProducersBeforeTheFinalDrain(t *testing.T) {
 	assert.Empty(t, kv.snapshot())
 }
 
+// TestTheJoinBudgetStrictlyOutlastsTheBarrierBudget pins the ONE relationship
+// that makes Stop's join deterministic.
+//
+// Stop's <-s.done wait and the shutdown goroutine's <-cc.Closed() wait start at
+// essentially the same instant: Stop cancels runCtx, and the goroutine's
+// <-runCtx.Done() returns immediately. Give the two the same budget and their
+// timers expire together, so the join can never observe the barrier resolving —
+// under a wedged handler the final drain is then skipped or not on a coin flip.
+// Collapsing these back to one constant is the regression this guards.
+func TestTheJoinBudgetStrictlyOutlastsTheBarrierBudget(t *testing.T) {
+	require.Greater(t, stopTimeout, barrierTimeout,
+		"the outer join MUST outlast the inner barrier, or it can never observe it resolving")
+}
+
 // TestStopAfterPrepareOnlyPerformsNoDatabaseWrite pins the activated/joined
 // split. The orchestrator's rollback path calls Stop on every subsystem it has
 // already PREPARED when some other subsystem fails, so a never-activated

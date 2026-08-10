@@ -290,6 +290,20 @@ func TestStopStopsTheConsumeContext(t *testing.T) {
 	require.True(t, cons.cc.wasStopped(), "Stop MUST unsubscribe the durable consumer")
 }
 
+// TestTheJoinBudgetStrictlyOutlastsTheBarrierBudget pins the ONE relationship
+// that makes Stop's join deterministic.
+//
+// Stop's <-s.done wait and the shutdown goroutine's <-cc.Closed() wait start at
+// essentially the same instant: Stop cancels runCtx, and the goroutine's
+// <-runCtx.Done() returns immediately. Give the two the same budget and their
+// timers expire together, so the join can never observe the barrier resolving —
+// and since Stop proceeds to unregisterJob() either way, the liveness guarantee
+// the barrier exists for reverts under exactly the condition it was written for.
+func TestTheJoinBudgetStrictlyOutlastsTheBarrierBudget(t *testing.T) {
+	require.Greater(t, stopTimeout, barrierTimeout,
+		"the outer join MUST outlast the inner barrier, or it can never observe it resolving")
+}
+
 // TestStopResetsBothGuardsSoRetryWorks is the guard-reset contract: Stop is
 // the single teardown path, and a Prepare/Activate retry after it MUST
 // rebuild rather than short-circuit on torn-down state.

@@ -31,9 +31,21 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
-// stopTimeout bounds how long Stop waits for the consume loop to unwind.
-// Mirrors the outbox relay subsystem's budget.
-const stopTimeout = 5 * time.Second
+// barrierTimeout bounds how long the shutdown goroutine waits on the consume
+// context's Closed() barrier — that is, for the last in-flight process() to
+// return. Mirrors the outbox relay subsystem's budget.
+const barrierTimeout = 5 * time.Second
+
+// stopTimeout bounds how long Stop waits to JOIN that goroutine.
+//
+// It MUST be strictly larger than barrierTimeout. Both waits start at
+// essentially the same instant — Stop cancels runCtx, and the goroutine's
+// <-runCtx.Done() returns immediately — so equal budgets expire together and
+// the outer join can NEVER observe the inner barrier resolving. That matters
+// here more than anywhere: Stop proceeds to unregisterJob() either way, so an
+// outer timeout that fires alongside (rather than after) the barrier silently
+// reverts the very guarantee the barrier was added for.
+const stopTimeout = barrierTimeout + time.Second
 
 // Config configures the retirement reactor subsystem.
 //
@@ -307,9 +319,16 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 		// join rather than a flag read.
 		select {
 		case <-cc.Closed():
-		case <-time.After(stopTimeout):
+		case <-time.After(barrierTimeout):
 			// A handler is wedged. Bounded rather than blocking shutdown
 			// forever; the unacked message is redelivered on the next boot.
+			// Logged because abandoning this barrier is precisely what lets
+			// unregisterJob() retract liveness under a live process(), and a
+			// silent arm leaves the resulting half-applied fanout with no
+			// shutdown-side evidence at all.
+			slog.WarnContext(runCtx,
+				"retirement reactor barrier timed out; a fanout may still be in flight",
+				"subsystem", s.ID().String(), "timeout", barrierTimeout.String())
 		}
 	}()
 
@@ -320,7 +339,7 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 // Stop drains the consume loop and resets BOTH guards so a legitimate
 // Prepare/Activate retry after Stop rebuilds the consumer and relaunches
 // the loop rather than short-circuiting on a torn-down one.
-func (s *Subsystem) Stop(_ context.Context) error {
+func (s *Subsystem) Stop(ctx context.Context) error {
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
@@ -329,6 +348,13 @@ func (s *Subsystem) Stop(_ context.Context) error {
 		select {
 		case <-s.done:
 		case <-time.After(stopTimeout):
+			// The join was abandoned past even the barrier's own budget, and
+			// unregisterJob() below runs anyway — so a still-running
+			// MoveCharacter is about to lose its ABAC attributes. That is the
+			// half-applied-fanout window, and it MUST NOT be silent.
+			slog.WarnContext(ctx,
+				"retirement reactor shutdown join timed out; retracting job liveness under a possible in-flight fanout",
+				"subsystem", s.ID().String(), "timeout", stopTimeout.String())
 		}
 		s.done = nil
 	}

@@ -29,9 +29,21 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 )
 
-// stopTimeout bounds how long Stop waits for the listener and flush ticker
-// to unwind. Mirrors the outbox relay subsystem's budget.
-const stopTimeout = 5 * time.Second
+// barrierTimeout bounds how long the shutdown goroutine waits on the consume
+// context's Closed() barrier — that is, for the last in-flight listener handler
+// to return. Mirrors the outbox relay subsystem's budget.
+const barrierTimeout = 5 * time.Second
+
+// stopTimeout bounds how long Stop waits to JOIN that goroutine.
+//
+// It MUST be strictly larger than barrierTimeout. Both waits start at
+// essentially the same instant — Stop cancels runCtx, and the goroutine's
+// <-runCtx.Done() returns immediately — so equal budgets expire together and
+// the outer join can NEVER observe the inner barrier resolving. Under a wedged
+// handler the outcome would then be settled by whichever timer the runtime
+// happens to fire first rather than by the barrier, and the final drain would
+// be skipped on a coin flip. The margin is what makes the join deterministic.
+const stopTimeout = barrierTimeout + time.Second
 
 // BucketName is the JetStream KV bucket the listener buffers into. It is the
 // repo's FIRST KV bucket; the name is a durable, not-safely-renamable
@@ -396,9 +408,15 @@ func (s *Subsystem) Activate(ctx context.Context) error {
 			// is in flight.
 			select {
 			case <-cc.Closed():
-			case <-time.After(stopTimeout):
+			case <-time.After(barrierTimeout):
 				// A handler is wedged. Bounded rather than blocking shutdown
 				// forever; the buffer is durable, so the next boot flushes it.
+				// Logged because an abandoned barrier is the precondition for
+				// the skipped final drain below, and a silent arm leaves an
+				// operator with nothing to correlate that against.
+				slog.WarnContext(runCtx,
+					"character activity listener barrier timed out; a handler may still be in flight",
+					"subsystem", s.ID().String(), "timeout", barrierTimeout.String())
 			}
 		}()
 		go func() {
@@ -440,8 +458,14 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 		case <-s.done:
 			joined = true
 		case <-time.After(stopTimeout):
-			// A producer is wedged. Skipping the final drain is the safe
-			// answer: the buffer is durable, so the next boot flushes it.
+			// A producer is wedged past even the barrier's own budget.
+			// Skipping the final drain is the safe answer: the buffer is
+			// durable, so the next boot flushes it. Logged because a shutdown
+			// that silently skips its drain is otherwise indistinguishable
+			// from one that ran it.
+			slog.WarnContext(ctx,
+				"character activity shutdown join timed out; skipping the final drain",
+				"subsystem", s.ID().String(), "timeout", stopTimeout.String())
 		}
 		s.done = nil
 	}
