@@ -11,9 +11,8 @@ package webv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v12 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
-	v1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
-	v11 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
+	v11 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
+	v1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -1928,99 +1927,6 @@ func (x *WebListCharactersResponse) GetCharacters() []*CharacterSummary {
 	return nil
 }
 
-// WebListAllCharactersRequest proxies to CoreService.ListAllCharacters; token
-// is injected from the X-Session-Token cookie.
-type WebListAllCharactersRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// character_id is the acting alt (forwarded as the ABAC subject). Required.
-	CharacterId   string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WebListAllCharactersRequest) Reset() {
-	*x = WebListAllCharactersRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WebListAllCharactersRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WebListAllCharactersRequest) ProtoMessage() {}
-
-func (x *WebListAllCharactersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WebListAllCharactersRequest.ProtoReflect.Descriptor instead.
-func (*WebListAllCharactersRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *WebListAllCharactersRequest) GetCharacterId() string {
-	if x != nil {
-		return x.CharacterId
-	}
-	return ""
-}
-
-// WebListAllCharactersResponse re-exports the directory page from core.
-type WebListAllCharactersResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// characters is the id+name list from CoreService.ListAllCharacters.
-	Characters    []*v1.CharacterDirectoryEntry `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WebListAllCharactersResponse) Reset() {
-	*x = WebListAllCharactersResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WebListAllCharactersResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WebListAllCharactersResponse) ProtoMessage() {}
-
-func (x *WebListAllCharactersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WebListAllCharactersResponse.ProtoReflect.Descriptor instead.
-func (*WebListAllCharactersResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *WebListAllCharactersResponse) GetCharacters() []*v1.CharacterDirectoryEntry {
-	if x != nil {
-		return x.Characters
-	}
-	return nil
-}
-
 // WebLogoutRequest is the empty request to end the current session; the session
 // to end is identified by the cookie token.
 type WebLogoutRequest struct {
@@ -2031,7 +1937,7 @@ type WebLogoutRequest struct {
 
 func (x *WebLogoutRequest) Reset() {
 	*x = WebLogoutRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[25]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2043,7 +1949,7 @@ func (x *WebLogoutRequest) String() string {
 func (*WebLogoutRequest) ProtoMessage() {}
 
 func (x *WebLogoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[25]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2056,7 +1962,7 @@ func (x *WebLogoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebLogoutRequest.ProtoReflect.Descriptor instead.
 func (*WebLogoutRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{25}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{23}
 }
 
 // WebLogoutResponse is the empty acknowledgement of logout. The meaningful
@@ -2070,7 +1976,7 @@ type WebLogoutResponse struct {
 
 func (x *WebLogoutResponse) Reset() {
 	*x = WebLogoutResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[26]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2082,7 +1988,7 @@ func (x *WebLogoutResponse) String() string {
 func (*WebLogoutResponse) ProtoMessage() {}
 
 func (x *WebLogoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[26]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2095,7 +2001,7 @@ func (x *WebLogoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebLogoutResponse.ProtoReflect.Descriptor instead.
 func (*WebLogoutResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{26}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{24}
 }
 
 // WebRequestPasswordResetRequest names the email address to begin a reset for.
@@ -2109,7 +2015,7 @@ type WebRequestPasswordResetRequest struct {
 
 func (x *WebRequestPasswordResetRequest) Reset() {
 	*x = WebRequestPasswordResetRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[27]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2121,7 +2027,7 @@ func (x *WebRequestPasswordResetRequest) String() string {
 func (*WebRequestPasswordResetRequest) ProtoMessage() {}
 
 func (x *WebRequestPasswordResetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[27]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2134,7 +2040,7 @@ func (x *WebRequestPasswordResetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebRequestPasswordResetRequest.ProtoReflect.Descriptor instead.
 func (*WebRequestPasswordResetRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{27}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *WebRequestPasswordResetRequest) GetEmail() string {
@@ -2158,7 +2064,7 @@ type WebRequestPasswordResetResponse struct {
 
 func (x *WebRequestPasswordResetResponse) Reset() {
 	*x = WebRequestPasswordResetResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[28]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2170,7 +2076,7 @@ func (x *WebRequestPasswordResetResponse) String() string {
 func (*WebRequestPasswordResetResponse) ProtoMessage() {}
 
 func (x *WebRequestPasswordResetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[28]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2183,7 +2089,7 @@ func (x *WebRequestPasswordResetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebRequestPasswordResetResponse.ProtoReflect.Descriptor instead.
 func (*WebRequestPasswordResetResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{28}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *WebRequestPasswordResetResponse) GetSuccess() bool {
@@ -2207,7 +2113,7 @@ type WebConfirmPasswordResetRequest struct {
 
 func (x *WebConfirmPasswordResetRequest) Reset() {
 	*x = WebConfirmPasswordResetRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[29]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2219,7 +2125,7 @@ func (x *WebConfirmPasswordResetRequest) String() string {
 func (*WebConfirmPasswordResetRequest) ProtoMessage() {}
 
 func (x *WebConfirmPasswordResetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[29]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2232,7 +2138,7 @@ func (x *WebConfirmPasswordResetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebConfirmPasswordResetRequest.ProtoReflect.Descriptor instead.
 func (*WebConfirmPasswordResetRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{29}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *WebConfirmPasswordResetRequest) GetToken() string {
@@ -2262,7 +2168,7 @@ type WebConfirmPasswordResetResponse struct {
 
 func (x *WebConfirmPasswordResetResponse) Reset() {
 	*x = WebConfirmPasswordResetResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[30]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2274,7 +2180,7 @@ func (x *WebConfirmPasswordResetResponse) String() string {
 func (*WebConfirmPasswordResetResponse) ProtoMessage() {}
 
 func (x *WebConfirmPasswordResetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[30]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2287,7 +2193,7 @@ func (x *WebConfirmPasswordResetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebConfirmPasswordResetResponse.ProtoReflect.Descriptor instead.
 func (*WebConfirmPasswordResetResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{30}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *WebConfirmPasswordResetResponse) GetSuccess() bool {
@@ -2314,7 +2220,7 @@ type WebCheckSessionRequest struct {
 
 func (x *WebCheckSessionRequest) Reset() {
 	*x = WebCheckSessionRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[31]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2326,7 +2232,7 @@ func (x *WebCheckSessionRequest) String() string {
 func (*WebCheckSessionRequest) ProtoMessage() {}
 
 func (x *WebCheckSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[31]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2339,7 +2245,7 @@ func (x *WebCheckSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebCheckSessionRequest.ProtoReflect.Descriptor instead.
 func (*WebCheckSessionRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{31}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{29}
 }
 
 // WebCheckSessionResponse returns the authenticated player's identity and
@@ -2365,7 +2271,7 @@ type WebCheckSessionResponse struct {
 
 func (x *WebCheckSessionResponse) Reset() {
 	*x = WebCheckSessionResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[32]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2377,7 +2283,7 @@ func (x *WebCheckSessionResponse) String() string {
 func (*WebCheckSessionResponse) ProtoMessage() {}
 
 func (x *WebCheckSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[32]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2390,7 +2296,7 @@ func (x *WebCheckSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebCheckSessionResponse.ProtoReflect.Descriptor instead.
 func (*WebCheckSessionResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{32}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *WebCheckSessionResponse) GetPlayerName() string {
@@ -2433,7 +2339,7 @@ type WebGetContentRequest struct {
 
 func (x *WebGetContentRequest) Reset() {
 	*x = WebGetContentRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[33]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2445,7 +2351,7 @@ func (x *WebGetContentRequest) String() string {
 func (*WebGetContentRequest) ProtoMessage() {}
 
 func (x *WebGetContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[33]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2458,7 +2364,7 @@ func (x *WebGetContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetContentRequest.ProtoReflect.Descriptor instead.
 func (*WebGetContentRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{33}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *WebGetContentRequest) GetKey() string {
@@ -2480,7 +2386,7 @@ type WebGetContentResponse struct {
 
 func (x *WebGetContentResponse) Reset() {
 	*x = WebGetContentResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[34]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2492,7 +2398,7 @@ func (x *WebGetContentResponse) String() string {
 func (*WebGetContentResponse) ProtoMessage() {}
 
 func (x *WebGetContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[34]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2505,7 +2411,7 @@ func (x *WebGetContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetContentResponse.ProtoReflect.Descriptor instead.
 func (*WebGetContentResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{34}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *WebGetContentResponse) GetItem() *WebContentItem {
@@ -2533,7 +2439,7 @@ type WebListContentRequest struct {
 
 func (x *WebListContentRequest) Reset() {
 	*x = WebListContentRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[35]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2545,7 +2451,7 @@ func (x *WebListContentRequest) String() string {
 func (*WebListContentRequest) ProtoMessage() {}
 
 func (x *WebListContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[35]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2558,7 +2464,7 @@ func (x *WebListContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListContentRequest.ProtoReflect.Descriptor instead.
 func (*WebListContentRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{35}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *WebListContentRequest) GetPrefix() string {
@@ -2597,7 +2503,7 @@ type WebListContentResponse struct {
 
 func (x *WebListContentResponse) Reset() {
 	*x = WebListContentResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[36]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2609,7 +2515,7 @@ func (x *WebListContentResponse) String() string {
 func (*WebListContentResponse) ProtoMessage() {}
 
 func (x *WebListContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[36]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2622,7 +2528,7 @@ func (x *WebListContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListContentResponse.ProtoReflect.Descriptor instead.
 func (*WebListContentResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{36}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *WebListContentResponse) GetItems() []*WebContentItem {
@@ -2658,7 +2564,7 @@ type WebContentItem struct {
 
 func (x *WebContentItem) Reset() {
 	*x = WebContentItem{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[37]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2670,7 +2576,7 @@ func (x *WebContentItem) String() string {
 func (*WebContentItem) ProtoMessage() {}
 
 func (x *WebContentItem) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[37]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2683,7 +2589,7 @@ func (x *WebContentItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebContentItem.ProtoReflect.Descriptor instead.
 func (*WebContentItem) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{37}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *WebContentItem) GetKey() string {
@@ -2748,7 +2654,7 @@ type WebQueryStreamHistoryRequest struct {
 
 func (x *WebQueryStreamHistoryRequest) Reset() {
 	*x = WebQueryStreamHistoryRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[38]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2760,7 +2666,7 @@ func (x *WebQueryStreamHistoryRequest) String() string {
 func (*WebQueryStreamHistoryRequest) ProtoMessage() {}
 
 func (x *WebQueryStreamHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[38]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2773,7 +2679,7 @@ func (x *WebQueryStreamHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebQueryStreamHistoryRequest.ProtoReflect.Descriptor instead.
 func (*WebQueryStreamHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{38}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *WebQueryStreamHistoryRequest) GetSessionId() string {
@@ -2835,7 +2741,7 @@ type WebQueryStreamHistoryResponse struct {
 
 func (x *WebQueryStreamHistoryResponse) Reset() {
 	*x = WebQueryStreamHistoryResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[39]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2847,7 +2753,7 @@ func (x *WebQueryStreamHistoryResponse) String() string {
 func (*WebQueryStreamHistoryResponse) ProtoMessage() {}
 
 func (x *WebQueryStreamHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[39]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2860,7 +2766,7 @@ func (x *WebQueryStreamHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebQueryStreamHistoryResponse.ProtoReflect.Descriptor instead.
 func (*WebQueryStreamHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{39}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *WebQueryStreamHistoryResponse) GetEvents() []*GameEvent {
@@ -2896,7 +2802,7 @@ type WebListSessionStreamsRequest struct {
 
 func (x *WebListSessionStreamsRequest) Reset() {
 	*x = WebListSessionStreamsRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[40]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2908,7 +2814,7 @@ func (x *WebListSessionStreamsRequest) String() string {
 func (*WebListSessionStreamsRequest) ProtoMessage() {}
 
 func (x *WebListSessionStreamsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[40]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2921,7 +2827,7 @@ func (x *WebListSessionStreamsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListSessionStreamsRequest.ProtoReflect.Descriptor instead.
 func (*WebListSessionStreamsRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{40}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *WebListSessionStreamsRequest) GetSessionId() string {
@@ -2946,7 +2852,7 @@ type WebListSessionStreamsResponse struct {
 
 func (x *WebListSessionStreamsResponse) Reset() {
 	*x = WebListSessionStreamsResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[41]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2958,7 +2864,7 @@ func (x *WebListSessionStreamsResponse) String() string {
 func (*WebListSessionStreamsResponse) ProtoMessage() {}
 
 func (x *WebListSessionStreamsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[41]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2971,7 +2877,7 @@ func (x *WebListSessionStreamsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListSessionStreamsResponse.ProtoReflect.Descriptor instead.
 func (*WebListSessionStreamsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{41}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *WebListSessionStreamsResponse) GetStreams() []string {
@@ -2991,7 +2897,7 @@ type WebListPlayerSessionsRequest struct {
 
 func (x *WebListPlayerSessionsRequest) Reset() {
 	*x = WebListPlayerSessionsRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[42]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3003,7 +2909,7 @@ func (x *WebListPlayerSessionsRequest) String() string {
 func (*WebListPlayerSessionsRequest) ProtoMessage() {}
 
 func (x *WebListPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[42]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3016,7 +2922,7 @@ func (x *WebListPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListPlayerSessionsRequest.ProtoReflect.Descriptor instead.
 func (*WebListPlayerSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{42}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{40}
 }
 
 // WebPlayerSessionInfo describes one of a player's PlayerSessions — a
@@ -3045,7 +2951,7 @@ type WebPlayerSessionInfo struct {
 
 func (x *WebPlayerSessionInfo) Reset() {
 	*x = WebPlayerSessionInfo{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[43]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3057,7 +2963,7 @@ func (x *WebPlayerSessionInfo) String() string {
 func (*WebPlayerSessionInfo) ProtoMessage() {}
 
 func (x *WebPlayerSessionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[43]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3070,7 +2976,7 @@ func (x *WebPlayerSessionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebPlayerSessionInfo.ProtoReflect.Descriptor instead.
 func (*WebPlayerSessionInfo) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{43}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *WebPlayerSessionInfo) GetId() string {
@@ -3128,7 +3034,7 @@ type WebListPlayerSessionsResponse struct {
 
 func (x *WebListPlayerSessionsResponse) Reset() {
 	*x = WebListPlayerSessionsResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[44]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3140,7 +3046,7 @@ func (x *WebListPlayerSessionsResponse) String() string {
 func (*WebListPlayerSessionsResponse) ProtoMessage() {}
 
 func (x *WebListPlayerSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[44]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3153,7 +3059,7 @@ func (x *WebListPlayerSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListPlayerSessionsResponse.ProtoReflect.Descriptor instead.
 func (*WebListPlayerSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{44}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *WebListPlayerSessionsResponse) GetSessions() []*WebPlayerSessionInfo {
@@ -3175,7 +3081,7 @@ type WebRevokePlayerSessionRequest struct {
 
 func (x *WebRevokePlayerSessionRequest) Reset() {
 	*x = WebRevokePlayerSessionRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[45]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3187,7 +3093,7 @@ func (x *WebRevokePlayerSessionRequest) String() string {
 func (*WebRevokePlayerSessionRequest) ProtoMessage() {}
 
 func (x *WebRevokePlayerSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[45]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3200,7 +3106,7 @@ func (x *WebRevokePlayerSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebRevokePlayerSessionRequest.ProtoReflect.Descriptor instead.
 func (*WebRevokePlayerSessionRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{45}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *WebRevokePlayerSessionRequest) GetTargetSessionId() string {
@@ -3224,7 +3130,7 @@ type WebRevokePlayerSessionResponse struct {
 
 func (x *WebRevokePlayerSessionResponse) Reset() {
 	*x = WebRevokePlayerSessionResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[46]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3236,7 +3142,7 @@ func (x *WebRevokePlayerSessionResponse) String() string {
 func (*WebRevokePlayerSessionResponse) ProtoMessage() {}
 
 func (x *WebRevokePlayerSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[46]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3249,7 +3155,7 @@ func (x *WebRevokePlayerSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebRevokePlayerSessionResponse.ProtoReflect.Descriptor instead.
 func (*WebRevokePlayerSessionResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{46}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *WebRevokePlayerSessionResponse) GetSuccess() bool {
@@ -3276,7 +3182,7 @@ type WebRevokeOtherPlayerSessionsRequest struct {
 
 func (x *WebRevokeOtherPlayerSessionsRequest) Reset() {
 	*x = WebRevokeOtherPlayerSessionsRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[47]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3288,7 +3194,7 @@ func (x *WebRevokeOtherPlayerSessionsRequest) String() string {
 func (*WebRevokeOtherPlayerSessionsRequest) ProtoMessage() {}
 
 func (x *WebRevokeOtherPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[47]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3301,7 +3207,7 @@ func (x *WebRevokeOtherPlayerSessionsRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use WebRevokeOtherPlayerSessionsRequest.ProtoReflect.Descriptor instead.
 func (*WebRevokeOtherPlayerSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{47}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{45}
 }
 
 // WebRevokeOtherPlayerSessionsResponse reports the bulk-revocation outcome and
@@ -3318,7 +3224,7 @@ type WebRevokeOtherPlayerSessionsResponse struct {
 
 func (x *WebRevokeOtherPlayerSessionsResponse) Reset() {
 	*x = WebRevokeOtherPlayerSessionsResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[48]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3330,7 +3236,7 @@ func (x *WebRevokeOtherPlayerSessionsResponse) String() string {
 func (*WebRevokeOtherPlayerSessionsResponse) ProtoMessage() {}
 
 func (x *WebRevokeOtherPlayerSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[48]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3343,7 +3249,7 @@ func (x *WebRevokeOtherPlayerSessionsResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use WebRevokeOtherPlayerSessionsResponse.ProtoReflect.Descriptor instead.
 func (*WebRevokeOtherPlayerSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{48}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *WebRevokeOtherPlayerSessionsResponse) GetSuccess() bool {
@@ -3377,7 +3283,7 @@ type WebPresenceEntry struct {
 
 func (x *WebPresenceEntry) Reset() {
 	*x = WebPresenceEntry{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[49]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3389,7 +3295,7 @@ func (x *WebPresenceEntry) String() string {
 func (*WebPresenceEntry) ProtoMessage() {}
 
 func (x *WebPresenceEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[49]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3402,7 +3308,7 @@ func (x *WebPresenceEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebPresenceEntry.ProtoReflect.Descriptor instead.
 func (*WebPresenceEntry) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{49}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *WebPresenceEntry) GetCharacterId() string {
@@ -3439,7 +3345,7 @@ type WebListFocusPresenceRequest struct {
 
 func (x *WebListFocusPresenceRequest) Reset() {
 	*x = WebListFocusPresenceRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[50]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3451,7 +3357,7 @@ func (x *WebListFocusPresenceRequest) String() string {
 func (*WebListFocusPresenceRequest) ProtoMessage() {}
 
 func (x *WebListFocusPresenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[50]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3464,7 +3370,7 @@ func (x *WebListFocusPresenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListFocusPresenceRequest.ProtoReflect.Descriptor instead.
 func (*WebListFocusPresenceRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{50}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *WebListFocusPresenceRequest) GetSessionId() string {
@@ -3491,7 +3397,7 @@ type WebListFocusPresenceResponse struct {
 
 func (x *WebListFocusPresenceResponse) Reset() {
 	*x = WebListFocusPresenceResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[51]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3503,7 +3409,7 @@ func (x *WebListFocusPresenceResponse) String() string {
 func (*WebListFocusPresenceResponse) ProtoMessage() {}
 
 func (x *WebListFocusPresenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[51]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3516,7 +3422,7 @@ func (x *WebListFocusPresenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListFocusPresenceResponse.ProtoReflect.Descriptor instead.
 func (*WebListFocusPresenceResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{51}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *WebListFocusPresenceResponse) GetContext() WebPresenceContext {
@@ -3557,7 +3463,7 @@ type WebAvailableCommand struct {
 
 func (x *WebAvailableCommand) Reset() {
 	*x = WebAvailableCommand{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[52]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3569,7 +3475,7 @@ func (x *WebAvailableCommand) String() string {
 func (*WebAvailableCommand) ProtoMessage() {}
 
 func (x *WebAvailableCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[52]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3582,7 +3488,7 @@ func (x *WebAvailableCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebAvailableCommand.ProtoReflect.Descriptor instead.
 func (*WebAvailableCommand) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{52}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *WebAvailableCommand) GetName() string {
@@ -3624,7 +3530,7 @@ type WebListCommandsRequest struct {
 
 func (x *WebListCommandsRequest) Reset() {
 	*x = WebListCommandsRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[53]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3636,7 +3542,7 @@ func (x *WebListCommandsRequest) String() string {
 func (*WebListCommandsRequest) ProtoMessage() {}
 
 func (x *WebListCommandsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[53]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3649,7 +3555,7 @@ func (x *WebListCommandsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListCommandsRequest.ProtoReflect.Descriptor instead.
 func (*WebListCommandsRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{53}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *WebListCommandsRequest) GetSessionId() string {
@@ -3674,7 +3580,7 @@ type WebListCommandsResponse struct {
 
 func (x *WebListCommandsResponse) Reset() {
 	*x = WebListCommandsResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[54]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3686,7 +3592,7 @@ func (x *WebListCommandsResponse) String() string {
 func (*WebListCommandsResponse) ProtoMessage() {}
 
 func (x *WebListCommandsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[54]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3699,7 +3605,7 @@ func (x *WebListCommandsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListCommandsResponse.ProtoReflect.Descriptor instead.
 func (*WebListCommandsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{54}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *WebListCommandsResponse) GetCommands() []*WebAvailableCommand {
@@ -3747,7 +3653,7 @@ type WebListScenesRequest struct {
 
 func (x *WebListScenesRequest) Reset() {
 	*x = WebListScenesRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[55]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3759,7 +3665,7 @@ func (x *WebListScenesRequest) String() string {
 func (*WebListScenesRequest) ProtoMessage() {}
 
 func (x *WebListScenesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[55]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3772,7 +3678,7 @@ func (x *WebListScenesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListScenesRequest.ProtoReflect.Descriptor instead.
 func (*WebListScenesRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{55}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *WebListScenesRequest) GetSessionId() string {
@@ -3821,14 +3727,14 @@ func (x *WebListScenesRequest) GetExcludeContentWarnings() []string {
 type WebListScenesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scenes is the matching public scenes for this page.
-	Scenes        []*v11.SceneInfo `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
+	Scenes        []*v1.SceneInfo `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebListScenesResponse) Reset() {
 	*x = WebListScenesResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[56]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3840,7 +3746,7 @@ func (x *WebListScenesResponse) String() string {
 func (*WebListScenesResponse) ProtoMessage() {}
 
 func (x *WebListScenesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[56]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3853,10 +3759,10 @@ func (x *WebListScenesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListScenesResponse.ProtoReflect.Descriptor instead.
 func (*WebListScenesResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{56}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{54}
 }
 
-func (x *WebListScenesResponse) GetScenes() []*v11.SceneInfo {
+func (x *WebListScenesResponse) GetScenes() []*v1.SceneInfo {
 	if x != nil {
 		return x.Scenes
 	}
@@ -3879,7 +3785,7 @@ type WebGetSceneRequest struct {
 
 func (x *WebGetSceneRequest) Reset() {
 	*x = WebGetSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[57]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3891,7 +3797,7 @@ func (x *WebGetSceneRequest) String() string {
 func (*WebGetSceneRequest) ProtoMessage() {}
 
 func (x *WebGetSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[57]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3904,7 +3810,7 @@ func (x *WebGetSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebGetSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{57}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *WebGetSceneRequest) GetSessionId() string {
@@ -3932,14 +3838,14 @@ func (x *WebGetSceneRequest) GetSceneId() string {
 type WebGetSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the loaded scene's full metadata projection.
-	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebGetSceneResponse) Reset() {
 	*x = WebGetSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[58]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3951,7 +3857,7 @@ func (x *WebGetSceneResponse) String() string {
 func (*WebGetSceneResponse) ProtoMessage() {}
 
 func (x *WebGetSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[58]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3964,10 +3870,10 @@ func (x *WebGetSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebGetSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{58}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{56}
 }
 
-func (x *WebGetSceneResponse) GetScene() *v11.SceneInfo {
+func (x *WebGetSceneResponse) GetScene() *v1.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -3988,7 +3894,7 @@ type WebListMyScenesRequest struct {
 
 func (x *WebListMyScenesRequest) Reset() {
 	*x = WebListMyScenesRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[59]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4000,7 +3906,7 @@ func (x *WebListMyScenesRequest) String() string {
 func (*WebListMyScenesRequest) ProtoMessage() {}
 
 func (x *WebListMyScenesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[59]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4013,7 +3919,7 @@ func (x *WebListMyScenesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListMyScenesRequest.ProtoReflect.Descriptor instead.
 func (*WebListMyScenesRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{59}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *WebListMyScenesRequest) GetSessionId() string {
@@ -4036,7 +3942,7 @@ type WebListMyScenesResponse struct {
 	// scenes is the character's scene participations, most recently active first.
 	// Each CharacterSceneInfo carries the per-scene `muted` flag from the facade
 	// ListMyScenes read, so the workspace renders persisted mute state on reload.
-	Scenes []*v11.CharacterSceneInfo `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
+	Scenes []*v1.CharacterSceneInfo `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
 	// global_notify_enabled is the character's persisted global notify preference,
 	// forwarded verbatim from SceneAccessService.ListMyScenes (default true;
 	// false when the character turned scene notifications off). Lets the web
@@ -4048,7 +3954,7 @@ type WebListMyScenesResponse struct {
 
 func (x *WebListMyScenesResponse) Reset() {
 	*x = WebListMyScenesResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[60]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4060,7 +3966,7 @@ func (x *WebListMyScenesResponse) String() string {
 func (*WebListMyScenesResponse) ProtoMessage() {}
 
 func (x *WebListMyScenesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[60]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4073,10 +3979,10 @@ func (x *WebListMyScenesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListMyScenesResponse.ProtoReflect.Descriptor instead.
 func (*WebListMyScenesResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{60}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{58}
 }
 
-func (x *WebListMyScenesResponse) GetScenes() []*v11.CharacterSceneInfo {
+func (x *WebListMyScenesResponse) GetScenes() []*v1.CharacterSceneInfo {
 	if x != nil {
 		return x.Scenes
 	}
@@ -4106,7 +4012,7 @@ type WebWatchSceneRequest struct {
 
 func (x *WebWatchSceneRequest) Reset() {
 	*x = WebWatchSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[61]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4118,7 +4024,7 @@ func (x *WebWatchSceneRequest) String() string {
 func (*WebWatchSceneRequest) ProtoMessage() {}
 
 func (x *WebWatchSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[61]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4131,7 +4037,7 @@ func (x *WebWatchSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebWatchSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebWatchSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{61}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *WebWatchSceneRequest) GetSessionId() string {
@@ -4160,14 +4066,14 @@ type WebWatchSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// participant is the resulting participant entry (role=observer), or the
 	// pre-existing row when the character was already a participant.
-	Participant   *v11.ParticipantInfo `protobuf:"bytes,1,opt,name=participant,proto3" json:"participant,omitempty"`
+	Participant   *v1.ParticipantInfo `protobuf:"bytes,1,opt,name=participant,proto3" json:"participant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebWatchSceneResponse) Reset() {
 	*x = WebWatchSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[62]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4179,7 +4085,7 @@ func (x *WebWatchSceneResponse) String() string {
 func (*WebWatchSceneResponse) ProtoMessage() {}
 
 func (x *WebWatchSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[62]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4192,10 +4098,10 @@ func (x *WebWatchSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebWatchSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebWatchSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{62}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{60}
 }
 
-func (x *WebWatchSceneResponse) GetParticipant() *v11.ParticipantInfo {
+func (x *WebWatchSceneResponse) GetParticipant() *v1.ParticipantInfo {
 	if x != nil {
 		return x.Participant
 	}
@@ -4221,7 +4127,7 @@ type WebCreateSceneRequest struct {
 
 func (x *WebCreateSceneRequest) Reset() {
 	*x = WebCreateSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[63]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4233,7 +4139,7 @@ func (x *WebCreateSceneRequest) String() string {
 func (*WebCreateSceneRequest) ProtoMessage() {}
 
 func (x *WebCreateSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[63]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4246,7 +4152,7 @@ func (x *WebCreateSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebCreateSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebCreateSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{63}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *WebCreateSceneRequest) GetSessionId() string {
@@ -4281,14 +4187,14 @@ func (x *WebCreateSceneRequest) GetDescription() string {
 type WebCreateSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the newly created scene's full metadata projection.
-	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebCreateSceneResponse) Reset() {
 	*x = WebCreateSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[64]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4300,7 +4206,7 @@ func (x *WebCreateSceneResponse) String() string {
 func (*WebCreateSceneResponse) ProtoMessage() {}
 
 func (x *WebCreateSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[64]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4313,10 +4219,10 @@ func (x *WebCreateSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebCreateSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebCreateSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{64}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{62}
 }
 
-func (x *WebCreateSceneResponse) GetScene() *v11.SceneInfo {
+func (x *WebCreateSceneResponse) GetScene() *v1.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -4341,7 +4247,7 @@ type WebExportSceneRequest struct {
 
 func (x *WebExportSceneRequest) Reset() {
 	*x = WebExportSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[65]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4353,7 +4259,7 @@ func (x *WebExportSceneRequest) String() string {
 func (*WebExportSceneRequest) ProtoMessage() {}
 
 func (x *WebExportSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[65]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4366,7 +4272,7 @@ func (x *WebExportSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebExportSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebExportSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{65}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *WebExportSceneRequest) GetSessionId() string {
@@ -4412,7 +4318,7 @@ type WebExportSceneResponse struct {
 
 func (x *WebExportSceneResponse) Reset() {
 	*x = WebExportSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[66]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4424,7 +4330,7 @@ func (x *WebExportSceneResponse) String() string {
 func (*WebExportSceneResponse) ProtoMessage() {}
 
 func (x *WebExportSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[66]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4437,7 +4343,7 @@ func (x *WebExportSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebExportSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebExportSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{66}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *WebExportSceneResponse) GetContent() []byte {
@@ -4477,7 +4383,7 @@ type WebSetSceneFocusRequest struct {
 
 func (x *WebSetSceneFocusRequest) Reset() {
 	*x = WebSetSceneFocusRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[67]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4489,7 +4395,7 @@ func (x *WebSetSceneFocusRequest) String() string {
 func (*WebSetSceneFocusRequest) ProtoMessage() {}
 
 func (x *WebSetSceneFocusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[67]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4502,7 +4408,7 @@ func (x *WebSetSceneFocusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebSetSceneFocusRequest.ProtoReflect.Descriptor instead.
 func (*WebSetSceneFocusRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{67}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *WebSetSceneFocusRequest) GetSessionId() string {
@@ -4536,7 +4442,7 @@ type WebSetSceneFocusResponse struct {
 
 func (x *WebSetSceneFocusResponse) Reset() {
 	*x = WebSetSceneFocusResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[68]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4548,7 +4454,7 @@ func (x *WebSetSceneFocusResponse) String() string {
 func (*WebSetSceneFocusResponse) ProtoMessage() {}
 
 func (x *WebSetSceneFocusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[68]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4561,7 +4467,7 @@ func (x *WebSetSceneFocusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebSetSceneFocusResponse.ProtoReflect.Descriptor instead.
 func (*WebSetSceneFocusResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{68}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{66}
 }
 
 // WebListPublishedScenesRequest proxies to SceneAccessService.ListPublishedScenes.
@@ -4582,7 +4488,7 @@ type WebListPublishedScenesRequest struct {
 
 func (x *WebListPublishedScenesRequest) Reset() {
 	*x = WebListPublishedScenesRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[69]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4594,7 +4500,7 @@ func (x *WebListPublishedScenesRequest) String() string {
 func (*WebListPublishedScenesRequest) ProtoMessage() {}
 
 func (x *WebListPublishedScenesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[69]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4607,7 +4513,7 @@ func (x *WebListPublishedScenesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListPublishedScenesRequest.ProtoReflect.Descriptor instead.
 func (*WebListPublishedScenesRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{69}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *WebListPublishedScenesRequest) GetSessionId() string {
@@ -4642,14 +4548,14 @@ func (x *WebListPublishedScenesRequest) GetTags() []string {
 type WebListPublishedScenesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// archives is the public-safe published-archive summaries, newest first.
-	Archives      []*v11.PublicSceneArchive `protobuf:"bytes,1,rep,name=archives,proto3" json:"archives,omitempty"`
+	Archives      []*v1.PublicSceneArchive `protobuf:"bytes,1,rep,name=archives,proto3" json:"archives,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebListPublishedScenesResponse) Reset() {
 	*x = WebListPublishedScenesResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[70]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4661,7 +4567,7 @@ func (x *WebListPublishedScenesResponse) String() string {
 func (*WebListPublishedScenesResponse) ProtoMessage() {}
 
 func (x *WebListPublishedScenesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[70]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4674,10 +4580,10 @@ func (x *WebListPublishedScenesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListPublishedScenesResponse.ProtoReflect.Descriptor instead.
 func (*WebListPublishedScenesResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{70}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{68}
 }
 
-func (x *WebListPublishedScenesResponse) GetArchives() []*v11.PublicSceneArchive {
+func (x *WebListPublishedScenesResponse) GetArchives() []*v1.PublicSceneArchive {
 	if x != nil {
 		return x.Archives
 	}
@@ -4698,7 +4604,7 @@ type WebGetPublicSceneArchiveRequest struct {
 
 func (x *WebGetPublicSceneArchiveRequest) Reset() {
 	*x = WebGetPublicSceneArchiveRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[71]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4710,7 +4616,7 @@ func (x *WebGetPublicSceneArchiveRequest) String() string {
 func (*WebGetPublicSceneArchiveRequest) ProtoMessage() {}
 
 func (x *WebGetPublicSceneArchiveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[71]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4723,7 +4629,7 @@ func (x *WebGetPublicSceneArchiveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetPublicSceneArchiveRequest.ProtoReflect.Descriptor instead.
 func (*WebGetPublicSceneArchiveRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{71}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *WebGetPublicSceneArchiveRequest) GetSessionId() string {
@@ -4750,7 +4656,7 @@ type WebGetPublicSceneArchiveResponse struct {
 	// participants_snapshot is the participant character names snapshotted at publish time.
 	ParticipantsSnapshot []string `protobuf:"bytes,3,rep,name=participants_snapshot,json=participantsSnapshot,proto3" json:"participants_snapshot,omitempty"`
 	// content_entries is the frozen published content.
-	ContentEntries []*v11.PublishedSceneEntry `protobuf:"bytes,4,rep,name=content_entries,json=contentEntries,proto3" json:"content_entries,omitempty"`
+	ContentEntries []*v1.PublishedSceneEntry `protobuf:"bytes,4,rep,name=content_entries,json=contentEntries,proto3" json:"content_entries,omitempty"`
 	// published_at_unix_ns is the epoch-nanosecond publish time.
 	PublishedAtUnixNs int64 `protobuf:"varint,5,opt,name=published_at_unix_ns,json=publishedAtUnixNs,proto3" json:"published_at_unix_ns,omitempty"`
 	unknownFields     protoimpl.UnknownFields
@@ -4759,7 +4665,7 @@ type WebGetPublicSceneArchiveResponse struct {
 
 func (x *WebGetPublicSceneArchiveResponse) Reset() {
 	*x = WebGetPublicSceneArchiveResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[72]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4771,7 +4677,7 @@ func (x *WebGetPublicSceneArchiveResponse) String() string {
 func (*WebGetPublicSceneArchiveResponse) ProtoMessage() {}
 
 func (x *WebGetPublicSceneArchiveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[72]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4784,7 +4690,7 @@ func (x *WebGetPublicSceneArchiveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetPublicSceneArchiveResponse.ProtoReflect.Descriptor instead.
 func (*WebGetPublicSceneArchiveResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{72}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *WebGetPublicSceneArchiveResponse) GetId() string {
@@ -4808,7 +4714,7 @@ func (x *WebGetPublicSceneArchiveResponse) GetParticipantsSnapshot() []string {
 	return nil
 }
 
-func (x *WebGetPublicSceneArchiveResponse) GetContentEntries() []*v11.PublishedSceneEntry {
+func (x *WebGetPublicSceneArchiveResponse) GetContentEntries() []*v1.PublishedSceneEntry {
 	if x != nil {
 		return x.ContentEntries
 	}
@@ -4839,7 +4745,7 @@ type WebDownloadPublicSceneArchiveRequest struct {
 
 func (x *WebDownloadPublicSceneArchiveRequest) Reset() {
 	*x = WebDownloadPublicSceneArchiveRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[73]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4851,7 +4757,7 @@ func (x *WebDownloadPublicSceneArchiveRequest) String() string {
 func (*WebDownloadPublicSceneArchiveRequest) ProtoMessage() {}
 
 func (x *WebDownloadPublicSceneArchiveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[73]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4864,7 +4770,7 @@ func (x *WebDownloadPublicSceneArchiveRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use WebDownloadPublicSceneArchiveRequest.ProtoReflect.Descriptor instead.
 func (*WebDownloadPublicSceneArchiveRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{73}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *WebDownloadPublicSceneArchiveRequest) GetSessionId() string {
@@ -4902,7 +4808,7 @@ type WebDownloadPublicSceneArchiveResponse struct {
 
 func (x *WebDownloadPublicSceneArchiveResponse) Reset() {
 	*x = WebDownloadPublicSceneArchiveResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[74]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4914,7 +4820,7 @@ func (x *WebDownloadPublicSceneArchiveResponse) String() string {
 func (*WebDownloadPublicSceneArchiveResponse) ProtoMessage() {}
 
 func (x *WebDownloadPublicSceneArchiveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[74]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4927,7 +4833,7 @@ func (x *WebDownloadPublicSceneArchiveResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use WebDownloadPublicSceneArchiveResponse.ProtoReflect.Descriptor instead.
 func (*WebDownloadPublicSceneArchiveResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{74}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *WebDownloadPublicSceneArchiveResponse) GetContent() []byte {
@@ -4960,7 +4866,7 @@ type WebEndSceneRequest struct {
 
 func (x *WebEndSceneRequest) Reset() {
 	*x = WebEndSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[75]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4972,7 +4878,7 @@ func (x *WebEndSceneRequest) String() string {
 func (*WebEndSceneRequest) ProtoMessage() {}
 
 func (x *WebEndSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[75]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4985,7 +4891,7 @@ func (x *WebEndSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebEndSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebEndSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{75}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *WebEndSceneRequest) GetSessionId() string {
@@ -5013,14 +4919,14 @@ func (x *WebEndSceneRequest) GetSceneId() string {
 type WebEndSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the scene row after the ended transition.
-	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebEndSceneResponse) Reset() {
 	*x = WebEndSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[76]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5032,7 +4938,7 @@ func (x *WebEndSceneResponse) String() string {
 func (*WebEndSceneResponse) ProtoMessage() {}
 
 func (x *WebEndSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[76]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5045,10 +4951,10 @@ func (x *WebEndSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebEndSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebEndSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{76}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{74}
 }
 
-func (x *WebEndSceneResponse) GetScene() *v11.SceneInfo {
+func (x *WebEndSceneResponse) GetScene() *v1.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -5070,7 +4976,7 @@ type WebStartScenePublishRequest struct {
 
 func (x *WebStartScenePublishRequest) Reset() {
 	*x = WebStartScenePublishRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[77]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5082,7 +4988,7 @@ func (x *WebStartScenePublishRequest) String() string {
 func (*WebStartScenePublishRequest) ProtoMessage() {}
 
 func (x *WebStartScenePublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[77]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5095,7 +5001,7 @@ func (x *WebStartScenePublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebStartScenePublishRequest.ProtoReflect.Descriptor instead.
 func (*WebStartScenePublishRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{77}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *WebStartScenePublishRequest) GetSessionId() string {
@@ -5132,7 +5038,7 @@ type WebStartScenePublishResponse struct {
 
 func (x *WebStartScenePublishResponse) Reset() {
 	*x = WebStartScenePublishResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[78]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5144,7 +5050,7 @@ func (x *WebStartScenePublishResponse) String() string {
 func (*WebStartScenePublishResponse) ProtoMessage() {}
 
 func (x *WebStartScenePublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[78]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5157,7 +5063,7 @@ func (x *WebStartScenePublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebStartScenePublishResponse.ProtoReflect.Descriptor instead.
 func (*WebStartScenePublishResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{78}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *WebStartScenePublishResponse) GetPublishedSceneId() string {
@@ -5191,7 +5097,7 @@ type WebCastPublishSceneVoteRequest struct {
 
 func (x *WebCastPublishSceneVoteRequest) Reset() {
 	*x = WebCastPublishSceneVoteRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[79]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5203,7 +5109,7 @@ func (x *WebCastPublishSceneVoteRequest) String() string {
 func (*WebCastPublishSceneVoteRequest) ProtoMessage() {}
 
 func (x *WebCastPublishSceneVoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[79]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5216,7 +5122,7 @@ func (x *WebCastPublishSceneVoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebCastPublishSceneVoteRequest.ProtoReflect.Descriptor instead.
 func (*WebCastPublishSceneVoteRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{79}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *WebCastPublishSceneVoteRequest) GetSessionId() string {
@@ -5258,7 +5164,7 @@ type WebCastPublishSceneVoteResponse struct {
 
 func (x *WebCastPublishSceneVoteResponse) Reset() {
 	*x = WebCastPublishSceneVoteResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[80]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5270,7 +5176,7 @@ func (x *WebCastPublishSceneVoteResponse) String() string {
 func (*WebCastPublishSceneVoteResponse) ProtoMessage() {}
 
 func (x *WebCastPublishSceneVoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[80]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5283,7 +5189,7 @@ func (x *WebCastPublishSceneVoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebCastPublishSceneVoteResponse.ProtoReflect.Descriptor instead.
 func (*WebCastPublishSceneVoteResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{80}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *WebCastPublishSceneVoteResponse) GetIsChange() bool {
@@ -5308,7 +5214,7 @@ type WebWithdrawScenePublishRequest struct {
 
 func (x *WebWithdrawScenePublishRequest) Reset() {
 	*x = WebWithdrawScenePublishRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[81]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5320,7 +5226,7 @@ func (x *WebWithdrawScenePublishRequest) String() string {
 func (*WebWithdrawScenePublishRequest) ProtoMessage() {}
 
 func (x *WebWithdrawScenePublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[81]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5333,7 +5239,7 @@ func (x *WebWithdrawScenePublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebWithdrawScenePublishRequest.ProtoReflect.Descriptor instead.
 func (*WebWithdrawScenePublishRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{81}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *WebWithdrawScenePublishRequest) GetSessionId() string {
@@ -5366,7 +5272,7 @@ type WebWithdrawScenePublishResponse struct {
 
 func (x *WebWithdrawScenePublishResponse) Reset() {
 	*x = WebWithdrawScenePublishResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[82]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5378,7 +5284,7 @@ func (x *WebWithdrawScenePublishResponse) String() string {
 func (*WebWithdrawScenePublishResponse) ProtoMessage() {}
 
 func (x *WebWithdrawScenePublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[82]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5391,7 +5297,7 @@ func (x *WebWithdrawScenePublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebWithdrawScenePublishResponse.ProtoReflect.Descriptor instead.
 func (*WebWithdrawScenePublishResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{82}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{80}
 }
 
 // WebGetPublishedSceneRequest reads the cold-start tally snapshot.
@@ -5409,7 +5315,7 @@ type WebGetPublishedSceneRequest struct {
 
 func (x *WebGetPublishedSceneRequest) Reset() {
 	*x = WebGetPublishedSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[83]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5421,7 +5327,7 @@ func (x *WebGetPublishedSceneRequest) String() string {
 func (*WebGetPublishedSceneRequest) ProtoMessage() {}
 
 func (x *WebGetPublishedSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[83]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5434,7 +5340,7 @@ func (x *WebGetPublishedSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetPublishedSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebGetPublishedSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{83}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *WebGetPublishedSceneRequest) GetSessionId() string {
@@ -5472,14 +5378,14 @@ type WebGetPublishedSceneResponse struct {
 	// failure_reason is the cause when status is ATTEMPT_FAILED; empty otherwise.
 	FailureReason string `protobuf:"bytes,5,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
 	// vote_summary is the current yes/no/pending tally.
-	VoteSummary   *v11.PublishedSceneVoteSummary `protobuf:"bytes,6,opt,name=vote_summary,json=voteSummary,proto3" json:"vote_summary,omitempty"`
+	VoteSummary   *v1.PublishedSceneVoteSummary `protobuf:"bytes,6,opt,name=vote_summary,json=voteSummary,proto3" json:"vote_summary,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebGetPublishedSceneResponse) Reset() {
 	*x = WebGetPublishedSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[84]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5491,7 +5397,7 @@ func (x *WebGetPublishedSceneResponse) String() string {
 func (*WebGetPublishedSceneResponse) ProtoMessage() {}
 
 func (x *WebGetPublishedSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[84]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5504,7 +5410,7 @@ func (x *WebGetPublishedSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetPublishedSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebGetPublishedSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{84}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *WebGetPublishedSceneResponse) GetId() string {
@@ -5542,7 +5448,7 @@ func (x *WebGetPublishedSceneResponse) GetFailureReason() string {
 	return ""
 }
 
-func (x *WebGetPublishedSceneResponse) GetVoteSummary() *v11.PublishedSceneVoteSummary {
+func (x *WebGetPublishedSceneResponse) GetVoteSummary() *v1.PublishedSceneVoteSummary {
 	if x != nil {
 		return x.VoteSummary
 	}
@@ -5564,7 +5470,7 @@ type WebPauseSceneRequest struct {
 
 func (x *WebPauseSceneRequest) Reset() {
 	*x = WebPauseSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[85]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5576,7 +5482,7 @@ func (x *WebPauseSceneRequest) String() string {
 func (*WebPauseSceneRequest) ProtoMessage() {}
 
 func (x *WebPauseSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[85]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5589,7 +5495,7 @@ func (x *WebPauseSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebPauseSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebPauseSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{85}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *WebPauseSceneRequest) GetSessionId() string {
@@ -5617,14 +5523,14 @@ func (x *WebPauseSceneRequest) GetSceneId() string {
 type WebPauseSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the scene row after the paused transition.
-	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebPauseSceneResponse) Reset() {
 	*x = WebPauseSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[86]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5636,7 +5542,7 @@ func (x *WebPauseSceneResponse) String() string {
 func (*WebPauseSceneResponse) ProtoMessage() {}
 
 func (x *WebPauseSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[86]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5649,10 +5555,10 @@ func (x *WebPauseSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebPauseSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebPauseSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{86}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{84}
 }
 
-func (x *WebPauseSceneResponse) GetScene() *v11.SceneInfo {
+func (x *WebPauseSceneResponse) GetScene() *v1.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -5674,7 +5580,7 @@ type WebResumeSceneRequest struct {
 
 func (x *WebResumeSceneRequest) Reset() {
 	*x = WebResumeSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[87]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5686,7 +5592,7 @@ func (x *WebResumeSceneRequest) String() string {
 func (*WebResumeSceneRequest) ProtoMessage() {}
 
 func (x *WebResumeSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[87]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5699,7 +5605,7 @@ func (x *WebResumeSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebResumeSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebResumeSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{87}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *WebResumeSceneRequest) GetSessionId() string {
@@ -5727,14 +5633,14 @@ func (x *WebResumeSceneRequest) GetSceneId() string {
 type WebResumeSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the scene row after the resumed transition.
-	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebResumeSceneResponse) Reset() {
 	*x = WebResumeSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[88]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5746,7 +5652,7 @@ func (x *WebResumeSceneResponse) String() string {
 func (*WebResumeSceneResponse) ProtoMessage() {}
 
 func (x *WebResumeSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[88]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5759,10 +5665,10 @@ func (x *WebResumeSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebResumeSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebResumeSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{88}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{86}
 }
 
-func (x *WebResumeSceneResponse) GetScene() *v11.SceneInfo {
+func (x *WebResumeSceneResponse) GetScene() *v1.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -5788,7 +5694,7 @@ type WebMuteSceneRequest struct {
 
 func (x *WebMuteSceneRequest) Reset() {
 	*x = WebMuteSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[89]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5800,7 +5706,7 @@ func (x *WebMuteSceneRequest) String() string {
 func (*WebMuteSceneRequest) ProtoMessage() {}
 
 func (x *WebMuteSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[89]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5813,7 +5719,7 @@ func (x *WebMuteSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebMuteSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebMuteSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{89}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *WebMuteSceneRequest) GetSessionId() string {
@@ -5854,7 +5760,7 @@ type WebMuteSceneResponse struct {
 
 func (x *WebMuteSceneResponse) Reset() {
 	*x = WebMuteSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[90]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5866,7 +5772,7 @@ func (x *WebMuteSceneResponse) String() string {
 func (*WebMuteSceneResponse) ProtoMessage() {}
 
 func (x *WebMuteSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[90]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5879,7 +5785,7 @@ func (x *WebMuteSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebMuteSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebMuteSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{90}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{88}
 }
 
 // WebSetSceneNotifyPrefRequest proxies to SceneAccessService.SetSceneNotifyPref
@@ -5900,7 +5806,7 @@ type WebSetSceneNotifyPrefRequest struct {
 
 func (x *WebSetSceneNotifyPrefRequest) Reset() {
 	*x = WebSetSceneNotifyPrefRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[91]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5912,7 +5818,7 @@ func (x *WebSetSceneNotifyPrefRequest) String() string {
 func (*WebSetSceneNotifyPrefRequest) ProtoMessage() {}
 
 func (x *WebSetSceneNotifyPrefRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[91]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5925,7 +5831,7 @@ func (x *WebSetSceneNotifyPrefRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebSetSceneNotifyPrefRequest.ProtoReflect.Descriptor instead.
 func (*WebSetSceneNotifyPrefRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{91}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *WebSetSceneNotifyPrefRequest) GetSessionId() string {
@@ -5959,7 +5865,7 @@ type WebSetSceneNotifyPrefResponse struct {
 
 func (x *WebSetSceneNotifyPrefResponse) Reset() {
 	*x = WebSetSceneNotifyPrefResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[92]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5971,7 +5877,7 @@ func (x *WebSetSceneNotifyPrefResponse) String() string {
 func (*WebSetSceneNotifyPrefResponse) ProtoMessage() {}
 
 func (x *WebSetSceneNotifyPrefResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[92]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5984,7 +5890,7 @@ func (x *WebSetSceneNotifyPrefResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebSetSceneNotifyPrefResponse.ProtoReflect.Descriptor instead.
 func (*WebSetSceneNotifyPrefResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{92}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{90}
 }
 
 // WebInviteToSceneRequest proxies to SceneAccessService.InviteToScene.
@@ -6004,7 +5910,7 @@ type WebInviteToSceneRequest struct {
 
 func (x *WebInviteToSceneRequest) Reset() {
 	*x = WebInviteToSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[93]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6016,7 +5922,7 @@ func (x *WebInviteToSceneRequest) String() string {
 func (*WebInviteToSceneRequest) ProtoMessage() {}
 
 func (x *WebInviteToSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[93]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6029,7 +5935,7 @@ func (x *WebInviteToSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebInviteToSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebInviteToSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{93}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *WebInviteToSceneRequest) GetSessionId() string {
@@ -6069,7 +5975,7 @@ type WebInviteToSceneResponse struct {
 
 func (x *WebInviteToSceneResponse) Reset() {
 	*x = WebInviteToSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[94]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6081,7 +5987,7 @@ func (x *WebInviteToSceneResponse) String() string {
 func (*WebInviteToSceneResponse) ProtoMessage() {}
 
 func (x *WebInviteToSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[94]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6094,7 +6000,7 @@ func (x *WebInviteToSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebInviteToSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebInviteToSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{94}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{92}
 }
 
 // WebKickFromSceneRequest proxies to SceneAccessService.KickFromScene.
@@ -6114,7 +6020,7 @@ type WebKickFromSceneRequest struct {
 
 func (x *WebKickFromSceneRequest) Reset() {
 	*x = WebKickFromSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[95]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6126,7 +6032,7 @@ func (x *WebKickFromSceneRequest) String() string {
 func (*WebKickFromSceneRequest) ProtoMessage() {}
 
 func (x *WebKickFromSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[95]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6139,7 +6045,7 @@ func (x *WebKickFromSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebKickFromSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebKickFromSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{95}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *WebKickFromSceneRequest) GetSessionId() string {
@@ -6179,7 +6085,7 @@ type WebKickFromSceneResponse struct {
 
 func (x *WebKickFromSceneResponse) Reset() {
 	*x = WebKickFromSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[96]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6191,7 +6097,7 @@ func (x *WebKickFromSceneResponse) String() string {
 func (*WebKickFromSceneResponse) ProtoMessage() {}
 
 func (x *WebKickFromSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[96]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6204,7 +6110,7 @@ func (x *WebKickFromSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebKickFromSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebKickFromSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{96}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{94}
 }
 
 // WebTransferOwnershipRequest proxies to SceneAccessService.TransferOwnership.
@@ -6224,7 +6130,7 @@ type WebTransferOwnershipRequest struct {
 
 func (x *WebTransferOwnershipRequest) Reset() {
 	*x = WebTransferOwnershipRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[97]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6236,7 +6142,7 @@ func (x *WebTransferOwnershipRequest) String() string {
 func (*WebTransferOwnershipRequest) ProtoMessage() {}
 
 func (x *WebTransferOwnershipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[97]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6249,7 +6155,7 @@ func (x *WebTransferOwnershipRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebTransferOwnershipRequest.ProtoReflect.Descriptor instead.
 func (*WebTransferOwnershipRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{97}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *WebTransferOwnershipRequest) GetSessionId() string {
@@ -6289,7 +6195,7 @@ type WebTransferOwnershipResponse struct {
 
 func (x *WebTransferOwnershipResponse) Reset() {
 	*x = WebTransferOwnershipResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[98]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6301,7 +6207,7 @@ func (x *WebTransferOwnershipResponse) String() string {
 func (*WebTransferOwnershipResponse) ProtoMessage() {}
 
 func (x *WebTransferOwnershipResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[98]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6314,7 +6220,7 @@ func (x *WebTransferOwnershipResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebTransferOwnershipResponse.ProtoReflect.Descriptor instead.
 func (*WebTransferOwnershipResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{98}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{96}
 }
 
 // WebLeaveSceneRequest proxies to SceneAccessService.LeaveScene.
@@ -6332,7 +6238,7 @@ type WebLeaveSceneRequest struct {
 
 func (x *WebLeaveSceneRequest) Reset() {
 	*x = WebLeaveSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[99]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6344,7 +6250,7 @@ func (x *WebLeaveSceneRequest) String() string {
 func (*WebLeaveSceneRequest) ProtoMessage() {}
 
 func (x *WebLeaveSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[99]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6357,7 +6263,7 @@ func (x *WebLeaveSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebLeaveSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebLeaveSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{99}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *WebLeaveSceneRequest) GetSessionId() string {
@@ -6390,7 +6296,7 @@ type WebLeaveSceneResponse struct {
 
 func (x *WebLeaveSceneResponse) Reset() {
 	*x = WebLeaveSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[100]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6402,7 +6308,7 @@ func (x *WebLeaveSceneResponse) String() string {
 func (*WebLeaveSceneResponse) ProtoMessage() {}
 
 func (x *WebLeaveSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[100]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6415,7 +6321,7 @@ func (x *WebLeaveSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebLeaveSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebLeaveSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{100}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{98}
 }
 
 // WebUpdateSceneRequest proxies to SceneAccessService.UpdateScene.
@@ -6449,7 +6355,7 @@ type WebUpdateSceneRequest struct {
 
 func (x *WebUpdateSceneRequest) Reset() {
 	*x = WebUpdateSceneRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[101]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6461,7 +6367,7 @@ func (x *WebUpdateSceneRequest) String() string {
 func (*WebUpdateSceneRequest) ProtoMessage() {}
 
 func (x *WebUpdateSceneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[101]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6474,7 +6380,7 @@ func (x *WebUpdateSceneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebUpdateSceneRequest.ProtoReflect.Descriptor instead.
 func (*WebUpdateSceneRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{101}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *WebUpdateSceneRequest) GetSessionId() string {
@@ -6551,14 +6457,14 @@ func (x *WebUpdateSceneRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 type WebUpdateSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the scene row after the partial update.
-	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebUpdateSceneResponse) Reset() {
 	*x = WebUpdateSceneResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[102]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6570,7 +6476,7 @@ func (x *WebUpdateSceneResponse) String() string {
 func (*WebUpdateSceneResponse) ProtoMessage() {}
 
 func (x *WebUpdateSceneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[102]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6583,10 +6489,10 @@ func (x *WebUpdateSceneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebUpdateSceneResponse.ProtoReflect.Descriptor instead.
 func (*WebUpdateSceneResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{102}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{100}
 }
 
-func (x *WebUpdateSceneResponse) GetScene() *v11.SceneInfo {
+func (x *WebUpdateSceneResponse) GetScene() *v1.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -6607,7 +6513,7 @@ type WebGetCharacterProfileRequest struct {
 
 func (x *WebGetCharacterProfileRequest) Reset() {
 	*x = WebGetCharacterProfileRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[103]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6619,7 +6525,7 @@ func (x *WebGetCharacterProfileRequest) String() string {
 func (*WebGetCharacterProfileRequest) ProtoMessage() {}
 
 func (x *WebGetCharacterProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[103]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6632,7 +6538,7 @@ func (x *WebGetCharacterProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetCharacterProfileRequest.ProtoReflect.Descriptor instead.
 func (*WebGetCharacterProfileRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{103}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *WebGetCharacterProfileRequest) GetCharacterId() string {
@@ -6647,14 +6553,14 @@ type WebGetCharacterProfileResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// character is the projection the facade built; the gateway forwards it
 	// unmodified and computes nothing.
-	Character     *v12.PublicCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	Character     *v11.PublicCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebGetCharacterProfileResponse) Reset() {
 	*x = WebGetCharacterProfileResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[104]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6666,7 +6572,7 @@ func (x *WebGetCharacterProfileResponse) String() string {
 func (*WebGetCharacterProfileResponse) ProtoMessage() {}
 
 func (x *WebGetCharacterProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[104]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6679,10 +6585,10 @@ func (x *WebGetCharacterProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetCharacterProfileResponse.ProtoReflect.Descriptor instead.
 func (*WebGetCharacterProfileResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{104}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{102}
 }
 
-func (x *WebGetCharacterProfileResponse) GetCharacter() *v12.PublicCharacter {
+func (x *WebGetCharacterProfileResponse) GetCharacter() *v11.PublicCharacter {
 	if x != nil {
 		return x.Character
 	}
@@ -6701,7 +6607,7 @@ type WebListMyCharactersRequest struct {
 
 func (x *WebListMyCharactersRequest) Reset() {
 	*x = WebListMyCharactersRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[105]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6713,7 +6619,7 @@ func (x *WebListMyCharactersRequest) String() string {
 func (*WebListMyCharactersRequest) ProtoMessage() {}
 
 func (x *WebListMyCharactersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[105]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6726,7 +6632,7 @@ func (x *WebListMyCharactersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListMyCharactersRequest.ProtoReflect.Descriptor instead.
 func (*WebListMyCharactersRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{105}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{103}
 }
 
 // WebListMyCharactersResponse re-exports the facade's roster verbatim.
@@ -6734,14 +6640,14 @@ type WebListMyCharactersResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// characters is the owner-audience roster the facade projected, retired
 	// entries included; the gateway forwards it unmodified.
-	Characters    []*v12.OwnCharacter `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	Characters    []*v11.OwnCharacter `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebListMyCharactersResponse) Reset() {
 	*x = WebListMyCharactersResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[106]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6753,7 +6659,7 @@ func (x *WebListMyCharactersResponse) String() string {
 func (*WebListMyCharactersResponse) ProtoMessage() {}
 
 func (x *WebListMyCharactersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[106]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6766,10 +6672,10 @@ func (x *WebListMyCharactersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListMyCharactersResponse.ProtoReflect.Descriptor instead.
 func (*WebListMyCharactersResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{106}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{104}
 }
 
-func (x *WebListMyCharactersResponse) GetCharacters() []*v12.OwnCharacter {
+func (x *WebListMyCharactersResponse) GetCharacters() []*v11.OwnCharacter {
 	if x != nil {
 		return x.Characters
 	}
@@ -6789,7 +6695,7 @@ type WebGetMyCharacterRequest struct {
 
 func (x *WebGetMyCharacterRequest) Reset() {
 	*x = WebGetMyCharacterRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[107]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6801,7 +6707,7 @@ func (x *WebGetMyCharacterRequest) String() string {
 func (*WebGetMyCharacterRequest) ProtoMessage() {}
 
 func (x *WebGetMyCharacterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[107]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6814,7 +6720,7 @@ func (x *WebGetMyCharacterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetMyCharacterRequest.ProtoReflect.Descriptor instead.
 func (*WebGetMyCharacterRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{107}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *WebGetMyCharacterRequest) GetCharacterId() string {
@@ -6828,14 +6734,14 @@ func (x *WebGetMyCharacterRequest) GetCharacterId() string {
 type WebGetMyCharacterResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// character is the projection the facade built for the owning player.
-	Character     *v12.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	Character     *v11.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebGetMyCharacterResponse) Reset() {
 	*x = WebGetMyCharacterResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[108]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6847,7 +6753,7 @@ func (x *WebGetMyCharacterResponse) String() string {
 func (*WebGetMyCharacterResponse) ProtoMessage() {}
 
 func (x *WebGetMyCharacterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[108]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6860,10 +6766,10 @@ func (x *WebGetMyCharacterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebGetMyCharacterResponse.ProtoReflect.Descriptor instead.
 func (*WebGetMyCharacterResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{108}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{106}
 }
 
-func (x *WebGetMyCharacterResponse) GetCharacter() *v12.OwnCharacter {
+func (x *WebGetMyCharacterResponse) GetCharacter() *v11.OwnCharacter {
 	if x != nil {
 		return x.Character
 	}
@@ -6916,7 +6822,7 @@ type WebUpdateCharacterProfileRequest struct {
 
 func (x *WebUpdateCharacterProfileRequest) Reset() {
 	*x = WebUpdateCharacterProfileRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[109]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6928,7 +6834,7 @@ func (x *WebUpdateCharacterProfileRequest) String() string {
 func (*WebUpdateCharacterProfileRequest) ProtoMessage() {}
 
 func (x *WebUpdateCharacterProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[109]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6941,7 +6847,7 @@ func (x *WebUpdateCharacterProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebUpdateCharacterProfileRequest.ProtoReflect.Descriptor instead.
 func (*WebUpdateCharacterProfileRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{109}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *WebUpdateCharacterProfileRequest) GetCharacterId() string {
@@ -7053,14 +6959,14 @@ func (x *WebUpdateCharacterProfileRequest) GetUpdateMask() *fieldmaskpb.FieldMas
 type WebUpdateCharacterProfileResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// character is the character as it stands after the partial edit.
-	Character     *v12.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	Character     *v11.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebUpdateCharacterProfileResponse) Reset() {
 	*x = WebUpdateCharacterProfileResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[110]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7072,7 +6978,7 @@ func (x *WebUpdateCharacterProfileResponse) String() string {
 func (*WebUpdateCharacterProfileResponse) ProtoMessage() {}
 
 func (x *WebUpdateCharacterProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[110]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7085,10 +6991,10 @@ func (x *WebUpdateCharacterProfileResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use WebUpdateCharacterProfileResponse.ProtoReflect.Descriptor instead.
 func (*WebUpdateCharacterProfileResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{110}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{108}
 }
 
-func (x *WebUpdateCharacterProfileResponse) GetCharacter() *v12.OwnCharacter {
+func (x *WebUpdateCharacterProfileResponse) GetCharacter() *v11.OwnCharacter {
 	if x != nil {
 		return x.Character
 	}
@@ -7111,7 +7017,7 @@ type WebUpdateCharacterDescriptionRequest struct {
 
 func (x *WebUpdateCharacterDescriptionRequest) Reset() {
 	*x = WebUpdateCharacterDescriptionRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[111]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7123,7 +7029,7 @@ func (x *WebUpdateCharacterDescriptionRequest) String() string {
 func (*WebUpdateCharacterDescriptionRequest) ProtoMessage() {}
 
 func (x *WebUpdateCharacterDescriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[111]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7136,7 +7042,7 @@ func (x *WebUpdateCharacterDescriptionRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use WebUpdateCharacterDescriptionRequest.ProtoReflect.Descriptor instead.
 func (*WebUpdateCharacterDescriptionRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{111}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *WebUpdateCharacterDescriptionRequest) GetCharacterId() string {
@@ -7164,14 +7070,14 @@ func (x *WebUpdateCharacterDescriptionRequest) GetDescription() string {
 type WebUpdateCharacterDescriptionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// character is the character as it stands after the rewrite.
-	Character     *v12.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	Character     *v11.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebUpdateCharacterDescriptionResponse) Reset() {
 	*x = WebUpdateCharacterDescriptionResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[112]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7183,7 +7089,7 @@ func (x *WebUpdateCharacterDescriptionResponse) String() string {
 func (*WebUpdateCharacterDescriptionResponse) ProtoMessage() {}
 
 func (x *WebUpdateCharacterDescriptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[112]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7196,12 +7102,101 @@ func (x *WebUpdateCharacterDescriptionResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use WebUpdateCharacterDescriptionResponse.ProtoReflect.Descriptor instead.
 func (*WebUpdateCharacterDescriptionResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{110}
+}
+
+func (x *WebUpdateCharacterDescriptionResponse) GetCharacter() *v11.OwnCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
+// WebListCharacterDirectoryRequest carries NO fields at all, and the emptiness
+// is the point: the viewer rung follows entirely from the header token
+// Handler.WebListCharacterDirectory reads, so a client cannot name an acting
+// character, a page or a filter the facade did not authorize. The retired RPC
+// this one replaces took a character id in the body; this surface is
+// viewer-scoped and needs none.
+type WebListCharacterDirectoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebListCharacterDirectoryRequest) Reset() {
+	*x = WebListCharacterDirectoryRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[111]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebListCharacterDirectoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebListCharacterDirectoryRequest) ProtoMessage() {}
+
+func (x *WebListCharacterDirectoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[111]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebListCharacterDirectoryRequest.ProtoReflect.Descriptor instead.
+func (*WebListCharacterDirectoryRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{111}
+}
+
+// WebListCharacterDirectoryResponse re-exports the facade's listing verbatim.
+type WebListCharacterDirectoryResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// characters is the reachable identity rows the facade projected, in the order
+	// it produced them; the gateway forwards them unmodified.
+	Characters    []*v11.PublicCharacterSummary `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebListCharacterDirectoryResponse) Reset() {
+	*x = WebListCharacterDirectoryResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[112]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebListCharacterDirectoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebListCharacterDirectoryResponse) ProtoMessage() {}
+
+func (x *WebListCharacterDirectoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[112]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebListCharacterDirectoryResponse.ProtoReflect.Descriptor instead.
+func (*WebListCharacterDirectoryResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{112}
 }
 
-func (x *WebUpdateCharacterDescriptionResponse) GetCharacter() *v12.OwnCharacter {
+func (x *WebListCharacterDirectoryResponse) GetCharacters() []*v11.PublicCharacterSummary {
 	if x != nil {
-		return x.Character
+		return x.Characters
 	}
 	return nil
 }
@@ -7210,7 +7205,7 @@ var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
 
 const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\n" +
-	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a1holomush/characteraccess/v1/characteraccess.proto\x1a\x1bholomush/core/v1/core.proto\x1a\x1dholomush/scene/v1/scene.proto\"\xca\x01\n" +
+	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a1holomush/characteraccess/v1/characteraccess.proto\x1a\x1dholomush/scene/v1/scene.proto\"\xca\x01\n" +
 	"\fControlFrame\x126\n" +
 	"\x06signal\x18\x01 \x01(\x0e2\x1e.holomush.web.v1.ControlSignalR\x06signal\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12#\n" +
@@ -7325,12 +7320,6 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x19WebListCharactersResponse\x12A\n" +
 	"\n" +
 	"characters\x18\x01 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
-	"characters\"@\n" +
-	"\x1bWebListAllCharactersRequest\x12!\n" +
-	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\"i\n" +
-	"\x1cWebListAllCharactersResponse\x12I\n" +
-	"\n" +
-	"characters\x18\x01 \x03(\v2).holomush.core.v1.CharacterDirectoryEntryR\n" +
 	"characters\"\x12\n" +
 	"\x10WebLogoutRequest\"\x13\n" +
 	"\x11WebLogoutResponse\"6\n" +
@@ -7678,7 +7667,12 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x10expected_version\x18\x02 \x01(\x05R\x0fexpectedVersion\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\"p\n" +
 	"%WebUpdateCharacterDescriptionResponse\x12G\n" +
-	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacter*\x98\x01\n" +
+	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacter\"\"\n" +
+	" WebListCharacterDirectoryRequest\"x\n" +
+	"!WebListCharacterDirectoryResponse\x12S\n" +
+	"\n" +
+	"characters\x18\x01 \x03(\v23.holomush.characteraccess.v1.PublicCharacterSummaryR\n" +
+	"characters*\x98\x01\n" +
 	"\fEventChannel\x12\x1d\n" +
 	"\x19EVENT_CHANNEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
@@ -7701,7 +7695,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x1eWEB_PRESENCE_STATE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19WEB_PRESENCE_STATE_ACTIVE\x10\x01\x12\x1f\n" +
 	"\x1bWEB_PRESENCE_STATE_DETACHED\x10\x02\x12\x1f\n" +
-	"\x1bWEB_PRESENCE_STATE_INACTIVE\x10\x032\xda-\n" +
+	"\x1bWEB_PRESENCE_STATE_INACTIVE\x10\x032\xea-\n" +
 	"\n" +
 	"WebService\x12X\n" +
 	"\vSendCommand\x12#.holomush.web.v1.SendCommandRequest\x1a$.holomush.web.v1.SendCommandResponse\x12]\n" +
@@ -7714,8 +7708,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x0fWebCreatePlayer\x12'.holomush.web.v1.WebCreatePlayerRequest\x1a(.holomush.web.v1.WebCreatePlayerResponse\x12a\n" +
 	"\x0eWebCreateGuest\x12&.holomush.web.v1.WebCreateGuestRequest\x1a'.holomush.web.v1.WebCreateGuestResponse\x12m\n" +
 	"\x12WebCreateCharacter\x12*.holomush.web.v1.WebCreateCharacterRequest\x1a+.holomush.web.v1.WebCreateCharacterResponse\x12j\n" +
-	"\x11WebListCharacters\x12).holomush.web.v1.WebListCharactersRequest\x1a*.holomush.web.v1.WebListCharactersResponse\x12s\n" +
-	"\x14WebListAllCharacters\x12,.holomush.web.v1.WebListAllCharactersRequest\x1a-.holomush.web.v1.WebListAllCharactersResponse\x12R\n" +
+	"\x11WebListCharacters\x12).holomush.web.v1.WebListCharactersRequest\x1a*.holomush.web.v1.WebListCharactersResponse\x12R\n" +
 	"\tWebLogout\x12!.holomush.web.v1.WebLogoutRequest\x1a\".holomush.web.v1.WebLogoutResponse\x12|\n" +
 	"\x17WebRequestPasswordReset\x12/.holomush.web.v1.WebRequestPasswordResetRequest\x1a0.holomush.web.v1.WebRequestPasswordResetResponse\x12|\n" +
 	"\x17WebConfirmPasswordReset\x12/.holomush.web.v1.WebConfirmPasswordResetRequest\x1a0.holomush.web.v1.WebConfirmPasswordResetResponse\x12d\n" +
@@ -7757,7 +7750,8 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x13WebListMyCharacters\x12+.holomush.web.v1.WebListMyCharactersRequest\x1a,.holomush.web.v1.WebListMyCharactersResponse\x12j\n" +
 	"\x11WebGetMyCharacter\x12).holomush.web.v1.WebGetMyCharacterRequest\x1a*.holomush.web.v1.WebGetMyCharacterResponse\x12\x82\x01\n" +
 	"\x19WebUpdateCharacterProfile\x121.holomush.web.v1.WebUpdateCharacterProfileRequest\x1a2.holomush.web.v1.WebUpdateCharacterProfileResponse\x12\x8e\x01\n" +
-	"\x1dWebUpdateCharacterDescription\x125.holomush.web.v1.WebUpdateCharacterDescriptionRequest\x1a6.holomush.web.v1.WebUpdateCharacterDescriptionResponseB\xbb\x01\n" +
+	"\x1dWebUpdateCharacterDescription\x125.holomush.web.v1.WebUpdateCharacterDescriptionRequest\x1a6.holomush.web.v1.WebUpdateCharacterDescriptionResponse\x12\x82\x01\n" +
+	"\x19WebListCharacterDirectory\x121.holomush.web.v1.WebListCharacterDirectoryRequest\x1a2.holomush.web.v1.WebListCharacterDirectoryResponseB\xbb\x01\n" +
 	"\x13com.holomush.web.v1B\bWebProtoP\x01Z<github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1\xa2\x02\x03HWX\xaa\x02\x0fHolomush.Web.V1\xca\x02\x0fHolomush\\Web\\V1\xe2\x02\x1bHolomush\\Web\\V1\\GPBMetadata\xea\x02\x11Holomush::Web::V1b\x06proto3"
 
 var (
@@ -7802,110 +7796,110 @@ var file_holomush_web_v1_web_proto_goTypes = []any{
 	(*WebCreateCharacterResponse)(nil),            // 24: holomush.web.v1.WebCreateCharacterResponse
 	(*WebListCharactersRequest)(nil),              // 25: holomush.web.v1.WebListCharactersRequest
 	(*WebListCharactersResponse)(nil),             // 26: holomush.web.v1.WebListCharactersResponse
-	(*WebListAllCharactersRequest)(nil),           // 27: holomush.web.v1.WebListAllCharactersRequest
-	(*WebListAllCharactersResponse)(nil),          // 28: holomush.web.v1.WebListAllCharactersResponse
-	(*WebLogoutRequest)(nil),                      // 29: holomush.web.v1.WebLogoutRequest
-	(*WebLogoutResponse)(nil),                     // 30: holomush.web.v1.WebLogoutResponse
-	(*WebRequestPasswordResetRequest)(nil),        // 31: holomush.web.v1.WebRequestPasswordResetRequest
-	(*WebRequestPasswordResetResponse)(nil),       // 32: holomush.web.v1.WebRequestPasswordResetResponse
-	(*WebConfirmPasswordResetRequest)(nil),        // 33: holomush.web.v1.WebConfirmPasswordResetRequest
-	(*WebConfirmPasswordResetResponse)(nil),       // 34: holomush.web.v1.WebConfirmPasswordResetResponse
-	(*WebCheckSessionRequest)(nil),                // 35: holomush.web.v1.WebCheckSessionRequest
-	(*WebCheckSessionResponse)(nil),               // 36: holomush.web.v1.WebCheckSessionResponse
-	(*WebGetContentRequest)(nil),                  // 37: holomush.web.v1.WebGetContentRequest
-	(*WebGetContentResponse)(nil),                 // 38: holomush.web.v1.WebGetContentResponse
-	(*WebListContentRequest)(nil),                 // 39: holomush.web.v1.WebListContentRequest
-	(*WebListContentResponse)(nil),                // 40: holomush.web.v1.WebListContentResponse
-	(*WebContentItem)(nil),                        // 41: holomush.web.v1.WebContentItem
-	(*WebQueryStreamHistoryRequest)(nil),          // 42: holomush.web.v1.WebQueryStreamHistoryRequest
-	(*WebQueryStreamHistoryResponse)(nil),         // 43: holomush.web.v1.WebQueryStreamHistoryResponse
-	(*WebListSessionStreamsRequest)(nil),          // 44: holomush.web.v1.WebListSessionStreamsRequest
-	(*WebListSessionStreamsResponse)(nil),         // 45: holomush.web.v1.WebListSessionStreamsResponse
-	(*WebListPlayerSessionsRequest)(nil),          // 46: holomush.web.v1.WebListPlayerSessionsRequest
-	(*WebPlayerSessionInfo)(nil),                  // 47: holomush.web.v1.WebPlayerSessionInfo
-	(*WebListPlayerSessionsResponse)(nil),         // 48: holomush.web.v1.WebListPlayerSessionsResponse
-	(*WebRevokePlayerSessionRequest)(nil),         // 49: holomush.web.v1.WebRevokePlayerSessionRequest
-	(*WebRevokePlayerSessionResponse)(nil),        // 50: holomush.web.v1.WebRevokePlayerSessionResponse
-	(*WebRevokeOtherPlayerSessionsRequest)(nil),   // 51: holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
-	(*WebRevokeOtherPlayerSessionsResponse)(nil),  // 52: holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
-	(*WebPresenceEntry)(nil),                      // 53: holomush.web.v1.WebPresenceEntry
-	(*WebListFocusPresenceRequest)(nil),           // 54: holomush.web.v1.WebListFocusPresenceRequest
-	(*WebListFocusPresenceResponse)(nil),          // 55: holomush.web.v1.WebListFocusPresenceResponse
-	(*WebAvailableCommand)(nil),                   // 56: holomush.web.v1.WebAvailableCommand
-	(*WebListCommandsRequest)(nil),                // 57: holomush.web.v1.WebListCommandsRequest
-	(*WebListCommandsResponse)(nil),               // 58: holomush.web.v1.WebListCommandsResponse
-	(*WebListScenesRequest)(nil),                  // 59: holomush.web.v1.WebListScenesRequest
-	(*WebListScenesResponse)(nil),                 // 60: holomush.web.v1.WebListScenesResponse
-	(*WebGetSceneRequest)(nil),                    // 61: holomush.web.v1.WebGetSceneRequest
-	(*WebGetSceneResponse)(nil),                   // 62: holomush.web.v1.WebGetSceneResponse
-	(*WebListMyScenesRequest)(nil),                // 63: holomush.web.v1.WebListMyScenesRequest
-	(*WebListMyScenesResponse)(nil),               // 64: holomush.web.v1.WebListMyScenesResponse
-	(*WebWatchSceneRequest)(nil),                  // 65: holomush.web.v1.WebWatchSceneRequest
-	(*WebWatchSceneResponse)(nil),                 // 66: holomush.web.v1.WebWatchSceneResponse
-	(*WebCreateSceneRequest)(nil),                 // 67: holomush.web.v1.WebCreateSceneRequest
-	(*WebCreateSceneResponse)(nil),                // 68: holomush.web.v1.WebCreateSceneResponse
-	(*WebExportSceneRequest)(nil),                 // 69: holomush.web.v1.WebExportSceneRequest
-	(*WebExportSceneResponse)(nil),                // 70: holomush.web.v1.WebExportSceneResponse
-	(*WebSetSceneFocusRequest)(nil),               // 71: holomush.web.v1.WebSetSceneFocusRequest
-	(*WebSetSceneFocusResponse)(nil),              // 72: holomush.web.v1.WebSetSceneFocusResponse
-	(*WebListPublishedScenesRequest)(nil),         // 73: holomush.web.v1.WebListPublishedScenesRequest
-	(*WebListPublishedScenesResponse)(nil),        // 74: holomush.web.v1.WebListPublishedScenesResponse
-	(*WebGetPublicSceneArchiveRequest)(nil),       // 75: holomush.web.v1.WebGetPublicSceneArchiveRequest
-	(*WebGetPublicSceneArchiveResponse)(nil),      // 76: holomush.web.v1.WebGetPublicSceneArchiveResponse
-	(*WebDownloadPublicSceneArchiveRequest)(nil),  // 77: holomush.web.v1.WebDownloadPublicSceneArchiveRequest
-	(*WebDownloadPublicSceneArchiveResponse)(nil), // 78: holomush.web.v1.WebDownloadPublicSceneArchiveResponse
-	(*WebEndSceneRequest)(nil),                    // 79: holomush.web.v1.WebEndSceneRequest
-	(*WebEndSceneResponse)(nil),                   // 80: holomush.web.v1.WebEndSceneResponse
-	(*WebStartScenePublishRequest)(nil),           // 81: holomush.web.v1.WebStartScenePublishRequest
-	(*WebStartScenePublishResponse)(nil),          // 82: holomush.web.v1.WebStartScenePublishResponse
-	(*WebCastPublishSceneVoteRequest)(nil),        // 83: holomush.web.v1.WebCastPublishSceneVoteRequest
-	(*WebCastPublishSceneVoteResponse)(nil),       // 84: holomush.web.v1.WebCastPublishSceneVoteResponse
-	(*WebWithdrawScenePublishRequest)(nil),        // 85: holomush.web.v1.WebWithdrawScenePublishRequest
-	(*WebWithdrawScenePublishResponse)(nil),       // 86: holomush.web.v1.WebWithdrawScenePublishResponse
-	(*WebGetPublishedSceneRequest)(nil),           // 87: holomush.web.v1.WebGetPublishedSceneRequest
-	(*WebGetPublishedSceneResponse)(nil),          // 88: holomush.web.v1.WebGetPublishedSceneResponse
-	(*WebPauseSceneRequest)(nil),                  // 89: holomush.web.v1.WebPauseSceneRequest
-	(*WebPauseSceneResponse)(nil),                 // 90: holomush.web.v1.WebPauseSceneResponse
-	(*WebResumeSceneRequest)(nil),                 // 91: holomush.web.v1.WebResumeSceneRequest
-	(*WebResumeSceneResponse)(nil),                // 92: holomush.web.v1.WebResumeSceneResponse
-	(*WebMuteSceneRequest)(nil),                   // 93: holomush.web.v1.WebMuteSceneRequest
-	(*WebMuteSceneResponse)(nil),                  // 94: holomush.web.v1.WebMuteSceneResponse
-	(*WebSetSceneNotifyPrefRequest)(nil),          // 95: holomush.web.v1.WebSetSceneNotifyPrefRequest
-	(*WebSetSceneNotifyPrefResponse)(nil),         // 96: holomush.web.v1.WebSetSceneNotifyPrefResponse
-	(*WebInviteToSceneRequest)(nil),               // 97: holomush.web.v1.WebInviteToSceneRequest
-	(*WebInviteToSceneResponse)(nil),              // 98: holomush.web.v1.WebInviteToSceneResponse
-	(*WebKickFromSceneRequest)(nil),               // 99: holomush.web.v1.WebKickFromSceneRequest
-	(*WebKickFromSceneResponse)(nil),              // 100: holomush.web.v1.WebKickFromSceneResponse
-	(*WebTransferOwnershipRequest)(nil),           // 101: holomush.web.v1.WebTransferOwnershipRequest
-	(*WebTransferOwnershipResponse)(nil),          // 102: holomush.web.v1.WebTransferOwnershipResponse
-	(*WebLeaveSceneRequest)(nil),                  // 103: holomush.web.v1.WebLeaveSceneRequest
-	(*WebLeaveSceneResponse)(nil),                 // 104: holomush.web.v1.WebLeaveSceneResponse
-	(*WebUpdateSceneRequest)(nil),                 // 105: holomush.web.v1.WebUpdateSceneRequest
-	(*WebUpdateSceneResponse)(nil),                // 106: holomush.web.v1.WebUpdateSceneResponse
-	(*WebGetCharacterProfileRequest)(nil),         // 107: holomush.web.v1.WebGetCharacterProfileRequest
-	(*WebGetCharacterProfileResponse)(nil),        // 108: holomush.web.v1.WebGetCharacterProfileResponse
-	(*WebListMyCharactersRequest)(nil),            // 109: holomush.web.v1.WebListMyCharactersRequest
-	(*WebListMyCharactersResponse)(nil),           // 110: holomush.web.v1.WebListMyCharactersResponse
-	(*WebGetMyCharacterRequest)(nil),              // 111: holomush.web.v1.WebGetMyCharacterRequest
-	(*WebGetMyCharacterResponse)(nil),             // 112: holomush.web.v1.WebGetMyCharacterResponse
-	(*WebUpdateCharacterProfileRequest)(nil),      // 113: holomush.web.v1.WebUpdateCharacterProfileRequest
-	(*WebUpdateCharacterProfileResponse)(nil),     // 114: holomush.web.v1.WebUpdateCharacterProfileResponse
-	(*WebUpdateCharacterDescriptionRequest)(nil),  // 115: holomush.web.v1.WebUpdateCharacterDescriptionRequest
-	(*WebUpdateCharacterDescriptionResponse)(nil), // 116: holomush.web.v1.WebUpdateCharacterDescriptionResponse
-	nil,                                   // 117: holomush.web.v1.WebContentItem.MetadataEntry
-	nil,                                   // 118: holomush.web.v1.WebListCommandsResponse.AliasesEntry
-	(*structpb.Struct)(nil),               // 119: google.protobuf.Struct
-	(*v1.CharacterDirectoryEntry)(nil),    // 120: holomush.core.v1.CharacterDirectoryEntry
-	(*timestamppb.Timestamp)(nil),         // 121: google.protobuf.Timestamp
-	(*v11.SceneInfo)(nil),                 // 122: holomush.scene.v1.SceneInfo
-	(*v11.CharacterSceneInfo)(nil),        // 123: holomush.scene.v1.CharacterSceneInfo
-	(*v11.ParticipantInfo)(nil),           // 124: holomush.scene.v1.ParticipantInfo
-	(*v11.PublicSceneArchive)(nil),        // 125: holomush.scene.v1.PublicSceneArchive
-	(*v11.PublishedSceneEntry)(nil),       // 126: holomush.scene.v1.PublishedSceneEntry
-	(*v11.PublishedSceneVoteSummary)(nil), // 127: holomush.scene.v1.PublishedSceneVoteSummary
-	(*fieldmaskpb.FieldMask)(nil),         // 128: google.protobuf.FieldMask
-	(*v12.PublicCharacter)(nil),           // 129: holomush.characteraccess.v1.PublicCharacter
-	(*v12.OwnCharacter)(nil),              // 130: holomush.characteraccess.v1.OwnCharacter
+	(*WebLogoutRequest)(nil),                      // 27: holomush.web.v1.WebLogoutRequest
+	(*WebLogoutResponse)(nil),                     // 28: holomush.web.v1.WebLogoutResponse
+	(*WebRequestPasswordResetRequest)(nil),        // 29: holomush.web.v1.WebRequestPasswordResetRequest
+	(*WebRequestPasswordResetResponse)(nil),       // 30: holomush.web.v1.WebRequestPasswordResetResponse
+	(*WebConfirmPasswordResetRequest)(nil),        // 31: holomush.web.v1.WebConfirmPasswordResetRequest
+	(*WebConfirmPasswordResetResponse)(nil),       // 32: holomush.web.v1.WebConfirmPasswordResetResponse
+	(*WebCheckSessionRequest)(nil),                // 33: holomush.web.v1.WebCheckSessionRequest
+	(*WebCheckSessionResponse)(nil),               // 34: holomush.web.v1.WebCheckSessionResponse
+	(*WebGetContentRequest)(nil),                  // 35: holomush.web.v1.WebGetContentRequest
+	(*WebGetContentResponse)(nil),                 // 36: holomush.web.v1.WebGetContentResponse
+	(*WebListContentRequest)(nil),                 // 37: holomush.web.v1.WebListContentRequest
+	(*WebListContentResponse)(nil),                // 38: holomush.web.v1.WebListContentResponse
+	(*WebContentItem)(nil),                        // 39: holomush.web.v1.WebContentItem
+	(*WebQueryStreamHistoryRequest)(nil),          // 40: holomush.web.v1.WebQueryStreamHistoryRequest
+	(*WebQueryStreamHistoryResponse)(nil),         // 41: holomush.web.v1.WebQueryStreamHistoryResponse
+	(*WebListSessionStreamsRequest)(nil),          // 42: holomush.web.v1.WebListSessionStreamsRequest
+	(*WebListSessionStreamsResponse)(nil),         // 43: holomush.web.v1.WebListSessionStreamsResponse
+	(*WebListPlayerSessionsRequest)(nil),          // 44: holomush.web.v1.WebListPlayerSessionsRequest
+	(*WebPlayerSessionInfo)(nil),                  // 45: holomush.web.v1.WebPlayerSessionInfo
+	(*WebListPlayerSessionsResponse)(nil),         // 46: holomush.web.v1.WebListPlayerSessionsResponse
+	(*WebRevokePlayerSessionRequest)(nil),         // 47: holomush.web.v1.WebRevokePlayerSessionRequest
+	(*WebRevokePlayerSessionResponse)(nil),        // 48: holomush.web.v1.WebRevokePlayerSessionResponse
+	(*WebRevokeOtherPlayerSessionsRequest)(nil),   // 49: holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
+	(*WebRevokeOtherPlayerSessionsResponse)(nil),  // 50: holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
+	(*WebPresenceEntry)(nil),                      // 51: holomush.web.v1.WebPresenceEntry
+	(*WebListFocusPresenceRequest)(nil),           // 52: holomush.web.v1.WebListFocusPresenceRequest
+	(*WebListFocusPresenceResponse)(nil),          // 53: holomush.web.v1.WebListFocusPresenceResponse
+	(*WebAvailableCommand)(nil),                   // 54: holomush.web.v1.WebAvailableCommand
+	(*WebListCommandsRequest)(nil),                // 55: holomush.web.v1.WebListCommandsRequest
+	(*WebListCommandsResponse)(nil),               // 56: holomush.web.v1.WebListCommandsResponse
+	(*WebListScenesRequest)(nil),                  // 57: holomush.web.v1.WebListScenesRequest
+	(*WebListScenesResponse)(nil),                 // 58: holomush.web.v1.WebListScenesResponse
+	(*WebGetSceneRequest)(nil),                    // 59: holomush.web.v1.WebGetSceneRequest
+	(*WebGetSceneResponse)(nil),                   // 60: holomush.web.v1.WebGetSceneResponse
+	(*WebListMyScenesRequest)(nil),                // 61: holomush.web.v1.WebListMyScenesRequest
+	(*WebListMyScenesResponse)(nil),               // 62: holomush.web.v1.WebListMyScenesResponse
+	(*WebWatchSceneRequest)(nil),                  // 63: holomush.web.v1.WebWatchSceneRequest
+	(*WebWatchSceneResponse)(nil),                 // 64: holomush.web.v1.WebWatchSceneResponse
+	(*WebCreateSceneRequest)(nil),                 // 65: holomush.web.v1.WebCreateSceneRequest
+	(*WebCreateSceneResponse)(nil),                // 66: holomush.web.v1.WebCreateSceneResponse
+	(*WebExportSceneRequest)(nil),                 // 67: holomush.web.v1.WebExportSceneRequest
+	(*WebExportSceneResponse)(nil),                // 68: holomush.web.v1.WebExportSceneResponse
+	(*WebSetSceneFocusRequest)(nil),               // 69: holomush.web.v1.WebSetSceneFocusRequest
+	(*WebSetSceneFocusResponse)(nil),              // 70: holomush.web.v1.WebSetSceneFocusResponse
+	(*WebListPublishedScenesRequest)(nil),         // 71: holomush.web.v1.WebListPublishedScenesRequest
+	(*WebListPublishedScenesResponse)(nil),        // 72: holomush.web.v1.WebListPublishedScenesResponse
+	(*WebGetPublicSceneArchiveRequest)(nil),       // 73: holomush.web.v1.WebGetPublicSceneArchiveRequest
+	(*WebGetPublicSceneArchiveResponse)(nil),      // 74: holomush.web.v1.WebGetPublicSceneArchiveResponse
+	(*WebDownloadPublicSceneArchiveRequest)(nil),  // 75: holomush.web.v1.WebDownloadPublicSceneArchiveRequest
+	(*WebDownloadPublicSceneArchiveResponse)(nil), // 76: holomush.web.v1.WebDownloadPublicSceneArchiveResponse
+	(*WebEndSceneRequest)(nil),                    // 77: holomush.web.v1.WebEndSceneRequest
+	(*WebEndSceneResponse)(nil),                   // 78: holomush.web.v1.WebEndSceneResponse
+	(*WebStartScenePublishRequest)(nil),           // 79: holomush.web.v1.WebStartScenePublishRequest
+	(*WebStartScenePublishResponse)(nil),          // 80: holomush.web.v1.WebStartScenePublishResponse
+	(*WebCastPublishSceneVoteRequest)(nil),        // 81: holomush.web.v1.WebCastPublishSceneVoteRequest
+	(*WebCastPublishSceneVoteResponse)(nil),       // 82: holomush.web.v1.WebCastPublishSceneVoteResponse
+	(*WebWithdrawScenePublishRequest)(nil),        // 83: holomush.web.v1.WebWithdrawScenePublishRequest
+	(*WebWithdrawScenePublishResponse)(nil),       // 84: holomush.web.v1.WebWithdrawScenePublishResponse
+	(*WebGetPublishedSceneRequest)(nil),           // 85: holomush.web.v1.WebGetPublishedSceneRequest
+	(*WebGetPublishedSceneResponse)(nil),          // 86: holomush.web.v1.WebGetPublishedSceneResponse
+	(*WebPauseSceneRequest)(nil),                  // 87: holomush.web.v1.WebPauseSceneRequest
+	(*WebPauseSceneResponse)(nil),                 // 88: holomush.web.v1.WebPauseSceneResponse
+	(*WebResumeSceneRequest)(nil),                 // 89: holomush.web.v1.WebResumeSceneRequest
+	(*WebResumeSceneResponse)(nil),                // 90: holomush.web.v1.WebResumeSceneResponse
+	(*WebMuteSceneRequest)(nil),                   // 91: holomush.web.v1.WebMuteSceneRequest
+	(*WebMuteSceneResponse)(nil),                  // 92: holomush.web.v1.WebMuteSceneResponse
+	(*WebSetSceneNotifyPrefRequest)(nil),          // 93: holomush.web.v1.WebSetSceneNotifyPrefRequest
+	(*WebSetSceneNotifyPrefResponse)(nil),         // 94: holomush.web.v1.WebSetSceneNotifyPrefResponse
+	(*WebInviteToSceneRequest)(nil),               // 95: holomush.web.v1.WebInviteToSceneRequest
+	(*WebInviteToSceneResponse)(nil),              // 96: holomush.web.v1.WebInviteToSceneResponse
+	(*WebKickFromSceneRequest)(nil),               // 97: holomush.web.v1.WebKickFromSceneRequest
+	(*WebKickFromSceneResponse)(nil),              // 98: holomush.web.v1.WebKickFromSceneResponse
+	(*WebTransferOwnershipRequest)(nil),           // 99: holomush.web.v1.WebTransferOwnershipRequest
+	(*WebTransferOwnershipResponse)(nil),          // 100: holomush.web.v1.WebTransferOwnershipResponse
+	(*WebLeaveSceneRequest)(nil),                  // 101: holomush.web.v1.WebLeaveSceneRequest
+	(*WebLeaveSceneResponse)(nil),                 // 102: holomush.web.v1.WebLeaveSceneResponse
+	(*WebUpdateSceneRequest)(nil),                 // 103: holomush.web.v1.WebUpdateSceneRequest
+	(*WebUpdateSceneResponse)(nil),                // 104: holomush.web.v1.WebUpdateSceneResponse
+	(*WebGetCharacterProfileRequest)(nil),         // 105: holomush.web.v1.WebGetCharacterProfileRequest
+	(*WebGetCharacterProfileResponse)(nil),        // 106: holomush.web.v1.WebGetCharacterProfileResponse
+	(*WebListMyCharactersRequest)(nil),            // 107: holomush.web.v1.WebListMyCharactersRequest
+	(*WebListMyCharactersResponse)(nil),           // 108: holomush.web.v1.WebListMyCharactersResponse
+	(*WebGetMyCharacterRequest)(nil),              // 109: holomush.web.v1.WebGetMyCharacterRequest
+	(*WebGetMyCharacterResponse)(nil),             // 110: holomush.web.v1.WebGetMyCharacterResponse
+	(*WebUpdateCharacterProfileRequest)(nil),      // 111: holomush.web.v1.WebUpdateCharacterProfileRequest
+	(*WebUpdateCharacterProfileResponse)(nil),     // 112: holomush.web.v1.WebUpdateCharacterProfileResponse
+	(*WebUpdateCharacterDescriptionRequest)(nil),  // 113: holomush.web.v1.WebUpdateCharacterDescriptionRequest
+	(*WebUpdateCharacterDescriptionResponse)(nil), // 114: holomush.web.v1.WebUpdateCharacterDescriptionResponse
+	(*WebListCharacterDirectoryRequest)(nil),      // 115: holomush.web.v1.WebListCharacterDirectoryRequest
+	(*WebListCharacterDirectoryResponse)(nil),     // 116: holomush.web.v1.WebListCharacterDirectoryResponse
+	nil,                                  // 117: holomush.web.v1.WebContentItem.MetadataEntry
+	nil,                                  // 118: holomush.web.v1.WebListCommandsResponse.AliasesEntry
+	(*structpb.Struct)(nil),              // 119: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),        // 120: google.protobuf.Timestamp
+	(*v1.SceneInfo)(nil),                 // 121: holomush.scene.v1.SceneInfo
+	(*v1.CharacterSceneInfo)(nil),        // 122: holomush.scene.v1.CharacterSceneInfo
+	(*v1.ParticipantInfo)(nil),           // 123: holomush.scene.v1.ParticipantInfo
+	(*v1.PublicSceneArchive)(nil),        // 124: holomush.scene.v1.PublicSceneArchive
+	(*v1.PublishedSceneEntry)(nil),       // 125: holomush.scene.v1.PublishedSceneEntry
+	(*v1.PublishedSceneVoteSummary)(nil), // 126: holomush.scene.v1.PublishedSceneVoteSummary
+	(*fieldmaskpb.FieldMask)(nil),        // 127: google.protobuf.FieldMask
+	(*v11.PublicCharacter)(nil),          // 128: holomush.characteraccess.v1.PublicCharacter
+	(*v11.OwnCharacter)(nil),             // 129: holomush.characteraccess.v1.OwnCharacter
+	(*v11.PublicCharacterSummary)(nil),   // 130: holomush.characteraccess.v1.PublicCharacterSummary
 }
 var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	1,   // 0: holomush.web.v1.ControlFrame.signal:type_name -> holomush.web.v1.ControlSignal
@@ -7917,39 +7911,39 @@ var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	14,  // 6: holomush.web.v1.WebCreatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	14,  // 7: holomush.web.v1.WebCreateGuestResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	14,  // 8: holomush.web.v1.WebListCharactersResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	120, // 9: holomush.web.v1.WebListAllCharactersResponse.characters:type_name -> holomush.core.v1.CharacterDirectoryEntry
-	14,  // 10: holomush.web.v1.WebCheckSessionResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	41,  // 11: holomush.web.v1.WebGetContentResponse.item:type_name -> holomush.web.v1.WebContentItem
-	41,  // 12: holomush.web.v1.WebListContentResponse.items:type_name -> holomush.web.v1.WebContentItem
-	117, // 13: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
-	8,   // 14: holomush.web.v1.WebQueryStreamHistoryResponse.events:type_name -> holomush.web.v1.GameEvent
-	121, // 15: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
-	121, // 16: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
-	47,  // 17: holomush.web.v1.WebListPlayerSessionsResponse.sessions:type_name -> holomush.web.v1.WebPlayerSessionInfo
-	3,   // 18: holomush.web.v1.WebPresenceEntry.state:type_name -> holomush.web.v1.WebPresenceState
-	2,   // 19: holomush.web.v1.WebListFocusPresenceResponse.context:type_name -> holomush.web.v1.WebPresenceContext
-	53,  // 20: holomush.web.v1.WebListFocusPresenceResponse.entries:type_name -> holomush.web.v1.WebPresenceEntry
-	56,  // 21: holomush.web.v1.WebListCommandsResponse.commands:type_name -> holomush.web.v1.WebAvailableCommand
-	118, // 22: holomush.web.v1.WebListCommandsResponse.aliases:type_name -> holomush.web.v1.WebListCommandsResponse.AliasesEntry
-	122, // 23: holomush.web.v1.WebListScenesResponse.scenes:type_name -> holomush.scene.v1.SceneInfo
-	122, // 24: holomush.web.v1.WebGetSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	123, // 25: holomush.web.v1.WebListMyScenesResponse.scenes:type_name -> holomush.scene.v1.CharacterSceneInfo
-	124, // 26: holomush.web.v1.WebWatchSceneResponse.participant:type_name -> holomush.scene.v1.ParticipantInfo
-	122, // 27: holomush.web.v1.WebCreateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	125, // 28: holomush.web.v1.WebListPublishedScenesResponse.archives:type_name -> holomush.scene.v1.PublicSceneArchive
-	126, // 29: holomush.web.v1.WebGetPublicSceneArchiveResponse.content_entries:type_name -> holomush.scene.v1.PublishedSceneEntry
-	122, // 30: holomush.web.v1.WebEndSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	127, // 31: holomush.web.v1.WebGetPublishedSceneResponse.vote_summary:type_name -> holomush.scene.v1.PublishedSceneVoteSummary
-	122, // 32: holomush.web.v1.WebPauseSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	122, // 33: holomush.web.v1.WebResumeSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	128, // 34: holomush.web.v1.WebUpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
-	122, // 35: holomush.web.v1.WebUpdateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	129, // 36: holomush.web.v1.WebGetCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.PublicCharacter
-	130, // 37: holomush.web.v1.WebListMyCharactersResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
-	130, // 38: holomush.web.v1.WebGetMyCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	128, // 39: holomush.web.v1.WebUpdateCharacterProfileRequest.update_mask:type_name -> google.protobuf.FieldMask
-	130, // 40: holomush.web.v1.WebUpdateCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	130, // 41: holomush.web.v1.WebUpdateCharacterDescriptionResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	14,  // 9: holomush.web.v1.WebCheckSessionResponse.characters:type_name -> holomush.web.v1.CharacterSummary
+	39,  // 10: holomush.web.v1.WebGetContentResponse.item:type_name -> holomush.web.v1.WebContentItem
+	39,  // 11: holomush.web.v1.WebListContentResponse.items:type_name -> holomush.web.v1.WebContentItem
+	117, // 12: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
+	8,   // 13: holomush.web.v1.WebQueryStreamHistoryResponse.events:type_name -> holomush.web.v1.GameEvent
+	120, // 14: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
+	120, // 15: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
+	45,  // 16: holomush.web.v1.WebListPlayerSessionsResponse.sessions:type_name -> holomush.web.v1.WebPlayerSessionInfo
+	3,   // 17: holomush.web.v1.WebPresenceEntry.state:type_name -> holomush.web.v1.WebPresenceState
+	2,   // 18: holomush.web.v1.WebListFocusPresenceResponse.context:type_name -> holomush.web.v1.WebPresenceContext
+	51,  // 19: holomush.web.v1.WebListFocusPresenceResponse.entries:type_name -> holomush.web.v1.WebPresenceEntry
+	54,  // 20: holomush.web.v1.WebListCommandsResponse.commands:type_name -> holomush.web.v1.WebAvailableCommand
+	118, // 21: holomush.web.v1.WebListCommandsResponse.aliases:type_name -> holomush.web.v1.WebListCommandsResponse.AliasesEntry
+	121, // 22: holomush.web.v1.WebListScenesResponse.scenes:type_name -> holomush.scene.v1.SceneInfo
+	121, // 23: holomush.web.v1.WebGetSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	122, // 24: holomush.web.v1.WebListMyScenesResponse.scenes:type_name -> holomush.scene.v1.CharacterSceneInfo
+	123, // 25: holomush.web.v1.WebWatchSceneResponse.participant:type_name -> holomush.scene.v1.ParticipantInfo
+	121, // 26: holomush.web.v1.WebCreateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	124, // 27: holomush.web.v1.WebListPublishedScenesResponse.archives:type_name -> holomush.scene.v1.PublicSceneArchive
+	125, // 28: holomush.web.v1.WebGetPublicSceneArchiveResponse.content_entries:type_name -> holomush.scene.v1.PublishedSceneEntry
+	121, // 29: holomush.web.v1.WebEndSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	126, // 30: holomush.web.v1.WebGetPublishedSceneResponse.vote_summary:type_name -> holomush.scene.v1.PublishedSceneVoteSummary
+	121, // 31: holomush.web.v1.WebPauseSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	121, // 32: holomush.web.v1.WebResumeSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	127, // 33: holomush.web.v1.WebUpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
+	121, // 34: holomush.web.v1.WebUpdateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	128, // 35: holomush.web.v1.WebGetCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.PublicCharacter
+	129, // 36: holomush.web.v1.WebListMyCharactersResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
+	129, // 37: holomush.web.v1.WebGetMyCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	127, // 38: holomush.web.v1.WebUpdateCharacterProfileRequest.update_mask:type_name -> google.protobuf.FieldMask
+	129, // 39: holomush.web.v1.WebUpdateCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	129, // 40: holomush.web.v1.WebUpdateCharacterDescriptionResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	130, // 41: holomush.web.v1.WebListCharacterDirectoryResponse.characters:type_name -> holomush.characteraccess.v1.PublicCharacterSummary
 	5,   // 42: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
 	7,   // 43: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
 	10,  // 44: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
@@ -7960,49 +7954,49 @@ var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	21,  // 49: holomush.web.v1.WebService.WebCreateGuest:input_type -> holomush.web.v1.WebCreateGuestRequest
 	23,  // 50: holomush.web.v1.WebService.WebCreateCharacter:input_type -> holomush.web.v1.WebCreateCharacterRequest
 	25,  // 51: holomush.web.v1.WebService.WebListCharacters:input_type -> holomush.web.v1.WebListCharactersRequest
-	27,  // 52: holomush.web.v1.WebService.WebListAllCharacters:input_type -> holomush.web.v1.WebListAllCharactersRequest
-	29,  // 53: holomush.web.v1.WebService.WebLogout:input_type -> holomush.web.v1.WebLogoutRequest
-	31,  // 54: holomush.web.v1.WebService.WebRequestPasswordReset:input_type -> holomush.web.v1.WebRequestPasswordResetRequest
-	33,  // 55: holomush.web.v1.WebService.WebConfirmPasswordReset:input_type -> holomush.web.v1.WebConfirmPasswordResetRequest
-	35,  // 56: holomush.web.v1.WebService.WebCheckSession:input_type -> holomush.web.v1.WebCheckSessionRequest
-	37,  // 57: holomush.web.v1.WebService.WebGetContent:input_type -> holomush.web.v1.WebGetContentRequest
-	39,  // 58: holomush.web.v1.WebService.WebListContent:input_type -> holomush.web.v1.WebListContentRequest
-	42,  // 59: holomush.web.v1.WebService.WebQueryStreamHistory:input_type -> holomush.web.v1.WebQueryStreamHistoryRequest
-	44,  // 60: holomush.web.v1.WebService.WebListSessionStreams:input_type -> holomush.web.v1.WebListSessionStreamsRequest
-	46,  // 61: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
-	49,  // 62: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
-	51,  // 63: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
-	54,  // 64: holomush.web.v1.WebService.WebListFocusPresence:input_type -> holomush.web.v1.WebListFocusPresenceRequest
-	57,  // 65: holomush.web.v1.WebService.WebListCommands:input_type -> holomush.web.v1.WebListCommandsRequest
-	59,  // 66: holomush.web.v1.WebService.WebListScenes:input_type -> holomush.web.v1.WebListScenesRequest
-	61,  // 67: holomush.web.v1.WebService.WebGetScene:input_type -> holomush.web.v1.WebGetSceneRequest
-	63,  // 68: holomush.web.v1.WebService.WebListMyScenes:input_type -> holomush.web.v1.WebListMyScenesRequest
-	65,  // 69: holomush.web.v1.WebService.WebWatchScene:input_type -> holomush.web.v1.WebWatchSceneRequest
-	67,  // 70: holomush.web.v1.WebService.WebCreateScene:input_type -> holomush.web.v1.WebCreateSceneRequest
-	79,  // 71: holomush.web.v1.WebService.WebEndScene:input_type -> holomush.web.v1.WebEndSceneRequest
-	89,  // 72: holomush.web.v1.WebService.WebPauseScene:input_type -> holomush.web.v1.WebPauseSceneRequest
-	91,  // 73: holomush.web.v1.WebService.WebResumeScene:input_type -> holomush.web.v1.WebResumeSceneRequest
-	93,  // 74: holomush.web.v1.WebService.WebMuteScene:input_type -> holomush.web.v1.WebMuteSceneRequest
-	95,  // 75: holomush.web.v1.WebService.WebSetSceneNotifyPref:input_type -> holomush.web.v1.WebSetSceneNotifyPrefRequest
-	105, // 76: holomush.web.v1.WebService.WebUpdateScene:input_type -> holomush.web.v1.WebUpdateSceneRequest
-	97,  // 77: holomush.web.v1.WebService.WebInviteToScene:input_type -> holomush.web.v1.WebInviteToSceneRequest
-	99,  // 78: holomush.web.v1.WebService.WebKickFromScene:input_type -> holomush.web.v1.WebKickFromSceneRequest
-	101, // 79: holomush.web.v1.WebService.WebTransferOwnership:input_type -> holomush.web.v1.WebTransferOwnershipRequest
-	103, // 80: holomush.web.v1.WebService.WebLeaveScene:input_type -> holomush.web.v1.WebLeaveSceneRequest
-	69,  // 81: holomush.web.v1.WebService.WebExportScene:input_type -> holomush.web.v1.WebExportSceneRequest
-	71,  // 82: holomush.web.v1.WebService.WebSetSceneFocus:input_type -> holomush.web.v1.WebSetSceneFocusRequest
-	73,  // 83: holomush.web.v1.WebService.WebListPublishedScenes:input_type -> holomush.web.v1.WebListPublishedScenesRequest
-	75,  // 84: holomush.web.v1.WebService.WebGetPublicSceneArchive:input_type -> holomush.web.v1.WebGetPublicSceneArchiveRequest
-	77,  // 85: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:input_type -> holomush.web.v1.WebDownloadPublicSceneArchiveRequest
-	81,  // 86: holomush.web.v1.WebService.WebStartScenePublish:input_type -> holomush.web.v1.WebStartScenePublishRequest
-	83,  // 87: holomush.web.v1.WebService.WebCastPublishSceneVote:input_type -> holomush.web.v1.WebCastPublishSceneVoteRequest
-	85,  // 88: holomush.web.v1.WebService.WebWithdrawScenePublish:input_type -> holomush.web.v1.WebWithdrawScenePublishRequest
-	87,  // 89: holomush.web.v1.WebService.WebGetPublishedScene:input_type -> holomush.web.v1.WebGetPublishedSceneRequest
-	107, // 90: holomush.web.v1.WebService.WebGetCharacterProfile:input_type -> holomush.web.v1.WebGetCharacterProfileRequest
-	109, // 91: holomush.web.v1.WebService.WebListMyCharacters:input_type -> holomush.web.v1.WebListMyCharactersRequest
-	111, // 92: holomush.web.v1.WebService.WebGetMyCharacter:input_type -> holomush.web.v1.WebGetMyCharacterRequest
-	113, // 93: holomush.web.v1.WebService.WebUpdateCharacterProfile:input_type -> holomush.web.v1.WebUpdateCharacterProfileRequest
-	115, // 94: holomush.web.v1.WebService.WebUpdateCharacterDescription:input_type -> holomush.web.v1.WebUpdateCharacterDescriptionRequest
+	27,  // 52: holomush.web.v1.WebService.WebLogout:input_type -> holomush.web.v1.WebLogoutRequest
+	29,  // 53: holomush.web.v1.WebService.WebRequestPasswordReset:input_type -> holomush.web.v1.WebRequestPasswordResetRequest
+	31,  // 54: holomush.web.v1.WebService.WebConfirmPasswordReset:input_type -> holomush.web.v1.WebConfirmPasswordResetRequest
+	33,  // 55: holomush.web.v1.WebService.WebCheckSession:input_type -> holomush.web.v1.WebCheckSessionRequest
+	35,  // 56: holomush.web.v1.WebService.WebGetContent:input_type -> holomush.web.v1.WebGetContentRequest
+	37,  // 57: holomush.web.v1.WebService.WebListContent:input_type -> holomush.web.v1.WebListContentRequest
+	40,  // 58: holomush.web.v1.WebService.WebQueryStreamHistory:input_type -> holomush.web.v1.WebQueryStreamHistoryRequest
+	42,  // 59: holomush.web.v1.WebService.WebListSessionStreams:input_type -> holomush.web.v1.WebListSessionStreamsRequest
+	44,  // 60: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
+	47,  // 61: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
+	49,  // 62: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
+	52,  // 63: holomush.web.v1.WebService.WebListFocusPresence:input_type -> holomush.web.v1.WebListFocusPresenceRequest
+	55,  // 64: holomush.web.v1.WebService.WebListCommands:input_type -> holomush.web.v1.WebListCommandsRequest
+	57,  // 65: holomush.web.v1.WebService.WebListScenes:input_type -> holomush.web.v1.WebListScenesRequest
+	59,  // 66: holomush.web.v1.WebService.WebGetScene:input_type -> holomush.web.v1.WebGetSceneRequest
+	61,  // 67: holomush.web.v1.WebService.WebListMyScenes:input_type -> holomush.web.v1.WebListMyScenesRequest
+	63,  // 68: holomush.web.v1.WebService.WebWatchScene:input_type -> holomush.web.v1.WebWatchSceneRequest
+	65,  // 69: holomush.web.v1.WebService.WebCreateScene:input_type -> holomush.web.v1.WebCreateSceneRequest
+	77,  // 70: holomush.web.v1.WebService.WebEndScene:input_type -> holomush.web.v1.WebEndSceneRequest
+	87,  // 71: holomush.web.v1.WebService.WebPauseScene:input_type -> holomush.web.v1.WebPauseSceneRequest
+	89,  // 72: holomush.web.v1.WebService.WebResumeScene:input_type -> holomush.web.v1.WebResumeSceneRequest
+	91,  // 73: holomush.web.v1.WebService.WebMuteScene:input_type -> holomush.web.v1.WebMuteSceneRequest
+	93,  // 74: holomush.web.v1.WebService.WebSetSceneNotifyPref:input_type -> holomush.web.v1.WebSetSceneNotifyPrefRequest
+	103, // 75: holomush.web.v1.WebService.WebUpdateScene:input_type -> holomush.web.v1.WebUpdateSceneRequest
+	95,  // 76: holomush.web.v1.WebService.WebInviteToScene:input_type -> holomush.web.v1.WebInviteToSceneRequest
+	97,  // 77: holomush.web.v1.WebService.WebKickFromScene:input_type -> holomush.web.v1.WebKickFromSceneRequest
+	99,  // 78: holomush.web.v1.WebService.WebTransferOwnership:input_type -> holomush.web.v1.WebTransferOwnershipRequest
+	101, // 79: holomush.web.v1.WebService.WebLeaveScene:input_type -> holomush.web.v1.WebLeaveSceneRequest
+	67,  // 80: holomush.web.v1.WebService.WebExportScene:input_type -> holomush.web.v1.WebExportSceneRequest
+	69,  // 81: holomush.web.v1.WebService.WebSetSceneFocus:input_type -> holomush.web.v1.WebSetSceneFocusRequest
+	71,  // 82: holomush.web.v1.WebService.WebListPublishedScenes:input_type -> holomush.web.v1.WebListPublishedScenesRequest
+	73,  // 83: holomush.web.v1.WebService.WebGetPublicSceneArchive:input_type -> holomush.web.v1.WebGetPublicSceneArchiveRequest
+	75,  // 84: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:input_type -> holomush.web.v1.WebDownloadPublicSceneArchiveRequest
+	79,  // 85: holomush.web.v1.WebService.WebStartScenePublish:input_type -> holomush.web.v1.WebStartScenePublishRequest
+	81,  // 86: holomush.web.v1.WebService.WebCastPublishSceneVote:input_type -> holomush.web.v1.WebCastPublishSceneVoteRequest
+	83,  // 87: holomush.web.v1.WebService.WebWithdrawScenePublish:input_type -> holomush.web.v1.WebWithdrawScenePublishRequest
+	85,  // 88: holomush.web.v1.WebService.WebGetPublishedScene:input_type -> holomush.web.v1.WebGetPublishedSceneRequest
+	105, // 89: holomush.web.v1.WebService.WebGetCharacterProfile:input_type -> holomush.web.v1.WebGetCharacterProfileRequest
+	107, // 90: holomush.web.v1.WebService.WebListMyCharacters:input_type -> holomush.web.v1.WebListMyCharactersRequest
+	109, // 91: holomush.web.v1.WebService.WebGetMyCharacter:input_type -> holomush.web.v1.WebGetMyCharacterRequest
+	111, // 92: holomush.web.v1.WebService.WebUpdateCharacterProfile:input_type -> holomush.web.v1.WebUpdateCharacterProfileRequest
+	113, // 93: holomush.web.v1.WebService.WebUpdateCharacterDescription:input_type -> holomush.web.v1.WebUpdateCharacterDescriptionRequest
+	115, // 94: holomush.web.v1.WebService.WebListCharacterDirectory:input_type -> holomush.web.v1.WebListCharacterDirectoryRequest
 	6,   // 95: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
 	9,   // 96: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
 	11,  // 97: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
@@ -8013,49 +8007,49 @@ var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	22,  // 102: holomush.web.v1.WebService.WebCreateGuest:output_type -> holomush.web.v1.WebCreateGuestResponse
 	24,  // 103: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
 	26,  // 104: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
-	28,  // 105: holomush.web.v1.WebService.WebListAllCharacters:output_type -> holomush.web.v1.WebListAllCharactersResponse
-	30,  // 106: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
-	32,  // 107: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
-	34,  // 108: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
-	36,  // 109: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
-	38,  // 110: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
-	40,  // 111: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
-	43,  // 112: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
-	45,  // 113: holomush.web.v1.WebService.WebListSessionStreams:output_type -> holomush.web.v1.WebListSessionStreamsResponse
-	48,  // 114: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
-	50,  // 115: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
-	52,  // 116: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
-	55,  // 117: holomush.web.v1.WebService.WebListFocusPresence:output_type -> holomush.web.v1.WebListFocusPresenceResponse
-	58,  // 118: holomush.web.v1.WebService.WebListCommands:output_type -> holomush.web.v1.WebListCommandsResponse
-	60,  // 119: holomush.web.v1.WebService.WebListScenes:output_type -> holomush.web.v1.WebListScenesResponse
-	62,  // 120: holomush.web.v1.WebService.WebGetScene:output_type -> holomush.web.v1.WebGetSceneResponse
-	64,  // 121: holomush.web.v1.WebService.WebListMyScenes:output_type -> holomush.web.v1.WebListMyScenesResponse
-	66,  // 122: holomush.web.v1.WebService.WebWatchScene:output_type -> holomush.web.v1.WebWatchSceneResponse
-	68,  // 123: holomush.web.v1.WebService.WebCreateScene:output_type -> holomush.web.v1.WebCreateSceneResponse
-	80,  // 124: holomush.web.v1.WebService.WebEndScene:output_type -> holomush.web.v1.WebEndSceneResponse
-	90,  // 125: holomush.web.v1.WebService.WebPauseScene:output_type -> holomush.web.v1.WebPauseSceneResponse
-	92,  // 126: holomush.web.v1.WebService.WebResumeScene:output_type -> holomush.web.v1.WebResumeSceneResponse
-	94,  // 127: holomush.web.v1.WebService.WebMuteScene:output_type -> holomush.web.v1.WebMuteSceneResponse
-	96,  // 128: holomush.web.v1.WebService.WebSetSceneNotifyPref:output_type -> holomush.web.v1.WebSetSceneNotifyPrefResponse
-	106, // 129: holomush.web.v1.WebService.WebUpdateScene:output_type -> holomush.web.v1.WebUpdateSceneResponse
-	98,  // 130: holomush.web.v1.WebService.WebInviteToScene:output_type -> holomush.web.v1.WebInviteToSceneResponse
-	100, // 131: holomush.web.v1.WebService.WebKickFromScene:output_type -> holomush.web.v1.WebKickFromSceneResponse
-	102, // 132: holomush.web.v1.WebService.WebTransferOwnership:output_type -> holomush.web.v1.WebTransferOwnershipResponse
-	104, // 133: holomush.web.v1.WebService.WebLeaveScene:output_type -> holomush.web.v1.WebLeaveSceneResponse
-	70,  // 134: holomush.web.v1.WebService.WebExportScene:output_type -> holomush.web.v1.WebExportSceneResponse
-	72,  // 135: holomush.web.v1.WebService.WebSetSceneFocus:output_type -> holomush.web.v1.WebSetSceneFocusResponse
-	74,  // 136: holomush.web.v1.WebService.WebListPublishedScenes:output_type -> holomush.web.v1.WebListPublishedScenesResponse
-	76,  // 137: holomush.web.v1.WebService.WebGetPublicSceneArchive:output_type -> holomush.web.v1.WebGetPublicSceneArchiveResponse
-	78,  // 138: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:output_type -> holomush.web.v1.WebDownloadPublicSceneArchiveResponse
-	82,  // 139: holomush.web.v1.WebService.WebStartScenePublish:output_type -> holomush.web.v1.WebStartScenePublishResponse
-	84,  // 140: holomush.web.v1.WebService.WebCastPublishSceneVote:output_type -> holomush.web.v1.WebCastPublishSceneVoteResponse
-	86,  // 141: holomush.web.v1.WebService.WebWithdrawScenePublish:output_type -> holomush.web.v1.WebWithdrawScenePublishResponse
-	88,  // 142: holomush.web.v1.WebService.WebGetPublishedScene:output_type -> holomush.web.v1.WebGetPublishedSceneResponse
-	108, // 143: holomush.web.v1.WebService.WebGetCharacterProfile:output_type -> holomush.web.v1.WebGetCharacterProfileResponse
-	110, // 144: holomush.web.v1.WebService.WebListMyCharacters:output_type -> holomush.web.v1.WebListMyCharactersResponse
-	112, // 145: holomush.web.v1.WebService.WebGetMyCharacter:output_type -> holomush.web.v1.WebGetMyCharacterResponse
-	114, // 146: holomush.web.v1.WebService.WebUpdateCharacterProfile:output_type -> holomush.web.v1.WebUpdateCharacterProfileResponse
-	116, // 147: holomush.web.v1.WebService.WebUpdateCharacterDescription:output_type -> holomush.web.v1.WebUpdateCharacterDescriptionResponse
+	28,  // 105: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
+	30,  // 106: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
+	32,  // 107: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
+	34,  // 108: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
+	36,  // 109: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
+	38,  // 110: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
+	41,  // 111: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
+	43,  // 112: holomush.web.v1.WebService.WebListSessionStreams:output_type -> holomush.web.v1.WebListSessionStreamsResponse
+	46,  // 113: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
+	48,  // 114: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
+	50,  // 115: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
+	53,  // 116: holomush.web.v1.WebService.WebListFocusPresence:output_type -> holomush.web.v1.WebListFocusPresenceResponse
+	56,  // 117: holomush.web.v1.WebService.WebListCommands:output_type -> holomush.web.v1.WebListCommandsResponse
+	58,  // 118: holomush.web.v1.WebService.WebListScenes:output_type -> holomush.web.v1.WebListScenesResponse
+	60,  // 119: holomush.web.v1.WebService.WebGetScene:output_type -> holomush.web.v1.WebGetSceneResponse
+	62,  // 120: holomush.web.v1.WebService.WebListMyScenes:output_type -> holomush.web.v1.WebListMyScenesResponse
+	64,  // 121: holomush.web.v1.WebService.WebWatchScene:output_type -> holomush.web.v1.WebWatchSceneResponse
+	66,  // 122: holomush.web.v1.WebService.WebCreateScene:output_type -> holomush.web.v1.WebCreateSceneResponse
+	78,  // 123: holomush.web.v1.WebService.WebEndScene:output_type -> holomush.web.v1.WebEndSceneResponse
+	88,  // 124: holomush.web.v1.WebService.WebPauseScene:output_type -> holomush.web.v1.WebPauseSceneResponse
+	90,  // 125: holomush.web.v1.WebService.WebResumeScene:output_type -> holomush.web.v1.WebResumeSceneResponse
+	92,  // 126: holomush.web.v1.WebService.WebMuteScene:output_type -> holomush.web.v1.WebMuteSceneResponse
+	94,  // 127: holomush.web.v1.WebService.WebSetSceneNotifyPref:output_type -> holomush.web.v1.WebSetSceneNotifyPrefResponse
+	104, // 128: holomush.web.v1.WebService.WebUpdateScene:output_type -> holomush.web.v1.WebUpdateSceneResponse
+	96,  // 129: holomush.web.v1.WebService.WebInviteToScene:output_type -> holomush.web.v1.WebInviteToSceneResponse
+	98,  // 130: holomush.web.v1.WebService.WebKickFromScene:output_type -> holomush.web.v1.WebKickFromSceneResponse
+	100, // 131: holomush.web.v1.WebService.WebTransferOwnership:output_type -> holomush.web.v1.WebTransferOwnershipResponse
+	102, // 132: holomush.web.v1.WebService.WebLeaveScene:output_type -> holomush.web.v1.WebLeaveSceneResponse
+	68,  // 133: holomush.web.v1.WebService.WebExportScene:output_type -> holomush.web.v1.WebExportSceneResponse
+	70,  // 134: holomush.web.v1.WebService.WebSetSceneFocus:output_type -> holomush.web.v1.WebSetSceneFocusResponse
+	72,  // 135: holomush.web.v1.WebService.WebListPublishedScenes:output_type -> holomush.web.v1.WebListPublishedScenesResponse
+	74,  // 136: holomush.web.v1.WebService.WebGetPublicSceneArchive:output_type -> holomush.web.v1.WebGetPublicSceneArchiveResponse
+	76,  // 137: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:output_type -> holomush.web.v1.WebDownloadPublicSceneArchiveResponse
+	80,  // 138: holomush.web.v1.WebService.WebStartScenePublish:output_type -> holomush.web.v1.WebStartScenePublishResponse
+	82,  // 139: holomush.web.v1.WebService.WebCastPublishSceneVote:output_type -> holomush.web.v1.WebCastPublishSceneVoteResponse
+	84,  // 140: holomush.web.v1.WebService.WebWithdrawScenePublish:output_type -> holomush.web.v1.WebWithdrawScenePublishResponse
+	86,  // 141: holomush.web.v1.WebService.WebGetPublishedScene:output_type -> holomush.web.v1.WebGetPublishedSceneResponse
+	106, // 142: holomush.web.v1.WebService.WebGetCharacterProfile:output_type -> holomush.web.v1.WebGetCharacterProfileResponse
+	108, // 143: holomush.web.v1.WebService.WebListMyCharacters:output_type -> holomush.web.v1.WebListMyCharactersResponse
+	110, // 144: holomush.web.v1.WebService.WebGetMyCharacter:output_type -> holomush.web.v1.WebGetMyCharacterResponse
+	112, // 145: holomush.web.v1.WebService.WebUpdateCharacterProfile:output_type -> holomush.web.v1.WebUpdateCharacterProfileResponse
+	114, // 146: holomush.web.v1.WebService.WebUpdateCharacterDescription:output_type -> holomush.web.v1.WebUpdateCharacterDescriptionResponse
+	116, // 147: holomush.web.v1.WebService.WebListCharacterDirectory:output_type -> holomush.web.v1.WebListCharacterDirectoryResponse
 	95,  // [95:148] is the sub-list for method output_type
 	42,  // [42:95] is the sub-list for method input_type
 	42,  // [42:42] is the sub-list for extension type_name

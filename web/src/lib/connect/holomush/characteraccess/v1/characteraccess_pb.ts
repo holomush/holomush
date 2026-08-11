@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/characteraccess/v1/characteraccess.proto.
  */
 export const file_holomush_characteraccess_v1_characteraccess: GenFile = /*@__PURE__*/
-  fileDesc("CjFob2xvbXVzaC9jaGFyYWN0ZXJhY2Nlc3MvdjEvY2hhcmFjdGVyYWNjZXNzLnByb3RvEhtob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEiSwoMUHJvZmlsZUltYWdlEhAKCG1lZGlhX2lkGAEgASgJEhAKCGFsdF90ZXh0GAIgASgJEhcKD2NvbnRlbnRfd2FybmluZxgDIAEoCSLEAgoPUHVibGljQ2hhcmFjdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSSgoHcHJvZmlsZRgEIAMoCzI5LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIuUHJvZmlsZUVudHJ5EkAKDXByaW1hcnlfaW1hZ2UYBSABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlEkQKB2dhbGxlcnkYBiADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlQgi6SAWSAQIQChouCgxQcm9maWxlRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJQChpHZXRDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkiXgobR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEj8KCWNoYXJhY3RlchgBIAEoCzIsLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIi3wIKDE93bkNoYXJhY3RlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEkcKB3Byb2ZpbGUYBCADKAsyNi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyLlByb2ZpbGVFbnRyeRJACg1wcmltYXJ5X2ltYWdlGAUgASgLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZRJECgdnYWxsZXJ5GAYgAygLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZUIIukgFkgECEAoSDgoGc3RhdHVzGAcgASgJEg8KB3ZlcnNpb24YCCABKAUaLgoMUHJvZmlsZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoXTGlzdE15Q2hhcmFjdGVyc1JlcXVlc3QSJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAlCB7pIBHICEAEiWQoYTGlzdE15Q2hhcmFjdGVyc1Jlc3BvbnNlEj0KCmNoYXJhY3RlcnMYASADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIl0KFUdldE15Q2hhcmFjdGVyUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAEiVgoWR2V0TXlDaGFyYWN0ZXJSZXNwb25zZRI8CgljaGFyYWN0ZXIYASABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIosDCh1VcGRhdGVDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRIQCghwcm9ub3VucxgEIAEoCRIPCgdjb25jZXB0GAUgASgJEg8KB3NwZWNpZXMYBiABKAkSCwoDYWdlGAcgASgJEg8KB2ZhY3Rpb24YCCABKAkSEgoKYXBwZWFyYW5jZRgJIAEoCRITCgtwZXJzb25hbGl0eRgKIAEoCRIRCgliaW9ncmFwaHkYCyABKAkSDgoGcnVtb3JzGAwgASgJEhEKCWN1cnJlbnRseRgNIAEoCRIWCg5ycF9wcmVmZXJlbmNlcxgOIAEoCRIQCgh0aW1lem9uZRgPIAEoCRIvCgt1cGRhdGVfbWFzaxhjIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siXgoeVXBkYXRlQ2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIimAEKIVVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRITCgtkZXNjcmlwdGlvbhgEIAEoCSJiCiJVcGRhdGVDaGFyYWN0ZXJEZXNjcmlwdGlvblJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIy0wUKFkNoYXJhY3RlckFjY2Vzc1NlcnZpY2USiAEKE0dldENoYXJhY3RlclByb2ZpbGUSNy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0Q2hhcmFjdGVyUHJvZmlsZVJlcXVlc3QaOC5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEn8KEExpc3RNeUNoYXJhY3RlcnMSNC5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdE15Q2hhcmFjdGVyc1JlcXVlc3QaNS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdE15Q2hhcmFjdGVyc1Jlc3BvbnNlEnkKDkdldE15Q2hhcmFjdGVyEjIuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLkdldE15Q2hhcmFjdGVyUmVxdWVzdBozLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5HZXRNeUNoYXJhY3RlclJlc3BvbnNlEpEBChZVcGRhdGVDaGFyYWN0ZXJQcm9maWxlEjouaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlclByb2ZpbGVSZXF1ZXN0GjsuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlclByb2ZpbGVSZXNwb25zZRKdAQoaVXBkYXRlQ2hhcmFjdGVyRGVzY3JpcHRpb24SPi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuVXBkYXRlQ2hhcmFjdGVyRGVzY3JpcHRpb25SZXF1ZXN0Gj8uaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uUmVzcG9uc2VCVlpUZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvY2hhcmFjdGVyYWNjZXNzL3YxO2NoYXJhY3RlcmFjY2Vzc3YxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_field_mask]);
+  fileDesc("CjFob2xvbXVzaC9jaGFyYWN0ZXJhY2Nlc3MvdjEvY2hhcmFjdGVyYWNjZXNzLnByb3RvEhtob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEiSwoMUHJvZmlsZUltYWdlEhAKCG1lZGlhX2lkGAEgASgJEhAKCGFsdF90ZXh0GAIgASgJEhcKD2NvbnRlbnRfd2FybmluZxgDIAEoCSLEAgoPUHVibGljQ2hhcmFjdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSSgoHcHJvZmlsZRgEIAMoCzI5LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIuUHJvZmlsZUVudHJ5EkAKDXByaW1hcnlfaW1hZ2UYBSABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlEkQKB2dhbGxlcnkYBiADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlQgi6SAWSAQIQChouCgxQcm9maWxlRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJQChpHZXRDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkiXgobR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEj8KCWNoYXJhY3RlchgBIAEoCzIsLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIiMgoWUHVibGljQ2hhcmFjdGVyU3VtbWFyeRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJIj0KHUxpc3RDaGFyYWN0ZXJEaXJlY3RvcnlSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJImkKHkxpc3RDaGFyYWN0ZXJEaXJlY3RvcnlSZXNwb25zZRJHCgpjaGFyYWN0ZXJzGAEgAygLMjMuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlB1YmxpY0NoYXJhY3RlclN1bW1hcnki3wIKDE93bkNoYXJhY3RlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEkcKB3Byb2ZpbGUYBCADKAsyNi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyLlByb2ZpbGVFbnRyeRJACg1wcmltYXJ5X2ltYWdlGAUgASgLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZRJECgdnYWxsZXJ5GAYgAygLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZUIIukgFkgECEAoSDgoGc3RhdHVzGAcgASgJEg8KB3ZlcnNpb24YCCABKAUaLgoMUHJvZmlsZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoXTGlzdE15Q2hhcmFjdGVyc1JlcXVlc3QSJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAlCB7pIBHICEAEiWQoYTGlzdE15Q2hhcmFjdGVyc1Jlc3BvbnNlEj0KCmNoYXJhY3RlcnMYASADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIl0KFUdldE15Q2hhcmFjdGVyUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAEiVgoWR2V0TXlDaGFyYWN0ZXJSZXNwb25zZRI8CgljaGFyYWN0ZXIYASABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIosDCh1VcGRhdGVDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRIQCghwcm9ub3VucxgEIAEoCRIPCgdjb25jZXB0GAUgASgJEg8KB3NwZWNpZXMYBiABKAkSCwoDYWdlGAcgASgJEg8KB2ZhY3Rpb24YCCABKAkSEgoKYXBwZWFyYW5jZRgJIAEoCRITCgtwZXJzb25hbGl0eRgKIAEoCRIRCgliaW9ncmFwaHkYCyABKAkSDgoGcnVtb3JzGAwgASgJEhEKCWN1cnJlbnRseRgNIAEoCRIWCg5ycF9wcmVmZXJlbmNlcxgOIAEoCRIQCgh0aW1lem9uZRgPIAEoCRIvCgt1cGRhdGVfbWFzaxhjIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siXgoeVXBkYXRlQ2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIimAEKIVVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRITCgtkZXNjcmlwdGlvbhgEIAEoCSJiCiJVcGRhdGVDaGFyYWN0ZXJEZXNjcmlwdGlvblJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIy5wYKFkNoYXJhY3RlckFjY2Vzc1NlcnZpY2USiAEKE0dldENoYXJhY3RlclByb2ZpbGUSNy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0Q2hhcmFjdGVyUHJvZmlsZVJlcXVlc3QaOC5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEn8KEExpc3RNeUNoYXJhY3RlcnMSNC5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdE15Q2hhcmFjdGVyc1JlcXVlc3QaNS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdE15Q2hhcmFjdGVyc1Jlc3BvbnNlEnkKDkdldE15Q2hhcmFjdGVyEjIuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLkdldE15Q2hhcmFjdGVyUmVxdWVzdBozLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5HZXRNeUNoYXJhY3RlclJlc3BvbnNlEpEBChZVcGRhdGVDaGFyYWN0ZXJQcm9maWxlEjouaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlclByb2ZpbGVSZXF1ZXN0GjsuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlclByb2ZpbGVSZXNwb25zZRKdAQoaVXBkYXRlQ2hhcmFjdGVyRGVzY3JpcHRpb24SPi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuVXBkYXRlQ2hhcmFjdGVyRGVzY3JpcHRpb25SZXF1ZXN0Gj8uaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uUmVzcG9uc2USkQEKFkxpc3RDaGFyYWN0ZXJEaXJlY3RvcnkSOi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdENoYXJhY3RlckRpcmVjdG9yeVJlcXVlc3QaOy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdENoYXJhY3RlckRpcmVjdG9yeVJlc3BvbnNlQlZaVGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2NoYXJhY3RlcmFjY2Vzcy92MTtjaGFyYWN0ZXJhY2Nlc3N2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask]);
 
 /**
  * ProfileImage is one stored image reference on a profile. The shape ships in
@@ -191,6 +191,106 @@ export const GetCharacterProfileResponseSchema: GenMessage<GetCharacterProfileRe
   messageDesc(file_holomush_characteraccess_v1_characteraccess, 3);
 
 /**
+ * PublicCharacterSummary is the list row projectPublicSummary
+ * (internal/grpc/characteraccess_projection.go) builds: PublicCharacter cut
+ * down to what a directory row needs. It is produced by the `public` projection
+ * family because a list is not a fourth audience — it publishes strictly less
+ * than the detail view of the same character, never something the detail view
+ * withholds.
+ *
+ * IT CARRIES NO PRESENCE TELEMETRY. The roster shape the retired web directory
+ * RPC re-exported reported whether a character held a live game session, that
+ * session's status string, the display label of its most recent location and the
+ * epoch timestamp of its last play activity. None of those has a field to occupy
+ * here, so their exclusion is a property of the descriptor rather than a
+ * discipline a handler has to remember.
+ *
+ * It carries no visibility hint, mask or withheld-field list either: a character
+ * this viewer may not reach is absent from the repeated field, and the client is
+ * not told a decision was made.
+ *
+ * @generated from message holomush.characteraccess.v1.PublicCharacterSummary
+ */
+export type PublicCharacterSummary = Message<"holomush.characteraccess.v1.PublicCharacterSummary"> & {
+  /**
+   * id is the stable characters.id ULID the profile URL is keyed on, and the
+   * key CharacterAccessServer.ListCharacterDirectory sorts the listing by so two
+   * identical calls agree byte for byte.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * name is the display name auth.CharacterRepository.ListAll read out of
+   * characters.name, forwarded as the stored bytes with no normalization,
+   * casefolding or re-encoding.
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.PublicCharacterSummary.
+ * Use `create(PublicCharacterSummarySchema)` to create a new message.
+ */
+export const PublicCharacterSummarySchema: GenMessage<PublicCharacterSummary> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 4);
+
+/**
+ * ListCharacterDirectoryRequest carries the caller's optional session token and
+ * nothing else: which characters are listed follows from the rung that token
+ * resolves to, so there is no field with which a caller could name a viewer, a
+ * page or a filter the facade did not authorize.
+ *
+ * @generated from message holomush.characteraccess.v1.ListCharacterDirectoryRequest
+ */
+export type ListCharacterDirectoryRequest = Message<"holomush.characteraccess.v1.ListCharacterDirectoryRequest"> & {
+  /**
+   * player_session_token is the raw session token the gateway lifted from the
+   * X-Session-Token header. It is OPTIONAL exactly as on
+   * GetCharacterProfileRequest: an empty, expired or otherwise unresolvable
+   * value resolves the least-privileged rung rather than an authentication
+   * error, so a logged-out visitor still reaches the public directory.
+   *
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.ListCharacterDirectoryRequest.
+ * Use `create(ListCharacterDirectoryRequestSchema)` to create a new message.
+ */
+export const ListCharacterDirectoryRequestSchema: GenMessage<ListCharacterDirectoryRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 5);
+
+/**
+ * ListCharacterDirectoryResponse carries the reachable subset of the directory.
+ *
+ * @generated from message holomush.characteraccess.v1.ListCharacterDirectoryResponse
+ */
+export type ListCharacterDirectoryResponse = Message<"holomush.characteraccess.v1.ListCharacterDirectoryResponse"> & {
+  /**
+   * characters is every character whose profile this viewer can reach, sorted by
+   * id by CharacterAccessServer.ListCharacterDirectory so enumeration order
+   * never varies between two identical calls. An empty directory is an empty
+   * list and a success status, never a not-found.
+   *
+   * @generated from field: repeated holomush.characteraccess.v1.PublicCharacterSummary characters = 1;
+   */
+  characters: PublicCharacterSummary[];
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.ListCharacterDirectoryResponse.
+ * Use `create(ListCharacterDirectoryResponseSchema)` to create a new message.
+ */
+export const ListCharacterDirectoryResponseSchema: GenMessage<ListCharacterDirectoryResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 6);
+
+/**
  * OwnCharacter is the character shape the `owner` audience receives, and it is
  * a DISTINCT MESSAGE rather than PublicCharacter plus extra fields (01-SPEC
  * §2.2). The two are never interchanged: reusing one for the other audience
@@ -282,7 +382,7 @@ export type OwnCharacter = Message<"holomush.characteraccess.v1.OwnCharacter"> &
  * Use `create(OwnCharacterSchema)` to create a new message.
  */
 export const OwnCharacterSchema: GenMessage<OwnCharacter> = /*@__PURE__*/
-  messageDesc(file_holomush_characteraccess_v1_characteraccess, 4);
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 7);
 
 /**
  * ListMyCharactersRequest asks for the caller's own roster; the session token is
@@ -306,7 +406,7 @@ export type ListMyCharactersRequest = Message<"holomush.characteraccess.v1.ListM
  * Use `create(ListMyCharactersRequestSchema)` to create a new message.
  */
 export const ListMyCharactersRequestSchema: GenMessage<ListMyCharactersRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_characteraccess_v1_characteraccess, 5);
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 8);
 
 /**
  * ListMyCharactersResponse carries the roster in the owner audience's shape.
@@ -329,7 +429,7 @@ export type ListMyCharactersResponse = Message<"holomush.characteraccess.v1.List
  * Use `create(ListMyCharactersResponseSchema)` to create a new message.
  */
 export const ListMyCharactersResponseSchema: GenMessage<ListMyCharactersResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_characteraccess_v1_characteraccess, 6);
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 9);
 
 /**
  * GetMyCharacterRequest names one owned character to read in full.
@@ -359,7 +459,7 @@ export type GetMyCharacterRequest = Message<"holomush.characteraccess.v1.GetMyCh
  * Use `create(GetMyCharacterRequestSchema)` to create a new message.
  */
 export const GetMyCharacterRequestSchema: GenMessage<GetMyCharacterRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_characteraccess_v1_characteraccess, 7);
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 10);
 
 /**
  * GetMyCharacterResponse carries one character in the owner audience's shape.
@@ -380,7 +480,7 @@ export type GetMyCharacterResponse = Message<"holomush.characteraccess.v1.GetMyC
  * Use `create(GetMyCharacterResponseSchema)` to create a new message.
  */
 export const GetMyCharacterResponseSchema: GenMessage<GetMyCharacterResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_characteraccess_v1_characteraccess, 8);
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 11);
 
 /**
  * UpdateCharacterProfileRequest is a partial edit of the stored `profile.*`
@@ -536,7 +636,7 @@ export type UpdateCharacterProfileRequest = Message<"holomush.characteraccess.v1
  * Use `create(UpdateCharacterProfileRequestSchema)` to create a new message.
  */
 export const UpdateCharacterProfileRequestSchema: GenMessage<UpdateCharacterProfileRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_characteraccess_v1_characteraccess, 9);
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 12);
 
 /**
  * UpdateCharacterProfileResponse returns the character as it stands after the
@@ -558,7 +658,7 @@ export type UpdateCharacterProfileResponse = Message<"holomush.characteraccess.v
  * Use `create(UpdateCharacterProfileResponseSchema)` to create a new message.
  */
 export const UpdateCharacterProfileResponseSchema: GenMessage<UpdateCharacterProfileResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_characteraccess_v1_characteraccess, 10);
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 13);
 
 /**
  * UpdateCharacterDescriptionRequest replaces the in-world `look` text. It is
@@ -609,7 +709,7 @@ export type UpdateCharacterDescriptionRequest = Message<"holomush.characteracces
  * Use `create(UpdateCharacterDescriptionRequestSchema)` to create a new message.
  */
 export const UpdateCharacterDescriptionRequestSchema: GenMessage<UpdateCharacterDescriptionRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_characteraccess_v1_characteraccess, 11);
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 14);
 
 /**
  * UpdateCharacterDescriptionResponse returns the character after the rewrite.
@@ -630,7 +730,7 @@ export type UpdateCharacterDescriptionResponse = Message<"holomush.characteracce
  * Use `create(UpdateCharacterDescriptionResponseSchema)` to create a new message.
  */
 export const UpdateCharacterDescriptionResponseSchema: GenMessage<UpdateCharacterDescriptionResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_characteraccess_v1_characteraccess, 12);
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 15);
 
 /**
  * CharacterAccessService is the host-side facade for the web character surface.
@@ -714,6 +814,24 @@ export const CharacterAccessService: GenService<{
     methodKind: "unary";
     input: typeof UpdateCharacterDescriptionRequestSchema;
     output: typeof UpdateCharacterDescriptionResponseSchema;
+  },
+  /**
+   * ListCharacterDirectory enumerates, as identity rows, the characters whose
+   * profiles the calling viewer can reach.
+   * CharacterAccessServer.ListCharacterDirectory
+   * (internal/grpc/characteraccess_directory.go) makes ONE ABAC decision on the
+   * singleton character_directory:all resource BEFORE reading any row — a
+   * viewer below that floor learns nothing, not even the corpus size — and then
+   * includes a character only when profilevis.Reachable permits this viewer for
+   * that character's profile. An unreachable character is simply absent, so its
+   * absence is indistinguishable from it not existing.
+   *
+   * @generated from rpc holomush.characteraccess.v1.CharacterAccessService.ListCharacterDirectory
+   */
+  listCharacterDirectory: {
+    methodKind: "unary";
+    input: typeof ListCharacterDirectoryRequestSchema;
+    output: typeof ListCharacterDirectoryResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_characteraccess_v1_characteraccess, 0);

@@ -32,7 +32,6 @@ const (
 	WebService_WebCreateGuest_FullMethodName                = "/holomush.web.v1.WebService/WebCreateGuest"
 	WebService_WebCreateCharacter_FullMethodName            = "/holomush.web.v1.WebService/WebCreateCharacter"
 	WebService_WebListCharacters_FullMethodName             = "/holomush.web.v1.WebService/WebListCharacters"
-	WebService_WebListAllCharacters_FullMethodName          = "/holomush.web.v1.WebService/WebListAllCharacters"
 	WebService_WebLogout_FullMethodName                     = "/holomush.web.v1.WebService/WebLogout"
 	WebService_WebRequestPasswordReset_FullMethodName       = "/holomush.web.v1.WebService/WebRequestPasswordReset"
 	WebService_WebConfirmPasswordReset_FullMethodName       = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
@@ -75,6 +74,7 @@ const (
 	WebService_WebGetMyCharacter_FullMethodName             = "/holomush.web.v1.WebService/WebGetMyCharacter"
 	WebService_WebUpdateCharacterProfile_FullMethodName     = "/holomush.web.v1.WebService/WebUpdateCharacterProfile"
 	WebService_WebUpdateCharacterDescription_FullMethodName = "/holomush.web.v1.WebService/WebUpdateCharacterDescription"
+	WebService_WebListCharacterDirectory_FullMethodName     = "/holomush.web.v1.WebService/WebListCharacterDirectory"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -140,10 +140,6 @@ type WebServiceClient interface {
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(ctx context.Context, in *WebListCharactersRequest, opts ...grpc.CallOption) (*WebListCharactersResponse, error)
-	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-	// reads player_session_token from the X-Session-Token cookie; any
-	// authenticated caller (guest included) may list character names.
-	WebListAllCharacters(ctx context.Context, in *WebListAllCharactersRequest, opts ...grpc.CallOption) (*WebListAllCharactersResponse, error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -306,6 +302,13 @@ type WebServiceClient interface {
 	// WebUpdateCharacterDescription proxies
 	// CharacterAccessService.UpdateCharacterDescription.
 	WebUpdateCharacterDescription(ctx context.Context, in *WebUpdateCharacterDescriptionRequest, opts ...grpc.CallOption) (*WebUpdateCharacterDescriptionResponse, error)
+	// WebListCharacterDirectory proxies
+	// CharacterAccessService.ListCharacterDirectory.
+	// Handler.WebListCharacterDirectory lifts the session token from the
+	// X-Session-Token header and forwards nothing else; a request with no cookie
+	// is the ordinary logged-out case rather than an error. The gateway neither
+	// filters nor re-sorts the listing — reachability and order are the facade's.
+	WebListCharacterDirectory(ctx context.Context, in *WebListCharacterDirectoryRequest, opts ...grpc.CallOption) (*WebListCharacterDirectoryResponse, error)
 }
 
 type webServiceClient struct {
@@ -419,16 +422,6 @@ func (c *webServiceClient) WebListCharacters(ctx context.Context, in *WebListCha
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebListCharactersResponse)
 	err := c.cc.Invoke(ctx, WebService_WebListCharacters_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *webServiceClient) WebListAllCharacters(ctx context.Context, in *WebListAllCharactersRequest, opts ...grpc.CallOption) (*WebListAllCharactersResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(WebListAllCharactersResponse)
-	err := c.cc.Invoke(ctx, WebService_WebListAllCharacters_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -855,6 +848,16 @@ func (c *webServiceClient) WebUpdateCharacterDescription(ctx context.Context, in
 	return out, nil
 }
 
+func (c *webServiceClient) WebListCharacterDirectory(ctx context.Context, in *WebListCharacterDirectoryRequest, opts ...grpc.CallOption) (*WebListCharacterDirectoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListCharacterDirectoryResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListCharacterDirectory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -918,10 +921,6 @@ type WebServiceServer interface {
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *WebListCharactersRequest) (*WebListCharactersResponse, error)
-	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-	// reads player_session_token from the X-Session-Token cookie; any
-	// authenticated caller (guest included) may list character names.
-	WebListAllCharacters(context.Context, *WebListAllCharactersRequest) (*WebListAllCharactersResponse, error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -1084,6 +1083,13 @@ type WebServiceServer interface {
 	// WebUpdateCharacterDescription proxies
 	// CharacterAccessService.UpdateCharacterDescription.
 	WebUpdateCharacterDescription(context.Context, *WebUpdateCharacterDescriptionRequest) (*WebUpdateCharacterDescriptionResponse, error)
+	// WebListCharacterDirectory proxies
+	// CharacterAccessService.ListCharacterDirectory.
+	// Handler.WebListCharacterDirectory lifts the session token from the
+	// X-Session-Token header and forwards nothing else; a request with no cookie
+	// is the ordinary logged-out case rather than an error. The gateway neither
+	// filters nor re-sorts the listing — reachability and order are the facade's.
+	WebListCharacterDirectory(context.Context, *WebListCharacterDirectoryRequest) (*WebListCharacterDirectoryResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -1123,9 +1129,6 @@ func (UnimplementedWebServiceServer) WebCreateCharacter(context.Context, *WebCre
 }
 func (UnimplementedWebServiceServer) WebListCharacters(context.Context, *WebListCharactersRequest) (*WebListCharactersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebListCharacters not implemented")
-}
-func (UnimplementedWebServiceServer) WebListAllCharacters(context.Context, *WebListAllCharactersRequest) (*WebListAllCharactersResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method WebListAllCharacters not implemented")
 }
 func (UnimplementedWebServiceServer) WebLogout(context.Context, *WebLogoutRequest) (*WebLogoutResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebLogout not implemented")
@@ -1252,6 +1255,9 @@ func (UnimplementedWebServiceServer) WebUpdateCharacterProfile(context.Context, 
 }
 func (UnimplementedWebServiceServer) WebUpdateCharacterDescription(context.Context, *WebUpdateCharacterDescriptionRequest) (*WebUpdateCharacterDescriptionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebUpdateCharacterDescription not implemented")
+}
+func (UnimplementedWebServiceServer) WebListCharacterDirectory(context.Context, *WebListCharacterDirectoryRequest) (*WebListCharacterDirectoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListCharacterDirectory not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -1443,24 +1449,6 @@ func _WebService_WebListCharacters_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WebServiceServer).WebListCharacters(ctx, req.(*WebListCharactersRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WebService_WebListAllCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WebListAllCharactersRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WebServiceServer).WebListAllCharacters(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WebService_WebListAllCharacters_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WebServiceServer).WebListAllCharacters(ctx, req.(*WebListAllCharactersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2221,6 +2209,24 @@ func _WebService_WebUpdateCharacterDescription_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebListCharacterDirectory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListCharacterDirectoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListCharacterDirectory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListCharacterDirectory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListCharacterDirectory(ctx, req.(*WebListCharacterDirectoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2263,10 +2269,6 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebListCharacters",
 			Handler:    _WebService_WebListCharacters_Handler,
-		},
-		{
-			MethodName: "WebListAllCharacters",
-			Handler:    _WebService_WebListAllCharacters_Handler,
 		},
 		{
 			MethodName: "WebLogout",
@@ -2435,6 +2437,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebUpdateCharacterDescription",
 			Handler:    _WebService_WebUpdateCharacterDescription_Handler,
+		},
+		{
+			MethodName: "WebListCharacterDirectory",
+			Handler:    _WebService_WebListCharacterDirectory_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

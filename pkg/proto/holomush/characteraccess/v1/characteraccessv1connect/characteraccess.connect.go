@@ -51,6 +51,9 @@ const (
 	// CharacterAccessServiceUpdateCharacterDescriptionProcedure is the fully-qualified name of the
 	// CharacterAccessService's UpdateCharacterDescription RPC.
 	CharacterAccessServiceUpdateCharacterDescriptionProcedure = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterDescription"
+	// CharacterAccessServiceListCharacterDirectoryProcedure is the fully-qualified name of the
+	// CharacterAccessService's ListCharacterDirectory RPC.
+	CharacterAccessServiceListCharacterDirectoryProcedure = "/holomush.characteraccess.v1.CharacterAccessService/ListCharacterDirectory"
 )
 
 // CharacterAccessServiceClient is a client for the
@@ -84,6 +87,16 @@ type CharacterAccessServiceClient interface {
 	// characters.description column itself, not a profile.* row — by reaching the
 	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
 	UpdateCharacterDescription(context.Context, *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error)
+	// ListCharacterDirectory enumerates, as identity rows, the characters whose
+	// profiles the calling viewer can reach.
+	// CharacterAccessServer.ListCharacterDirectory
+	// (internal/grpc/characteraccess_directory.go) makes ONE ABAC decision on the
+	// singleton character_directory:all resource BEFORE reading any row — a
+	// viewer below that floor learns nothing, not even the corpus size — and then
+	// includes a character only when profilevis.Reachable permits this viewer for
+	// that character's profile. An unreachable character is simply absent, so its
+	// absence is indistinguishable from it not existing.
+	ListCharacterDirectory(context.Context, *connect.Request[v1.ListCharacterDirectoryRequest]) (*connect.Response[v1.ListCharacterDirectoryResponse], error)
 }
 
 // NewCharacterAccessServiceClient constructs a client for the
@@ -128,6 +141,12 @@ func NewCharacterAccessServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(characterAccessServiceMethods.ByName("UpdateCharacterDescription")),
 			connect.WithClientOptions(opts...),
 		),
+		listCharacterDirectory: connect.NewClient[v1.ListCharacterDirectoryRequest, v1.ListCharacterDirectoryResponse](
+			httpClient,
+			baseURL+CharacterAccessServiceListCharacterDirectoryProcedure,
+			connect.WithSchema(characterAccessServiceMethods.ByName("ListCharacterDirectory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -138,6 +157,7 @@ type characterAccessServiceClient struct {
 	getMyCharacter             *connect.Client[v1.GetMyCharacterRequest, v1.GetMyCharacterResponse]
 	updateCharacterProfile     *connect.Client[v1.UpdateCharacterProfileRequest, v1.UpdateCharacterProfileResponse]
 	updateCharacterDescription *connect.Client[v1.UpdateCharacterDescriptionRequest, v1.UpdateCharacterDescriptionResponse]
+	listCharacterDirectory     *connect.Client[v1.ListCharacterDirectoryRequest, v1.ListCharacterDirectoryResponse]
 }
 
 // GetCharacterProfile calls holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile.
@@ -165,6 +185,12 @@ func (c *characterAccessServiceClient) UpdateCharacterProfile(ctx context.Contex
 // holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription.
 func (c *characterAccessServiceClient) UpdateCharacterDescription(ctx context.Context, req *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error) {
 	return c.updateCharacterDescription.CallUnary(ctx, req)
+}
+
+// ListCharacterDirectory calls
+// holomush.characteraccess.v1.CharacterAccessService.ListCharacterDirectory.
+func (c *characterAccessServiceClient) ListCharacterDirectory(ctx context.Context, req *connect.Request[v1.ListCharacterDirectoryRequest]) (*connect.Response[v1.ListCharacterDirectoryResponse], error) {
+	return c.listCharacterDirectory.CallUnary(ctx, req)
 }
 
 // CharacterAccessServiceHandler is an implementation of the
@@ -198,6 +224,16 @@ type CharacterAccessServiceHandler interface {
 	// characters.description column itself, not a profile.* row — by reaching the
 	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
 	UpdateCharacterDescription(context.Context, *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error)
+	// ListCharacterDirectory enumerates, as identity rows, the characters whose
+	// profiles the calling viewer can reach.
+	// CharacterAccessServer.ListCharacterDirectory
+	// (internal/grpc/characteraccess_directory.go) makes ONE ABAC decision on the
+	// singleton character_directory:all resource BEFORE reading any row — a
+	// viewer below that floor learns nothing, not even the corpus size — and then
+	// includes a character only when profilevis.Reachable permits this viewer for
+	// that character's profile. An unreachable character is simply absent, so its
+	// absence is indistinguishable from it not existing.
+	ListCharacterDirectory(context.Context, *connect.Request[v1.ListCharacterDirectoryRequest]) (*connect.Response[v1.ListCharacterDirectoryResponse], error)
 }
 
 // NewCharacterAccessServiceHandler builds an HTTP handler from the service implementation. It
@@ -237,6 +273,12 @@ func NewCharacterAccessServiceHandler(svc CharacterAccessServiceHandler, opts ..
 		connect.WithSchema(characterAccessServiceMethods.ByName("UpdateCharacterDescription")),
 		connect.WithHandlerOptions(opts...),
 	)
+	characterAccessServiceListCharacterDirectoryHandler := connect.NewUnaryHandler(
+		CharacterAccessServiceListCharacterDirectoryProcedure,
+		svc.ListCharacterDirectory,
+		connect.WithSchema(characterAccessServiceMethods.ByName("ListCharacterDirectory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.characteraccess.v1.CharacterAccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CharacterAccessServiceGetCharacterProfileProcedure:
@@ -249,6 +291,8 @@ func NewCharacterAccessServiceHandler(svc CharacterAccessServiceHandler, opts ..
 			characterAccessServiceUpdateCharacterProfileHandler.ServeHTTP(w, r)
 		case CharacterAccessServiceUpdateCharacterDescriptionProcedure:
 			characterAccessServiceUpdateCharacterDescriptionHandler.ServeHTTP(w, r)
+		case CharacterAccessServiceListCharacterDirectoryProcedure:
+			characterAccessServiceListCharacterDirectoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -276,4 +320,8 @@ func (UnimplementedCharacterAccessServiceHandler) UpdateCharacterProfile(context
 
 func (UnimplementedCharacterAccessServiceHandler) UpdateCharacterDescription(context.Context, *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription is not implemented"))
+}
+
+func (UnimplementedCharacterAccessServiceHandler) ListCharacterDirectory(context.Context, *connect.Request[v1.ListCharacterDirectoryRequest]) (*connect.Response[v1.ListCharacterDirectoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.ListCharacterDirectory is not implemented"))
 }

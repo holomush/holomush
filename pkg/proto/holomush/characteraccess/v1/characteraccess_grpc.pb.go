@@ -27,6 +27,7 @@ const (
 	CharacterAccessService_GetMyCharacter_FullMethodName             = "/holomush.characteraccess.v1.CharacterAccessService/GetMyCharacter"
 	CharacterAccessService_UpdateCharacterProfile_FullMethodName     = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterProfile"
 	CharacterAccessService_UpdateCharacterDescription_FullMethodName = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterDescription"
+	CharacterAccessService_ListCharacterDirectory_FullMethodName     = "/holomush.characteraccess.v1.CharacterAccessService/ListCharacterDirectory"
 )
 
 // CharacterAccessServiceClient is the client API for CharacterAccessService service.
@@ -72,6 +73,16 @@ type CharacterAccessServiceClient interface {
 	// characters.description column itself, not a profile.* row — by reaching the
 	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
 	UpdateCharacterDescription(ctx context.Context, in *UpdateCharacterDescriptionRequest, opts ...grpc.CallOption) (*UpdateCharacterDescriptionResponse, error)
+	// ListCharacterDirectory enumerates, as identity rows, the characters whose
+	// profiles the calling viewer can reach.
+	// CharacterAccessServer.ListCharacterDirectory
+	// (internal/grpc/characteraccess_directory.go) makes ONE ABAC decision on the
+	// singleton character_directory:all resource BEFORE reading any row — a
+	// viewer below that floor learns nothing, not even the corpus size — and then
+	// includes a character only when profilevis.Reachable permits this viewer for
+	// that character's profile. An unreachable character is simply absent, so its
+	// absence is indistinguishable from it not existing.
+	ListCharacterDirectory(ctx context.Context, in *ListCharacterDirectoryRequest, opts ...grpc.CallOption) (*ListCharacterDirectoryResponse, error)
 }
 
 type characterAccessServiceClient struct {
@@ -132,6 +143,16 @@ func (c *characterAccessServiceClient) UpdateCharacterDescription(ctx context.Co
 	return out, nil
 }
 
+func (c *characterAccessServiceClient) ListCharacterDirectory(ctx context.Context, in *ListCharacterDirectoryRequest, opts ...grpc.CallOption) (*ListCharacterDirectoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCharacterDirectoryResponse)
+	err := c.cc.Invoke(ctx, CharacterAccessService_ListCharacterDirectory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CharacterAccessServiceServer is the server API for CharacterAccessService service.
 // All implementations must embed UnimplementedCharacterAccessServiceServer
 // for forward compatibility.
@@ -175,6 +196,16 @@ type CharacterAccessServiceServer interface {
 	// characters.description column itself, not a profile.* row — by reaching the
 	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
 	UpdateCharacterDescription(context.Context, *UpdateCharacterDescriptionRequest) (*UpdateCharacterDescriptionResponse, error)
+	// ListCharacterDirectory enumerates, as identity rows, the characters whose
+	// profiles the calling viewer can reach.
+	// CharacterAccessServer.ListCharacterDirectory
+	// (internal/grpc/characteraccess_directory.go) makes ONE ABAC decision on the
+	// singleton character_directory:all resource BEFORE reading any row — a
+	// viewer below that floor learns nothing, not even the corpus size — and then
+	// includes a character only when profilevis.Reachable permits this viewer for
+	// that character's profile. An unreachable character is simply absent, so its
+	// absence is indistinguishable from it not existing.
+	ListCharacterDirectory(context.Context, *ListCharacterDirectoryRequest) (*ListCharacterDirectoryResponse, error)
 	mustEmbedUnimplementedCharacterAccessServiceServer()
 }
 
@@ -199,6 +230,9 @@ func (UnimplementedCharacterAccessServiceServer) UpdateCharacterProfile(context.
 }
 func (UnimplementedCharacterAccessServiceServer) UpdateCharacterDescription(context.Context, *UpdateCharacterDescriptionRequest) (*UpdateCharacterDescriptionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateCharacterDescription not implemented")
+}
+func (UnimplementedCharacterAccessServiceServer) ListCharacterDirectory(context.Context, *ListCharacterDirectoryRequest) (*ListCharacterDirectoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCharacterDirectory not implemented")
 }
 func (UnimplementedCharacterAccessServiceServer) mustEmbedUnimplementedCharacterAccessServiceServer() {
 }
@@ -312,6 +346,24 @@ func _CharacterAccessService_UpdateCharacterDescription_Handler(srv interface{},
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CharacterAccessService_ListCharacterDirectory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCharacterDirectoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharacterAccessServiceServer).ListCharacterDirectory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharacterAccessService_ListCharacterDirectory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharacterAccessServiceServer).ListCharacterDirectory(ctx, req.(*ListCharacterDirectoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CharacterAccessService_ServiceDesc is the grpc.ServiceDesc for CharacterAccessService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -338,6 +390,10 @@ var CharacterAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateCharacterDescription",
 			Handler:    _CharacterAccessService_UpdateCharacterDescription_Handler,
+		},
+		{
+			MethodName: "ListCharacterDirectory",
+			Handler:    _CharacterAccessService_ListCharacterDirectory_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -53,6 +53,17 @@ service CharacterAccessService {
   // characters.description column itself, not a profile.* row — by reaching the
   // shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
   rpc UpdateCharacterDescription(UpdateCharacterDescriptionRequest) returns (UpdateCharacterDescriptionResponse);
+
+  // ListCharacterDirectory enumerates, as identity rows, the characters whose
+  // profiles the calling viewer can reach.
+  // CharacterAccessServer.ListCharacterDirectory
+  // (internal/grpc/characteraccess_directory.go) makes ONE ABAC decision on the
+  // singleton character_directory:all resource BEFORE reading any row — a
+  // viewer below that floor learns nothing, not even the corpus size — and then
+  // includes a character only when profilevis.Reachable permits this viewer for
+  // that character's profile. An unreachable character is simply absent, so its
+  // absence is indistinguishable from it not existing.
+  rpc ListCharacterDirectory(ListCharacterDirectoryRequest) returns (ListCharacterDirectoryResponse);
 }
 
 // ProfileImage is one stored image reference on a profile. The shape ships in
@@ -125,6 +136,56 @@ message GetCharacterProfileRequest {
 message GetCharacterProfileResponse {
   // character is the projection projectPublic built for this viewer.
   PublicCharacter character = 1;
+}
+
+// PublicCharacterSummary is the list row projectPublicSummary
+// (internal/grpc/characteraccess_projection.go) builds: PublicCharacter cut
+// down to what a directory row needs. It is produced by the `public` projection
+// family because a list is not a fourth audience — it publishes strictly less
+// than the detail view of the same character, never something the detail view
+// withholds.
+//
+// IT CARRIES NO PRESENCE TELEMETRY. The roster shape the retired web directory
+// RPC re-exported reported whether a character held a live game session, that
+// session's status string, the display label of its most recent location and the
+// epoch timestamp of its last play activity. None of those has a field to occupy
+// here, so their exclusion is a property of the descriptor rather than a
+// discipline a handler has to remember.
+//
+// It carries no visibility hint, mask or withheld-field list either: a character
+// this viewer may not reach is absent from the repeated field, and the client is
+// not told a decision was made.
+message PublicCharacterSummary {
+  // id is the stable characters.id ULID the profile URL is keyed on, and the
+  // key CharacterAccessServer.ListCharacterDirectory sorts the listing by so two
+  // identical calls agree byte for byte.
+  string id = 1;
+  // name is the display name auth.CharacterRepository.ListAll read out of
+  // characters.name, forwarded as the stored bytes with no normalization,
+  // casefolding or re-encoding.
+  string name = 2;
+}
+
+// ListCharacterDirectoryRequest carries the caller's optional session token and
+// nothing else: which characters are listed follows from the rung that token
+// resolves to, so there is no field with which a caller could name a viewer, a
+// page or a filter the facade did not authorize.
+message ListCharacterDirectoryRequest {
+  // player_session_token is the raw session token the gateway lifted from the
+  // X-Session-Token header. It is OPTIONAL exactly as on
+  // GetCharacterProfileRequest: an empty, expired or otherwise unresolvable
+  // value resolves the least-privileged rung rather than an authentication
+  // error, so a logged-out visitor still reaches the public directory.
+  string player_session_token = 1;
+}
+
+// ListCharacterDirectoryResponse carries the reachable subset of the directory.
+message ListCharacterDirectoryResponse {
+  // characters is every character whose profile this viewer can reach, sorted by
+  // id by CharacterAccessServer.ListCharacterDirectory so enumeration order
+  // never varies between two identical calls. An empty directory is an empty
+  // list and a success status, never a not-found.
+  repeated PublicCharacterSummary characters = 1;
 }
 
 // OwnCharacter is the character shape the `owner` audience receives, and it is

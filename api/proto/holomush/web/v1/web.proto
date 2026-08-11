@@ -10,7 +10,6 @@ import "google/protobuf/field_mask.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "holomush/characteraccess/v1/characteraccess.proto";
-import "holomush/core/v1/core.proto";
 import "holomush/scene/v1/scene.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1";
@@ -181,11 +180,6 @@ service WebService {
   // Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
   // CodeUnauthenticated (session expired or invalid).
   rpc WebListCharacters(WebListCharactersRequest) returns (WebListCharactersResponse);
-
-  // WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-  // reads player_session_token from the X-Session-Token cookie; any
-  // authenticated caller (guest included) may list character names.
-  rpc WebListAllCharacters(WebListAllCharactersRequest) returns (WebListAllCharactersResponse);
 
   // WebLogout ends the player session and clears the session cookie. Proxies
   // to CoreService.Logout (best-effort) when a token is present, then always
@@ -381,6 +375,13 @@ service WebService {
   // WebUpdateCharacterDescription proxies
   // CharacterAccessService.UpdateCharacterDescription.
   rpc WebUpdateCharacterDescription(WebUpdateCharacterDescriptionRequest) returns (WebUpdateCharacterDescriptionResponse);
+  // WebListCharacterDirectory proxies
+  // CharacterAccessService.ListCharacterDirectory.
+  // Handler.WebListCharacterDirectory lifts the session token from the
+  // X-Session-Token header and forwards nothing else; a request with no cookie
+  // is the ordinary logged-out case rather than an error. The gateway neither
+  // filters nor re-sorts the listing — reachability and order are the facade's.
+  rpc WebListCharacterDirectory(WebListCharacterDirectoryRequest) returns (WebListCharacterDirectoryResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -690,19 +691,6 @@ message WebListCharactersRequest {}
 message WebListCharactersResponse {
   // characters is the player's full character roster.
   repeated CharacterSummary characters = 1;
-}
-
-// WebListAllCharactersRequest proxies to CoreService.ListAllCharacters; token
-// is injected from the X-Session-Token cookie.
-message WebListAllCharactersRequest {
-  // character_id is the acting alt (forwarded as the ABAC subject). Required.
-  string character_id = 1;
-}
-
-// WebListAllCharactersResponse re-exports the directory page from core.
-message WebListAllCharactersResponse {
-  // characters is the id+name list from CoreService.ListAllCharacters.
-  repeated holomush.core.v1.CharacterDirectoryEntry characters = 1;
 }
 
 // WebLogoutRequest is the empty request to end the current session; the session
@@ -1611,4 +1599,19 @@ message WebUpdateCharacterDescriptionRequest {
 message WebUpdateCharacterDescriptionResponse {
   // character is the character as it stands after the rewrite.
   holomush.characteraccess.v1.OwnCharacter character = 1;
+}
+
+// WebListCharacterDirectoryRequest carries NO fields at all, and the emptiness
+// is the point: the viewer rung follows entirely from the header token
+// Handler.WebListCharacterDirectory reads, so a client cannot name an acting
+// character, a page or a filter the facade did not authorize. The retired RPC
+// this one replaces took a character id in the body; this surface is
+// viewer-scoped and needs none.
+message WebListCharacterDirectoryRequest {}
+
+// WebListCharacterDirectoryResponse re-exports the facade's listing verbatim.
+message WebListCharacterDirectoryResponse {
+  // characters is the reachable identity rows the facade projected, in the order
+  // it produced them; the gateway forwards them unmodified.
+  repeated holomush.characteraccess.v1.PublicCharacterSummary characters = 1;
 }

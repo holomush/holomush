@@ -63,9 +63,6 @@ const (
 	// WebServiceWebListCharactersProcedure is the fully-qualified name of the WebService's
 	// WebListCharacters RPC.
 	WebServiceWebListCharactersProcedure = "/holomush.web.v1.WebService/WebListCharacters"
-	// WebServiceWebListAllCharactersProcedure is the fully-qualified name of the WebService's
-	// WebListAllCharacters RPC.
-	WebServiceWebListAllCharactersProcedure = "/holomush.web.v1.WebService/WebListAllCharacters"
 	// WebServiceWebLogoutProcedure is the fully-qualified name of the WebService's WebLogout RPC.
 	WebServiceWebLogoutProcedure = "/holomush.web.v1.WebService/WebLogout"
 	// WebServiceWebRequestPasswordResetProcedure is the fully-qualified name of the WebService's
@@ -188,6 +185,9 @@ const (
 	// WebServiceWebUpdateCharacterDescriptionProcedure is the fully-qualified name of the WebService's
 	// WebUpdateCharacterDescription RPC.
 	WebServiceWebUpdateCharacterDescriptionProcedure = "/holomush.web.v1.WebService/WebUpdateCharacterDescription"
+	// WebServiceWebListCharacterDirectoryProcedure is the fully-qualified name of the WebService's
+	// WebListCharacterDirectory RPC.
+	WebServiceWebListCharacterDirectoryProcedure = "/holomush.web.v1.WebService/WebListCharacterDirectory"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -241,10 +241,6 @@ type WebServiceClient interface {
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
-	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-	// reads player_session_token from the X-Session-Token cookie; any
-	// authenticated caller (guest included) may list character names.
-	WebListAllCharacters(context.Context, *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -407,6 +403,13 @@ type WebServiceClient interface {
 	// WebUpdateCharacterDescription proxies
 	// CharacterAccessService.UpdateCharacterDescription.
 	WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error)
+	// WebListCharacterDirectory proxies
+	// CharacterAccessService.ListCharacterDirectory.
+	// Handler.WebListCharacterDirectory lifts the session token from the
+	// X-Session-Token header and forwards nothing else; a request with no cookie
+	// is the ordinary logged-out case rather than an error. The gateway neither
+	// filters nor re-sorts the listing — reachability and order are the facade's.
+	WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -478,12 +481,6 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+WebServiceWebListCharactersProcedure,
 			connect.WithSchema(webServiceMethods.ByName("WebListCharacters")),
-			connect.WithClientOptions(opts...),
-		),
-		webListAllCharacters: connect.NewClient[v1.WebListAllCharactersRequest, v1.WebListAllCharactersResponse](
-			httpClient,
-			baseURL+WebServiceWebListAllCharactersProcedure,
-			connect.WithSchema(webServiceMethods.ByName("WebListAllCharacters")),
 			connect.WithClientOptions(opts...),
 		),
 		webLogout: connect.NewClient[v1.WebLogoutRequest, v1.WebLogoutResponse](
@@ -738,6 +735,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterDescription")),
 			connect.WithClientOptions(opts...),
 		),
+		webListCharacterDirectory: connect.NewClient[v1.WebListCharacterDirectoryRequest, v1.WebListCharacterDirectoryResponse](
+			httpClient,
+			baseURL+WebServiceWebListCharacterDirectoryProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListCharacterDirectory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -753,7 +756,6 @@ type webServiceClient struct {
 	webCreateGuest                *connect.Client[v1.WebCreateGuestRequest, v1.WebCreateGuestResponse]
 	webCreateCharacter            *connect.Client[v1.WebCreateCharacterRequest, v1.WebCreateCharacterResponse]
 	webListCharacters             *connect.Client[v1.WebListCharactersRequest, v1.WebListCharactersResponse]
-	webListAllCharacters          *connect.Client[v1.WebListAllCharactersRequest, v1.WebListAllCharactersResponse]
 	webLogout                     *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
 	webRequestPasswordReset       *connect.Client[v1.WebRequestPasswordResetRequest, v1.WebRequestPasswordResetResponse]
 	webConfirmPasswordReset       *connect.Client[v1.WebConfirmPasswordResetRequest, v1.WebConfirmPasswordResetResponse]
@@ -796,6 +798,7 @@ type webServiceClient struct {
 	webGetMyCharacter             *connect.Client[v1.WebGetMyCharacterRequest, v1.WebGetMyCharacterResponse]
 	webUpdateCharacterProfile     *connect.Client[v1.WebUpdateCharacterProfileRequest, v1.WebUpdateCharacterProfileResponse]
 	webUpdateCharacterDescription *connect.Client[v1.WebUpdateCharacterDescriptionRequest, v1.WebUpdateCharacterDescriptionResponse]
+	webListCharacterDirectory     *connect.Client[v1.WebListCharacterDirectoryRequest, v1.WebListCharacterDirectoryResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -846,11 +849,6 @@ func (c *webServiceClient) WebCreateCharacter(ctx context.Context, req *connect.
 // WebListCharacters calls holomush.web.v1.WebService.WebListCharacters.
 func (c *webServiceClient) WebListCharacters(ctx context.Context, req *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error) {
 	return c.webListCharacters.CallUnary(ctx, req)
-}
-
-// WebListAllCharacters calls holomush.web.v1.WebService.WebListAllCharacters.
-func (c *webServiceClient) WebListAllCharacters(ctx context.Context, req *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error) {
-	return c.webListAllCharacters.CallUnary(ctx, req)
 }
 
 // WebLogout calls holomush.web.v1.WebService.WebLogout.
@@ -1063,6 +1061,11 @@ func (c *webServiceClient) WebUpdateCharacterDescription(ctx context.Context, re
 	return c.webUpdateCharacterDescription.CallUnary(ctx, req)
 }
 
+// WebListCharacterDirectory calls holomush.web.v1.WebService.WebListCharacterDirectory.
+func (c *webServiceClient) WebListCharacterDirectory(ctx context.Context, req *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error) {
+	return c.webListCharacterDirectory.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -1114,10 +1117,6 @@ type WebServiceHandler interface {
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
-	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-	// reads player_session_token from the X-Session-Token cookie; any
-	// authenticated caller (guest included) may list character names.
-	WebListAllCharacters(context.Context, *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -1280,6 +1279,13 @@ type WebServiceHandler interface {
 	// WebUpdateCharacterDescription proxies
 	// CharacterAccessService.UpdateCharacterDescription.
 	WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error)
+	// WebListCharacterDirectory proxies
+	// CharacterAccessService.ListCharacterDirectory.
+	// Handler.WebListCharacterDirectory lifts the session token from the
+	// X-Session-Token header and forwards nothing else; a request with no cookie
+	// is the ordinary logged-out case rather than an error. The gateway neither
+	// filters nor re-sorts the listing — reachability and order are the facade's.
+	WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1347,12 +1353,6 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		WebServiceWebListCharactersProcedure,
 		svc.WebListCharacters,
 		connect.WithSchema(webServiceMethods.ByName("WebListCharacters")),
-		connect.WithHandlerOptions(opts...),
-	)
-	webServiceWebListAllCharactersHandler := connect.NewUnaryHandler(
-		WebServiceWebListAllCharactersProcedure,
-		svc.WebListAllCharacters,
-		connect.WithSchema(webServiceMethods.ByName("WebListAllCharacters")),
 		connect.WithHandlerOptions(opts...),
 	)
 	webServiceWebLogoutHandler := connect.NewUnaryHandler(
@@ -1607,6 +1607,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterDescription")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebListCharacterDirectoryHandler := connect.NewUnaryHandler(
+		WebServiceWebListCharacterDirectoryProcedure,
+		svc.WebListCharacterDirectory,
+		connect.WithSchema(webServiceMethods.ByName("WebListCharacterDirectory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -1629,8 +1635,6 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebCreateCharacterHandler.ServeHTTP(w, r)
 		case WebServiceWebListCharactersProcedure:
 			webServiceWebListCharactersHandler.ServeHTTP(w, r)
-		case WebServiceWebListAllCharactersProcedure:
-			webServiceWebListAllCharactersHandler.ServeHTTP(w, r)
 		case WebServiceWebLogoutProcedure:
 			webServiceWebLogoutHandler.ServeHTTP(w, r)
 		case WebServiceWebRequestPasswordResetProcedure:
@@ -1715,6 +1719,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebUpdateCharacterProfileHandler.ServeHTTP(w, r)
 		case WebServiceWebUpdateCharacterDescriptionProcedure:
 			webServiceWebUpdateCharacterDescriptionHandler.ServeHTTP(w, r)
+		case WebServiceWebListCharacterDirectoryProcedure:
+			webServiceWebListCharacterDirectoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1762,10 +1768,6 @@ func (UnimplementedWebServiceHandler) WebCreateCharacter(context.Context, *conne
 
 func (UnimplementedWebServiceHandler) WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListCharacters is not implemented"))
-}
-
-func (UnimplementedWebServiceHandler) WebListAllCharacters(context.Context, *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListAllCharacters is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error) {
@@ -1934,4 +1936,8 @@ func (UnimplementedWebServiceHandler) WebUpdateCharacterProfile(context.Context,
 
 func (UnimplementedWebServiceHandler) WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebUpdateCharacterDescription is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListCharacterDirectory is not implemented"))
 }

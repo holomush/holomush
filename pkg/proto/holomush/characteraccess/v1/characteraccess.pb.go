@@ -314,6 +314,183 @@ func (x *GetCharacterProfileResponse) GetCharacter() *PublicCharacter {
 	return nil
 }
 
+// PublicCharacterSummary is the list row projectPublicSummary
+// (internal/grpc/characteraccess_projection.go) builds: PublicCharacter cut
+// down to what a directory row needs. It is produced by the `public` projection
+// family because a list is not a fourth audience — it publishes strictly less
+// than the detail view of the same character, never something the detail view
+// withholds.
+//
+// IT CARRIES NO PRESENCE TELEMETRY. The roster shape the retired web directory
+// RPC re-exported reported whether a character held a live game session, that
+// session's status string, the display label of its most recent location and the
+// epoch timestamp of its last play activity. None of those has a field to occupy
+// here, so their exclusion is a property of the descriptor rather than a
+// discipline a handler has to remember.
+//
+// It carries no visibility hint, mask or withheld-field list either: a character
+// this viewer may not reach is absent from the repeated field, and the client is
+// not told a decision was made.
+type PublicCharacterSummary struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the stable characters.id ULID the profile URL is keyed on, and the
+	// key CharacterAccessServer.ListCharacterDirectory sorts the listing by so two
+	// identical calls agree byte for byte.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// name is the display name auth.CharacterRepository.ListAll read out of
+	// characters.name, forwarded as the stored bytes with no normalization,
+	// casefolding or re-encoding.
+	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublicCharacterSummary) Reset() {
+	*x = PublicCharacterSummary{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublicCharacterSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublicCharacterSummary) ProtoMessage() {}
+
+func (x *PublicCharacterSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublicCharacterSummary.ProtoReflect.Descriptor instead.
+func (*PublicCharacterSummary) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PublicCharacterSummary) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PublicCharacterSummary) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+// ListCharacterDirectoryRequest carries the caller's optional session token and
+// nothing else: which characters are listed follows from the rung that token
+// resolves to, so there is no field with which a caller could name a viewer, a
+// page or a filter the facade did not authorize.
+type ListCharacterDirectoryRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// player_session_token is the raw session token the gateway lifted from the
+	// X-Session-Token header. It is OPTIONAL exactly as on
+	// GetCharacterProfileRequest: an empty, expired or otherwise unresolvable
+	// value resolves the least-privileged rung rather than an authentication
+	// error, so a logged-out visitor still reaches the public directory.
+	PlayerSessionToken string `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ListCharacterDirectoryRequest) Reset() {
+	*x = ListCharacterDirectoryRequest{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCharacterDirectoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCharacterDirectoryRequest) ProtoMessage() {}
+
+func (x *ListCharacterDirectoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCharacterDirectoryRequest.ProtoReflect.Descriptor instead.
+func (*ListCharacterDirectoryRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListCharacterDirectoryRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+// ListCharacterDirectoryResponse carries the reachable subset of the directory.
+type ListCharacterDirectoryResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// characters is every character whose profile this viewer can reach, sorted by
+	// id by CharacterAccessServer.ListCharacterDirectory so enumeration order
+	// never varies between two identical calls. An empty directory is an empty
+	// list and a success status, never a not-found.
+	Characters    []*PublicCharacterSummary `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCharacterDirectoryResponse) Reset() {
+	*x = ListCharacterDirectoryResponse{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCharacterDirectoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCharacterDirectoryResponse) ProtoMessage() {}
+
+func (x *ListCharacterDirectoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCharacterDirectoryResponse.ProtoReflect.Descriptor instead.
+func (*ListCharacterDirectoryResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListCharacterDirectoryResponse) GetCharacters() []*PublicCharacterSummary {
+	if x != nil {
+		return x.Characters
+	}
+	return nil
+}
+
 // OwnCharacter is the character shape the `owner` audience receives, and it is
 // a DISTINCT MESSAGE rather than PublicCharacter plus extra fields (01-SPEC
 // §2.2). The two are never interchanged: reusing one for the other audience
@@ -363,7 +540,7 @@ type OwnCharacter struct {
 
 func (x *OwnCharacter) Reset() {
 	*x = OwnCharacter{}
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[4]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -375,7 +552,7 @@ func (x *OwnCharacter) String() string {
 func (*OwnCharacter) ProtoMessage() {}
 
 func (x *OwnCharacter) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[4]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -388,7 +565,7 @@ func (x *OwnCharacter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OwnCharacter.ProtoReflect.Descriptor instead.
 func (*OwnCharacter) Descriptor() ([]byte, []int) {
-	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{4}
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *OwnCharacter) GetId() string {
@@ -461,7 +638,7 @@ type ListMyCharactersRequest struct {
 
 func (x *ListMyCharactersRequest) Reset() {
 	*x = ListMyCharactersRequest{}
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[5]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -473,7 +650,7 @@ func (x *ListMyCharactersRequest) String() string {
 func (*ListMyCharactersRequest) ProtoMessage() {}
 
 func (x *ListMyCharactersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[5]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -486,7 +663,7 @@ func (x *ListMyCharactersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyCharactersRequest.ProtoReflect.Descriptor instead.
 func (*ListMyCharactersRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{5}
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListMyCharactersRequest) GetPlayerSessionToken() string {
@@ -509,7 +686,7 @@ type ListMyCharactersResponse struct {
 
 func (x *ListMyCharactersResponse) Reset() {
 	*x = ListMyCharactersResponse{}
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[6]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -521,7 +698,7 @@ func (x *ListMyCharactersResponse) String() string {
 func (*ListMyCharactersResponse) ProtoMessage() {}
 
 func (x *ListMyCharactersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[6]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -534,7 +711,7 @@ func (x *ListMyCharactersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyCharactersResponse.ProtoReflect.Descriptor instead.
 func (*ListMyCharactersResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{6}
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListMyCharactersResponse) GetCharacters() []*OwnCharacter {
@@ -559,7 +736,7 @@ type GetMyCharacterRequest struct {
 
 func (x *GetMyCharacterRequest) Reset() {
 	*x = GetMyCharacterRequest{}
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[7]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -571,7 +748,7 @@ func (x *GetMyCharacterRequest) String() string {
 func (*GetMyCharacterRequest) ProtoMessage() {}
 
 func (x *GetMyCharacterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[7]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -584,7 +761,7 @@ func (x *GetMyCharacterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMyCharacterRequest.ProtoReflect.Descriptor instead.
 func (*GetMyCharacterRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{7}
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetMyCharacterRequest) GetCharacterId() string {
@@ -612,7 +789,7 @@ type GetMyCharacterResponse struct {
 
 func (x *GetMyCharacterResponse) Reset() {
 	*x = GetMyCharacterResponse{}
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[8]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -624,7 +801,7 @@ func (x *GetMyCharacterResponse) String() string {
 func (*GetMyCharacterResponse) ProtoMessage() {}
 
 func (x *GetMyCharacterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[8]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -637,7 +814,7 @@ func (x *GetMyCharacterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMyCharacterResponse.ProtoReflect.Descriptor instead.
 func (*GetMyCharacterResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{8}
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetMyCharacterResponse) GetCharacter() *OwnCharacter {
@@ -718,7 +895,7 @@ type UpdateCharacterProfileRequest struct {
 
 func (x *UpdateCharacterProfileRequest) Reset() {
 	*x = UpdateCharacterProfileRequest{}
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[9]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -730,7 +907,7 @@ func (x *UpdateCharacterProfileRequest) String() string {
 func (*UpdateCharacterProfileRequest) ProtoMessage() {}
 
 func (x *UpdateCharacterProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[9]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -743,7 +920,7 @@ func (x *UpdateCharacterProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCharacterProfileRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCharacterProfileRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{9}
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *UpdateCharacterProfileRequest) GetCharacterId() string {
@@ -870,7 +1047,7 @@ type UpdateCharacterProfileResponse struct {
 
 func (x *UpdateCharacterProfileResponse) Reset() {
 	*x = UpdateCharacterProfileResponse{}
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[10]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -882,7 +1059,7 @@ func (x *UpdateCharacterProfileResponse) String() string {
 func (*UpdateCharacterProfileResponse) ProtoMessage() {}
 
 func (x *UpdateCharacterProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[10]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -895,7 +1072,7 @@ func (x *UpdateCharacterProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCharacterProfileResponse.ProtoReflect.Descriptor instead.
 func (*UpdateCharacterProfileResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{10}
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *UpdateCharacterProfileResponse) GetCharacter() *OwnCharacter {
@@ -931,7 +1108,7 @@ type UpdateCharacterDescriptionRequest struct {
 
 func (x *UpdateCharacterDescriptionRequest) Reset() {
 	*x = UpdateCharacterDescriptionRequest{}
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[11]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -943,7 +1120,7 @@ func (x *UpdateCharacterDescriptionRequest) String() string {
 func (*UpdateCharacterDescriptionRequest) ProtoMessage() {}
 
 func (x *UpdateCharacterDescriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[11]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -956,7 +1133,7 @@ func (x *UpdateCharacterDescriptionRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use UpdateCharacterDescriptionRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCharacterDescriptionRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{11}
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *UpdateCharacterDescriptionRequest) GetCharacterId() string {
@@ -998,7 +1175,7 @@ type UpdateCharacterDescriptionResponse struct {
 
 func (x *UpdateCharacterDescriptionResponse) Reset() {
 	*x = UpdateCharacterDescriptionResponse{}
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[12]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1010,7 +1187,7 @@ func (x *UpdateCharacterDescriptionResponse) String() string {
 func (*UpdateCharacterDescriptionResponse) ProtoMessage() {}
 
 func (x *UpdateCharacterDescriptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[12]
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1023,7 +1200,7 @@ func (x *UpdateCharacterDescriptionResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use UpdateCharacterDescriptionResponse.ProtoReflect.Descriptor instead.
 func (*UpdateCharacterDescriptionResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{12}
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *UpdateCharacterDescriptionResponse) GetCharacter() *OwnCharacter {
@@ -1057,7 +1234,16 @@ const file_holomush_characteraccess_v1_characteraccess_proto_rawDesc = "" +
 	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x120\n" +
 	"\x14player_session_token\x18\x02 \x01(\tR\x12playerSessionToken\"i\n" +
 	"\x1bGetCharacterProfileResponse\x12J\n" +
-	"\tcharacter\x18\x01 \x01(\v2,.holomush.characteraccess.v1.PublicCharacterR\tcharacter\"\xb3\x03\n" +
+	"\tcharacter\x18\x01 \x01(\v2,.holomush.characteraccess.v1.PublicCharacterR\tcharacter\"<\n" +
+	"\x16PublicCharacterSummary\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"Q\n" +
+	"\x1dListCharacterDirectoryRequest\x120\n" +
+	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"u\n" +
+	"\x1eListCharacterDirectoryResponse\x12S\n" +
+	"\n" +
+	"characters\x18\x01 \x03(\v23.holomush.characteraccess.v1.PublicCharacterSummaryR\n" +
+	"characters\"\xb3\x03\n" +
 	"\fOwnCharacter\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1111,13 +1297,14 @@ const file_holomush_characteraccess_v1_characteraccess_proto_rawDesc = "" +
 	"\x10expected_version\x18\x03 \x01(\x05R\x0fexpectedVersion\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\"m\n" +
 	"\"UpdateCharacterDescriptionResponse\x12G\n" +
-	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacter2\xd3\x05\n" +
+	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacter2\xe7\x06\n" +
 	"\x16CharacterAccessService\x12\x88\x01\n" +
 	"\x13GetCharacterProfile\x127.holomush.characteraccess.v1.GetCharacterProfileRequest\x1a8.holomush.characteraccess.v1.GetCharacterProfileResponse\x12\x7f\n" +
 	"\x10ListMyCharacters\x124.holomush.characteraccess.v1.ListMyCharactersRequest\x1a5.holomush.characteraccess.v1.ListMyCharactersResponse\x12y\n" +
 	"\x0eGetMyCharacter\x122.holomush.characteraccess.v1.GetMyCharacterRequest\x1a3.holomush.characteraccess.v1.GetMyCharacterResponse\x12\x91\x01\n" +
 	"\x16UpdateCharacterProfile\x12:.holomush.characteraccess.v1.UpdateCharacterProfileRequest\x1a;.holomush.characteraccess.v1.UpdateCharacterProfileResponse\x12\x9d\x01\n" +
-	"\x1aUpdateCharacterDescription\x12>.holomush.characteraccess.v1.UpdateCharacterDescriptionRequest\x1a?.holomush.characteraccess.v1.UpdateCharacterDescriptionResponseB\x9b\x02\n" +
+	"\x1aUpdateCharacterDescription\x12>.holomush.characteraccess.v1.UpdateCharacterDescriptionRequest\x1a?.holomush.characteraccess.v1.UpdateCharacterDescriptionResponse\x12\x91\x01\n" +
+	"\x16ListCharacterDirectory\x12:.holomush.characteraccess.v1.ListCharacterDirectoryRequest\x1a;.holomush.characteraccess.v1.ListCharacterDirectoryResponseB\x9b\x02\n" +
 	"\x1fcom.holomush.characteraccess.v1B\x14CharacteraccessProtoP\x01ZTgithub.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1;characteraccessv1\xa2\x02\x03HCX\xaa\x02\x1bHolomush.Characteraccess.V1\xca\x02\x1bHolomush\\Characteraccess\\V1\xe2\x02'Holomush\\Characteraccess\\V1\\GPBMetadata\xea\x02\x1dHolomush::Characteraccess::V1b\x06proto3"
 
 var (
@@ -1132,53 +1319,59 @@ func file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP() []byte
 	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescData
 }
 
-var file_holomush_characteraccess_v1_characteraccess_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_holomush_characteraccess_v1_characteraccess_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_holomush_characteraccess_v1_characteraccess_proto_goTypes = []any{
 	(*ProfileImage)(nil),                       // 0: holomush.characteraccess.v1.ProfileImage
 	(*PublicCharacter)(nil),                    // 1: holomush.characteraccess.v1.PublicCharacter
 	(*GetCharacterProfileRequest)(nil),         // 2: holomush.characteraccess.v1.GetCharacterProfileRequest
 	(*GetCharacterProfileResponse)(nil),        // 3: holomush.characteraccess.v1.GetCharacterProfileResponse
-	(*OwnCharacter)(nil),                       // 4: holomush.characteraccess.v1.OwnCharacter
-	(*ListMyCharactersRequest)(nil),            // 5: holomush.characteraccess.v1.ListMyCharactersRequest
-	(*ListMyCharactersResponse)(nil),           // 6: holomush.characteraccess.v1.ListMyCharactersResponse
-	(*GetMyCharacterRequest)(nil),              // 7: holomush.characteraccess.v1.GetMyCharacterRequest
-	(*GetMyCharacterResponse)(nil),             // 8: holomush.characteraccess.v1.GetMyCharacterResponse
-	(*UpdateCharacterProfileRequest)(nil),      // 9: holomush.characteraccess.v1.UpdateCharacterProfileRequest
-	(*UpdateCharacterProfileResponse)(nil),     // 10: holomush.characteraccess.v1.UpdateCharacterProfileResponse
-	(*UpdateCharacterDescriptionRequest)(nil),  // 11: holomush.characteraccess.v1.UpdateCharacterDescriptionRequest
-	(*UpdateCharacterDescriptionResponse)(nil), // 12: holomush.characteraccess.v1.UpdateCharacterDescriptionResponse
-	nil,                           // 13: holomush.characteraccess.v1.PublicCharacter.ProfileEntry
-	nil,                           // 14: holomush.characteraccess.v1.OwnCharacter.ProfileEntry
-	(*fieldmaskpb.FieldMask)(nil), // 15: google.protobuf.FieldMask
+	(*PublicCharacterSummary)(nil),             // 4: holomush.characteraccess.v1.PublicCharacterSummary
+	(*ListCharacterDirectoryRequest)(nil),      // 5: holomush.characteraccess.v1.ListCharacterDirectoryRequest
+	(*ListCharacterDirectoryResponse)(nil),     // 6: holomush.characteraccess.v1.ListCharacterDirectoryResponse
+	(*OwnCharacter)(nil),                       // 7: holomush.characteraccess.v1.OwnCharacter
+	(*ListMyCharactersRequest)(nil),            // 8: holomush.characteraccess.v1.ListMyCharactersRequest
+	(*ListMyCharactersResponse)(nil),           // 9: holomush.characteraccess.v1.ListMyCharactersResponse
+	(*GetMyCharacterRequest)(nil),              // 10: holomush.characteraccess.v1.GetMyCharacterRequest
+	(*GetMyCharacterResponse)(nil),             // 11: holomush.characteraccess.v1.GetMyCharacterResponse
+	(*UpdateCharacterProfileRequest)(nil),      // 12: holomush.characteraccess.v1.UpdateCharacterProfileRequest
+	(*UpdateCharacterProfileResponse)(nil),     // 13: holomush.characteraccess.v1.UpdateCharacterProfileResponse
+	(*UpdateCharacterDescriptionRequest)(nil),  // 14: holomush.characteraccess.v1.UpdateCharacterDescriptionRequest
+	(*UpdateCharacterDescriptionResponse)(nil), // 15: holomush.characteraccess.v1.UpdateCharacterDescriptionResponse
+	nil,                           // 16: holomush.characteraccess.v1.PublicCharacter.ProfileEntry
+	nil,                           // 17: holomush.characteraccess.v1.OwnCharacter.ProfileEntry
+	(*fieldmaskpb.FieldMask)(nil), // 18: google.protobuf.FieldMask
 }
 var file_holomush_characteraccess_v1_characteraccess_proto_depIdxs = []int32{
-	13, // 0: holomush.characteraccess.v1.PublicCharacter.profile:type_name -> holomush.characteraccess.v1.PublicCharacter.ProfileEntry
+	16, // 0: holomush.characteraccess.v1.PublicCharacter.profile:type_name -> holomush.characteraccess.v1.PublicCharacter.ProfileEntry
 	0,  // 1: holomush.characteraccess.v1.PublicCharacter.primary_image:type_name -> holomush.characteraccess.v1.ProfileImage
 	0,  // 2: holomush.characteraccess.v1.PublicCharacter.gallery:type_name -> holomush.characteraccess.v1.ProfileImage
 	1,  // 3: holomush.characteraccess.v1.GetCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.PublicCharacter
-	14, // 4: holomush.characteraccess.v1.OwnCharacter.profile:type_name -> holomush.characteraccess.v1.OwnCharacter.ProfileEntry
-	0,  // 5: holomush.characteraccess.v1.OwnCharacter.primary_image:type_name -> holomush.characteraccess.v1.ProfileImage
-	0,  // 6: holomush.characteraccess.v1.OwnCharacter.gallery:type_name -> holomush.characteraccess.v1.ProfileImage
-	4,  // 7: holomush.characteraccess.v1.ListMyCharactersResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
-	4,  // 8: holomush.characteraccess.v1.GetMyCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	15, // 9: holomush.characteraccess.v1.UpdateCharacterProfileRequest.update_mask:type_name -> google.protobuf.FieldMask
-	4,  // 10: holomush.characteraccess.v1.UpdateCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	4,  // 11: holomush.characteraccess.v1.UpdateCharacterDescriptionResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	2,  // 12: holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile:input_type -> holomush.characteraccess.v1.GetCharacterProfileRequest
-	5,  // 13: holomush.characteraccess.v1.CharacterAccessService.ListMyCharacters:input_type -> holomush.characteraccess.v1.ListMyCharactersRequest
-	7,  // 14: holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter:input_type -> holomush.characteraccess.v1.GetMyCharacterRequest
-	9,  // 15: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile:input_type -> holomush.characteraccess.v1.UpdateCharacterProfileRequest
-	11, // 16: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription:input_type -> holomush.characteraccess.v1.UpdateCharacterDescriptionRequest
-	3,  // 17: holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile:output_type -> holomush.characteraccess.v1.GetCharacterProfileResponse
-	6,  // 18: holomush.characteraccess.v1.CharacterAccessService.ListMyCharacters:output_type -> holomush.characteraccess.v1.ListMyCharactersResponse
-	8,  // 19: holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter:output_type -> holomush.characteraccess.v1.GetMyCharacterResponse
-	10, // 20: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile:output_type -> holomush.characteraccess.v1.UpdateCharacterProfileResponse
-	12, // 21: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription:output_type -> holomush.characteraccess.v1.UpdateCharacterDescriptionResponse
-	17, // [17:22] is the sub-list for method output_type
-	12, // [12:17] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	4,  // 4: holomush.characteraccess.v1.ListCharacterDirectoryResponse.characters:type_name -> holomush.characteraccess.v1.PublicCharacterSummary
+	17, // 5: holomush.characteraccess.v1.OwnCharacter.profile:type_name -> holomush.characteraccess.v1.OwnCharacter.ProfileEntry
+	0,  // 6: holomush.characteraccess.v1.OwnCharacter.primary_image:type_name -> holomush.characteraccess.v1.ProfileImage
+	0,  // 7: holomush.characteraccess.v1.OwnCharacter.gallery:type_name -> holomush.characteraccess.v1.ProfileImage
+	7,  // 8: holomush.characteraccess.v1.ListMyCharactersResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
+	7,  // 9: holomush.characteraccess.v1.GetMyCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	18, // 10: holomush.characteraccess.v1.UpdateCharacterProfileRequest.update_mask:type_name -> google.protobuf.FieldMask
+	7,  // 11: holomush.characteraccess.v1.UpdateCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	7,  // 12: holomush.characteraccess.v1.UpdateCharacterDescriptionResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	2,  // 13: holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile:input_type -> holomush.characteraccess.v1.GetCharacterProfileRequest
+	8,  // 14: holomush.characteraccess.v1.CharacterAccessService.ListMyCharacters:input_type -> holomush.characteraccess.v1.ListMyCharactersRequest
+	10, // 15: holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter:input_type -> holomush.characteraccess.v1.GetMyCharacterRequest
+	12, // 16: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile:input_type -> holomush.characteraccess.v1.UpdateCharacterProfileRequest
+	14, // 17: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription:input_type -> holomush.characteraccess.v1.UpdateCharacterDescriptionRequest
+	5,  // 18: holomush.characteraccess.v1.CharacterAccessService.ListCharacterDirectory:input_type -> holomush.characteraccess.v1.ListCharacterDirectoryRequest
+	3,  // 19: holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile:output_type -> holomush.characteraccess.v1.GetCharacterProfileResponse
+	9,  // 20: holomush.characteraccess.v1.CharacterAccessService.ListMyCharacters:output_type -> holomush.characteraccess.v1.ListMyCharactersResponse
+	11, // 21: holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter:output_type -> holomush.characteraccess.v1.GetMyCharacterResponse
+	13, // 22: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile:output_type -> holomush.characteraccess.v1.UpdateCharacterProfileResponse
+	15, // 23: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription:output_type -> holomush.characteraccess.v1.UpdateCharacterDescriptionResponse
+	6,  // 24: holomush.characteraccess.v1.CharacterAccessService.ListCharacterDirectory:output_type -> holomush.characteraccess.v1.ListCharacterDirectoryResponse
+	19, // [19:25] is the sub-list for method output_type
+	13, // [13:19] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_holomush_characteraccess_v1_characteraccess_proto_init() }
@@ -1192,7 +1385,7 @@ func file_holomush_characteraccess_v1_characteraccess_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_characteraccess_v1_characteraccess_proto_rawDesc), len(file_holomush_characteraccess_v1_characteraccess_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

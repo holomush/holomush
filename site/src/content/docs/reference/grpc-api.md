@@ -147,6 +147,8 @@ title: "gRPC API Reference"
     - [GetCharacterProfileResponse](#holomush-characteraccess-v1-GetCharacterProfileResponse)
     - [GetMyCharacterRequest](#holomush-characteraccess-v1-GetMyCharacterRequest)
     - [GetMyCharacterResponse](#holomush-characteraccess-v1-GetMyCharacterResponse)
+    - [ListCharacterDirectoryRequest](#holomush-characteraccess-v1-ListCharacterDirectoryRequest)
+    - [ListCharacterDirectoryResponse](#holomush-characteraccess-v1-ListCharacterDirectoryResponse)
     - [ListMyCharactersRequest](#holomush-characteraccess-v1-ListMyCharactersRequest)
     - [ListMyCharactersResponse](#holomush-characteraccess-v1-ListMyCharactersResponse)
     - [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter)
@@ -154,6 +156,7 @@ title: "gRPC API Reference"
     - [ProfileImage](#holomush-characteraccess-v1-ProfileImage)
     - [PublicCharacter](#holomush-characteraccess-v1-PublicCharacter)
     - [PublicCharacter.ProfileEntry](#holomush-characteraccess-v1-PublicCharacter-ProfileEntry)
+    - [PublicCharacterSummary](#holomush-characteraccess-v1-PublicCharacterSummary)
     - [UpdateCharacterDescriptionRequest](#holomush-characteraccess-v1-UpdateCharacterDescriptionRequest)
     - [UpdateCharacterDescriptionResponse](#holomush-characteraccess-v1-UpdateCharacterDescriptionResponse)
     - [UpdateCharacterProfileRequest](#holomush-characteraccess-v1-UpdateCharacterProfileRequest)
@@ -564,8 +567,8 @@ title: "gRPC API Reference"
     - [WebKickFromSceneResponse](#holomush-web-v1-WebKickFromSceneResponse)
     - [WebLeaveSceneRequest](#holomush-web-v1-WebLeaveSceneRequest)
     - [WebLeaveSceneResponse](#holomush-web-v1-WebLeaveSceneResponse)
-    - [WebListAllCharactersRequest](#holomush-web-v1-WebListAllCharactersRequest)
-    - [WebListAllCharactersResponse](#holomush-web-v1-WebListAllCharactersResponse)
+    - [WebListCharacterDirectoryRequest](#holomush-web-v1-WebListCharacterDirectoryRequest)
+    - [WebListCharacterDirectoryResponse](#holomush-web-v1-WebListCharacterDirectoryResponse)
     - [WebListCharactersRequest](#holomush-web-v1-WebListCharactersRequest)
     - [WebListCharactersResponse](#holomush-web-v1-WebListCharactersResponse)
     - [WebListCommandsRequest](#holomush-web-v1-WebListCommandsRequest)
@@ -3026,6 +3029,39 @@ GetMyCharacterResponse carries one character in the owner audience&#39;s shape.
 
 
 
+<a name="holomush-characteraccess-v1-ListCharacterDirectoryRequest"></a>
+
+### ListCharacterDirectoryRequest
+ListCharacterDirectoryRequest carries the caller&#39;s optional session token and
+nothing else: which characters are listed follows from the rung that token
+resolves to, so there is no field with which a caller could name a viewer, a
+page or a filter the facade did not authorize.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw session token the gateway lifted from the X-Session-Token header. It is OPTIONAL exactly as on GetCharacterProfileRequest: an empty, expired or otherwise unresolvable value resolves the least-privileged rung rather than an authentication error, so a logged-out visitor still reaches the public directory. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-ListCharacterDirectoryResponse"></a>
+
+### ListCharacterDirectoryResponse
+ListCharacterDirectoryResponse carries the reachable subset of the directory.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [PublicCharacterSummary](#holomush-characteraccess-v1-PublicCharacterSummary) | repeated | characters is every character whose profile this viewer can reach, sorted by id by CharacterAccessServer.ListCharacterDirectory so enumeration order never varies between two identical calls. An empty directory is an empty list and a success status, never a not-found. |
+
+
+
+
+
+
 <a name="holomush-characteraccess-v1-ListMyCharactersRequest"></a>
 
 ### ListMyCharactersRequest
@@ -3174,6 +3210,38 @@ client is not told a decision was made.
 
 
 
+<a name="holomush-characteraccess-v1-PublicCharacterSummary"></a>
+
+### PublicCharacterSummary
+PublicCharacterSummary is the list row projectPublicSummary
+(internal/grpc/characteraccess_projection.go) builds: PublicCharacter cut
+down to what a directory row needs. It is produced by the `public` projection
+family because a list is not a fourth audience — it publishes strictly less
+than the detail view of the same character, never something the detail view
+withholds.
+
+IT CARRIES NO PRESENCE TELEMETRY. The roster shape the retired web directory
+RPC re-exported reported whether a character held a live game session, that
+session&#39;s status string, the display label of its most recent location and the
+epoch timestamp of its last play activity. None of those has a field to occupy
+here, so their exclusion is a property of the descriptor rather than a
+discipline a handler has to remember.
+
+It carries no visibility hint, mask or withheld-field list either: a character
+this viewer may not reach is absent from the repeated field, and the client is
+not told a decision was made.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the stable characters.id ULID the profile URL is keyed on, and the key CharacterAccessServer.ListCharacterDirectory sorts the listing by so two identical calls agree byte for byte. |
+| name | [string](#string) |  | name is the display name auth.CharacterRepository.ListAll read out of characters.name, forwarded as the stored bytes with no normalization, casefolding or re-encoding. |
+
+
+
+
+
+
 <a name="holomush-characteraccess-v1-UpdateCharacterDescriptionRequest"></a>
 
 ### UpdateCharacterDescriptionRequest
@@ -3287,6 +3355,7 @@ SceneAccessService.
 | GetMyCharacter | [GetMyCharacterRequest](#holomush-characteraccess-v1-GetMyCharacterRequest) | [GetMyCharacterResponse](#holomush-characteraccess-v1-GetMyCharacterResponse) | GetMyCharacter returns one owned character in the shape the edit forms write back, so a client never has to reconstruct the owner view by merging a public projection with a second read. Ownership is verified server-side against the session&#39;s player; handler in plan 04-05. |
 | UpdateCharacterProfile | [UpdateCharacterProfileRequest](#holomush-characteraccess-v1-UpdateCharacterProfileRequest) | [UpdateCharacterProfileResponse](#holomush-characteraccess-v1-UpdateCharacterProfileResponse) | UpdateCharacterProfile applies a partial edit to the character&#39;s stored profile.* rows, driven by an update mask evaluated against a closed allowlist (01-SPEC §9.5) and guarded by the caller&#39;s expected_version. Handler in plan 04-06; the write reaches entity_properties through the world write executor&#39;s same-transaction outbox seam, never a parallel path. |
 | UpdateCharacterDescription | [UpdateCharacterDescriptionRequest](#holomush-characteraccess-v1-UpdateCharacterDescriptionRequest) | [UpdateCharacterDescriptionResponse](#holomush-characteraccess-v1-UpdateCharacterDescriptionResponse) | UpdateCharacterDescription replaces the in-world `look` text — the characters.description column itself, not a profile.* row — by reaching the shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06. |
+| ListCharacterDirectory | [ListCharacterDirectoryRequest](#holomush-characteraccess-v1-ListCharacterDirectoryRequest) | [ListCharacterDirectoryResponse](#holomush-characteraccess-v1-ListCharacterDirectoryResponse) | ListCharacterDirectory enumerates, as identity rows, the characters whose profiles the calling viewer can reach. CharacterAccessServer.ListCharacterDirectory (internal/grpc/characteraccess_directory.go) makes ONE ABAC decision on the singleton character_directory:all resource BEFORE reading any row — a viewer below that floor learns nothing, not even the corpus size — and then includes a character only when profilevis.Reachable permits this viewer for that character&#39;s profile. An unreachable character is simply absent, so its absence is indistinguishable from it not existing. |
 
  
 
@@ -9459,31 +9528,30 @@ WebLeaveSceneResponse is empty.
 
 
 
-<a name="holomush-web-v1-WebListAllCharactersRequest"></a>
+<a name="holomush-web-v1-WebListCharacterDirectoryRequest"></a>
 
-### WebListAllCharactersRequest
-WebListAllCharactersRequest proxies to CoreService.ListAllCharacters; token
-is injected from the X-Session-Token cookie.
+### WebListCharacterDirectoryRequest
+WebListCharacterDirectoryRequest carries NO fields at all, and the emptiness
+is the point: the viewer rung follows entirely from the header token
+Handler.WebListCharacterDirectory reads, so a client cannot name an acting
+character, a page or a filter the facade did not authorize. The retired RPC
+this one replaces took a character id in the body; this surface is
+viewer-scoped and needs none.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebListCharacterDirectoryResponse"></a>
+
+### WebListCharacterDirectoryResponse
+WebListCharacterDirectoryResponse re-exports the facade&#39;s listing verbatim.
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| character_id | [string](#string) |  | character_id is the acting alt (forwarded as the ABAC subject). Required. |
-
-
-
-
-
-
-<a name="holomush-web-v1-WebListAllCharactersResponse"></a>
-
-### WebListAllCharactersResponse
-WebListAllCharactersResponse re-exports the directory page from core.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| characters | [holomush.core.v1.CharacterDirectoryEntry](#holomush-core-v1-CharacterDirectoryEntry) | repeated | characters is the id&#43;name list from CoreService.ListAllCharacters. |
+| characters | [holomush.characteraccess.v1.PublicCharacterSummary](#holomush-characteraccess-v1-PublicCharacterSummary) | repeated | characters is the reachable identity rows the facade projected, in the order it produced them; the gateway forwards them unmodified. |
 
 
 
@@ -10555,7 +10623,6 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebCreateGuest | [WebCreateGuestRequest](#holomush-web-v1-WebCreateGuestRequest) | [WebCreateGuestResponse](#holomush-web-v1-WebCreateGuestResponse) | WebCreateGuest provisions an ephemeral guest player and character. Proxies to CoreService.CreateGuest; on success the gateway sets a session cookie whose MaxAge matches the guest session&#39;s shorter TTL. Runs the cookie-collision gate first. |
 | WebCreateCharacter | [WebCreateCharacterRequest](#holomush-web-v1-WebCreateCharacterRequest) | [WebCreateCharacterResponse](#holomush-web-v1-WebCreateCharacterResponse) | WebCreateCharacter adds a character to the authenticated player. Proxies to CoreService.CreateCharacter using the cookie-derived session token. |
 | WebListCharacters | [WebListCharactersRequest](#holomush-web-v1-WebListCharactersRequest) | [WebListCharactersResponse](#holomush-web-v1-WebListCharactersResponse) | WebListCharacters returns the authenticated player&#39;s character roster. Proxies to CoreService.ListCharacters; an RPC failure is surfaced as CodeUnauthenticated (session expired or invalid). |
-| WebListAllCharacters | [WebListAllCharactersRequest](#holomush-web-v1-WebListAllCharactersRequest) | [WebListAllCharactersResponse](#holomush-web-v1-WebListAllCharactersResponse) | WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway reads player_session_token from the X-Session-Token cookie; any authenticated caller (guest included) may list character names. |
 | WebLogout | [WebLogoutRequest](#holomush-web-v1-WebLogoutRequest) | [WebLogoutResponse](#holomush-web-v1-WebLogoutResponse) | WebLogout ends the player session and clears the session cookie. Proxies to CoreService.Logout (best-effort) when a token is present, then always emits the cookie-clear signal regardless of the RPC outcome. |
 | WebRequestPasswordReset | [WebRequestPasswordResetRequest](#holomush-web-v1-WebRequestPasswordResetRequest) | [WebRequestPasswordResetResponse](#holomush-web-v1-WebRequestPasswordResetResponse) | WebRequestPasswordReset initiates the email-based reset flow. Proxies to CoreService.RequestPasswordReset; to avoid leaking account existence the gateway reports success=true even when the underlying RPC errors. |
 | WebConfirmPasswordReset | [WebConfirmPasswordResetRequest](#holomush-web-v1-WebConfirmPasswordResetRequest) | [WebConfirmPasswordResetResponse](#holomush-web-v1-WebConfirmPasswordResetResponse) | WebConfirmPasswordReset completes a reset using the emailed token and a new password. Proxies to CoreService.ConfirmPasswordReset. |
@@ -10598,6 +10665,7 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebGetMyCharacter | [WebGetMyCharacterRequest](#holomush-web-v1-WebGetMyCharacterRequest) | [WebGetMyCharacterResponse](#holomush-web-v1-WebGetMyCharacterResponse) | WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership is verified in the facade, not here. |
 | WebUpdateCharacterProfile | [WebUpdateCharacterProfileRequest](#holomush-web-v1-WebUpdateCharacterProfileRequest) | [WebUpdateCharacterProfileResponse](#holomush-web-v1-WebUpdateCharacterProfileResponse) | WebUpdateCharacterProfile proxies CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile forwards the mask and every prose field verbatim; the gateway neither validates the mask nor decides which fields it reaches. |
 | WebUpdateCharacterDescription | [WebUpdateCharacterDescriptionRequest](#holomush-web-v1-WebUpdateCharacterDescriptionRequest) | [WebUpdateCharacterDescriptionResponse](#holomush-web-v1-WebUpdateCharacterDescriptionResponse) | WebUpdateCharacterDescription proxies CharacterAccessService.UpdateCharacterDescription. |
+| WebListCharacterDirectory | [WebListCharacterDirectoryRequest](#holomush-web-v1-WebListCharacterDirectoryRequest) | [WebListCharacterDirectoryResponse](#holomush-web-v1-WebListCharacterDirectoryResponse) | WebListCharacterDirectory proxies CharacterAccessService.ListCharacterDirectory. Handler.WebListCharacterDirectory lifts the session token from the X-Session-Token header and forwards nothing else; a request with no cookie is the ordinary logged-out case rather than an error. The gateway neither filters nor re-sorts the listing — reachability and order are the facade&#39;s. |
 
  
 
