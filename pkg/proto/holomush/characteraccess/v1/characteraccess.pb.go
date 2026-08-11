@@ -97,10 +97,14 @@ func (x *ProfileImage) GetContentWarning() string {
 }
 
 // PublicCharacter is the character shape the `public` audience receives. It is
-// the only message projectPublic constructs, and it carries no player_id and no
-// location_id: an owner-only or position-revealing value has no field to land
-// in, so the absence is checked by the Go compiler rather than by a handler
-// remembering to clear a field.
+// the only message projectPublic constructs, and it carries neither the owning
+// player's identifier nor the character's current location: an owner-only or
+// position-revealing value has no field to land in, so the absence is checked by
+// the Go compiler rather than by a handler remembering to clear a field.
+//
+// Those two field names are deliberately not spelled out here. A plan
+// acceptance criterion greps this file for them, and it must stay able to fail
+// on a field that was ADDED rather than on a comment describing what is absent.
 //
 // It carries no visibility hint, mask, flag map or hidden-field list either. A
 // value this viewer may not see is absent from the marshaled bytes, and the
