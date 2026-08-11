@@ -379,7 +379,7 @@ Which phases cover which requirements. Filled during roadmap creation.
 | PROFILE-01 | Phase 5 | Pending |
 | PROFILE-02 | Phase 5 | Pending |
 | PROFILE-03 | Phase 4 | Complete |
-| PROFILE-04 | Phase 4 | Pending |
+| PROFILE-04 | Phase 4 | Complete |
 | PROFILE-05 | Phase 4 | Complete |
 | PROFILE-06 | Phase 5 | Pending |
 | PROFILE-07 | Phase 5 | Pending |
