@@ -216,6 +216,32 @@ func projectOwner(char *world.Character, profile map[string]string) *characterac
 	return out
 }
 
+// isGovernedProfileName reports whether name is one of the profile row names
+// this facade's messages are contracted to carry: 01-SPEC §7.2's twelve prose
+// names, §7.3's one primary-image name and its ten gallery slot names.
+//
+// It introduces NO fourth spelling of the twelve. The prose names are read back
+// out of updateCharacterProfileMaskablePaths — the facade's single, already-load-
+// bearing list — so a name added to the edit surface is admitted here by
+// construction and the two cannot drift.
+//
+// It exists because the OWNER read was the one direction on this surface that
+// was not name-closed. The domain write closes itself (world.profileAttributeNames),
+// the facade write closes itself (updateCharacterProfileMaskablePaths), and the
+// public read is closed by term A's tier-floor seeds matching a fixed name list.
+// The owner read kept every row the character's own subject could reach — which
+// is broader than `profile.*`, since seed:profile-public-read-property,
+// seed:property-private-read and seed:property-restricted-visible-to are all
+// keyed on the row rather than its name. Exposure is nil today only because
+// UpdateCharacterProfileAttributes is the sole production property writer, and
+// GitHub #4959 already records that assumption as pinned by no mechanism.
+func isGovernedProfileName(name string) bool {
+	if _, ok := updateCharacterProfileMaskablePaths[name]; ok {
+		return true
+	}
+	return name == profileImagePrimaryName || isProfileGallerySlotName(name)
+}
+
 // isProfileGallerySlotName reports whether name is one of the ten gallery slot
 // names, compared as an exact whole string.
 func isProfileGallerySlotName(name string) bool {

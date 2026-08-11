@@ -150,6 +150,16 @@ func (s *CharacterAccessServer) ownedProfileAttributes(ctx context.Context, char
 		if row == nil || row.Value == nil {
 			continue
 		}
+		// THE READ IS NAME-CLOSED, for the same reason the write is. What the
+		// character's own subject may read is broader than this message's
+		// contract — the row-keyed grid policies decide on the row, not on its
+		// name — so an arbitrary property row on the character would otherwise
+		// land verbatim in OwnCharacter.profile and in the edit form's model.
+		// projectOwner may then keep holding only what it is contracted to
+		// publish, exactly as projectPublic already does.
+		if !isGovernedProfileName(row.Name) {
+			continue
+		}
 		attrs[row.Name] = *row.Value
 	}
 	return attrs, nil

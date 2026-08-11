@@ -309,6 +309,92 @@ func TestGetMyCharacterCarriesTheOwnersFullPropertySliceAndDrivesNoViewerPrincip
 	})
 }
 
+// TestGetMyCharacterPublishesOnlyGovernedProfileNamesFromTheOwnersReadableRows
+// pins the owner read as NAME-CLOSED.
+//
+// The subject the enumeration is driven with is the character's OWN, and the
+// grid-side policies that answer it key on the ROW (its visibility, its owner),
+// never on its name — so the reader legitimately hands back rows that are not
+// `profile.*` at all. OwnCharacter.profile is contracted to carry §7.2's twelve
+// prose names, so an ungoverned row must not reach it even though the character
+// may read it.
+//
+// The governed row in the same slice is the positive control: without it this
+// spec could not tell "the ungoverned names were filtered" from "the enumeration
+// returned nothing".
+func TestGetMyCharacterPublishesOnlyGovernedProfileNamesFromTheOwnersReadableRows(t *testing.T) {
+	t.Parallel()
+
+	playerID := idgen.New()
+	char := ownedCharacterFixture(playerID, "Ada", world.StatusActive)
+
+	seeds := []profileSeed{
+		// Governed — §7.2. Must survive.
+		publicSeed("profile.pronouns", "they/them"),
+		// Ungoverned. All three are rows the character's own subject can read
+		// under the shipped row-keyed grid policies, and none is a name this
+		// message's contract names.
+		publicSeed("grid.last_seen_location", "the salt flats"),
+		publicSeed("profile", "a bare prefix is not a governed name"),
+		publicSeed("profile.pronouns.extra", "a dotted subtree is not a governed name"),
+	}
+	rows := make([]*world.EntityProperty, 0, len(seeds))
+	for _, s := range seeds {
+		rows = append(rows, s.entity(char.ID))
+	}
+
+	h := newOwnerHarness(t, ownerFixture{owned: []*world.Character{char}, rows: rows})
+
+	resp, err := h.srv.GetMyCharacter(context.Background(), &characteraccessv1.GetMyCharacterRequest{
+		CharacterId:        char.ID.String(),
+		PlayerSessionToken: h.token,
+	})
+	require.NoError(t, err)
+
+	profile := resp.GetCharacter().GetProfile()
+	assert.Equal(t, "they/them", profile["profile.pronouns"],
+		"a governed name still publishes — without this the absences below are satisfiable by an empty enumeration")
+	assert.NotContains(t, profile, "grid.last_seen_location",
+		"a non-profile row on the character is not part of this message's contract")
+	assert.NotContains(t, profile, "profile",
+		"the bare prefix is not a governed name: matching is exact-string, never prefix")
+	assert.NotContains(t, profile, "profile.pronouns.extra",
+		"a dotted subtree of a governed name is not itself governed")
+	assert.Len(t, profile, 1,
+		"exactly the governed names reach the wire")
+}
+
+// TestIsGovernedProfileNameAdmitsExactlyTheContractedNames pins the predicate
+// itself against §7.2's twelve and §7.3's eleven, so a drift in either list is
+// caught here rather than as a missing field at a caller.
+func TestIsGovernedProfileNameAdmitsExactlyTheContractedNames(t *testing.T) {
+	t.Parallel()
+
+	prose := []string{
+		"profile.pronouns", "profile.concept", "profile.species", "profile.age",
+		"profile.faction", "profile.currently", "profile.timezone",
+		"profile.appearance", "profile.personality", "profile.biography",
+		"profile.rumors", "profile.rp_preferences",
+	}
+	require.Len(t, prose, 12, "01-SPEC §7.2 declares twelve prose names")
+	for _, name := range prose {
+		assert.True(t, isGovernedProfileName(name), "§7.2 name %q must be governed", name)
+	}
+
+	assert.True(t, isGovernedProfileName(profileImagePrimaryName))
+	require.Len(t, profileGallerySlotNames, 10, "01-SPEC §7.3 declares ten gallery slots")
+	for _, slot := range profileGallerySlotNames {
+		assert.True(t, isGovernedProfileName(slot), "gallery slot %q must be governed", slot)
+	}
+
+	for _, name := range []string{
+		"", "profile", "profile.", "profile.unknown", "profile.pronouns.extra",
+		"Profile.Pronouns", "grid.last_seen_location", "profile.image", "profile.gallery",
+	} {
+		assert.False(t, isGovernedProfileName(name), "%q must NOT be governed", name)
+	}
+}
+
 // TestGetMyCharacterReturnsAnIdenticalNotFoundForANonOwnedAndAnUnknownCharacter
 // is behavior 5, and the assertion is an EQUALITY between the two outcomes
 // rather than two comparisons against a literal.
