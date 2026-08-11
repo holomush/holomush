@@ -484,7 +484,7 @@ Plans:
 **Plans**: 1/9 plans executed
 **UI hint**: no
 
-**Sketch findings** (must be answered in this phase): **A3** — `AdminSearchCharacters` (§9.2) currently "searches names" (character names); the admin list needs it extended to player usernames. **A2's RPC half** — the list RPC must accept a sort key for the joined `players.username`. **Admin rename census decision** (see Phase 3). Source: `.planning/sketches/002-*/README.md`.
+**Sketch findings** (must be answered in this phase): **A3** — `AdminSearchCharacters` (§9.2) currently "searches names" (character names); the admin list needs it extended to player usernames. **ACCEPTED** as the design, implemented in **Phase 6** — D-72 defers the admin RPCs; answered 2026-08-10 by D-81, no Phase-4 code. **A2's RPC half** — the list RPC must accept a sort key for the joined `players.username`. **ACCEPTED** as the design, implemented in **Phase 6**; §11.3's row was already amended in Phase 2 by D-26. **Admin rename census decision** (see Phase 3) — **WITHDRAWN.** Phase 3 D-44 removed rename from v0.13, so sketch 004's `Rename…` affordance is not live in v0.13 and sketch 009 finding #5 ("names are reserved, not permanent") is false for v0.13; answered 2026-08-10 by D-81, no code. Source: `.planning/sketches/002-*/README.md`.
 
 Plans:
 **Wave 1**
