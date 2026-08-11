@@ -755,20 +755,46 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	// If a future edit drops either `when` conjunct, this seed becomes a job-
 	// wide character read — which IS the D-29 risk, reached by a door the name
 	// set and the shape map would both stay green for.
+	// v0.13 phase 04 plan 01 is the phase this test's own doc comment names, and
+	// these two entries are the discharge. Read them against the three-part risk
+	// above: the PRINCIPAL of the second one is `viewer` and of the first is
+	// `character` — so unlike the job seeds, D-29's "every ephemeral guest"
+	// concern DOES apply to the principal. What answers it is the ACTION.
+	//
+	// `read_description` is a token no other policy and no other call site
+	// carries. It reaches exactly one method, world.Service.GetCharacterDescription,
+	// whose return type world.CharacterDescription has exactly two fields, Name
+	// and Description. The leak D-29 describes runs through
+	// world.Service.GetCharacter → characterToProto → {Id, PlayerId, Name,
+	// Description, LocationId}; that method still checks `read`, and both
+	// `read`-carrying character-resource seeds below are still the conditioned
+	// pre-Phase-2 pair. So the roster-enumeration primitive D-29 defers is not
+	// reachable from either new entry: there is no field for a player id or a
+	// location id to land in, and the compiler enforces that rather than a
+	// reviewer.
+	//
+	// THE ACTION IS THE WHOLE FENCE, so it is pinned twice — in wantShapes below
+	// (compiled target) and in the exact-DSL assertions after it. Widening either
+	// entry's action list to include "read" IS the D-29 leak, and it would leave
+	// this family's name set unchanged.
 	want := []string{
+		"seed:character-description-read",
 		"seed:job-fixture-instance-scoped",
 		"seed:job-retirement-instance-scoped",
 		"seed:player-character-colocation",
 		"seed:player-self-access",
+		"seed:viewer-character-description-read",
 	}
 
 	// The compiled target shape of every member, so a widening of an EXISTING
 	// member is caught even though the name set is unchanged.
 	wantShapes := map[string]characterSeedTargetShape{
-		"seed:job-fixture-instance-scoped":    {principal: "job", actions: []string{"write"}},
-		"seed:job-retirement-instance-scoped": {principal: "job", actions: []string{"read", "write"}},
-		"seed:player-character-colocation":    {principal: "character", actions: []string{"read"}},
-		"seed:player-self-access":             {principal: "character", actions: []string{"read", "write"}},
+		"seed:character-description-read":        {principal: "character", actions: []string{"read_description"}},
+		"seed:job-fixture-instance-scoped":       {principal: "job", actions: []string{"write"}},
+		"seed:job-retirement-instance-scoped":    {principal: "job", actions: []string{"read", "write"}},
+		"seed:player-character-colocation":       {principal: "character", actions: []string{"read"}},
+		"seed:player-self-access":                {principal: "character", actions: []string{"read", "write"}},
+		"seed:viewer-character-description-read": {principal: "viewer", actions: []string{"read_description"}},
 	}
 
 	compiler := NewCompiler(emptySchema())
@@ -849,9 +875,43 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	assert.Equal(t, 1, retirementSeed.SeedVersion,
 		"seed:job-retirement-instance-scoped ships at SeedVersion 1 (v0.13 phase 03, IDENT-04)")
 
+	// The two Phase-4 read_description permits, pinned as exact DSL for the same
+	// reason the job seeds are: their whole fence is a target-clause detail the
+	// name set does not carry. The viewer twin's `when` body additionally carries
+	// the tier clearing list §7.4 says a game edits to raise the description's
+	// floor — dropping it entirely would make the permit unconditional across
+	// every future rung, and rewriting it as an ordinal comparison would hand a
+	// newly appended fourth rung the highest clearance in the system (§8.2.1).
+	descSeed := requireSeedPolicy(t, "seed:character-description-read")
+	assert.Equal(t,
+		`permit(principal is character, action in ["read_description"], resource is character);`,
+		descSeed.DSLText,
+		"seed:character-description-read is the grid-side off-location description read (D-29's literal "+
+			"deferral, D-75). Its safety rests entirely on the ACTION token: `read_description` reaches only "+
+			"world.Service.GetCharacterDescription, whose return type carries no player id and no location "+
+			"id. Widening it to `read` reaches GetCharacter and its full CharacterInfo projection — which IS "+
+			"the leak D-29 deferred.")
+	assert.Equal(t, 1, descSeed.SeedVersion,
+		"seed:character-description-read ships at SeedVersion 1 (v0.13 phase 04, PROFILE-11's character half)")
+
+	viewerDescSeed := requireSeedPolicy(t, "seed:viewer-character-description-read")
+	assert.Equal(t,
+		`permit(principal is viewer, action in ["read_description"], resource is character) `+
+			`when { principal.viewer.tier in ["anonymous", "guest", "player"] };`,
+		viewerDescSeed.DSLText,
+		"seed:viewer-character-description-read is the D-76 viewer twin. It carries its own tier clearing "+
+			"test because the tier-floor family targets `resource is property` and this resource is a "+
+			"CHARACTER, so no tier-floor policy governs it. SET MEMBERSHIP, never ordinal comparison "+
+			"(§8.2.1). The list is what a game edits to raise the description's floor (§7.4).")
+	assert.Equal(t, 1, viewerDescSeed.SeedVersion,
+		"seed:viewer-character-description-read ships at SeedVersion 1 (v0.13 phase 04, D-76)")
+
 	_, exists := seedPolicyByName("seed:profile-public-read-character")
 	assert.False(t, exists,
-		"seed:profile-public-read-character is DEFERRED TO PHASE 4 by D-29 and MUST NOT be seeded here")
+		"seed:profile-public-read-character — the `action in [\"read\"]` shape D-29 deferred — MUST NOT be "+
+			"seeded. Phase 4 discharged the deferral with the two narrow read_description permits above "+
+			"instead; the deferred NAME must stay absent so a future edit cannot resurrect the deferred SHAPE "+
+			"under cover of \"Phase 4 shipped it\".")
 }
 
 // characterSeedTargetShape is the slice of a compiled Target that D-29 cares

@@ -859,6 +859,68 @@ func SeedPolicies() []SeedPolicy {
 			SeedVersion: 1,
 		},
 
+		// --- The characters.description half, landing in Phase 4 (D-75, D-76) ---
+		//
+		// This is the deferral immediately above being discharged, and it is
+		// discharged the way that comment said it had to be: with the projection
+		// narrowing that makes it safe. Each of the four reasons the Phase-2
+		// permit was rejected is answered by a NARROW ACTION rather than by
+		// weakening any of them.
+		//
+		// THE ACTION IS `read_description`, NOT `read`. That is the whole
+		// mechanism. The rejected Phase-2 permit was `action in ["read"]` on
+		// `resource is character`, which is the pair world.Service.GetCharacter
+		// gates on — so it handed every principal the entire CharacterInfo
+		// projection (Id, PlayerId, Name, Description, LocationId), not the one
+		// column it was justified by. A distinct action reaches exactly one
+		// method, world.Service.GetCharacterDescription, whose return type
+		// (world.CharacterDescription) has only Name and Description fields. The
+		// narrowing is therefore structural: PlayerID and LocationID have nowhere
+		// to go, so no reviewer has to notice that they were cleared.
+		//
+		// `seed:player-character-colocation` and GetCharacter's `read` gate are
+		// left BYTE-IDENTICAL. The grid path does not move; these are new
+		// additive permits and permits combine disjunctively (combineDecisions,
+		// engine.go), which is what lets the description widen without editing a
+		// shipped policy or opening an upgrade path that could collide with an
+		// admin-customized row.
+		//
+		// THE ACTION TOKEN IS REGISTERED NOWHERE, and that is correct.
+		// POLICY_UNREGISTERED_ACTION_ATTRIBUTE (compiler.go) gates `action.<key>`
+		// ATTRIBUTE references inside `when {}` clauses, not action TOKENS in a
+		// target clause, and neither policy below carries such a reference.
+		// attribute.ActionNamespaceSchema() and internal/command/types.go's
+		// validActions govern different surfaces and MUST NOT grow an entry for
+		// this token.
+		//
+		// BOTH SHIP AT SeedVersion 1. The version is PER POLICY, not a global
+		// counter: bootstrap.go:91 compares a seed's declared version against
+		// that same policy's own stored row purely as an upgrade trigger, and a
+		// brand-new policy has no prior row to upgrade from. Every policy Phase 2
+		// added ships at 1 for the same reason.
+		{
+			Name:        "seed:character-description-read",
+			Description: "Any character may read another character's in-world description, off-location (PROFILE-11's characters.description half; D-29's literal deferral, D-75)",
+			DSLText:     `permit(principal is character, action in ["read_description"], resource is character);`,
+			SeedVersion: 1,
+		},
+		// The D-76 viewer twin. It carries the tier clearing test rather than
+		// deferring to the tier-floor family, because that family targets
+		// `resource is property` and this resource is a CHARACTER — so before
+		// this entry NO shipped policy granted a `viewer:` principal any read on
+		// characters.description, and the paired positive control in
+		// test/integration/access/character_profile_read_test.go is exactly that
+		// tree. 01-SPEC §8.6 seeds the in-world description at the `anonymous`
+		// floor (§7.4, §8.11's recorded divergence from strict grid-parity), so
+		// all three rungs clear. The clearing list below is what a game edits to
+		// raise that floor (§7.4 closing paragraph).
+		{
+			Name:        "seed:viewer-character-description-read",
+			Description: "A viewer at any rung may read a character's in-world description on the profile (§7.4, §8.6 anonymous floor; D-76)",
+			DSLText:     `permit(principal is viewer, action in ["read_description"], resource is character) when { principal.viewer.tier in ["anonymous", "guest", "player"] };`,
+			SeedVersion: 1,
+		},
+
 		// --- Admin sections (EXT-07, §10.4, §10.5) ---
 		//
 		// SCOPED BY RESOURCE TYPE, NOT BY ENUMERATED ID. `resource is

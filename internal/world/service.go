@@ -840,6 +840,40 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID Caller, id ulid.UL
 	return char, nil
 }
 
+// GetCharacterDescription retrieves a character's name and in-world description
+// after checking `read_description` authorization on the character resource.
+//
+// IT IS A DIFFERENT QUESTION FROM [Service.GetCharacter], and the difference is
+// the point. GetCharacter keeps requiring the `read` action and keeps its
+// colocation clause (seed:player-character-colocation), and both are left
+// byte-identical by the plan that added this method: the grid path does not
+// move. This method exists so the web profile path can reach the two columns
+// 01-SPEC §7.4 makes public WITHOUT reaching the full CharacterInfo projection
+// that GetCharacter's `read` gate unlocks — which also carries PlayerId and
+// LocationId (D-75).
+//
+// The narrowing is carried by the RETURN TYPE, not by the caller: a
+// [CharacterDescription] has no field for a player id or a location id, so the
+// "without PlayerId or LocationId" guarantee is checked by the compiler rather
+// than by a projection remembering to clear them.
+func (s *Service) GetCharacterDescription(ctx context.Context, subjectID Caller, characterID ulid.ULID) (CharacterDescription, error) {
+	if s.characterRepo == nil {
+		return CharacterDescription{}, oops.Code("CHARACTER_GET_FAILED").Errorf("character repository not configured")
+	}
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, subjectID, "read_description", resource, prefixCharacter); err != nil {
+		return CharacterDescription{}, err
+	}
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return CharacterDescription{}, oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", characterID)
+		}
+		return CharacterDescription{}, oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+	return CharacterDescription{Name: char.Name, Description: char.Description}, nil
+}
+
 // UpdateCharacterDescription sets a character's description after checking write authorization.
 func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID Caller, characterID ulid.ULID, description string) error {
 	if s.characterRepo == nil {

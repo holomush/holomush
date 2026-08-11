@@ -38,6 +38,24 @@ type Character struct {
 	LastActiveAt int64
 }
 
+// CharacterDescription is the two-field read [Service.GetCharacterDescription]
+// returns: the character's display name and its in-world `look` text.
+//
+// THE TYPE IS THE NARROWING. 01-SPEC §2.2's absence guarantee is a type-system
+// property, not a handler discipline, and this struct is where that property
+// starts on the read path: PlayerID and LocationID have no field to land in, so
+// a profile projection built from this value cannot leak alt-to-player ownership
+// or live grid position even if a later edit tried to (D-75). Widening it back
+// to *Character would silently reopen exactly the exposure 02-CONTEXT D-29
+// deferred out of Phase 2.
+type CharacterDescription struct {
+	// Name is characters.name verbatim — the stored bytes, with no
+	// normalization, casefolding or re-encoding on the read path.
+	Name string
+	// Description is characters.description, the in-world `look` text.
+	Description string
+}
+
 // NewCharacter creates a new Character with a generated ID.
 // The character is validated before being returned.
 func NewCharacter(playerID ulid.ULID, name string) (*Character, error) {
