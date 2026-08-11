@@ -149,7 +149,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [ ] **PROFILE-02**: **Profile and sheet are separate surfaces.** The split ships; the sheet ships
       **empty** (mechanical stats require a system that does not exist).
 
-- [ ] **PROFILE-03**: Each profile field carries **server-enforced visibility** of `public` or `private`,
+- [x] **PROFILE-03**: Each profile field carries **server-enforced visibility** of `public` or `private`,
       with sane defaults. Enforcement is by omission from the response, never client-side hiding.
 
 - [x] **PROFILE-04**: **Profile reachability is its own facet** above the fields: a private profile
@@ -164,7 +164,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [ ] **PROFILE-09**: The profile carries a **time zone** field, supporting the availability half of
       OOC preferences.
 
-- [ ] **PROFILE-10**: The public profile page is built **exclusively** from the viewer-filtered property
+- [x] **PROFILE-10**: The public profile page is built **exclusively** from the viewer-filtered property
       slice; the facade MUST NOT call `PropertyReader.ListByParent` / `PropertyRepository.ListByParent`
       directly (unfiltered by construction).
 
@@ -378,14 +378,14 @@ Which phases cover which requirements. Filled during roadmap creation.
 | IDENT-10 | Phase 3 | Complete |
 | PROFILE-01 | Phase 5 | Pending |
 | PROFILE-02 | Phase 5 | Pending |
-| PROFILE-03 | Phase 4 | Pending |
+| PROFILE-03 | Phase 4 | Complete |
 | PROFILE-04 | Phase 4 | Pending |
-| PROFILE-05 | Phase 4 | Pending |
+| PROFILE-05 | Phase 4 | Complete |
 | PROFILE-06 | Phase 5 | Pending |
 | PROFILE-07 | Phase 5 | Pending |
 | PROFILE-08 | Phase 5 | Pending |
 | PROFILE-09 | Phase 5 | Pending |
-| PROFILE-10 | Phase 4 | Pending |
+| PROFILE-10 | Phase 4 | Complete |
 | PROFILE-10a | Phase 5 | Pending |
 | PROFILE-11 | Phase 2 | Pending |
 | PROFILE-12 | Phase 5 | Pending |
