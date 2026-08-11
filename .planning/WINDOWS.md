@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 7
+open_count: 8
 waived_count: 0
 fixed_count: 7
-total_count: 14
-last_updated: 2026-08-09T21:53:11.900Z
+total_count: 15
+last_updated: 2026-08-11T14:38:07.345Z
 ---
 
 # Broken Windows Ledger
@@ -29,6 +29,7 @@ last_updated: 2026-08-09T21:53:11.900Z
 | 12 | 02 | deviation | .planning/phases/02-abac-schema-vocabulary/02-12-SUMMARY.md |  | INV-WORLD-4's 'exactly TWO sanctioned out-of-world writers' text is false until plan 02-11 amends it to three | open |  | 2026-08-05T04:50:04.129Z |  |
 | 13 | 01.1 | unrun-verify | site/src/content/docs/operating/how-to/sandbox/sandbox-restore.md |  | D-18 surgical rollback is WRITTEN but never EXECUTED against restored sandbox data — a rollback nobody has run is a hypothesis, not a control. Split out of #9, whose D-16 half was executed and passed 2026-08-03 (snapshot k8895de81ae827d94862d54a5c9b5b19f: side A version=53/1 row/dirty=false; adopt recorded_version=53 seeded_versions=44; checks a/b/c green incl. ZERO core drift across 353 columns). D-18 remains the unexercised half. | open |  | 2026-08-06T16:13:50.936Z |  |
 | 14 | 03 | deviation | internal/access/policy/seed_profile_visibility_test.go |  | D-29 character-resource guard extended with an argued exemption to admit seed:job-retirement-instance-scoped's read action; abac-reviewer must confirm before push | open |  | 2026-08-09T21:53:11.900Z |  |
+| 15 | 04 | deviation | .planning/REQUIREMENTS.md |  | PROFILE-04/PROFILE-05 remain Pending after 04-01: the plan claims them but pronouns arrive with the property slice in 04-02/04-04 | open |  | 2026-08-11T14:38:07.345Z |  |
 
 ````json
 [
@@ -198,6 +199,18 @@ last_updated: 2026-08-09T21:53:11.900Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-09T21:53:11.900Z",
+    "resolved_at": null
+  },
+  {
+    "id": 15,
+    "kind": "deviation",
+    "phase": "04",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "PROFILE-04/PROFILE-05 remain Pending after 04-01: the plan claims them but pronouns arrive with the property slice in 04-02/04-04",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-11T14:38:07.345Z",
     "resolved_at": null
   }
 ]

@@ -152,10 +152,10 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [ ] **PROFILE-03**: Each profile field carries **server-enforced visibility** of `public` or `private`,
       with sane defaults. Enforcement is by omission from the response, never client-side hiding.
 
-- [ ] **PROFILE-04**: **Profile reachability is its own facet** above the fields: a private profile
+- [x] **PROFILE-04**: **Profile reachability is its own facet** above the fields: a private profile
       returns a not-found-equivalent, never "this profile is private" (which leaks existence).
 
-- [ ] **PROFILE-05**: **Name and pronouns cannot be set private** — they are the minimum public identity.
+- [x] **PROFILE-05**: **Name and pronouns cannot be set private** — they are the minimum public identity.
 - [ ] **PROFILE-06**: The profile carries a **rumors / RP-hooks** field.
 - [ ] **PROFILE-07**: The profile carries a short, volatile **"Currently"** status line.
 - [ ] **PROFILE-08**: The profile carries an **OOC RP-preferences block** (style, availability, content
@@ -239,7 +239,7 @@ cannot be dropped as "nice to have" during planning.
       than asserting it. `UNIQUE(parent_type,parent_id,name)` enforces exactly-one-primary in the
       database.
 
-- [ ] **EXT-06**: The proto ships the media shape now, empty — `ProfileImage{media_id, alt_text,
+- [x] **EXT-06**: The proto ships the media shape now, empty — `ProfileImage{media_id, alt_text,
       content_warning}` + `primary_image` + `repeated gallery [max_items = 10]` — giving alt-text and
       content-warning somewhere to live before moderation exists.
 
@@ -402,7 +402,7 @@ Which phases cover which requirements. Filled during roadmap creation.
 | EXT-03 | Phase 6 | Pending |
 | EXT-04 | Phase 6 | Pending |
 | EXT-05 | Phase 5 | Pending |
-| EXT-06 | Phase 4 | Pending |
+| EXT-06 | Phase 4 | Complete |
 | EXT-07 | Phase 2 | Pending |
 | EXT-08 | Phase 5 | Pending |
 | AUTHZ-01 | Phase 02.1 | Pending |

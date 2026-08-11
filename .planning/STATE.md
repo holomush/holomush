@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 4
-current_phase_name: Shared Facade Helpers & `CharacterAccessService`
+current_phase: 04
+current_phase_name: shared-facade-helpers-characteraccessservice
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-08-11T12:00:52.982Z"
-last_activity: 2026-08-10
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-08-11T14:38:01.583Z"
+last_activity: 2026-08-11
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 49
-  completed_plans: 40
+  completed_plans: 41
   percent: 67
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-09)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 03 — world-character-commands
+**Current focus:** Phase 04 — shared-facade-helpers-characteraccessservice
 unchanged: complete the character identity surface (creation, management, public profiles with privacy) and
 stand up the `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces
 without rework.
@@ -34,11 +34,11 @@ without rework.
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 4 — Shared Facade Helpers & `CharacterAccessService`
-Plan: Not started
+Phase: 04 (shared-facade-helpers-characteraccessservice) — EXECUTING
+Plan: 2 of 9
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
-Last activity: 2026-08-10 — Phase 03 complete, transitioned to Phase 4
+Progress: [█████████████████░░░] 34/40 plans ([████████░░] 84%)
+Last activity: 2026-08-11 — Phase 04 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
 (`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
@@ -257,6 +257,7 @@ no action needed.
 | Phase 03 P04 | 50m | 2 tasks | 11 files |
 | Phase 03 P05 | 70m | 3 tasks | 15 files |
 | Phase 03 P06 | 55m | 2 tasks | 7 files |
+| Phase 04 P01 | 35min | 3 tasks | 28 files |
 
 ## Accumulated Context
 
@@ -547,6 +548,11 @@ the next milestone yet.
 - [Phase ?]: Phase 3: character ownership is policy text, not a Go predicate (D-39/D-40) — retire/unretire are distinct ABAC actions, admin-only in v0.13 via the pre-existing bare-action admin seed; no new human-principal grant shipped.
 - [Phase ?]: Phase 3: the first production job: consumer is instance-scoped by its triggering event (D-54) — seed:job-retirement-instance-scoped binds BOTH action.job.trigger_event_type and action.job.trigger_subject == resource.id.
 - [Phase ?]: Phase 3: IDENT-04 ruled Complete as a DOMAIN capability; the admin-reachable half is ADMIN-05 (Phase 6), conditional on a Phase 6 traceability link being added.
+- [Phase ?]: 04-01: D-29 discharged by a NARROW ACTION (read_description) reaching only world.Service.GetCharacterDescription, whose return type has no player-id/location-id field — not the deferred permit(character, read, character) shape
+- [Phase ?]: 04-01: a read_description DENIAL collapses into the uniform not-found rather than PermissionDenied — a distinguishable denial discloses that the character exists (8.7); unreachable in the shipped corpus, it is the fail-closed floor under a raised description floor
+- [Phase ?]: 04-01: mapDescriptionError tests world.ErrNotFound BEFORE ErrAccessEvaluationFailed — an absent character carries both sentinels because the ABAC gate resolves character attributes before the row is read; the reverse order was a live id-existence oracle (Internal vs NotFound) the differential spec caught
+- [Phase ?]: 04-01: D-83 implemented literally — the facade holds the session repos and resolves all three rungs itself, including the GUEST rung playerGate.resolveAndGate refuses outright (INV-SCENE-64)
+- [Phase ?]: 04-01: PROFILE-04/PROFILE-05 left Pending in REQUIREMENTS.md — 04-01 delivers reachability gating and name, but pronouns arrive with the property slice in 04-02/04-04; only EXT-06 marked Complete
 
 ### Pending Todos
 
@@ -610,13 +616,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-10T17:31:55.415Z
+Last session: 2026-08-11T14:37:21.578Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-shared-facade-helpers-characteraccessservice/04-CONTEXT.md
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
