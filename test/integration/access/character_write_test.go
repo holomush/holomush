@@ -47,13 +47,20 @@ import (
 //
 // # Why the character is placed in a location
 //
-// The profile rows this suite writes are created with `public` visibility, and
-// `seed:property-public-read` carries a colocation clause
-// (`principal.character.location == resource.property.parent_location`). A
-// character with NO location therefore cannot read back its own public rows
-// through its own subject — a live consequence of the shipped corpus recorded by
-// plan 04-05. Placing the character in a location is what makes the post-write
-// projection assertions meaningful rather than vacuously empty.
+// The placement is fixture realism, NOT a correctness requirement of the
+// readback. An earlier draft of this comment claimed a location-less character
+// could not read back its own `public` rows because `seed:property-public-read`
+// is colocation-gated. That claim is FALSE against the shipped corpus and is
+// corrected here so nobody widens a policy to fix a defect that does not exist:
+// `seed:profile-public-read-property` (internal/access/policy/seed.go:888-893)
+// permits `read` on any row with `visibility == "public" && parent_type ==
+// "character"` with NO location clause at all, so the colocation-gated permit is
+// not the only one in play. seed_policies_test.go's S3 asserts exactly the
+// off-location case ALLOW, and Phase 2's own D-10/D-11 note calls the colocation
+// restriction "the anomaly" that the PROFILE-11 widening deliberately reversed.
+//
+// These assertions are therefore non-vacuous regardless of placement; the
+// location is kept because a character on the grid is the realistic shape.
 var _ = Describe("IDENT-02/IDENT-02a: the owner edits prose profile fields and the in-world description", func() {
 	const ownerToken = "character-write-owner-session-token"
 
