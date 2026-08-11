@@ -578,6 +578,39 @@ func SeedPolicies() []SeedPolicy {
 			SeedVersion: 1,
 		},
 
+		// The VIEWER-flavored twin of the permit above (D-76, D-01's pattern).
+		// The shipped policy is `principal is character`-scoped, so a `viewer:`
+		// principal — the web reader, who may hold no character at all — matches
+		// nothing and the default-deny floor closes the surface. This entry is
+		// 01-SPEC §9.2's tier floor ON THE DIRECTORY RESOURCE, and it is what
+		// CharacterAccessServer.ListCharacterDirectory evaluates, ONCE, before it
+		// enumerates anything.
+		//
+		// THE CLEARING SET IS THE WHOLE CONFIGURATION SURFACE. Raising the
+		// directory floor — publishing it to logged-in players only, or closing
+		// it entirely — is an edit to this list and nothing else; no handler, no
+		// resource type and no action token changes with it.
+		//
+		// IT IS INDEPENDENT OF seed:profile-reachable. The two govern different
+		// questions on different resource types — "may this viewer enumerate the
+		// directory at all" versus "does this character's profile resolve" — so a
+		// game may publish the directory at a rung it does not publish profiles
+		// at, or the reverse. The facade evaluates both and never derives one
+		// from the other.
+		//
+		// It reads NO resource attributes, exactly as seed:profile-reachable
+		// does, so `resource is character_directory` needs no AttributeProvider:
+		// it is a target match on the parsed resource type. `character_directory`
+		// is also a DIFFERENT resource type from `character`, which is why this
+		// entry is outside TestNoPhase2SeedIntroducesACharacterResourceTypePermit's
+		// sweep rather than an exception to it.
+		{
+			Name:        "seed:viewer-directory-list-characters",
+			Description: "A viewer at any rung may enumerate the character directory (§9.2 directory tier floor: anonymous)",
+			DSLText:     `permit(principal is viewer, action in ["list_character_directory"], resource is character_directory) when { principal.viewer.tier in ["anonymous", "guest", "player"] };`,
+			SeedVersion: 1,
+		},
+
 		// --- Profile visibility: viewer-tier floors (§8.2.1, §8.6) ---
 		//
 		// TERM A of 01-SPEC §8.5.1's conjunction. A profile attribute publishes

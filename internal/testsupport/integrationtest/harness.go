@@ -1207,6 +1207,13 @@ func (s *Server) NewCharacterAccessServer() *holoGRPC.CharacterAccessServer {
 		s.worldSvc,
 		s.worldSvc,
 		&profilevis.Evaluator{Engine: s.accessEngine},
+		// The §9.2 directory gate's evaluator is the harness's own engine — the
+		// same value the profilevis.Evaluator above is built over, exactly as
+		// cmd/holomush passes one policyEngine to both.
+		s.accessEngine,
+		// The directory enumeration and the owner audience's ownership lookup are
+		// the same adapter, as in production.
+		s.charRepo,
 		s.playerSessionStore,
 		s.playerRepo,
 		s.charRepo,

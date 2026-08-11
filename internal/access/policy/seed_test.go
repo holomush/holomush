@@ -30,8 +30,11 @@ func TestSeedPoliciesCount(t *testing.T) {
 	// the first REAL job grant, seed:job-retirement-instance-scoped (60 → 61).
 	// v0.13 phase 04 plan 01 discharged D-29's deferral with the two narrow
 	// read_description permits, seed:character-description-read and
-	// seed:viewer-character-description-read (61 → 63).
-	assert.Len(t, seeds, 63, "expected 63 seed policies (53 permit, 10 forbid)")
+	// seed:viewer-character-description-read (61 → 63). v0.13 phase 04 plan 07
+	// added the viewer twin of the shipped character-directory permit,
+	// seed:viewer-directory-list-characters — 01-SPEC §9.2's tier floor on the
+	// directory resource (63 → 64).
+	assert.Len(t, seeds, 64, "expected 64 seed policies (54 permit, 10 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -88,7 +91,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 53, permitCount, "expected 53 permit policies (+2 v0.13 phase-04 read_description permits discharging D-29: seed:character-description-read and seed:viewer-character-description-read,+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, +3 v0.13 phase-2 profile visibility: two viewer-tier floors and profile reachability, +4 viewer read twins, +1 PROFILE-11 property widening, +1 EXT-07 admin-section access, +1 v0.13 phase-02.2 background-job fixture grant AUTHZ-02, +1 v0.13 phase-03 retirement-reactor job grant IDENT-04, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
+	assert.Equal(t, 54, permitCount, "expected 54 permit policies (+1 v0.13 phase-04 §9.2 directory tier floor seed:viewer-directory-list-characters, +2 v0.13 phase-04 read_description permits discharging D-29: seed:character-description-read and seed:viewer-character-description-read,+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, +3 v0.13 phase-2 profile visibility: two viewer-tier floors and profile reachability, +4 viewer read twins, +1 PROFILE-11 property widening, +1 EXT-07 admin-section access, +1 v0.13 phase-02.2 background-job fixture grant AUTHZ-02, +1 v0.13 phase-03 retirement-reactor job grant IDENT-04, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
 	assert.Equal(t, 10, forbidCount, "expected 10 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies + 1 v0.13 phase-2 seed:viewer-property-restricted-excluded)")
 }
 
@@ -171,6 +174,7 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:job-retirement-instance-scoped",
 		// Character directory (INV-ACCESS-9)
 		"seed:directory-list-characters",
+		"seed:viewer-directory-list-characters",
 		// Profile visibility: viewer-tier floors (01-SPEC §8.2.1, §8.6; D-03).
 		// TWO, not three: §8.6 seeds no name at the `player` rung and the DSL's
 		// list grammar forbids an empty `in []`. The conditional re-entry guard

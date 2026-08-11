@@ -81,6 +81,8 @@ var _ = Describe("IDENT-02/IDENT-02a: the owner edits prose profile fields and t
 			worldSvc,
 			worldSvc,
 			&profilevis.Evaluator{Engine: env.engine},
+			env.engine,
+			setup.NewCharRepoAdapter(env.pool, env.charRepo),
 			store.NewPostgresPlayerSessionStore(env.pool),
 			authpg.NewPlayerRepository(env.pool),
 			setup.NewCharRepoAdapter(env.pool, env.charRepo),

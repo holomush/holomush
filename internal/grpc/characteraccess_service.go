@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/access/profilevis"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/world"
@@ -77,6 +78,62 @@ type characterAccessProfileVisibility interface {
 	VisibleAttributes(ctx context.Context, viewerSubject, characterID string, properties []profilevis.Property) (map[string]profilevis.Property, error)
 }
 
+// characterAccessDirectoryReader is the narrow interface CharacterAccessServer
+// needs to ENUMERATE characters — one method, and no second.
+//
+// Its signature is verbatim auth.CharacterRepository.ListAll
+// (internal/auth/character_service.go:38-42), which is already the directory
+// seam the retired RPC read through: id and name only, fetch-all with no
+// pagination, ordered by name ascending, carrying no connection state. It is
+// satisfied WITHOUT NEW PRODUCTION CODE by bootstrapsetup.CharRepoAdapter at the
+// production wiring site and by the harness's own adapter under test.
+//
+// THE ABSENCES ARE LOAD-BEARING HERE TOO (PROFILE-10, D-79). Adding a third and
+// a fourth interface to this facade does not weaken the compile fence, because
+// the fence IS the absence of PropertyReader.ListByParent and
+// PropertyRepository.ListByParent from every interface the facade holds. This
+// one names ListAll and nothing else, so it cannot reach a property row.
+//
+// world.Service was deliberately NOT widened with a ListCharacters instead. A
+// new ABAC-gated domain read would have to choose between one bulk decision and
+// N per-row decisions — the choice 01-SPEC §9.2 already makes at the facade (one
+// directory decision plus the §8.7 membership pass) — so a second,
+// differently-shaped authorization point inside world for the same question is
+// the duplicate gate §2.6 warns against.
+type characterAccessDirectoryReader interface {
+	ListAll(ctx context.Context) ([]*world.Character, error)
+}
+
+// characterAccessPolicyEvaluator is the narrow slice of the ABAC engine this
+// facade needs to make ONE raw authorization decision of its own: 01-SPEC
+// §9.2's directory gate, on access.CharacterDirectoryResource().
+//
+// The signature is verbatim (*policy.Engine).Evaluate
+// (internal/access/policy/engine.go:82), and identical to the shipped
+// consumer-side slice profilevis.PolicyEvaluator (profilevis.go:99-101) — the
+// same one-method shape declared at the consumer for the same reason. It is
+// satisfied at the production wiring site by the *policy.Engine already in
+// scope, and under test by the harness's types.AccessPolicyEngine, whose first
+// method is this one. No new production type exists anywhere for it.
+//
+// A METHOD ON profilevis.Evaluator WAS REJECTED. It would have needed no wiring
+// at all, which is its whole appeal; but that package is scoped by its own doc
+// to §8.5.1's per-attribute conjunction and §8.4.2 reachability — profile
+// VISIBILITY. A bulk directory-enumeration gate is a different question on a
+// different resource type, and widening that package to host it makes its name a
+// lie and invites the next reader to route more §9.x decisions through it.
+//
+// GATING ON profilevis.Reachable INSTEAD IS THE ONE THING THIS SEAM EXISTS TO
+// PREVENT. Per-character reachability is the §8.7 MEMBERSHIP rule; substituting
+// it for the gate deletes §9.2's decision altogether and makes "the directory is
+// closed" and "this character is not listed" the same sentence.
+//
+// THE ABSENCES ARE LOAD-BEARING, as on every sibling: it names Evaluate and
+// nothing else, so it cannot reach a property row either.
+type characterAccessPolicyEvaluator interface {
+	Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error)
+}
+
 // characterProfileNotFoundMessage is the ONE generic wire message every
 // non-resolving profile read returns — below the reachability floor, denied at
 // the description gate, or naming no row at all. 01-SPEC §8.7 requires the cases
@@ -135,6 +192,14 @@ type CharacterAccessServer struct {
 	// production type and no third construction site.
 	worldMutator characterAccessWorldMutator
 	profileVis   characterAccessProfileVisibility
+	// policyEval makes the ONE raw ABAC decision this facade owns: §9.2's
+	// directory gate. Every other authorization question here is asked through
+	// profileVis or through world.Service's own checkAccess, and this handle
+	// exists precisely so the directory gate is not approximated by one of them.
+	policyEval characterAccessPolicyEvaluator
+	// directory is the character enumeration the public directory reads, and the
+	// only bulk read this facade performs.
+	directory characterAccessDirectoryReader
 }
 
 // NewCharacterAccessServer constructs a CharacterAccessServer. Every dependency
@@ -147,10 +212,18 @@ type CharacterAccessServer struct {
 // worldMutator is the one handle the owner MUTATION surface adds. Both call
 // sites pass the same *world.Service value they already pass for worldReader, so
 // the write surface costs one argument and no new production type.
+//
+// policyEval and directoryReader are the two the public DIRECTORY adds, and
+// neither introduces a production type either: policyEval is satisfied by the
+// *policy.Engine already in scope at the wiring site (the same engine the
+// profilevis.Evaluator a line away is built over), and directoryReader by the
+// character-repository adapter already built there for charRepo.
 func NewCharacterAccessServer(
 	worldReader characterAccessWorldReader,
 	worldMutator characterAccessWorldMutator,
 	profileVis characterAccessProfileVisibility,
+	policyEval characterAccessPolicyEvaluator,
+	directoryReader characterAccessDirectoryReader,
 	playerSessionRepo auth.PlayerSessionRepository,
 	playerRepo auth.PlayerRepository,
 	charRepo auth.CharacterRepository,
@@ -160,6 +233,8 @@ func NewCharacterAccessServer(
 		world:        worldReader,
 		worldMutator: worldMutator,
 		profileVis:   profileVis,
+		policyEval:   policyEval,
+		directory:    directoryReader,
 	}
 }
 

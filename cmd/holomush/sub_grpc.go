@@ -862,6 +862,15 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		worldService,
 		worldService,
 		&profilevis.Evaluator{Engine: policyEngine},
+		// The §9.2 directory gate's evaluator: the SAME engine the
+		// profilevis.Evaluator a line above is built over. The facade makes one
+		// raw ABAC decision of its own and it is made against the production
+		// corpus, not a second engine.
+		policyEngine,
+		// The directory enumeration: the SAME adapter handed to charRepo below.
+		// It is the seam the retired directory RPC already read through — id and
+		// name only, no connection state.
+		authCharRepo,
 		authPlayerSessionRepo,
 		authPlayerRepo,
 		authCharRepo,

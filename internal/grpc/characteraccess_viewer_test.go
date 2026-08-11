@@ -102,6 +102,8 @@ func newCAServerForToken(
 		// that continuously enforced.
 		&recordingWorldMutator{t: t, failOnCall: true},
 		vis,
+		&failOnCallDirectoryGate{t: t},
+		&failOnCallDirectoryReader{t: t},
 		sessionRepo,
 		playerRepo,
 		// The viewer-identity seam never reaches the owner audience, so a

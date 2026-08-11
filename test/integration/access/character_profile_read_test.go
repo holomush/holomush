@@ -123,6 +123,12 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 			worldSvc,
 			worldSvc,
 			&profilevis.Evaluator{Engine: engine},
+			// The §9.2 directory gate's evaluator and the directory enumeration.
+			// No spec in this file lists the directory, but both are wired to the
+			// same values cmd/holomush passes rather than to nil, so a spec added
+			// later exercises the production shape.
+			engine,
+			setup.NewCharRepoAdapter(env.pool, env.charRepo),
 			psRepo,
 			playerRep,
 			// The owner audience's repository. No spec in this file reaches it

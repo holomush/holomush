@@ -134,7 +134,7 @@ func newOwnerHarness(t *testing.T, f ownerFixture) *ownerHarness {
 	}
 
 	return &ownerHarness{
-		srv:      NewCharacterAccessServer(reader, &recordingWorldMutator{t: t, failOnCall: true}, &failOnCallProfileVisibility{t: t}, sessionRepo, playerRepo, charRepo),
+		srv:      NewCharacterAccessServer(reader, &recordingWorldMutator{t: t, failOnCall: true}, &failOnCallProfileVisibility{t: t}, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, charRepo),
 		reader:   reader,
 		owned:    f.owned,
 		playerID: playerID,

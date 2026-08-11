@@ -108,6 +108,37 @@ func projectPublic(characterID string, desc world.CharacterDescription, profile 
 	return out
 }
 
+// projectPublicSummary is the SOLE constructor of a PublicCharacterSummary —
+// the `public` audience's LIST row.
+//
+// It sits beside projectPublic because a list is not a fourth audience (01-SPEC
+// §2.4): the summary is the public projection cut down to what a directory row
+// needs, so it publishes strictly less about a character than projectPublic
+// does and never something projectPublic withholds. Putting it here is what
+// keeps that relationship visible; a summary assembled in the handler is exactly
+// how a list surface drifts away from the detail surface it is supposed to
+// match.
+//
+// IT CARRIES NO PRESENCE TELEMETRY, and the enforcement is structural rather
+// than behavioral: PublicCharacterSummary has two fields, so there is nowhere
+// for an active-session flag, a session status, a last location or a
+// last-played timestamp to land. The retired directory RPC re-exported all four.
+//
+// IT TAKES A world.Character AND READS EXACTLY TWO FIELDS. The value it is
+// handed comes from auth.CharacterRepository.ListAll, whose own contract is
+// "id + name only", so the remaining fields of that struct are not populated on
+// this path and reading one would publish a zero value dressed as data. The same
+// omission discipline as projectPublic applies to what it does read: nothing
+// here emits a present-and-empty value that a blank field and a withheld field
+// could be told apart by, because the two fields it carries are the two
+// §8.8 minimum-identity guarantees a reachable character always has.
+func projectPublicSummary(char *world.Character) *characteraccessv1.PublicCharacterSummary {
+	return &characteraccessv1.PublicCharacterSummary{
+		Id:   char.ID.String(),
+		Name: char.Name,
+	}
+}
+
 // projectOwner is the SOLE constructor of an OwnCharacter (01-SPEC §2.3), the
 // owner-audience counterpart of projectPublic. The two are never interchanged:
 // OwnCharacter is a DISTINCT message rather than PublicCharacter plus fields,
