@@ -2126,3 +2126,123 @@ All nine plans are execution-ready as written: **04-01, 04-02, 04-03 (wave 1), 0
 lifted — H1/H2/H3 are all resolved with repo-verified evidence. Overall risk: **LOW**. The three
 open LOW items are wording clarifications an attentive executor would resolve correctly anyway;
 none blocks execution.
+
+
+---
+
+# Cross-AI Plan Review — Phase 4 · Cycle 8 (delta / ledger-closing cycle)
+
+**Reviewer:** claude (headless Claude CLI, model pinned `claude-fable-5` via `review.models.claude`;
+lane explicitly selected by the user with `--claude`, overriding the runtime-independence skip — the
+lane ran as a fresh non-interactive session with full repo read access) + orchestrator
+source-grounding pass.
+**Reviewed at:** 2026-08-11T12:30Z.
+**Plans reviewed:** delta-focused. Commit `aec657b33` ("docs(04): resolve cycle-7 LOW residue")
+made three targeted edits — 04-05-PLAN.md (2 lines), 04-08-PLAN.md (2 hunks), 04-HANDOFF.md
+(dated addendum) — intended to close cycle 7's three LOW residue items (L-c7-1/2/3). The plans
+were otherwise unchanged since cycle 7, so this cycle independently audited the three dispositions
+against the current text at HEAD, swept the touched passages for revision-introduced defects, and
+spot-checked the untouched plans' cross-references into the edited regions. Trend (total
+unresolved, per the handoff §5 accounting): 8 → 6 → 2 → 6 → 8 → 9 → 3 → **0** (0 HIGH +
+0 actionable; all three cycle-7 items verified RESOLVED; the finding ledger from cycles 1–7 is
+closed).
+
+
+## Claude Review
+
+## 1. Summary
+
+Commit `aec657b33` closes all three cycle-7 LOW residue items. I opened the current files rather than trusting the diff: 04-08 now instructs the literal-driven absence assertion in both the action text and the acceptance criterion, and the two sites agree with each other, with behavior `:199`, and with the only-in-the-literal rule; 04-05's two bound-flip criteria carry precondition-conditional clauses that reconcile them with the fail-closed fallback without letting an executor skip the flip when the precondition held; and the handoff addendum covers **both** stale items (2/M1 and 3/L1) while preserving the historical markers. The git stat confirms the delta touched exactly the three files (4 changed lines in 04-05, 7 in 04-08, 2 added in 04-HANDOFF). A cross-reference sweep of the other seven plans found no line-number citations into the edited passages; the only citations into 04-08's shifted region live in the handoff's *historical* cycle-5/6 findings section, which is a record of past text by design. One near-tautology in the new 04-05 conditional is noted below (LOW); nothing blocks execution.
+
+## 2. Cycle-7 Disposition Audit
+
+| Finding | Verdict | Evidence |
+|---|---|---|
+| **L-c7-1** (04-08 absence assertion must range over the literal) | **RESOLVED** | Action text at `04-08-PLAN.md:340-343`: "Drive the absence assertion by iterating the public-audience literal — do not restate the RPC names as fresh string constants, or the only-in-the-literal acceptance criterion below becomes unsatisfiable." Criterion at `:573` mirrors it: "the absence assertion satisfies this by iterating the public-audience literal, never by restating the names as fresh string constants." Behavior `:199` ("asserts that absence explicitly with a comment naming why") is now jointly satisfiable with `:573` by exactly the mechanism both new sites prescribe — the naive-executor path cycle 7 worried about (`require.NotContains(set, "GetCharacterProfile")` with fresh constants) now violates an explicit action instruction, not just an inferable criterion. The two sites agree with each other and with the retained H1-correction parenthetical at `:573`. |
+| **L-c7-2** (04-05 flip criteria vs fail-closed fallback) | **RESOLVED** | `04-05-PLAN.md:339` appends "(assuming both bound-flip preconditions held; otherwise the documented fail-closed fallback applies — the entry stays pending, surfaced as an execution deviation or coverage issue per the action — and this criterion is N/A)"; `:340` appends the analogous clause for the annotation precondition. The clauses match the action's two preconditions verbatim (`:296-315`: annotation-exists + every-clause-asserted, each with an explicit leave-pending fallback). Vacuity check: the preconditions are established by 04-01 (wave 1) independently of this plan — 04-01's own acceptance criterion requires the annotation — so when they hold, the criteria revert to unconditional and the executor cannot skip the flip; when they fail, the fallback path leaves an auditable trail (pending entry, no `asserted_by`, recorded deviation) rather than a silent pass. One self-reference nit noted in §3. |
+| **L-c7-3** (04-HANDOFF §9 stale "Not yet corrected" markers) | **RESOLVED** | `04-HANDOFF.md:159`: "**Addendum (2026-08-11):** Items 2 (M1) and 3 (L1) above were corrected at HEAD by commit `7fb1334a5` … The '**Not yet corrected**' markers above are preserved as history of record; they no longer describe HEAD." Covers both items the orchestrator flagged (cycle 7's lane cited only item 3; the orchestrator extended to item 2 — the addendum names both). The historical markers at items 2 (`:152`) and 3 (`:153-155` region) are intact, so the history-of-record property holds. |
+
+## 3. New Concerns
+
+- **LOW — 04-05:340 is self-referential under its own condition.** The criterion asserts "`rg -c 'Verifies: INV-PRIVACY-9' …` returns 1 … (Assuming the annotation precondition held; otherwise … N/A)" — but the annotation precondition *is* that same `rg -c` returning 1 (action `:297-299`). Read in isolation, this one bullet reduces to "the check passes, assuming the check passes." It is not vacuous in effect, because the sibling criterion `:339` conditions on a jointly-determinable precondition and the fallback path mandates a visible pending entry plus a recorded execution deviation — so a silent skip still fails the plan. But if a future cycle wants zero self-reference, `:340`'s clause could instead condition on 04-01's acceptance record ("assuming 04-01 Task 1 completed as accepted"). Cosmetic; no action required for execution.
+- **Informational, not a defect — handoff historical line citations drifted further.** `04-HANDOFF.md:107-114` cites `04-08:485`, `:355-360`, `:346-352`, `:33`, `:414` — cycle-5-era positions that were already stale before this commit and shifted 3 more lines by the `:337-343` insertion. That section is an explicit historical record of past findings (all marked resolved in later cycles), so drift is expected and the addendum pattern already covers the one section (§9) where staleness could mislead a resuming session. No fix needed.
+
+No HIGH or MEDIUM concerns.
+
+## 4. Suggestions
+
+None required. (Optional polish, non-blocking: reword `04-05-PLAN.md:340`'s conditional to reference 04-01's completion rather than the criterion's own check, per §3.)
+
+## 5. Risk Assessment
+
+**Overall: LOW.** The delta is contained exactly as claimed (3 files; `git show --stat aec657b33` confirms), the three edits do what the commit message says, and no cross-plan reference breaks: 04-01 still solely owns the `// Verifies: INV-PRIVACY-9` annotation (04-05's `read_first :269-274` and criteria `:339-340` both restate that ownership and stay inside 04-05's `files_modified`), and 04-08's census cross-references into 04-02/04-05/04-07 are untouched by this commit (its guest-gate/ownership/proxy expected-set membership at `:560-571` region is unchanged).
+
+Per-plan execution readiness: **04-05 READY** (self-reference nit is cosmetic) · **04-08 READY** (the L-c7-1 ambiguity is closed at both the instruction and criterion layer). The finding ledger from cycles 1–7 is now fully closed: **0 open findings**.
+
+---
+
+## Orchestrator source-grounding pass — Cycle 8
+
+The orchestrator independently re-verified the lane's disposition verdicts against the files on
+disk before accepting the cycle:
+
+| Claim | Status | Evidence |
+|---|---|---|
+| L-c7-1 action-side instruction present | VERIFIED | `04-08-PLAN.md:340-343` reads "Drive the absence assertion by iterating the public-audience literal — do not restate the RPC names as fresh string constants, or the only-in-the-literal acceptance criterion below becomes unsatisfiable" |
+| L-c7-1 criterion-side clause present and consistent | VERIFIED | `04-08-PLAN.md:573` carries "the absence assertion satisfies this by iterating the public-audience literal, never by restating the names as fresh string constants" alongside the retained cycle-6 H1-correction parenthetical; behavior `:199` ("the census asserts that absence explicitly with a comment naming why") is jointly satisfiable by that mechanism |
+| L-c7-2 both criteria conditioned on the preconditions | VERIFIED | `04-05-PLAN.md:339` ("assuming both bound-flip preconditions held; otherwise the documented fail-closed fallback applies … and this criterion is N/A") and `:340` ("Assuming the annotation precondition held; otherwise … N/A"); the action's two preconditions with leave-pending fallbacks sit at `:296-311` (annotation-exists, ownership stays with 04-01) and `:308-311` (every-clause-asserted, coverage-issue fallback) |
+| L-c7-2 non-vacuity | ACCEPTED | The preconditions are established by 04-01 (wave 1) whose own acceptance criterion requires the annotation (`rg -c` returns 1); when they hold the criteria are unconditional, and the fallback path leaves an auditable pending entry — no silent-pass route exists. The lane's LOW self-reference note on `:340` is accurate (the conditional's precondition is the same `rg -c` check at `:298`) and correctly graded cosmetic |
+| L-c7-3 addendum covers both stale items | VERIFIED | `04-HANDOFF.md:159` names "Items 2 (M1) and 3 (L1)" and `7fb1334a5`; the historical "**Not yet corrected**" markers remain at items 2–3 (`rg -c 'Not yet corrected' 04-HANDOFF.md` → 3: the two markers plus the addendum's own quotation) |
+| Delta containment | VERIFIED | `git show --stat aec657b33` → exactly `04-05-PLAN.md` (4 ±), `04-08-PLAN.md` (7 ±), `04-HANDOFF.md` (2 +); 9 insertions, 4 deletions; no other file touched |
+
+All three dispositions accepted as RESOLVED. The one new LOW is a cosmetic wording preference
+(self-referential conditional on `04-05-PLAN.md:340`) whose substance — no silent-pass route —
+the orchestrator confirmed; it is recorded as an observation, not an actionable finding, because
+the plan text already encodes the fail-closed behavior the wording is meant to protect. The
+informational note on historical handoff line-drift requires no action by design.
+
+## Consensus Summary — Cycle 8
+
+Two independent reviewer identities across cycles 5–8 (codex `gpt-5`-class at `xhigh`, claude
+`claude-fable-5`) have converged to a closed ledger: every finding raised across cycles 1–7 is
+resolved on disk and verified by an independent lane, and cycle 8 raised no HIGH, no MEDIUM, and
+no actionable LOW.
+
+### Agreed Strengths
+
+- The literal-driven absence assertion is now specified at both layers (action instruction and
+  acceptance criterion), eliminating the last joint-satisfiability ambiguity in the 04-08 census.
+- The 04-05 bound-flip criteria are reconciled with their fail-closed fallback without opening a
+  silent-skip route: precondition holds ⇒ criteria unconditional; precondition fails ⇒ auditable
+  pending entry plus recorded deviation.
+- The handoff's history-of-record convention (preserve stale markers, correct via dated addendum)
+  is now applied consistently to both stale items.
+
+### Open Concerns
+
+None actionable. One cosmetic observation (04-05:340's precondition-conditional references its own
+check; a future edit could reference 04-01's completion instead) and one informational note
+(historical line-number drift in 04-HANDOFF §5's cycle-5-era citations, expected and harmless).
+
+### Divergent Views
+
+None.
+
+### Execution-readiness (joint position)
+
+All nine plans are execution-ready as written: **04-01, 04-02, 04-03 (wave 1), 04-04 + 04-09
+(wave 2), 04-05 (wave 3), 04-06 (wave 4), 04-07 (wave 5), 04-08 (wave 6)**. Overall risk: **LOW**.
+The finding ledger is fully closed — **0 open findings** across all eight cycles. Phase 4 is ready
+for `/gsd-execute-phase`.
+
+## Verification coverage — Cycle 8
+
+Commands the orchestrator ran against HEAD (`aec657b33`) to ground this cycle:
+
+- `sed -n '337,345p' 04-08-PLAN.md` — action-side literal-iteration instruction present
+- `sed -n '573p' 04-08-PLAN.md` + `sed -n '197,201p'` — criterion clause and behavior `:199` agree
+- `sed -n '296,315p' 04-05-PLAN.md` + `sed -n '339,340p'` — preconditions and conditional criteria match
+- `rg -n 'Addendum \(2026-08-11\)' 04-HANDOFF.md` → `:159`; `rg -c 'Not yet corrected'` → 3 (two markers + the addendum's quotation)
+- `rg -n 'Drive the absence assertion' 04-08-PLAN.md` → `:340`
+- `rg -n 'assuming both bound-flip preconditions held|Assuming the annotation precondition held' 04-05-PLAN.md` → `:339`, `:340`
+- `git show --stat aec657b33` — delta touched exactly the three files claimed
