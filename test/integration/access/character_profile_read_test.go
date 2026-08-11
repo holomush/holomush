@@ -99,14 +99,20 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 	)
 
 	var (
-		charID    ulid.ULID // the character whose profile is read
-		charName  string
-		charDesc  string
-		guestID   ulid.ULID // the guest PLAYER whose session token drives the guest rung
-		locID     ulid.ULID
-		srv       *holoGRPC.CharacterAccessServer
-		psRepo    auth.PlayerSessionRepository
-		playerRep auth.PlayerRepository
+		charID   ulid.ULID // the character whose profile is read
+		charName string
+		charDesc string
+		// otherCharID is a SECOND reachable character, named by no spec's
+		// targeted policy. It exists so a control can assert the engine under
+		// test still PERMITS something — an engine that denied every profile
+		// would satisfy an all-negative differential just as well.
+		otherCharID   ulid.ULID
+		otherCharName string
+		guestID       ulid.ULID // the guest PLAYER whose session token drives the guest rung
+		locID         ulid.ULID
+		srv           *holoGRPC.CharacterAccessServer
+		psRepo        auth.PlayerSessionRepository
+		playerRep     auth.PlayerRepository
 	)
 
 	// newServer builds a CharacterAccessServer over an arbitrary policy engine,
@@ -140,13 +146,22 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 	}
 
 	// newCorpusEngine builds a second engine over the SAME real provider stack as
-	// env.engine but a DIFFERENT policy corpus, and pins that the exclusion
-	// actually matched something.
+	// env.engine but a DIFFERENT policy corpus, and pins that the corpus really
+	// does differ from the seeded one.
 	newCorpusEngine := func(ctx context.Context, excluded []string, appended ...*policystore.StoredPolicy) *policy.Engine {
 		exSet := make(map[string]bool, len(excluded))
 		for _, name := range excluded {
 			exSet[name] = true
 		}
+
+		// A corpus that neither excludes nor appends is byte-identical to the
+		// seeded one, so a "control" built from it differs from the subject in
+		// NOTHING and can only ever agree with it. Refuse that shape here rather
+		// than let a caller reach it by passing a nil exclusion list and
+		// forgetting the append.
+		Expect(len(excluded)+len(appended)).To(BeNumerically(">", 0),
+			"a control corpus must differ from the seeded one in at least one direction — exclude a policy, append a policy, or both")
+
 		corpus := &profileCorpusStore{PolicyStore: env.pStore, excluded: exSet, appended: appended}
 		cache := policy.NewCache(corpus, env.compiler)
 		Expect(cache.Reload(ctx)).To(Succeed())
@@ -223,6 +238,18 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 			append([]any{charID.String(), ownerID.String(), charName, charDesc, locID.String()},
 				chartest.Columns(charName)...)...)
+		Expect(err).NotTo(HaveOccurred())
+
+		// The second, unremarkable character. It carries no property rows, so it
+		// changes nothing for the specs that enumerate charID's profile; its only
+		// job is to be reachable while a targeted policy names charID.
+		otherCharID = core.NewULID()
+		otherCharName = uniqueCharFixtureName("Bystander", otherCharID)
+		_, err = env.pool.Exec(ctx, `
+			INSERT INTO characters (id, player_id, name, description, location_id, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			append([]any{otherCharID.String(), ownerID.String(), otherCharName, "A bystander.", locID.String()},
+				chartest.Columns(otherCharName)...)...)
 		Expect(err).NotTo(HaveOccurred())
 
 		// The guest player and its live session. The token is what moves the
@@ -336,13 +363,17 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 			Expect(strings.Contains(status.Convert(unreachableErr).Message(), "CHARACTER_PROFILE_NOT_FOUND")).
 				To(BeFalse(), "the wire message must not carry the internal code string")
 
-			// Non-vacuity: the same server on a THIRD, reachable, existing
-			// character must succeed, so the equality above is not "this engine
-			// denies everything".
+			// Non-vacuity: a DIFFERENT, reachable, existing character on the SAME
+			// engine must SUCCEED. Without this the byte equality above is
+			// satisfiable by an engine that denies every profile — both legs would
+			// then be NotFound with the identical shared literal, both responses
+			// nil, and proto.Marshal(nil) empty for both, so the spec would go
+			// green with the property under test never exercised.
 			okResp, okErr := belowFloor.GetCharacterProfile(ctx,
-				&characteraccessv1.GetCharacterProfileRequest{CharacterId: charID.String(), PlayerSessionToken: ""})
-			Expect(okErr).To(HaveOccurred(), "the forbidden profile stays forbidden")
-			Expect(okResp).To(BeNil())
+				&characteraccessv1.GetCharacterProfileRequest{CharacterId: otherCharID.String()})
+			Expect(okErr).NotTo(HaveOccurred(),
+				"the appended forbid names ONE profile; every other profile must stay reachable on this same engine")
+			Expect(okResp.GetCharacter().GetName()).To(Equal(otherCharName))
 		})
 	})
 

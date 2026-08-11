@@ -2160,7 +2160,7 @@ invariants:
   # -- v0.13 web portal (milestone v0.13, Phase 1). Born canonical; no legacy tokens.
   # The two DISCLOSURE guarantees of the profile visibility model land here; the two
   # EVALUATION guarantees land in INV-ACCESS (this scope's boundary forwards ABAC
-  # policy evaluation there by name). binding: pending — asserting tests land in Phase 4.
+  # policy evaluation there by name). The asserting tests landed in Phase 4.
   - id: INV-PRIVACY-9
     scope: INV-PRIVACY
     origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
