@@ -82,7 +82,7 @@ func NewSceneAccessServer(
 	pluginManager sceneAccessPluginManager,
 ) *SceneAccessServer {
 	return &SceneAccessServer{
-		playerGate:    newPlayerGate(playerSessionRepo, playerRepo, charRepo, sceneGuestDenialMessage),
+		playerGate:    newPlayerGate(playerSessionRepo, playerRepo, charRepo, sceneGuestDenialMessage, sceneAccessLogPrefix),
 		sessionStore:  sessionStore,
 		coordinator:   coordinator,
 		sceneClient:   sceneClient,

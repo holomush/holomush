@@ -4,7 +4,9 @@
 package grpc
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -44,6 +46,7 @@ func TestPlayerGateResolveAndGateDeniesAGuestSessionWithPermissionDeniedAndTheCo
 		buildGatePlayerRepo(t, playerID, true),
 		authmocks.NewMockCharacterRepository(t),
 		sceneGuestDenialMessage,
+		sceneAccessLogPrefix,
 	)
 
 	got, err := gate.resolveAndGate(ctx, testSAToken)
@@ -81,6 +84,7 @@ func TestPlayerGateResolveAndGateGuestDenialMessageIsPerGateRatherThanHardCoded(
 				buildGatePlayerRepo(t, playerID, true),
 				authmocks.NewMockCharacterRepository(t),
 				tt.configured,
+				sceneAccessLogPrefix,
 			)
 
 			_, err := gate.resolveAndGate(ctx, testSAToken)
@@ -104,6 +108,7 @@ func TestPlayerGateResolveAndGateReturnsTheResolvedSessionForANonGuestPlayer(t *
 		buildGatePlayerRepo(t, playerID, false),
 		authmocks.NewMockCharacterRepository(t),
 		sceneGuestDenialMessage,
+		sceneAccessLogPrefix,
 	)
 
 	got, err := gate.resolveAndGate(ctx, testSAToken)
@@ -124,6 +129,7 @@ func TestPlayerGateResolveAndGateReturnsUnimplementedWhenTheSessionRepositoryIsN
 		authmocks.NewMockPlayerRepository(t),
 		authmocks.NewMockCharacterRepository(t),
 		sceneGuestDenialMessage,
+		sceneAccessLogPrefix,
 	)
 
 	got, err := gate.resolveAndGate(ctx, testSAToken)
@@ -157,6 +163,7 @@ func TestPlayerGateOwnedCharacterReturnsAnIdenticalNotFoundForAnUnparseableIDAnd
 		authmocks.NewMockPlayerRepository(t),
 		charRepo,
 		sceneGuestDenialMessage,
+		sceneAccessLogPrefix,
 	)
 
 	malformedChar, malformedErr := gate.ownedCharacter(ctx, playerID, "not-a-ulid")
@@ -192,6 +199,7 @@ func TestPlayerGateOwnedCharacterReturnsInternalWithAMessageDistinctFromNotFound
 		authmocks.NewMockPlayerRepository(t),
 		failingRepo,
 		sceneGuestDenialMessage,
+		sceneAccessLogPrefix,
 	)
 
 	gotChar, infraErr := failingGate.ownedCharacter(ctx, playerID, charID.String())
@@ -210,6 +218,7 @@ func TestPlayerGateOwnedCharacterReturnsInternalWithAMessageDistinctFromNotFound
 		authmocks.NewMockPlayerRepository(t),
 		emptyRepo,
 		sceneGuestDenialMessage,
+		sceneAccessLogPrefix,
 	)
 	_, notFoundErr := notFoundGate.ownedCharacter(ctx, playerID, charID.String())
 	require.Error(t, notFoundErr)
@@ -233,6 +242,7 @@ func TestPlayerGateOwnedCharacterReturnsTheCharacterWhenThePlayerOwnsIt(t *testi
 		authmocks.NewMockPlayerRepository(t),
 		charRepo,
 		sceneGuestDenialMessage,
+		sceneAccessLogPrefix,
 	)
 
 	got, err := gate.ownedCharacter(ctx, playerID, owned.ID.String())
@@ -241,4 +251,87 @@ func TestPlayerGateOwnedCharacterReturnsTheCharacterWhenThePlayerOwnsIt(t *testi
 	require.NotNil(t, got)
 	assert.Equal(t, owned.ID, got.ID)
 	assert.Equal(t, "Alice", got.Name)
+}
+
+// TestPlayerGateAttributesItsFailureLogsToTheConfiguredSurfaceAndCarriesTheOopsCode
+// pins the two remaining log lines the shared gate emits.
+//
+// Both were byte-identical carry-overs from the scene facade, hardcoded to
+// "scene access" and written as a bare slog.ErrorContext(ctx, msg, "error", err).
+// Moving them into shared code multiplied their blast radius: they now fire for
+// ListMyCharacters, GetMyCharacter, UpdateCharacterProfile and
+// UpdateCharacterDescription, so an operator triaging a character-surface outage
+// greps "character access" and finds nothing while the scene facade's dashboards
+// absorb the noise. The phase's own reasoning for a per-facade DENIAL message
+// applies verbatim to a per-facade log message.
+//
+// The oops-code assertion is the second half: .claude/rules/grpc-errors.md
+// requires errutil.LogErrorContext, which lifts the oops code and context map
+// into structured fields. The bare form flattens the error to a string and loses
+// the code an operator would filter on in Loki or Sentry.
+func TestPlayerGateAttributesItsFailureLogsToTheConfiguredSurfaceAndCarriesTheOopsCode(t *testing.T) {
+	tests := []struct {
+		name      string
+		prefix    string
+		wantScene bool
+	}{
+		{"the scene gate keeps naming the scene surface", sceneAccessLogPrefix, true},
+		{"the character gate names the character surface", characterAccessLogPrefix, false},
+		{"an empty prefix falls back to the scene surface rather than emitting a bare line", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			playerID := idgen.New()
+
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+
+			// The roster lookup fails — the gate's one logged branch in
+			// ownedCharacter.
+			failingRepo := authmocks.NewMockCharacterRepository(t)
+			failingRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+				Return(nil, oops.Code("CHARACTER_LIST_FAILED").Errorf("database unreachable")).Once()
+
+			// The player lookup fails — the gate's one logged branch in
+			// resolveAndGate.
+			ps := buildSATestPS(t, playerID)
+			failingPlayerRepo := authmocks.NewMockPlayerRepository(t)
+			failingPlayerRepo.EXPECT().GetByID(mock.Anything, playerID).
+				Return(nil, oops.Code("PLAYER_LOOKUP_FAILED").Errorf("database unreachable")).Once()
+
+			gate := newPlayerGate(
+				buildSASessionRepo(t, ps),
+				failingPlayerRepo,
+				failingRepo,
+				sceneGuestDenialMessage,
+				tt.prefix,
+			)
+
+			_, charErr := gate.ownedCharacter(ctx, playerID, idgen.New().String())
+			_, sessErr := gate.resolveAndGate(ctx, testSAToken)
+			require.Error(t, charErr)
+			require.Error(t, sessErr)
+
+			logged := buf.String()
+			wantPrefix, otherPrefix := characterAccessLogPrefix, sceneAccessLogPrefix
+			if tt.wantScene {
+				wantPrefix, otherPrefix = sceneAccessLogPrefix, characterAccessLogPrefix
+			}
+
+			assert.Contains(t, logged, wantPrefix+": list characters failed")
+			assert.Contains(t, logged, wantPrefix+": player lookup failed")
+			assert.NotContains(t, logged, otherPrefix+":",
+				"a gate MUST NOT attribute its failures to a surface the caller never touched")
+
+			// errutil.LogErrorContext lifts the oops code into a structured field;
+			// a bare slog.ErrorContext(ctx, msg, "error", err) would not.
+			assert.Contains(t, logged, "CHARACTER_LIST_FAILED",
+				"the oops code must reach the log as a structured field, not be flattened into a string")
+			assert.Contains(t, logged, "PLAYER_LOOKUP_FAILED")
+		})
+	}
 }

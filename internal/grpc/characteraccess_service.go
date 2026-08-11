@@ -150,6 +150,12 @@ const characterProfileNotFoundMessage = "character profile not found"
 // caller cannot see and no reason beyond the one that applies.
 const characterGuestDenialMessage = "guests do not have characters of their own"
 
+// characterAccessLogPrefix names the CHARACTER surface in the log lines the
+// shared gate emits on this facade's behalf. It is the same prefix every other
+// log line in this facade already uses, so an operator triaging a
+// character-surface outage finds the gate's lines with the same grep.
+const characterAccessLogPrefix = "character access"
+
 // characterParentType is the entity_properties.parent_type discriminator the
 // profile enumeration filters on. Profile rows hang off the character row, not
 // off a location or an object.
@@ -229,7 +235,7 @@ func NewCharacterAccessServer(
 	charRepo auth.CharacterRepository,
 ) *CharacterAccessServer {
 	return &CharacterAccessServer{
-		playerGate:   newPlayerGate(playerSessionRepo, playerRepo, charRepo, characterGuestDenialMessage),
+		playerGate:   newPlayerGate(playerSessionRepo, playerRepo, charRepo, characterGuestDenialMessage, characterAccessLogPrefix),
 		world:        worldReader,
 		worldMutator: worldMutator,
 		profileVis:   profileVis,

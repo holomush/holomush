@@ -5,7 +5,6 @@ package grpc
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // sceneGuestDenialMessage is the wire message SceneAccessServer denies a guest
@@ -22,6 +22,11 @@ import (
 // a caller supplies an empty message — a miswired facade must not produce an
 // empty denial reason.
 const sceneGuestDenialMessage = "guests cannot access scenes"
+
+// sceneAccessLogPrefix names the SCENE surface in the log lines its gate emits.
+// Like sceneGuestDenialMessage it doubles as newPlayerGate's fallback, so a
+// miswired facade produces an attributed line rather than a bare one.
+const sceneAccessLogPrefix = "scene access"
 
 // playerGate is the single definition of the two owner-audience authorization
 // helpers every facade in this package shares: the guest gate (INV-SCENE-64)
@@ -38,24 +43,37 @@ type playerGate struct {
 	// sceneGuestDenialMessage verbatim, while other owner-audience surfaces
 	// name their own.
 	guestDenialMessage string
+
+	// logPrefix names the SURFACE in every log line this gate emits, for the
+	// same reason guestDenialMessage is per-facade. An operator triaging a
+	// character-surface outage greps "character access" — the prefix every other
+	// log line on that facade uses — and a hardcoded "scene access" here makes
+	// the failure unfindable from the surface that produced it while dropping
+	// character-facade noise into the scene facade's dashboards.
+	logPrefix string
 }
 
 // newPlayerGate builds the shared gate. An empty guestDenialMessage defaults to
-// sceneGuestDenialMessage.
+// sceneGuestDenialMessage, and an empty logPrefix to sceneAccessLogPrefix.
 func newPlayerGate(
 	playerSessionRepo auth.PlayerSessionRepository,
 	playerRepo auth.PlayerRepository,
 	charRepo auth.CharacterRepository,
 	guestDenialMessage string,
+	logPrefix string,
 ) playerGate {
 	if guestDenialMessage == "" {
 		guestDenialMessage = sceneGuestDenialMessage
+	}
+	if logPrefix == "" {
+		logPrefix = sceneAccessLogPrefix
 	}
 	return playerGate{
 		playerSessionRepo:  playerSessionRepo,
 		playerRepo:         playerRepo,
 		charRepo:           charRepo,
 		guestDenialMessage: guestDenialMessage,
+		logPrefix:          logPrefix,
 	}
 }
 
@@ -73,7 +91,7 @@ func (s *playerGate) ownedCharacter(ctx context.Context, playerID ulid.ULID, cha
 	}
 	chars, err := s.charRepo.ListByPlayer(ctx, playerID)
 	if err != nil {
-		slog.ErrorContext(ctx, "scene access: list characters failed", "error", err)
+		errutil.LogErrorContext(ctx, s.logPrefix+": list characters failed", err)
 		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
 	}
 	for _, c := range chars {
@@ -98,7 +116,7 @@ func (s *playerGate) resolveAndGate(ctx context.Context, rawToken string) (*auth
 
 	player, err := s.playerRepo.GetByID(ctx, ps.PlayerID)
 	if err != nil {
-		slog.ErrorContext(ctx, "scene access: player lookup failed", "error", err)
+		errutil.LogErrorContext(ctx, s.logPrefix+": player lookup failed", err)
 		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
 	}
 	if player.IsGuest {
