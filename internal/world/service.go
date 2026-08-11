@@ -876,7 +876,46 @@ func (s *Service) GetCharacterDescription(ctx context.Context, subjectID Caller,
 	return CharacterDescription{Name: char.Name, Description: char.Description}, nil
 }
 
-// UpdateCharacterDescription sets a character's description after checking write authorization.
+// UpdateCharacterDescription sets a character's description after checking write
+// authorization and VALIDATING the new value.
+//
+// # The validation is new, and its absence was a real bug (issue #4954)
+//
+// Until this command routed the assignment through [Character.SetDescription] it
+// performed no validation at all: the freshly-read character took the caller's
+// string by direct field assignment, worldMutator.updateCharacter forwarded it
+// verbatim to characterWriter.Update, and the repository bound it straight into
+// the UPDATE — so an over-cap, invalid-UTF-8 or control-character description
+// reached the column through the shipped command. ValidateDescription was
+// reachable only from Character.Validate and Character.SetDescription, and
+// neither ran here. The sibling commands already had the shape: UpdateLocation
+// validates before its write for the same reason.
+//
+// # Position is load-bearing
+//
+// The setter runs AFTER checkAccess and AFTER the repository read, exactly where
+// the bare assignment used to. Hoisting it to the top as a cheap fast-fail would
+// let an unauthorized caller distinguish a valid payload from an invalid one and
+// turn this command into a rules oracle.
+//
+// # The narrow setter, not Character.Validate
+//
+// Validate() also re-checks the STORED name through ValidateCharacterName, so a
+// legacy or guest-provisioned name that no longer satisfies the current rules
+// would make an unrelated description edit fail. Validate the field being
+// written and nothing else.
+//
+// # Which layer owns this cap
+//
+// THE DESCRIPTION'S CAP LIVES HERE, IN THE DOMAIN, and the facade converts the
+// resulting CodeCharacterInvalid into codes.InvalidArgument rather than
+// re-implementing the rule. That is the opposite of the twelve `profile.*`
+// prose fields, whose caps live in the character-access handler (D-82) because
+// UpdateCharacterProfileAttributes deliberately does not enforce them. Exactly
+// one layer owns each field; do not add a second, divergent check for either.
+//
+// An EMPTY description is legal — ValidateDescription returns early for it — so
+// clearing the column is a supported edit. The cap is measured in BYTES.
 func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID Caller, characterID ulid.ULID, description string) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_UPDATE_FAILED").Errorf("character repository not configured")
@@ -895,7 +934,9 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID Call
 	if s.mutator == nil {
 		return oops.Code("CHARACTER_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	char.Description = description
+	if setErr := char.SetDescription(description); setErr != nil {
+		return oops.Code(CodeCharacterInvalid).Wrap(setErr)
+	}
 	payload, err := BuildCharacterUpdatePayload(characterID, description)
 	if err != nil {
 		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "build character update payload %s", characterID)

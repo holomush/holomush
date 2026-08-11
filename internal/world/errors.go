@@ -25,6 +25,18 @@ var ErrConcurrentEdit = errors.New("concurrent edit")
 // wrapping ErrConcurrentEdit. Asserted with errutil.AssertErrorCode.
 const CodeConcurrentEdit = "WORLD_CONCURRENT_EDIT"
 
+// CodeCharacterInvalid is the oops code a character command stamps when the
+// value it was asked to write fails the domain's own validation — today, the
+// description rules ValidateDescription applies (issue #4954).
+//
+// It is a CONSTANT rather than the bare literal its LOCATION_INVALID /
+// OBJECT_INVALID siblings use because it crosses a package boundary: the
+// character-access facade matches on it to render codes.InvalidArgument, and a
+// cross-package code with two spellings is a divergence waiting to happen. That
+// is the same reason CodeConcurrentEdit above is a constant. Asserted with
+// errutil.AssertErrorCode.
+const CodeCharacterInvalid = "CHARACTER_INVALID"
+
 // ErrFeedLockTimeout is returned when the per-game feed_position counter's
 // FOR UPDATE lock cannot be acquired within the allocator's bounded
 // lock/statement timeout (MODEL-04). The per-game counter serializes all

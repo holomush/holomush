@@ -485,6 +485,110 @@ func TestWorldService_UpdateCharacterDescription(t *testing.T) {
 		assert.ErrorIs(t, err, world.ErrConcurrentEdit)
 		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
 	})
+
+	// The subtests below close GitHub issue #4954: until this plan the command
+	// performed NO validation at all. `char.Description = description` went
+	// straight into the mutator, into characterWriter.Update, and into the
+	// UPDATE statement — so a 4001-byte, invalid-UTF-8 or control-character
+	// description reached the column through the shipped command.
+	//
+	// "Update was never called" is asserted by simply NOT declaring an
+	// EXPECT().Update: the mockery mock fails the test on an unexpected call.
+	// The outbox call count reinforces it, so a future harness change cannot
+	// silently weaken the negative.
+	newDescriptionFixture := func(t *testing.T, grantWrite bool) (*world.Service, *worldtest.MockCharacterRepository, *mockOutboxWriter) {
+		t.Helper()
+		engine := policytest.NewGrantEngine()
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+		outbox := &mockOutboxWriter{}
+		if grantWrite {
+			engine.Grant(subjectID, "write", access.CharacterResource(charID.String()))
+		}
+		svc := world.NewService(withWriteExecutor(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			Engine:        engine,
+		}, outbox))
+		return svc, mockRepo, outbox
+	}
+
+	// overCap is one byte past MaxDescriptionLength. multiByte has a rune count
+	// comfortably under the cap and a BYTE length over it — the domain rule is
+	// byte-measured (validation.go:102 compares len(desc)).
+	overCap := strings.Repeat("a", world.MaxDescriptionLength+1)
+	multiByte := strings.Repeat("é", (world.MaxDescriptionLength/2)+1)
+
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{"a description one byte past the cap", overCap},
+		{"a multi-byte value under the RUNE cap but over the BYTE cap", multiByte},
+		{"invalid UTF-8", string([]byte{0xff, 0xfe, 0x41})},
+		// NOT "\r": hasControlCharsExceptWhitespace (validation.go:191) permits
+		// carriage return alongside newline and tab, so a "\r" fixture would be
+		// permanently RED against correct code.
+		{"an ANSI escape", "\x1b[31mdanger"},
+		{"a BEL", "ring\x07ring"},
+	} {
+		t.Run("rejects "+tc.name+" before any write", func(t *testing.T) {
+			svc, mockRepo, outbox := newDescriptionFixture(t, true)
+			mockRepo.EXPECT().Get(ctx, charID).Return(&world.Character{ID: charID, Name: "Alice", Version: 5}, nil)
+
+			err := svc.UpdateCharacterDescription(ctx, world.HumanCaller(subjectID), charID, tc.value)
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, world.CodeCharacterInvalid)
+
+			var validationErr *world.ValidationError
+			require.ErrorAs(t, err, &validationErr,
+				"the facade needs a typed validation failure, not an opaque one")
+			assert.Equal(t, 0, outbox.calls, "a rejected description emits no envelope")
+		})
+	}
+
+	t.Run("sanity: the multi-byte fixture really is under the rune cap and over the byte cap", func(t *testing.T) {
+		require.Less(t, len([]rune(multiByte)), world.MaxDescriptionLength)
+		require.Greater(t, len(multiByte), world.MaxDescriptionLength)
+	})
+
+	t.Run("accepts a description at exactly the cap", func(t *testing.T) {
+		svc, mockRepo, outbox := newDescriptionFixture(t, true)
+		atCap := strings.Repeat("a", world.MaxDescriptionLength)
+		mockRepo.EXPECT().Get(ctx, charID).Return(&world.Character{ID: charID, Name: "Alice", Version: 5}, nil)
+		mockRepo.EXPECT().Update(mock.Anything, mock.MatchedBy(func(c *world.Character) bool {
+			return c.Description == atCap
+		})).Return(nil, nil)
+
+		require.NoError(t, svc.UpdateCharacterDescription(ctx, world.HumanCaller(subjectID), charID, atCap))
+		assert.Equal(t, 1, outbox.calls)
+	})
+
+	t.Run("still accepts an empty description — clearing it is a supported edit", func(t *testing.T) {
+		svc, mockRepo, outbox := newDescriptionFixture(t, true)
+		mockRepo.EXPECT().Get(ctx, charID).Return(&world.Character{ID: charID, Name: "Alice", Description: "old", Version: 5}, nil)
+		mockRepo.EXPECT().Update(mock.Anything, mock.MatchedBy(func(c *world.Character) bool {
+			return c.Description == ""
+		})).Return(nil, nil)
+
+		require.NoError(t, svc.UpdateCharacterDescription(ctx, world.HumanCaller(subjectID), charID, ""))
+		assert.Equal(t, 1, outbox.calls)
+	})
+
+	t.Run("an unauthorized caller gets the authorization error, never the validation error", func(t *testing.T) {
+		// Validation sits AFTER checkAccess deliberately. Hoisting it to the top
+		// as a cheap fast-fail would let an unauthorized caller distinguish a
+		// valid payload from an invalid one and turn the command into a rules
+		// oracle. No Get expectation is declared: the read must not happen either.
+		svc, _, outbox := newDescriptionFixture(t, false)
+
+		err := svc.UpdateCharacterDescription(ctx, world.HumanCaller(subjectID), charID, overCap)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		if oe, ok := oops.AsOops(err); ok {
+			assert.NotEqual(t, world.CodeCharacterInvalid, oe.Code(),
+				"an unauthorized caller learns nothing about the row or the rules")
+		}
+		assert.Equal(t, 0, outbox.calls)
+	})
 }
 
 func TestWorldService_DeleteLocation(t *testing.T) {
