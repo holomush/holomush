@@ -54,7 +54,7 @@ const reachabilityPolicyName = "seed:profile-reachable"
 // written against an empty row passes while the property is false.
 const integrationBiographySentinel = "SENTINEL-INTEGRATION-BIOGRAPHY-BELOW-ANON-FLOOR-9b41ce07"
 
-// profileCorpusStore is the paired-positive-control corpus for this file: the
+// profileCorpusStore is the paired-positive-control corpus for this package: the
 // real seeded corpus with named policies removed and/or extra ones appended.
 //
 // It generalizes profile_public_read_test.go's excludingPolicyStore in the one
@@ -90,6 +90,45 @@ func (s *profileCorpusStore) ListEnabled(ctx context.Context) ([]*policystore.St
 		kept = append(kept, p)
 	}
 	return append(kept, s.appended...), nil
+}
+
+// newCorpusEngine builds a second engine over the SAME real provider stack as
+// env.engine but a DIFFERENT policy corpus, and pins that the corpus really does
+// differ from the seeded one.
+//
+// It is package-level rather than a per-file closure DELIBERATELY. Two
+// byte-similar copies existed — one here, one in character_directory_test.go —
+// and only this one carried the differs-in-at-least-one-direction refusal. That
+// file is safe today only because all three of its call sites happen to pass a
+// non-empty `excluded`; an append-only control added there later would have
+// reached exactly the disarmed shape the refusal exists to reject. One
+// definition means one place for the refusal to live.
+//
+// What the two guards prove, and what they do not: the refusal proves the corpus
+// differs in SHAPE, and `removed` proves each named exclusion actually matched.
+// Neither proves the difference took EFFECT — an appended `forbid` naming a
+// resource that matches nothing still compiles and still passes Cache.Reload.
+// Effect is each spec's own paired positive control to establish.
+func newCorpusEngine(ctx context.Context, excluded []string, appended ...*policystore.StoredPolicy) *policy.Engine {
+	exSet := make(map[string]bool, len(excluded))
+	for _, name := range excluded {
+		exSet[name] = true
+	}
+
+	// A corpus that neither excludes nor appends is byte-identical to the seeded
+	// one, so a "control" built from it differs from the subject in NOTHING and
+	// can only ever agree with it. Refuse that shape here rather than let a
+	// caller reach it by passing a nil exclusion list and forgetting the append.
+	Expect(len(excluded)+len(appended)).To(BeNumerically(">", 0),
+		"a control corpus must differ from the seeded one in at least one direction — exclude a policy, append a policy, or both")
+
+	corpus := &profileCorpusStore{PolicyStore: env.pStore, excluded: exSet, appended: appended}
+	cache := policy.NewCache(corpus, env.compiler)
+	Expect(cache.Reload(ctx)).To(Succeed())
+	Expect(corpus.removed).To(Equal(len(excluded)),
+		"the control corpus must exclude exactly %d policies (%v) — a 0 here means the name no longer matches anything seeded and the control is disarmed",
+		len(excluded), excluded)
+	return policy.NewEngine(env.resolver, cache, &noopSessionResolver{}, env.auditLogger)
 }
 
 var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile read", func() {
@@ -143,32 +182,6 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 			// exercises the same shape cmd/holomush does.
 			setup.NewCharRepoAdapter(env.pool, env.charRepo),
 		)
-	}
-
-	// newCorpusEngine builds a second engine over the SAME real provider stack as
-	// env.engine but a DIFFERENT policy corpus, and pins that the corpus really
-	// does differ from the seeded one.
-	newCorpusEngine := func(ctx context.Context, excluded []string, appended ...*policystore.StoredPolicy) *policy.Engine {
-		exSet := make(map[string]bool, len(excluded))
-		for _, name := range excluded {
-			exSet[name] = true
-		}
-
-		// A corpus that neither excludes nor appends is byte-identical to the
-		// seeded one, so a "control" built from it differs from the subject in
-		// NOTHING and can only ever agree with it. Refuse that shape here rather
-		// than let a caller reach it by passing a nil exclusion list and
-		// forgetting the append.
-		Expect(len(excluded)+len(appended)).To(BeNumerically(">", 0),
-			"a control corpus must differ from the seeded one in at least one direction — exclude a policy, append a policy, or both")
-
-		corpus := &profileCorpusStore{PolicyStore: env.pStore, excluded: exSet, appended: appended}
-		cache := policy.NewCache(corpus, env.compiler)
-		Expect(cache.Reload(ctx)).To(Succeed())
-		Expect(corpus.removed).To(Equal(len(excluded)),
-			"the control corpus must exclude exactly %d policies (%v) — a 0 here means the name no longer matches anything seeded and the control is disarmed",
-			len(excluded), excluded)
-		return policy.NewEngine(env.resolver, cache, &noopSessionResolver{}, env.auditLogger)
 	}
 
 	read := func(id, token string) (*characteraccessv1.GetCharacterProfileResponse, error) {

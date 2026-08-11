@@ -73,23 +73,11 @@ var _ = Describe("PROFILE-03/PROFILE-04: the public character directory", func()
 		)
 	}
 
-	// newCorpusEngine builds a second engine over the SAME real provider stack
-	// but a DIFFERENT corpus, and pins that the exclusion actually matched — a
-	// control whose policy name stopped matching anything is a copy of the full
-	// corpus that still LOOKS like a control.
-	newCorpusEngine := func(ctx context.Context, excluded []string, appended ...*policystore.StoredPolicy) *policy.Engine {
-		exSet := make(map[string]bool, len(excluded))
-		for _, name := range excluded {
-			exSet[name] = true
-		}
-		corpus := &profileCorpusStore{PolicyStore: env.pStore, excluded: exSet, appended: appended}
-		cache := policy.NewCache(corpus, env.compiler)
-		Expect(cache.Reload(ctx)).To(Succeed())
-		Expect(corpus.removed).To(Equal(len(excluded)),
-			"the control corpus must exclude exactly %d policies (%v) — a 0 here means the name no longer matches anything seeded and the control is disarmed",
-			len(excluded), excluded)
-		return policy.NewEngine(env.resolver, cache, &noopSessionResolver{}, env.auditLogger)
-	}
+	// The control-corpus builder is the package-level newCorpusEngine
+	// (character_profile_read_test.go): this file previously carried a
+	// byte-similar copy WITHOUT its differs-in-at-least-one-direction refusal,
+	// so an append-only control added here would have reached the disarmed shape
+	// that refusal exists to reject.
 
 	list := func(server *holoGRPC.CharacterAccessServer, token string) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
 		return server.ListCharacterDirectory(context.Background(), &characteraccessv1.ListCharacterDirectoryRequest{
