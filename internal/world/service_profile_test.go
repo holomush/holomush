@@ -5,6 +5,7 @@ package world_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -317,3 +318,57 @@ func TestWorldServiceUpdateCharacterProfileAttributesSeedAuthorization(t *testin
 		assert.Equal(t, "character_profile_update", outbox.rows[0].Kind)
 	})
 }
+
+// decodeProfileChangePayload unmarshals one character_profile_update envelope's
+// payload, so an assertion is made against the BYTES a consumer receives rather
+// than against an in-memory slice the command happened to build.
+func decodeProfileChangePayload(t *testing.T, intent wmodel.EnvelopeIntent) world.CharacterProfileUpdateChangePayload {
+	t.Helper()
+	var got world.CharacterProfileUpdateChangePayload
+	require.NoError(t, json.Unmarshal(intent.Payload, &got))
+	return got
+}
+
+// TestWorldServiceUpdateCharacterProfileAttributesEnvelopeNamesOnlyWhatTheWriteChanged
+// pins changed_attributes to the PARTITION rather than to the request.
+//
+// Both the payload type and the taxonomy schema document the field as the names
+// of the attributes the write CHANGED. The value passed was every name the caller
+// REQUESTED, collected before the partition ran — so a clear of a field with no
+// row, which the partition documents as a no-op, was still shipped as changed. A
+// consumer (cache invalidation, moderation feed, search re-index) gets a false
+// positive it cannot detect, since the payload deliberately carries no values to
+// compare against.
+func TestWorldServiceUpdateCharacterProfileAttributesEnvelopeNamesOnlyWhatTheWriteChanged(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, charID)
+	seedProfileRow(props, charID, "profile.concept", "a wandering archivist")
+
+	stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.StatusActive}
+	mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+	mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(&wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateCharacter, ID: charID}}, nil)
+
+	err := svc.UpdateCharacterProfileAttributes(ctx, world.HumanCaller(subjectID), charID, 5, map[string]string{
+		// A real update — must be reported.
+		"profile.concept": "a retired archivist",
+		// A real create — must be reported.
+		"profile.species": "corvid",
+		// A clear of a field that has NO row. The partition documents this as a
+		// no-op, so nothing was changed and nothing may be claimed.
+		"profile.pronouns": "",
+	})
+	require.NoError(t, err)
+
+	require.Len(t, outbox.rows, 1)
+	got := decodeProfileChangePayload(t, outbox.rows[0])
+	assert.Equal(t, charID.String(), got.CharacterID)
+	assert.Equal(t, []string{"profile.concept", "profile.species"}, got.ChangedAttributes,
+		"the envelope names the partition's work, sorted — never the caller's request")
+	assert.NotContains(t, got.ChangedAttributes, "profile.pronouns",
+		"a clear of an unset field wrote no row, so the envelope must not claim it changed")
+}
+

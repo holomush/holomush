@@ -1082,7 +1082,10 @@ func (s *Service) UpdateCharacterProfileAttributes(
 		}
 		names = append(names, name)
 	}
-	// Sorted so the applied order, and the envelope payload, are deterministic.
+	// Sorted so the applied order is deterministic. The envelope payload is NOT
+	// taken from this slice — see `changed` below — but it inherits the order
+	// anyway, because the partition walks `names` and BuildCharacterProfileUpdatePayload
+	// sorts its own copy regardless.
 	slices.Sort(names)
 	// (2) Authorization on the CHARACTER resource (01-SPEC §9.3).
 	resource := access.CharacterResource(characterID.String())
@@ -1110,6 +1113,14 @@ func (s *Service) UpdateCharacterProfileAttributes(
 		creates []*EntityProperty
 		updates []*EntityProperty
 		deletes []ulid.ULID
+		// changed is the envelope's changed_attributes, accumulated BY THE
+		// PARTITION rather than taken from the request. The two differ: the
+		// partition drops work `names` has already claimed — a clear of a field
+		// with no row is a documented no-op below, yet the name was still
+		// shipped as changed. The payload carries no values, so a consumer
+		// (cache invalidation, moderation feed, search re-index) has no way to
+		// detect the false positive.
+		changed []string
 		now     = time.Now().UTC()
 	)
 	for _, name := range names {
@@ -1119,9 +1130,10 @@ func (s *Service) UpdateCharacterProfileAttributes(
 		case value == "":
 			// The empty string REMOVES the row. With no row there is nothing to
 			// remove, so a clear of an unset field is a no-op rather than a create
-			// of an empty value.
+			// of an empty value — and a no-op is not a change.
 			if found {
 				deletes = append(deletes, current.ID)
+				changed = append(changed, name)
 			}
 		case found:
 			// Carry the row's ID, Owner, Visibility and CreatedAt forward
@@ -1131,6 +1143,7 @@ func (s *Service) UpdateCharacterProfileAttributes(
 			newValue := value
 			row.Value = &newValue
 			updates = append(updates, &row)
+			changed = append(changed, name)
 		default:
 			// Every field is set EXPLICITLY. PropertyRepository.Create passes
 			// p.Visibility straight into the INSERT and applies no visibility
@@ -1152,13 +1165,14 @@ func (s *Service) UpdateCharacterProfileAttributes(
 				Visibility: "public",
 				CreatedAt:  now,
 			})
+			changed = append(changed, name)
 		}
 	}
 	if s.mutator == nil {
 		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
 			Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	payload, err := BuildCharacterProfileUpdatePayload(characterID, names)
+	payload, err := BuildCharacterProfileUpdatePayload(characterID, changed)
 	if err != nil {
 		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
 			Wrapf(err, "build character profile update payload %s", characterID)
