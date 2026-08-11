@@ -991,6 +991,25 @@ var profileAttributeNames = map[string]struct{}{
 // per-row write path. No second per-property check is added here: a second gate
 // over coverage the character gate already has is the duplicate-gate cost
 // 01-SPEC §2.6 names.
+//
+// # Three things a later reader should not "fix"
+//
+// LENGTH CAPS ARE NOT ENFORCED HERE. This method validates the attribute NAME
+// set, never the value lengths. IDENT-02's server-enforced caps belong to the
+// facade handler (01-SPEC §9.3's CharacterAccessService.UpdateCharacterProfile
+// row), where the oops code and its §9.6 wire status live. Adding a second cap
+// here would give the same requirement two divergent enforcement points.
+//
+// A PROFILE-ONLY WRITE BUMPS THE CHARACTER VERSION. The profile is part of the
+// character aggregate and the aggregate carries exactly ONE optimistic-
+// concurrency token, so the guarded character update that fences this write also
+// moves characters.version even though no column on characters changed. That is
+// the intended aggregate-level behavior, not an accident.
+//
+// THIS IS THE FIRST PRODUCTION PROPERTY WRITER. Before it, the only production
+// use of the property repository was a ListByParent read and the delete-cascade
+// DeleteByParent, so there is no older property write path to stay consistent
+// with — the row-construction contract above is set here, not inherited.
 func (s *Service) UpdateCharacterProfileAttributes(
 	ctx context.Context,
 	caller Caller,
