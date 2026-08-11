@@ -365,6 +365,22 @@ service WebService {
   // X-Session-Token header CookieMiddleware injected and forwards it; a request
   // with no cookie is the ordinary logged-out case, not an error.
   rpc WebGetCharacterProfile(WebGetCharacterProfileRequest) returns (WebGetCharacterProfileResponse);
+
+  // WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+  // Handler.WebListMyCharacters lifts the session token from the header and
+  // forwards nothing else; whose roster is returned follows from the token.
+  rpc WebListMyCharacters(WebListMyCharactersRequest) returns (WebListMyCharactersResponse);
+  // WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+  // is verified in the facade, not here.
+  rpc WebGetMyCharacter(WebGetMyCharacterRequest) returns (WebGetMyCharacterResponse);
+  // WebUpdateCharacterProfile proxies
+  // CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+  // forwards the mask and every prose field verbatim; the gateway neither
+  // validates the mask nor decides which fields it reaches.
+  rpc WebUpdateCharacterProfile(WebUpdateCharacterProfileRequest) returns (WebUpdateCharacterProfileResponse);
+  // WebUpdateCharacterDescription proxies
+  // CharacterAccessService.UpdateCharacterDescription.
+  rpc WebUpdateCharacterDescription(WebUpdateCharacterDescriptionRequest) returns (WebUpdateCharacterDescriptionResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -1504,4 +1520,95 @@ message WebGetCharacterProfileResponse {
   // character is the projection the facade built; the gateway forwards it
   // unmodified and computes nothing.
   holomush.characteraccess.v1.PublicCharacter character = 1;
+}
+
+// WebListMyCharactersRequest carries NO fields at all, and the emptiness is the
+// point: the roster's owner is the player the session token resolves to, and
+// Handler.WebListMyCharacters reads that token from the request header. A
+// player-id field here would let a client name a roster it does not own.
+message WebListMyCharactersRequest {}
+
+// WebListMyCharactersResponse re-exports the facade's roster verbatim.
+message WebListMyCharactersResponse {
+  // characters is the owner-audience roster the facade projected, retired
+  // entries included; the gateway forwards it unmodified.
+  repeated holomush.characteraccess.v1.OwnCharacter characters = 1;
+}
+
+// WebGetMyCharacterRequest names one owned character. It carries no
+// session-token field: Handler.WebGetMyCharacter reads the token from the
+// request header rather than the body.
+message WebGetMyCharacterRequest {
+  // character_id is the target character's ULID, taken from the edit-page URL.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// WebGetMyCharacterResponse re-exports the facade's owner projection verbatim.
+message WebGetMyCharacterResponse {
+  // character is the projection the facade built for the owning player.
+  holomush.characteraccess.v1.OwnCharacter character = 1;
+}
+
+// WebUpdateCharacterProfileRequest mirrors the facade's partial-edit request
+// minus its session-token field, which travels in the request header. Every
+// prose field is forwarded verbatim; whether it is APPLIED is decided by the
+// facade against update_mask, never by the gateway.
+message WebUpdateCharacterProfileRequest {
+  // character_id is the character whose profile rows are edited.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // expected_version is the characters.version the browser last read; the
+  // facade rejects an absent or zero value rather than writing unguarded.
+  int32 expected_version = 2;
+  // pronouns is forwarded to the facade's `profile.pronouns` edit.
+  string pronouns = 3;
+  // concept is forwarded to the facade's `profile.concept` edit.
+  string concept = 4;
+  // species is forwarded to the facade's `profile.species` edit.
+  string species = 5;
+  // age is forwarded to the facade's `profile.age` edit.
+  string age = 6;
+  // faction is forwarded to the facade's `profile.faction` edit.
+  string faction = 7;
+  // appearance is forwarded to the facade's `profile.appearance` edit.
+  string appearance = 8;
+  // personality is forwarded to the facade's `profile.personality` edit.
+  string personality = 9;
+  // biography is forwarded to the facade's `profile.biography` edit.
+  string biography = 10;
+  // rumors is forwarded to the facade's `profile.rumors` edit.
+  string rumors = 11;
+  // currently is forwarded to the facade's `profile.currently` edit.
+  string currently = 12;
+  // rp_preferences is forwarded to the facade's `profile.rp_preferences` edit —
+  // the OUT-OF-CHARACTER block, not the characters.preferences settings column.
+  string rp_preferences = 13;
+  // timezone is forwarded to the facade's `profile.timezone` edit.
+  string timezone = 14;
+  // update_mask is the set of snake_case paths the facade will apply. The
+  // gateway forwards it without inspecting it; an empty mask is a no-op success
+  // and the web client is expected to skip the round trip entirely.
+  google.protobuf.FieldMask update_mask = 99;
+}
+
+// WebUpdateCharacterProfileResponse re-exports the post-write projection.
+message WebUpdateCharacterProfileResponse {
+  // character is the character as it stands after the partial edit.
+  holomush.characteraccess.v1.OwnCharacter character = 1;
+}
+
+// WebUpdateCharacterDescriptionRequest rewrites the in-world `look` text. It
+// carries no session-token field; the token travels in the request header.
+message WebUpdateCharacterDescriptionRequest {
+  // character_id is the character whose description column is rewritten.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // expected_version is the characters.version the browser last read.
+  int32 expected_version = 2;
+  // description is the replacement `look` text; an empty value clears it.
+  string description = 3;
+}
+
+// WebUpdateCharacterDescriptionResponse re-exports the post-write projection.
+message WebUpdateCharacterDescriptionResponse {
+  // character is the character as it stands after the rewrite.
+  holomush.characteraccess.v1.OwnCharacter character = 1;
 }

@@ -6,6 +6,7 @@ syntax = "proto3";
 package holomush.characteraccess.v1;
 
 import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1;characteraccessv1";
 
@@ -27,6 +28,31 @@ service CharacterAccessService {
   // response a character id naming no row receives, so a withheld profile
   // cannot be distinguished from a nonexistent one.
   rpc GetCharacterProfile(GetCharacterProfileRequest) returns (GetCharacterProfileResponse);
+
+  // ListMyCharacters returns the authenticated player's own roster, retired
+  // characters included, so the web edit surface can offer un-retire without a
+  // second lookup. Its handler lands in plan 04-05 and resolves the player from
+  // the session token before reading; until then the embedded
+  // UnimplementedCharacterAccessServiceServer answers Unimplemented.
+  rpc ListMyCharacters(ListMyCharactersRequest) returns (ListMyCharactersResponse);
+
+  // GetMyCharacter returns one owned character in the shape the edit forms
+  // write back, so a client never has to reconstruct the owner view by merging
+  // a public projection with a second read. Ownership is verified server-side
+  // against the session's player; handler in plan 04-05.
+  rpc GetMyCharacter(GetMyCharacterRequest) returns (GetMyCharacterResponse);
+
+  // UpdateCharacterProfile applies a partial edit to the character's stored
+  // profile.* rows, driven by an update mask evaluated against a closed
+  // allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
+  // Handler in plan 04-06; the write reaches entity_properties through the
+  // world write executor's same-transaction outbox seam, never a parallel path.
+  rpc UpdateCharacterProfile(UpdateCharacterProfileRequest) returns (UpdateCharacterProfileResponse);
+
+  // UpdateCharacterDescription replaces the in-world `look` text — the
+  // characters.description column itself, not a profile.* row — by reaching the
+  // shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
+  rpc UpdateCharacterDescription(UpdateCharacterDescriptionRequest) returns (UpdateCharacterDescriptionResponse);
 }
 
 // ProfileImage is one stored image reference on a profile. The shape ships in
@@ -99,4 +125,181 @@ message GetCharacterProfileRequest {
 message GetCharacterProfileResponse {
   // character is the projection projectPublic built for this viewer.
   PublicCharacter character = 1;
+}
+
+// OwnCharacter is the character shape the `owner` audience receives, and it is
+// a DISTINCT MESSAGE rather than PublicCharacter plus extra fields (01-SPEC
+// §2.2). The two are never interchanged: reusing one for the other audience
+// would put the absence guarantee back on per-field runtime discipline, which
+// is the arrangement the per-audience split exists to replace.
+//
+// It will be constructed only by projectOwner (§2.3), the owner-audience
+// counterpart of projectPublic in
+// internal/grpc/characteraccess_projection.go. It carries the owner's FULL
+// profile map — no tier floor is evaluated on this path, because a floor
+// governs what a VIEWER may read, not what an owner may see of their own row.
+message OwnCharacter {
+  // id is the stable characters.id ULID, the same key the public profile URL is
+  // built on and the key every mutation targets.
+  string id = 1;
+  // name is characters.name, forwarded as the stored bytes with no
+  // normalization, casefolding or re-encoding.
+  string name = 2;
+  // description is the in-world `look` text (characters.description) that
+  // UpdateCharacterDescription writes.
+  string description = 3;
+  // profile holds every stored `profile.*` attribute keyed by its governed
+  // name, unfiltered — the owner's own edit surface reads the values it is
+  // about to write back.
+  map<string, string> profile = 4;
+  // primary_image is the `profile.image.primary` row when one exists. v0.13
+  // mints no media identifier, so it is always absent.
+  ProfileImage primary_image = 5;
+  // gallery holds the `profile.image.gallery.00`…`.09` rows, capped at the ten
+  // names the storage schema fixes. Always empty in v0.13.
+  repeated ProfileImage gallery = 6 [(buf.validate.field).repeated.max_items = 10];
+  // status is characters.status, one of exactly `active`, `retired` or `idle`,
+  // compared as an exact lowercase literal (01-SPEC §4.2). A reader MUST switch
+  // over all three with a denying default; `idle` has no transition into it in
+  // v0.13, which is precisely why the default arm may not fall through to
+  // permit.
+  string status = 7;
+  // version is characters.version, the optimistic-concurrency counter a client
+  // reads here and sends back as expected_version on its next mutation.
+  // Transcribed from the INTEGER column added by migration 000049 and from
+  // world.Character.Version.
+  int32 version = 8;
+}
+
+// ListMyCharactersRequest asks for the caller's own roster; the session token is
+// the only input, because whose roster it is follows from who is asking.
+message ListMyCharactersRequest {
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // request header. The player is resolved from it server-side; there is
+  // deliberately no player-id field a caller could point at someone else.
+  string player_session_token = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// ListMyCharactersResponse carries the roster in the owner audience's shape.
+message ListMyCharactersResponse {
+  // characters is every character the resolved player owns, retired ones
+  // included (01-SPEC §4.5) — a roster that hid them would make un-retire
+  // unreachable from the UI.
+  repeated OwnCharacter characters = 1;
+}
+
+// GetMyCharacterRequest names one owned character to read in full.
+message GetMyCharacterRequest {
+  // character_id is the target character's ULID. Ownership is verified against
+  // the session's player, and a character the caller does not own resolves the
+  // same not-found outcome as one that does not exist.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // player_session_token is the raw bearer token; see ListMyCharactersRequest.
+  string player_session_token = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// GetMyCharacterResponse carries one character in the owner audience's shape.
+message GetMyCharacterResponse {
+  // character is the projection projectOwner built for the owning player.
+  OwnCharacter character = 1;
+}
+
+// UpdateCharacterProfileRequest is a partial edit of the stored `profile.*`
+// rows (01-SPEC §7.2). Every prose field below is applied ONLY when its
+// snake_case path appears in update_mask; the value carried by a field outside
+// the mask is immaterial and MUST be ignored rather than written.
+message UpdateCharacterProfileRequest {
+  // character_id is the character whose rows are edited; ownership is verified
+  // server-side before the mask is applied.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // request header.
+  string player_session_token = 2 [(buf.validate.field).string.min_len = 1];
+  // expected_version is the characters.version the caller last read. It is a
+  // plain scalar rather than an `optional` field or a wrapper message on
+  // purpose: absent and explicit zero take the SAME rejection branch (§9.4.2),
+  // so proto3's inability to tell them apart costs nothing here. Zero is never
+  // a legal input, and it MUST NOT be read as "write without the guard" — the
+  // repository layer below does accept zero as an unversioned write, which is
+  // exactly why this boundary rejects it first.
+  int32 expected_version = 3;
+  // pronouns replaces the `profile.pronouns` row — half of §8.8's minimum
+  // public identity, and the one profile field seeded at the anonymous floor.
+  string pronouns = 4;
+  // concept replaces the `profile.concept` row: the one-line "what this
+  // character is" pitch.
+  string concept = 5;
+  // species replaces the `profile.species` row. Free text — the platform ships
+  // no species vocabulary, because the setting owns that word.
+  string species = 6;
+  // age replaces the `profile.age` row. Free text rather than an integer:
+  // settings routinely want "ageless", "early 30s", or a century.
+  string age = 7;
+  // faction replaces the `profile.faction` row: affiliation, house, crew or
+  // allegiance. Free text; there is no faction registry.
+  string faction = 8;
+  // appearance replaces the `profile.appearance` row — extended detail beyond
+  // what a single in-world `look` would give a viewer.
+  string appearance = 9;
+  // personality replaces the `profile.personality` row: disposition and manner.
+  string personality = 10;
+  // biography replaces the `profile.biography` row: history and background.
+  string biography = 11;
+  // rumors replaces the `profile.rumors` row — the RP hooks block, the
+  // "reasons to approach this character" prose.
+  string rumors = 12;
+  // currently replaces the `profile.currently` row: the volatile status line
+  // for what the character is up to right now. It carries no history and is
+  // expected to change often.
+  string currently = 13;
+  // rp_preferences replaces the `profile.rp_preferences` row — the
+  // OUT-OF-CHARACTER block about the player's style, availability and content
+  // limits. It is NOT the `characters.preferences` JSONB settings column; the
+  // `rp_` qualifier exists so the two cannot be conflated by name alone.
+  string rp_preferences = 14;
+  // timezone replaces the `profile.timezone` row, supporting the availability
+  // half of the OOC block.
+  string timezone = 15;
+  // update_mask is the SET of snake_case field paths to apply. Paths are
+  // matched as exact strings against a closed allowlist — no prefix, wildcard,
+  // glob or dotted-subtree expansion — and an unlisted path is rejected rather
+  // than ignored. Evaluation is order-independent and duplicate paths are
+  // idempotent. An EMPTY mask is a no-op success, never "apply every field",
+  // which would turn an under-populated client request into a silent full-row
+  // overwrite. Field 99 mirrors the placement UpdateSceneRequest already uses.
+  google.protobuf.FieldMask update_mask = 99;
+}
+
+// UpdateCharacterProfileResponse returns the character as it stands after the
+// partial edit, so a client re-reads its new version rather than guessing it.
+message UpdateCharacterProfileResponse {
+  // character is the post-write projection projectOwner built.
+  OwnCharacter character = 1;
+}
+
+// UpdateCharacterDescriptionRequest replaces the in-world `look` text. It is
+// deliberately its own RPC rather than a mask path on the profile edit: the
+// description is the intrinsic characters.description COLUMN, reached through
+// the shipped world.Service.UpdateCharacterDescription, while every profile
+// field is an entity_properties row.
+message UpdateCharacterDescriptionRequest {
+  // character_id is the character whose column is rewritten; ownership is
+  // verified server-side.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // request header.
+  string player_session_token = 2 [(buf.validate.field).string.min_len = 1];
+  // expected_version is the characters.version the caller last read; absent and
+  // zero are both rejected. See UpdateCharacterProfileRequest for why the
+  // scalar carriage costs nothing.
+  int32 expected_version = 3;
+  // description is the replacement `look` text. An empty value CLEARS the
+  // column — there is no mask on this RPC, so the field is always applied.
+  string description = 4;
+}
+
+// UpdateCharacterDescriptionResponse returns the character after the rewrite.
+message UpdateCharacterDescriptionResponse {
+  // character is the post-write projection projectOwner built.
+  OwnCharacter character = 1;
 }

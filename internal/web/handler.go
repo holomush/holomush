@@ -140,6 +140,10 @@ type SceneAccessClient interface {
 // token and owns every visibility decision.
 type CharacterAccessClient interface {
 	GetCharacterProfile(ctx context.Context, req *characteraccessv1.GetCharacterProfileRequest) (*characteraccessv1.GetCharacterProfileResponse, error)
+	ListMyCharacters(ctx context.Context, req *characteraccessv1.ListMyCharactersRequest) (*characteraccessv1.ListMyCharactersResponse, error)
+	GetMyCharacter(ctx context.Context, req *characteraccessv1.GetMyCharacterRequest) (*characteraccessv1.GetMyCharacterResponse, error)
+	UpdateCharacterProfile(ctx context.Context, req *characteraccessv1.UpdateCharacterProfileRequest) (*characteraccessv1.UpdateCharacterProfileResponse, error)
+	UpdateCharacterDescription(ctx context.Context, req *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error)
 }
 
 // Handler implements WebServiceHandler by delegating to the core gRPC client.

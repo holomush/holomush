@@ -22,7 +22,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CharacterAccessService_GetCharacterProfile_FullMethodName = "/holomush.characteraccess.v1.CharacterAccessService/GetCharacterProfile"
+	CharacterAccessService_GetCharacterProfile_FullMethodName        = "/holomush.characteraccess.v1.CharacterAccessService/GetCharacterProfile"
+	CharacterAccessService_ListMyCharacters_FullMethodName           = "/holomush.characteraccess.v1.CharacterAccessService/ListMyCharacters"
+	CharacterAccessService_GetMyCharacter_FullMethodName             = "/holomush.characteraccess.v1.CharacterAccessService/GetMyCharacter"
+	CharacterAccessService_UpdateCharacterProfile_FullMethodName     = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterProfile"
+	CharacterAccessService_UpdateCharacterDescription_FullMethodName = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterDescription"
 )
 
 // CharacterAccessServiceClient is the client API for CharacterAccessService service.
@@ -47,6 +51,27 @@ type CharacterAccessServiceClient interface {
 	// response a character id naming no row receives, so a withheld profile
 	// cannot be distinguished from a nonexistent one.
 	GetCharacterProfile(ctx context.Context, in *GetCharacterProfileRequest, opts ...grpc.CallOption) (*GetCharacterProfileResponse, error)
+	// ListMyCharacters returns the authenticated player's own roster, retired
+	// characters included, so the web edit surface can offer un-retire without a
+	// second lookup. Its handler lands in plan 04-05 and resolves the player from
+	// the session token before reading; until then the embedded
+	// UnimplementedCharacterAccessServiceServer answers Unimplemented.
+	ListMyCharacters(ctx context.Context, in *ListMyCharactersRequest, opts ...grpc.CallOption) (*ListMyCharactersResponse, error)
+	// GetMyCharacter returns one owned character in the shape the edit forms
+	// write back, so a client never has to reconstruct the owner view by merging
+	// a public projection with a second read. Ownership is verified server-side
+	// against the session's player; handler in plan 04-05.
+	GetMyCharacter(ctx context.Context, in *GetMyCharacterRequest, opts ...grpc.CallOption) (*GetMyCharacterResponse, error)
+	// UpdateCharacterProfile applies a partial edit to the character's stored
+	// profile.* rows, driven by an update mask evaluated against a closed
+	// allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
+	// Handler in plan 04-06; the write reaches entity_properties through the
+	// world write executor's same-transaction outbox seam, never a parallel path.
+	UpdateCharacterProfile(ctx context.Context, in *UpdateCharacterProfileRequest, opts ...grpc.CallOption) (*UpdateCharacterProfileResponse, error)
+	// UpdateCharacterDescription replaces the in-world `look` text — the
+	// characters.description column itself, not a profile.* row — by reaching the
+	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
+	UpdateCharacterDescription(ctx context.Context, in *UpdateCharacterDescriptionRequest, opts ...grpc.CallOption) (*UpdateCharacterDescriptionResponse, error)
 }
 
 type characterAccessServiceClient struct {
@@ -61,6 +86,46 @@ func (c *characterAccessServiceClient) GetCharacterProfile(ctx context.Context, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetCharacterProfileResponse)
 	err := c.cc.Invoke(ctx, CharacterAccessService_GetCharacterProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *characterAccessServiceClient) ListMyCharacters(ctx context.Context, in *ListMyCharactersRequest, opts ...grpc.CallOption) (*ListMyCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMyCharactersResponse)
+	err := c.cc.Invoke(ctx, CharacterAccessService_ListMyCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *characterAccessServiceClient) GetMyCharacter(ctx context.Context, in *GetMyCharacterRequest, opts ...grpc.CallOption) (*GetMyCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMyCharacterResponse)
+	err := c.cc.Invoke(ctx, CharacterAccessService_GetMyCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *characterAccessServiceClient) UpdateCharacterProfile(ctx context.Context, in *UpdateCharacterProfileRequest, opts ...grpc.CallOption) (*UpdateCharacterProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateCharacterProfileResponse)
+	err := c.cc.Invoke(ctx, CharacterAccessService_UpdateCharacterProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *characterAccessServiceClient) UpdateCharacterDescription(ctx context.Context, in *UpdateCharacterDescriptionRequest, opts ...grpc.CallOption) (*UpdateCharacterDescriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateCharacterDescriptionResponse)
+	err := c.cc.Invoke(ctx, CharacterAccessService_UpdateCharacterDescription_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +154,27 @@ type CharacterAccessServiceServer interface {
 	// response a character id naming no row receives, so a withheld profile
 	// cannot be distinguished from a nonexistent one.
 	GetCharacterProfile(context.Context, *GetCharacterProfileRequest) (*GetCharacterProfileResponse, error)
+	// ListMyCharacters returns the authenticated player's own roster, retired
+	// characters included, so the web edit surface can offer un-retire without a
+	// second lookup. Its handler lands in plan 04-05 and resolves the player from
+	// the session token before reading; until then the embedded
+	// UnimplementedCharacterAccessServiceServer answers Unimplemented.
+	ListMyCharacters(context.Context, *ListMyCharactersRequest) (*ListMyCharactersResponse, error)
+	// GetMyCharacter returns one owned character in the shape the edit forms
+	// write back, so a client never has to reconstruct the owner view by merging
+	// a public projection with a second read. Ownership is verified server-side
+	// against the session's player; handler in plan 04-05.
+	GetMyCharacter(context.Context, *GetMyCharacterRequest) (*GetMyCharacterResponse, error)
+	// UpdateCharacterProfile applies a partial edit to the character's stored
+	// profile.* rows, driven by an update mask evaluated against a closed
+	// allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
+	// Handler in plan 04-06; the write reaches entity_properties through the
+	// world write executor's same-transaction outbox seam, never a parallel path.
+	UpdateCharacterProfile(context.Context, *UpdateCharacterProfileRequest) (*UpdateCharacterProfileResponse, error)
+	// UpdateCharacterDescription replaces the in-world `look` text — the
+	// characters.description column itself, not a profile.* row — by reaching the
+	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
+	UpdateCharacterDescription(context.Context, *UpdateCharacterDescriptionRequest) (*UpdateCharacterDescriptionResponse, error)
 	mustEmbedUnimplementedCharacterAccessServiceServer()
 }
 
@@ -101,6 +187,18 @@ type UnimplementedCharacterAccessServiceServer struct{}
 
 func (UnimplementedCharacterAccessServiceServer) GetCharacterProfile(context.Context, *GetCharacterProfileRequest) (*GetCharacterProfileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCharacterProfile not implemented")
+}
+func (UnimplementedCharacterAccessServiceServer) ListMyCharacters(context.Context, *ListMyCharactersRequest) (*ListMyCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMyCharacters not implemented")
+}
+func (UnimplementedCharacterAccessServiceServer) GetMyCharacter(context.Context, *GetMyCharacterRequest) (*GetMyCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetMyCharacter not implemented")
+}
+func (UnimplementedCharacterAccessServiceServer) UpdateCharacterProfile(context.Context, *UpdateCharacterProfileRequest) (*UpdateCharacterProfileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateCharacterProfile not implemented")
+}
+func (UnimplementedCharacterAccessServiceServer) UpdateCharacterDescription(context.Context, *UpdateCharacterDescriptionRequest) (*UpdateCharacterDescriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateCharacterDescription not implemented")
 }
 func (UnimplementedCharacterAccessServiceServer) mustEmbedUnimplementedCharacterAccessServiceServer() {
 }
@@ -142,6 +240,78 @@ func _CharacterAccessService_GetCharacterProfile_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CharacterAccessService_ListMyCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMyCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharacterAccessServiceServer).ListMyCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharacterAccessService_ListMyCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharacterAccessServiceServer).ListMyCharacters(ctx, req.(*ListMyCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CharacterAccessService_GetMyCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMyCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharacterAccessServiceServer).GetMyCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharacterAccessService_GetMyCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharacterAccessServiceServer).GetMyCharacter(ctx, req.(*GetMyCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CharacterAccessService_UpdateCharacterProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateCharacterProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharacterAccessServiceServer).UpdateCharacterProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharacterAccessService_UpdateCharacterProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharacterAccessServiceServer).UpdateCharacterProfile(ctx, req.(*UpdateCharacterProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CharacterAccessService_UpdateCharacterDescription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateCharacterDescriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharacterAccessServiceServer).UpdateCharacterDescription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharacterAccessService_UpdateCharacterDescription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharacterAccessServiceServer).UpdateCharacterDescription(ctx, req.(*UpdateCharacterDescriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CharacterAccessService_ServiceDesc is the grpc.ServiceDesc for CharacterAccessService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -152,6 +322,22 @@ var CharacterAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCharacterProfile",
 			Handler:    _CharacterAccessService_GetCharacterProfile_Handler,
+		},
+		{
+			MethodName: "ListMyCharacters",
+			Handler:    _CharacterAccessService_ListMyCharacters_Handler,
+		},
+		{
+			MethodName: "GetMyCharacter",
+			Handler:    _CharacterAccessService_GetMyCharacter_Handler,
+		},
+		{
+			MethodName: "UpdateCharacterProfile",
+			Handler:    _CharacterAccessService_UpdateCharacterProfile_Handler,
+		},
+		{
+			MethodName: "UpdateCharacterDescription",
+			Handler:    _CharacterAccessService_UpdateCharacterDescription_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

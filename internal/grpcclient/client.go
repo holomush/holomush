@@ -398,6 +398,52 @@ func (c *Client) GetCharacterProfile(ctx context.Context, req *characteraccessv1
 	return resp, nil
 }
 
+// ListMyCharacters reads the authenticated player's own roster from the
+// character-access facade. The facade resolves the player from the forwarded
+// session token; the gateway names no player.
+//
+// This and the three legs below reach facade handlers that land in plans 04-05
+// and 04-06. Until then the facade's embedded server stub answers Unimplemented
+// and these pass that through, wrapped with the method name like every sibling.
+func (c *Client) ListMyCharacters(ctx context.Context, req *characteraccessv1.ListMyCharactersRequest) (*characteraccessv1.ListMyCharactersResponse, error) {
+	resp, err := c.characterAccessClient.ListMyCharacters(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListMyCharacters").Wrap(err)
+	}
+	return resp, nil
+}
+
+// GetMyCharacter reads one owned character in the owner audience's shape.
+// Ownership is verified in the facade against the token's player.
+func (c *Client) GetMyCharacter(ctx context.Context, req *characteraccessv1.GetMyCharacterRequest) (*characteraccessv1.GetMyCharacterResponse, error) {
+	resp, err := c.characterAccessClient.GetMyCharacter(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "GetMyCharacter").Wrap(err)
+	}
+	return resp, nil
+}
+
+// UpdateCharacterProfile applies a masked partial edit to the character's
+// stored profile.* rows. The mask is forwarded unread — the allowlist that
+// decides which paths are acceptable lives in the facade.
+func (c *Client) UpdateCharacterProfile(ctx context.Context, req *characteraccessv1.UpdateCharacterProfileRequest) (*characteraccessv1.UpdateCharacterProfileResponse, error) {
+	resp, err := c.characterAccessClient.UpdateCharacterProfile(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "UpdateCharacterProfile").Wrap(err)
+	}
+	return resp, nil
+}
+
+// UpdateCharacterDescription rewrites the in-world `look` text — the intrinsic
+// characters.description column, not a profile.* row.
+func (c *Client) UpdateCharacterDescription(ctx context.Context, req *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error) {
+	resp, err := c.characterAccessClient.UpdateCharacterDescription(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "UpdateCharacterDescription").Wrap(err)
+	}
+	return resp, nil
+}
+
 // ListScenesForViewer returns the public scene board filtered by the player's preferences.
 func (c *Client) ListScenesForViewer(ctx context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
 	resp, err := c.sceneAccessClient.ListScenesForViewer(ctx, req)

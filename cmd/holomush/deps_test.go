@@ -302,6 +302,22 @@ func (m *mockGRPCClient) GetCharacterProfile(_ context.Context, _ *characteracce
 	return nil, nil
 }
 
+func (m *mockGRPCClient) ListMyCharacters(_ context.Context, _ *characteraccessv1.ListMyCharactersRequest) (*characteraccessv1.ListMyCharactersResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) GetMyCharacter(_ context.Context, _ *characteraccessv1.GetMyCharacterRequest) (*characteraccessv1.GetMyCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) UpdateCharacterProfile(_ context.Context, _ *characteraccessv1.UpdateCharacterProfileRequest) (*characteraccessv1.UpdateCharacterProfileResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) UpdateCharacterDescription(_ context.Context, _ *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error) {
+	return nil, nil
+}
+
 // mockListener implements net.Listener for testing.
 type mockListener struct {
 	acceptFunc func() (net.Conn, error)

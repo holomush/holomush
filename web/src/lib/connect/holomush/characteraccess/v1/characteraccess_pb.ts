@@ -8,13 +8,15 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
+import type { FieldMask } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file holomush/characteraccess/v1/characteraccess.proto.
  */
 export const file_holomush_characteraccess_v1_characteraccess: GenFile = /*@__PURE__*/
-  fileDesc("CjFob2xvbXVzaC9jaGFyYWN0ZXJhY2Nlc3MvdjEvY2hhcmFjdGVyYWNjZXNzLnByb3RvEhtob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEiSwoMUHJvZmlsZUltYWdlEhAKCG1lZGlhX2lkGAEgASgJEhAKCGFsdF90ZXh0GAIgASgJEhcKD2NvbnRlbnRfd2FybmluZxgDIAEoCSLEAgoPUHVibGljQ2hhcmFjdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSSgoHcHJvZmlsZRgEIAMoCzI5LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIuUHJvZmlsZUVudHJ5EkAKDXByaW1hcnlfaW1hZ2UYBSABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlEkQKB2dhbGxlcnkYBiADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlQgi6SAWSAQIQChouCgxQcm9maWxlRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJQChpHZXRDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkiXgobR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEj8KCWNoYXJhY3RlchgBIAEoCzIsLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIyowEKFkNoYXJhY3RlckFjY2Vzc1NlcnZpY2USiAEKE0dldENoYXJhY3RlclByb2ZpbGUSNy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0Q2hhcmFjdGVyUHJvZmlsZVJlcXVlc3QaOC5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlQlZaVGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2NoYXJhY3RlcmFjY2Vzcy92MTtjaGFyYWN0ZXJhY2Nlc3N2MWIGcHJvdG8z", [file_buf_validate_validate]);
+  fileDesc("CjFob2xvbXVzaC9jaGFyYWN0ZXJhY2Nlc3MvdjEvY2hhcmFjdGVyYWNjZXNzLnByb3RvEhtob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEiSwoMUHJvZmlsZUltYWdlEhAKCG1lZGlhX2lkGAEgASgJEhAKCGFsdF90ZXh0GAIgASgJEhcKD2NvbnRlbnRfd2FybmluZxgDIAEoCSLEAgoPUHVibGljQ2hhcmFjdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSSgoHcHJvZmlsZRgEIAMoCzI5LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIuUHJvZmlsZUVudHJ5EkAKDXByaW1hcnlfaW1hZ2UYBSABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlEkQKB2dhbGxlcnkYBiADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlQgi6SAWSAQIQChouCgxQcm9maWxlRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJQChpHZXRDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkiXgobR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEj8KCWNoYXJhY3RlchgBIAEoCzIsLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIi3wIKDE93bkNoYXJhY3RlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEkcKB3Byb2ZpbGUYBCADKAsyNi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyLlByb2ZpbGVFbnRyeRJACg1wcmltYXJ5X2ltYWdlGAUgASgLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZRJECgdnYWxsZXJ5GAYgAygLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZUIIukgFkgECEAoSDgoGc3RhdHVzGAcgASgJEg8KB3ZlcnNpb24YCCABKAUaLgoMUHJvZmlsZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoXTGlzdE15Q2hhcmFjdGVyc1JlcXVlc3QSJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAlCB7pIBHICEAEiWQoYTGlzdE15Q2hhcmFjdGVyc1Jlc3BvbnNlEj0KCmNoYXJhY3RlcnMYASADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIl0KFUdldE15Q2hhcmFjdGVyUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAEiVgoWR2V0TXlDaGFyYWN0ZXJSZXNwb25zZRI8CgljaGFyYWN0ZXIYASABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIosDCh1VcGRhdGVDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRIQCghwcm9ub3VucxgEIAEoCRIPCgdjb25jZXB0GAUgASgJEg8KB3NwZWNpZXMYBiABKAkSCwoDYWdlGAcgASgJEg8KB2ZhY3Rpb24YCCABKAkSEgoKYXBwZWFyYW5jZRgJIAEoCRITCgtwZXJzb25hbGl0eRgKIAEoCRIRCgliaW9ncmFwaHkYCyABKAkSDgoGcnVtb3JzGAwgASgJEhEKCWN1cnJlbnRseRgNIAEoCRIWCg5ycF9wcmVmZXJlbmNlcxgOIAEoCRIQCgh0aW1lem9uZRgPIAEoCRIvCgt1cGRhdGVfbWFzaxhjIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siXgoeVXBkYXRlQ2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIimAEKIVVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRITCgtkZXNjcmlwdGlvbhgEIAEoCSJiCiJVcGRhdGVDaGFyYWN0ZXJEZXNjcmlwdGlvblJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIy0wUKFkNoYXJhY3RlckFjY2Vzc1NlcnZpY2USiAEKE0dldENoYXJhY3RlclByb2ZpbGUSNy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0Q2hhcmFjdGVyUHJvZmlsZVJlcXVlc3QaOC5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEn8KEExpc3RNeUNoYXJhY3RlcnMSNC5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdE15Q2hhcmFjdGVyc1JlcXVlc3QaNS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdE15Q2hhcmFjdGVyc1Jlc3BvbnNlEnkKDkdldE15Q2hhcmFjdGVyEjIuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLkdldE15Q2hhcmFjdGVyUmVxdWVzdBozLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5HZXRNeUNoYXJhY3RlclJlc3BvbnNlEpEBChZVcGRhdGVDaGFyYWN0ZXJQcm9maWxlEjouaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlclByb2ZpbGVSZXF1ZXN0GjsuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlclByb2ZpbGVSZXNwb25zZRKdAQoaVXBkYXRlQ2hhcmFjdGVyRGVzY3JpcHRpb24SPi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuVXBkYXRlQ2hhcmFjdGVyRGVzY3JpcHRpb25SZXF1ZXN0Gj8uaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uUmVzcG9uc2VCVlpUZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvY2hhcmFjdGVyYWNjZXNzL3YxO2NoYXJhY3RlcmFjY2Vzc3YxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_field_mask]);
 
 /**
  * ProfileImage is one stored image reference on a profile. The shape ships in
@@ -189,6 +191,448 @@ export const GetCharacterProfileResponseSchema: GenMessage<GetCharacterProfileRe
   messageDesc(file_holomush_characteraccess_v1_characteraccess, 3);
 
 /**
+ * OwnCharacter is the character shape the `owner` audience receives, and it is
+ * a DISTINCT MESSAGE rather than PublicCharacter plus extra fields (01-SPEC
+ * §2.2). The two are never interchanged: reusing one for the other audience
+ * would put the absence guarantee back on per-field runtime discipline, which
+ * is the arrangement the per-audience split exists to replace.
+ *
+ * It will be constructed only by projectOwner (§2.3), the owner-audience
+ * counterpart of projectPublic in
+ * internal/grpc/characteraccess_projection.go. It carries the owner's FULL
+ * profile map — no tier floor is evaluated on this path, because a floor
+ * governs what a VIEWER may read, not what an owner may see of their own row.
+ *
+ * @generated from message holomush.characteraccess.v1.OwnCharacter
+ */
+export type OwnCharacter = Message<"holomush.characteraccess.v1.OwnCharacter"> & {
+  /**
+   * id is the stable characters.id ULID, the same key the public profile URL is
+   * built on and the key every mutation targets.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * name is characters.name, forwarded as the stored bytes with no
+   * normalization, casefolding or re-encoding.
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * description is the in-world `look` text (characters.description) that
+   * UpdateCharacterDescription writes.
+   *
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * profile holds every stored `profile.*` attribute keyed by its governed
+   * name, unfiltered — the owner's own edit surface reads the values it is
+   * about to write back.
+   *
+   * @generated from field: map<string, string> profile = 4;
+   */
+  profile: { [key: string]: string };
+
+  /**
+   * primary_image is the `profile.image.primary` row when one exists. v0.13
+   * mints no media identifier, so it is always absent.
+   *
+   * @generated from field: holomush.characteraccess.v1.ProfileImage primary_image = 5;
+   */
+  primaryImage?: ProfileImage | undefined;
+
+  /**
+   * gallery holds the `profile.image.gallery.00`…`.09` rows, capped at the ten
+   * names the storage schema fixes. Always empty in v0.13.
+   *
+   * @generated from field: repeated holomush.characteraccess.v1.ProfileImage gallery = 6;
+   */
+  gallery: ProfileImage[];
+
+  /**
+   * status is characters.status, one of exactly `active`, `retired` or `idle`,
+   * compared as an exact lowercase literal (01-SPEC §4.2). A reader MUST switch
+   * over all three with a denying default; `idle` has no transition into it in
+   * v0.13, which is precisely why the default arm may not fall through to
+   * permit.
+   *
+   * @generated from field: string status = 7;
+   */
+  status: string;
+
+  /**
+   * version is characters.version, the optimistic-concurrency counter a client
+   * reads here and sends back as expected_version on its next mutation.
+   * Transcribed from the INTEGER column added by migration 000049 and from
+   * world.Character.Version.
+   *
+   * @generated from field: int32 version = 8;
+   */
+  version: number;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.OwnCharacter.
+ * Use `create(OwnCharacterSchema)` to create a new message.
+ */
+export const OwnCharacterSchema: GenMessage<OwnCharacter> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 4);
+
+/**
+ * ListMyCharactersRequest asks for the caller's own roster; the session token is
+ * the only input, because whose roster it is follows from who is asking.
+ *
+ * @generated from message holomush.characteraccess.v1.ListMyCharactersRequest
+ */
+export type ListMyCharactersRequest = Message<"holomush.characteraccess.v1.ListMyCharactersRequest"> & {
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * request header. The player is resolved from it server-side; there is
+   * deliberately no player-id field a caller could point at someone else.
+   *
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.ListMyCharactersRequest.
+ * Use `create(ListMyCharactersRequestSchema)` to create a new message.
+ */
+export const ListMyCharactersRequestSchema: GenMessage<ListMyCharactersRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 5);
+
+/**
+ * ListMyCharactersResponse carries the roster in the owner audience's shape.
+ *
+ * @generated from message holomush.characteraccess.v1.ListMyCharactersResponse
+ */
+export type ListMyCharactersResponse = Message<"holomush.characteraccess.v1.ListMyCharactersResponse"> & {
+  /**
+   * characters is every character the resolved player owns, retired ones
+   * included (01-SPEC §4.5) — a roster that hid them would make un-retire
+   * unreachable from the UI.
+   *
+   * @generated from field: repeated holomush.characteraccess.v1.OwnCharacter characters = 1;
+   */
+  characters: OwnCharacter[];
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.ListMyCharactersResponse.
+ * Use `create(ListMyCharactersResponseSchema)` to create a new message.
+ */
+export const ListMyCharactersResponseSchema: GenMessage<ListMyCharactersResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 6);
+
+/**
+ * GetMyCharacterRequest names one owned character to read in full.
+ *
+ * @generated from message holomush.characteraccess.v1.GetMyCharacterRequest
+ */
+export type GetMyCharacterRequest = Message<"holomush.characteraccess.v1.GetMyCharacterRequest"> & {
+  /**
+   * character_id is the target character's ULID. Ownership is verified against
+   * the session's player, and a character the caller does not own resolves the
+   * same not-found outcome as one that does not exist.
+   *
+   * @generated from field: string character_id = 1;
+   */
+  characterId: string;
+
+  /**
+   * player_session_token is the raw bearer token; see ListMyCharactersRequest.
+   *
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.GetMyCharacterRequest.
+ * Use `create(GetMyCharacterRequestSchema)` to create a new message.
+ */
+export const GetMyCharacterRequestSchema: GenMessage<GetMyCharacterRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 7);
+
+/**
+ * GetMyCharacterResponse carries one character in the owner audience's shape.
+ *
+ * @generated from message holomush.characteraccess.v1.GetMyCharacterResponse
+ */
+export type GetMyCharacterResponse = Message<"holomush.characteraccess.v1.GetMyCharacterResponse"> & {
+  /**
+   * character is the projection projectOwner built for the owning player.
+   *
+   * @generated from field: holomush.characteraccess.v1.OwnCharacter character = 1;
+   */
+  character?: OwnCharacter | undefined;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.GetMyCharacterResponse.
+ * Use `create(GetMyCharacterResponseSchema)` to create a new message.
+ */
+export const GetMyCharacterResponseSchema: GenMessage<GetMyCharacterResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 8);
+
+/**
+ * UpdateCharacterProfileRequest is a partial edit of the stored `profile.*`
+ * rows (01-SPEC §7.2). Every prose field below is applied ONLY when its
+ * snake_case path appears in update_mask; the value carried by a field outside
+ * the mask is immaterial and MUST be ignored rather than written.
+ *
+ * @generated from message holomush.characteraccess.v1.UpdateCharacterProfileRequest
+ */
+export type UpdateCharacterProfileRequest = Message<"holomush.characteraccess.v1.UpdateCharacterProfileRequest"> & {
+  /**
+   * character_id is the character whose rows are edited; ownership is verified
+   * server-side before the mask is applied.
+   *
+   * @generated from field: string character_id = 1;
+   */
+  characterId: string;
+
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * request header.
+   *
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+
+  /**
+   * expected_version is the characters.version the caller last read. It is a
+   * plain scalar rather than an `optional` field or a wrapper message on
+   * purpose: absent and explicit zero take the SAME rejection branch (§9.4.2),
+   * so proto3's inability to tell them apart costs nothing here. Zero is never
+   * a legal input, and it MUST NOT be read as "write without the guard" — the
+   * repository layer below does accept zero as an unversioned write, which is
+   * exactly why this boundary rejects it first.
+   *
+   * @generated from field: int32 expected_version = 3;
+   */
+  expectedVersion: number;
+
+  /**
+   * pronouns replaces the `profile.pronouns` row — half of §8.8's minimum
+   * public identity, and the one profile field seeded at the anonymous floor.
+   *
+   * @generated from field: string pronouns = 4;
+   */
+  pronouns: string;
+
+  /**
+   * concept replaces the `profile.concept` row: the one-line "what this
+   * character is" pitch.
+   *
+   * @generated from field: string concept = 5;
+   */
+  concept: string;
+
+  /**
+   * species replaces the `profile.species` row. Free text — the platform ships
+   * no species vocabulary, because the setting owns that word.
+   *
+   * @generated from field: string species = 6;
+   */
+  species: string;
+
+  /**
+   * age replaces the `profile.age` row. Free text rather than an integer:
+   * settings routinely want "ageless", "early 30s", or a century.
+   *
+   * @generated from field: string age = 7;
+   */
+  age: string;
+
+  /**
+   * faction replaces the `profile.faction` row: affiliation, house, crew or
+   * allegiance. Free text; there is no faction registry.
+   *
+   * @generated from field: string faction = 8;
+   */
+  faction: string;
+
+  /**
+   * appearance replaces the `profile.appearance` row — extended detail beyond
+   * what a single in-world `look` would give a viewer.
+   *
+   * @generated from field: string appearance = 9;
+   */
+  appearance: string;
+
+  /**
+   * personality replaces the `profile.personality` row: disposition and manner.
+   *
+   * @generated from field: string personality = 10;
+   */
+  personality: string;
+
+  /**
+   * biography replaces the `profile.biography` row: history and background.
+   *
+   * @generated from field: string biography = 11;
+   */
+  biography: string;
+
+  /**
+   * rumors replaces the `profile.rumors` row — the RP hooks block, the
+   * "reasons to approach this character" prose.
+   *
+   * @generated from field: string rumors = 12;
+   */
+  rumors: string;
+
+  /**
+   * currently replaces the `profile.currently` row: the volatile status line
+   * for what the character is up to right now. It carries no history and is
+   * expected to change often.
+   *
+   * @generated from field: string currently = 13;
+   */
+  currently: string;
+
+  /**
+   * rp_preferences replaces the `profile.rp_preferences` row — the
+   * OUT-OF-CHARACTER block about the player's style, availability and content
+   * limits. It is NOT the `characters.preferences` JSONB settings column; the
+   * `rp_` qualifier exists so the two cannot be conflated by name alone.
+   *
+   * @generated from field: string rp_preferences = 14;
+   */
+  rpPreferences: string;
+
+  /**
+   * timezone replaces the `profile.timezone` row, supporting the availability
+   * half of the OOC block.
+   *
+   * @generated from field: string timezone = 15;
+   */
+  timezone: string;
+
+  /**
+   * update_mask is the SET of snake_case field paths to apply. Paths are
+   * matched as exact strings against a closed allowlist — no prefix, wildcard,
+   * glob or dotted-subtree expansion — and an unlisted path is rejected rather
+   * than ignored. Evaluation is order-independent and duplicate paths are
+   * idempotent. An EMPTY mask is a no-op success, never "apply every field",
+   * which would turn an under-populated client request into a silent full-row
+   * overwrite. Field 99 mirrors the placement UpdateSceneRequest already uses.
+   *
+   * @generated from field: google.protobuf.FieldMask update_mask = 99;
+   */
+  updateMask?: FieldMask | undefined;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.UpdateCharacterProfileRequest.
+ * Use `create(UpdateCharacterProfileRequestSchema)` to create a new message.
+ */
+export const UpdateCharacterProfileRequestSchema: GenMessage<UpdateCharacterProfileRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 9);
+
+/**
+ * UpdateCharacterProfileResponse returns the character as it stands after the
+ * partial edit, so a client re-reads its new version rather than guessing it.
+ *
+ * @generated from message holomush.characteraccess.v1.UpdateCharacterProfileResponse
+ */
+export type UpdateCharacterProfileResponse = Message<"holomush.characteraccess.v1.UpdateCharacterProfileResponse"> & {
+  /**
+   * character is the post-write projection projectOwner built.
+   *
+   * @generated from field: holomush.characteraccess.v1.OwnCharacter character = 1;
+   */
+  character?: OwnCharacter | undefined;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.UpdateCharacterProfileResponse.
+ * Use `create(UpdateCharacterProfileResponseSchema)` to create a new message.
+ */
+export const UpdateCharacterProfileResponseSchema: GenMessage<UpdateCharacterProfileResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 10);
+
+/**
+ * UpdateCharacterDescriptionRequest replaces the in-world `look` text. It is
+ * deliberately its own RPC rather than a mask path on the profile edit: the
+ * description is the intrinsic characters.description COLUMN, reached through
+ * the shipped world.Service.UpdateCharacterDescription, while every profile
+ * field is an entity_properties row.
+ *
+ * @generated from message holomush.characteraccess.v1.UpdateCharacterDescriptionRequest
+ */
+export type UpdateCharacterDescriptionRequest = Message<"holomush.characteraccess.v1.UpdateCharacterDescriptionRequest"> & {
+  /**
+   * character_id is the character whose column is rewritten; ownership is
+   * verified server-side.
+   *
+   * @generated from field: string character_id = 1;
+   */
+  characterId: string;
+
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * request header.
+   *
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+
+  /**
+   * expected_version is the characters.version the caller last read; absent and
+   * zero are both rejected. See UpdateCharacterProfileRequest for why the
+   * scalar carriage costs nothing.
+   *
+   * @generated from field: int32 expected_version = 3;
+   */
+  expectedVersion: number;
+
+  /**
+   * description is the replacement `look` text. An empty value CLEARS the
+   * column — there is no mask on this RPC, so the field is always applied.
+   *
+   * @generated from field: string description = 4;
+   */
+  description: string;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.UpdateCharacterDescriptionRequest.
+ * Use `create(UpdateCharacterDescriptionRequestSchema)` to create a new message.
+ */
+export const UpdateCharacterDescriptionRequestSchema: GenMessage<UpdateCharacterDescriptionRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 11);
+
+/**
+ * UpdateCharacterDescriptionResponse returns the character after the rewrite.
+ *
+ * @generated from message holomush.characteraccess.v1.UpdateCharacterDescriptionResponse
+ */
+export type UpdateCharacterDescriptionResponse = Message<"holomush.characteraccess.v1.UpdateCharacterDescriptionResponse"> & {
+  /**
+   * character is the post-write projection projectOwner built.
+   *
+   * @generated from field: holomush.characteraccess.v1.OwnCharacter character = 1;
+   */
+  character?: OwnCharacter | undefined;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.UpdateCharacterDescriptionResponse.
+ * Use `create(UpdateCharacterDescriptionResponseSchema)` to create a new message.
+ */
+export const UpdateCharacterDescriptionResponseSchema: GenMessage<UpdateCharacterDescriptionResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 12);
+
+/**
  * CharacterAccessService is the host-side facade for the web character surface.
  * It constructs the viewer principal itself — resolving the optional player
  * session token through auth.PlayerSessionRepository and auth.PlayerRepository —
@@ -217,6 +661,59 @@ export const CharacterAccessService: GenService<{
     methodKind: "unary";
     input: typeof GetCharacterProfileRequestSchema;
     output: typeof GetCharacterProfileResponseSchema;
+  },
+  /**
+   * ListMyCharacters returns the authenticated player's own roster, retired
+   * characters included, so the web edit surface can offer un-retire without a
+   * second lookup. Its handler lands in plan 04-05 and resolves the player from
+   * the session token before reading; until then the embedded
+   * UnimplementedCharacterAccessServiceServer answers Unimplemented.
+   *
+   * @generated from rpc holomush.characteraccess.v1.CharacterAccessService.ListMyCharacters
+   */
+  listMyCharacters: {
+    methodKind: "unary";
+    input: typeof ListMyCharactersRequestSchema;
+    output: typeof ListMyCharactersResponseSchema;
+  },
+  /**
+   * GetMyCharacter returns one owned character in the shape the edit forms
+   * write back, so a client never has to reconstruct the owner view by merging
+   * a public projection with a second read. Ownership is verified server-side
+   * against the session's player; handler in plan 04-05.
+   *
+   * @generated from rpc holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter
+   */
+  getMyCharacter: {
+    methodKind: "unary";
+    input: typeof GetMyCharacterRequestSchema;
+    output: typeof GetMyCharacterResponseSchema;
+  },
+  /**
+   * UpdateCharacterProfile applies a partial edit to the character's stored
+   * profile.* rows, driven by an update mask evaluated against a closed
+   * allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
+   * Handler in plan 04-06; the write reaches entity_properties through the
+   * world write executor's same-transaction outbox seam, never a parallel path.
+   *
+   * @generated from rpc holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile
+   */
+  updateCharacterProfile: {
+    methodKind: "unary";
+    input: typeof UpdateCharacterProfileRequestSchema;
+    output: typeof UpdateCharacterProfileResponseSchema;
+  },
+  /**
+   * UpdateCharacterDescription replaces the in-world `look` text — the
+   * characters.description column itself, not a profile.* row — by reaching the
+   * shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
+   *
+   * @generated from rpc holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription
+   */
+  updateCharacterDescription: {
+    methodKind: "unary";
+    input: typeof UpdateCharacterDescriptionRequestSchema;
+    output: typeof UpdateCharacterDescriptionResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_characteraccess_v1_characteraccess, 0);

@@ -49,3 +49,143 @@ func (h *Handler) WebGetCharacterProfile(ctx context.Context, req *connect.Reque
 		Character: resp.GetCharacter(),
 	}), nil
 }
+
+// The four owner-audience proxies below copy WebGetCharacterProfile's shape
+// exactly: nil-client guard, token from the header, bounded context,
+// field-by-field forward, log-then-pass-through on error. They compute nothing.
+//
+// THEY ANSWER Unimplemented TODAY, AND THAT IS THE INTENDED STATE. Their facade
+// handlers land in plans 04-05 and 04-06; until then
+// UnimplementedCharacterAccessServiceServer answers Unimplemented and these
+// proxies pass it through unchanged. They exist now because
+// webv1connect.WebServiceHandler is asserted at compile time in handler.go, so
+// declaring the RPCs without the methods would break the build.
+
+// WebListMyCharacters proxies to CharacterAccessService.ListMyCharacters. The
+// request message carries no fields at all — whose roster is returned follows
+// entirely from the header token, so a client cannot name someone else's.
+func (h *Handler) WebListMyCharacters(ctx context.Context, req *connect.Request[webv1.WebListMyCharactersRequest]) (*connect.Response[webv1.WebListMyCharactersResponse], error) {
+	slog.DebugContext(ctx, "web: WebListMyCharacters")
+	if h.characterAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("character access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.characterAccess.ListMyCharacters(rpcCtx, &characteraccessv1.ListMyCharactersRequest{
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: list my characters RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebListMyCharactersResponse{
+		Characters: resp.GetCharacters(),
+	}), nil
+}
+
+// WebGetMyCharacter proxies to CharacterAccessService.GetMyCharacter. Ownership
+// is verified in the facade against the token's player; the gateway forwards
+// the id it was given and makes no ownership judgement of its own.
+func (h *Handler) WebGetMyCharacter(ctx context.Context, req *connect.Request[webv1.WebGetMyCharacterRequest]) (*connect.Response[webv1.WebGetMyCharacterResponse], error) {
+	slog.DebugContext(ctx, "web: WebGetMyCharacter", "character_id", req.Msg.GetCharacterId())
+	if h.characterAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("character access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.characterAccess.GetMyCharacter(rpcCtx, &characteraccessv1.GetMyCharacterRequest{
+		CharacterId:        req.Msg.GetCharacterId(),
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: get my character RPC failed", err, "character_id", req.Msg.GetCharacterId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebGetMyCharacterResponse{
+		Character: resp.GetCharacter(),
+	}), nil
+}
+
+// WebUpdateCharacterProfile proxies to
+// CharacterAccessService.UpdateCharacterProfile. The mask and every prose field
+// are forwarded VERBATIM: which paths are acceptable, and which fields they
+// reach, is the facade's allowlist decision. A gateway that filtered the mask
+// would be a second allowlist that can drift from the authoritative one.
+func (h *Handler) WebUpdateCharacterProfile(ctx context.Context, req *connect.Request[webv1.WebUpdateCharacterProfileRequest]) (*connect.Response[webv1.WebUpdateCharacterProfileResponse], error) {
+	slog.DebugContext(ctx, "web: WebUpdateCharacterProfile", "character_id", req.Msg.GetCharacterId())
+	if h.characterAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("character access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.characterAccess.UpdateCharacterProfile(rpcCtx, &characteraccessv1.UpdateCharacterProfileRequest{
+		CharacterId:        req.Msg.GetCharacterId(),
+		PlayerSessionToken: token,
+		ExpectedVersion:    req.Msg.GetExpectedVersion(),
+		Pronouns:           req.Msg.GetPronouns(),
+		Concept:            req.Msg.GetConcept(),
+		Species:            req.Msg.GetSpecies(),
+		Age:                req.Msg.GetAge(),
+		Faction:            req.Msg.GetFaction(),
+		Appearance:         req.Msg.GetAppearance(),
+		Personality:        req.Msg.GetPersonality(),
+		Biography:          req.Msg.GetBiography(),
+		Rumors:             req.Msg.GetRumors(),
+		Currently:          req.Msg.GetCurrently(),
+		RpPreferences:      req.Msg.GetRpPreferences(),
+		Timezone:           req.Msg.GetTimezone(),
+		UpdateMask:         req.Msg.GetUpdateMask(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: update character profile RPC failed", err, "character_id", req.Msg.GetCharacterId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebUpdateCharacterProfileResponse{
+		Character: resp.GetCharacter(),
+	}), nil
+}
+
+// WebUpdateCharacterDescription proxies to
+// CharacterAccessService.UpdateCharacterDescription — the intrinsic
+// characters.description column, not a profile.* row.
+func (h *Handler) WebUpdateCharacterDescription(ctx context.Context, req *connect.Request[webv1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[webv1.WebUpdateCharacterDescriptionResponse], error) {
+	slog.DebugContext(ctx, "web: WebUpdateCharacterDescription", "character_id", req.Msg.GetCharacterId())
+	if h.characterAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("character access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.characterAccess.UpdateCharacterDescription(rpcCtx, &characteraccessv1.UpdateCharacterDescriptionRequest{
+		CharacterId:        req.Msg.GetCharacterId(),
+		PlayerSessionToken: token,
+		ExpectedVersion:    req.Msg.GetExpectedVersion(),
+		Description:        req.Msg.GetDescription(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: update character description RPC failed", err, "character_id", req.Msg.GetCharacterId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebUpdateCharacterDescriptionResponse{
+		Character: resp.GetCharacter(),
+	}), nil
+}

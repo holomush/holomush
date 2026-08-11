@@ -176,6 +176,18 @@ const (
 	// WebServiceWebGetCharacterProfileProcedure is the fully-qualified name of the WebService's
 	// WebGetCharacterProfile RPC.
 	WebServiceWebGetCharacterProfileProcedure = "/holomush.web.v1.WebService/WebGetCharacterProfile"
+	// WebServiceWebListMyCharactersProcedure is the fully-qualified name of the WebService's
+	// WebListMyCharacters RPC.
+	WebServiceWebListMyCharactersProcedure = "/holomush.web.v1.WebService/WebListMyCharacters"
+	// WebServiceWebGetMyCharacterProcedure is the fully-qualified name of the WebService's
+	// WebGetMyCharacter RPC.
+	WebServiceWebGetMyCharacterProcedure = "/holomush.web.v1.WebService/WebGetMyCharacter"
+	// WebServiceWebUpdateCharacterProfileProcedure is the fully-qualified name of the WebService's
+	// WebUpdateCharacterProfile RPC.
+	WebServiceWebUpdateCharacterProfileProcedure = "/holomush.web.v1.WebService/WebUpdateCharacterProfile"
+	// WebServiceWebUpdateCharacterDescriptionProcedure is the fully-qualified name of the WebService's
+	// WebUpdateCharacterDescription RPC.
+	WebServiceWebUpdateCharacterDescriptionProcedure = "/holomush.web.v1.WebService/WebUpdateCharacterDescription"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -380,6 +392,21 @@ type WebServiceClient interface {
 	// X-Session-Token header CookieMiddleware injected and forwards it; a request
 	// with no cookie is the ordinary logged-out case, not an error.
 	WebGetCharacterProfile(context.Context, *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error)
+	// WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+	// Handler.WebListMyCharacters lifts the session token from the header and
+	// forwards nothing else; whose roster is returned follows from the token.
+	WebListMyCharacters(context.Context, *connect.Request[v1.WebListMyCharactersRequest]) (*connect.Response[v1.WebListMyCharactersResponse], error)
+	// WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+	// is verified in the facade, not here.
+	WebGetMyCharacter(context.Context, *connect.Request[v1.WebGetMyCharacterRequest]) (*connect.Response[v1.WebGetMyCharacterResponse], error)
+	// WebUpdateCharacterProfile proxies
+	// CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+	// forwards the mask and every prose field verbatim; the gateway neither
+	// validates the mask nor decides which fields it reaches.
+	WebUpdateCharacterProfile(context.Context, *connect.Request[v1.WebUpdateCharacterProfileRequest]) (*connect.Response[v1.WebUpdateCharacterProfileResponse], error)
+	// WebUpdateCharacterDescription proxies
+	// CharacterAccessService.UpdateCharacterDescription.
+	WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -687,6 +714,30 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebGetCharacterProfile")),
 			connect.WithClientOptions(opts...),
 		),
+		webListMyCharacters: connect.NewClient[v1.WebListMyCharactersRequest, v1.WebListMyCharactersResponse](
+			httpClient,
+			baseURL+WebServiceWebListMyCharactersProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListMyCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		webGetMyCharacter: connect.NewClient[v1.WebGetMyCharacterRequest, v1.WebGetMyCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebGetMyCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebGetMyCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		webUpdateCharacterProfile: connect.NewClient[v1.WebUpdateCharacterProfileRequest, v1.WebUpdateCharacterProfileResponse](
+			httpClient,
+			baseURL+WebServiceWebUpdateCharacterProfileProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterProfile")),
+			connect.WithClientOptions(opts...),
+		),
+		webUpdateCharacterDescription: connect.NewClient[v1.WebUpdateCharacterDescriptionRequest, v1.WebUpdateCharacterDescriptionResponse](
+			httpClient,
+			baseURL+WebServiceWebUpdateCharacterDescriptionProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterDescription")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -741,6 +792,10 @@ type webServiceClient struct {
 	webWithdrawScenePublish       *connect.Client[v1.WebWithdrawScenePublishRequest, v1.WebWithdrawScenePublishResponse]
 	webGetPublishedScene          *connect.Client[v1.WebGetPublishedSceneRequest, v1.WebGetPublishedSceneResponse]
 	webGetCharacterProfile        *connect.Client[v1.WebGetCharacterProfileRequest, v1.WebGetCharacterProfileResponse]
+	webListMyCharacters           *connect.Client[v1.WebListMyCharactersRequest, v1.WebListMyCharactersResponse]
+	webGetMyCharacter             *connect.Client[v1.WebGetMyCharacterRequest, v1.WebGetMyCharacterResponse]
+	webUpdateCharacterProfile     *connect.Client[v1.WebUpdateCharacterProfileRequest, v1.WebUpdateCharacterProfileResponse]
+	webUpdateCharacterDescription *connect.Client[v1.WebUpdateCharacterDescriptionRequest, v1.WebUpdateCharacterDescriptionResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -988,6 +1043,26 @@ func (c *webServiceClient) WebGetCharacterProfile(ctx context.Context, req *conn
 	return c.webGetCharacterProfile.CallUnary(ctx, req)
 }
 
+// WebListMyCharacters calls holomush.web.v1.WebService.WebListMyCharacters.
+func (c *webServiceClient) WebListMyCharacters(ctx context.Context, req *connect.Request[v1.WebListMyCharactersRequest]) (*connect.Response[v1.WebListMyCharactersResponse], error) {
+	return c.webListMyCharacters.CallUnary(ctx, req)
+}
+
+// WebGetMyCharacter calls holomush.web.v1.WebService.WebGetMyCharacter.
+func (c *webServiceClient) WebGetMyCharacter(ctx context.Context, req *connect.Request[v1.WebGetMyCharacterRequest]) (*connect.Response[v1.WebGetMyCharacterResponse], error) {
+	return c.webGetMyCharacter.CallUnary(ctx, req)
+}
+
+// WebUpdateCharacterProfile calls holomush.web.v1.WebService.WebUpdateCharacterProfile.
+func (c *webServiceClient) WebUpdateCharacterProfile(ctx context.Context, req *connect.Request[v1.WebUpdateCharacterProfileRequest]) (*connect.Response[v1.WebUpdateCharacterProfileResponse], error) {
+	return c.webUpdateCharacterProfile.CallUnary(ctx, req)
+}
+
+// WebUpdateCharacterDescription calls holomush.web.v1.WebService.WebUpdateCharacterDescription.
+func (c *webServiceClient) WebUpdateCharacterDescription(ctx context.Context, req *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error) {
+	return c.webUpdateCharacterDescription.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -1190,6 +1265,21 @@ type WebServiceHandler interface {
 	// X-Session-Token header CookieMiddleware injected and forwards it; a request
 	// with no cookie is the ordinary logged-out case, not an error.
 	WebGetCharacterProfile(context.Context, *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error)
+	// WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+	// Handler.WebListMyCharacters lifts the session token from the header and
+	// forwards nothing else; whose roster is returned follows from the token.
+	WebListMyCharacters(context.Context, *connect.Request[v1.WebListMyCharactersRequest]) (*connect.Response[v1.WebListMyCharactersResponse], error)
+	// WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+	// is verified in the facade, not here.
+	WebGetMyCharacter(context.Context, *connect.Request[v1.WebGetMyCharacterRequest]) (*connect.Response[v1.WebGetMyCharacterResponse], error)
+	// WebUpdateCharacterProfile proxies
+	// CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+	// forwards the mask and every prose field verbatim; the gateway neither
+	// validates the mask nor decides which fields it reaches.
+	WebUpdateCharacterProfile(context.Context, *connect.Request[v1.WebUpdateCharacterProfileRequest]) (*connect.Response[v1.WebUpdateCharacterProfileResponse], error)
+	// WebUpdateCharacterDescription proxies
+	// CharacterAccessService.UpdateCharacterDescription.
+	WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1493,6 +1583,30 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebGetCharacterProfile")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebListMyCharactersHandler := connect.NewUnaryHandler(
+		WebServiceWebListMyCharactersProcedure,
+		svc.WebListMyCharacters,
+		connect.WithSchema(webServiceMethods.ByName("WebListMyCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebGetMyCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebGetMyCharacterProcedure,
+		svc.WebGetMyCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebGetMyCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebUpdateCharacterProfileHandler := connect.NewUnaryHandler(
+		WebServiceWebUpdateCharacterProfileProcedure,
+		svc.WebUpdateCharacterProfile,
+		connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebUpdateCharacterDescriptionHandler := connect.NewUnaryHandler(
+		WebServiceWebUpdateCharacterDescriptionProcedure,
+		svc.WebUpdateCharacterDescription,
+		connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterDescription")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -1593,6 +1707,14 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebGetPublishedSceneHandler.ServeHTTP(w, r)
 		case WebServiceWebGetCharacterProfileProcedure:
 			webServiceWebGetCharacterProfileHandler.ServeHTTP(w, r)
+		case WebServiceWebListMyCharactersProcedure:
+			webServiceWebListMyCharactersHandler.ServeHTTP(w, r)
+		case WebServiceWebGetMyCharacterProcedure:
+			webServiceWebGetMyCharacterHandler.ServeHTTP(w, r)
+		case WebServiceWebUpdateCharacterProfileProcedure:
+			webServiceWebUpdateCharacterProfileHandler.ServeHTTP(w, r)
+		case WebServiceWebUpdateCharacterDescriptionProcedure:
+			webServiceWebUpdateCharacterDescriptionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1796,4 +1918,20 @@ func (UnimplementedWebServiceHandler) WebGetPublishedScene(context.Context, *con
 
 func (UnimplementedWebServiceHandler) WebGetCharacterProfile(context.Context, *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetCharacterProfile is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListMyCharacters(context.Context, *connect.Request[v1.WebListMyCharactersRequest]) (*connect.Response[v1.WebListMyCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListMyCharacters is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebGetMyCharacter(context.Context, *connect.Request[v1.WebGetMyCharacterRequest]) (*connect.Response[v1.WebGetMyCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetMyCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebUpdateCharacterProfile(context.Context, *connect.Request[v1.WebUpdateCharacterProfileRequest]) (*connect.Response[v1.WebUpdateCharacterProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebUpdateCharacterProfile is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebUpdateCharacterDescription is not implemented"))
 }

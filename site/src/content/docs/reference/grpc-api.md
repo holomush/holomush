@@ -145,9 +145,19 @@ title: "gRPC API Reference"
 - [holomush/characteraccess/v1/characteraccess.proto](#holomush_characteraccess_v1_characteraccess-proto)
     - [GetCharacterProfileRequest](#holomush-characteraccess-v1-GetCharacterProfileRequest)
     - [GetCharacterProfileResponse](#holomush-characteraccess-v1-GetCharacterProfileResponse)
+    - [GetMyCharacterRequest](#holomush-characteraccess-v1-GetMyCharacterRequest)
+    - [GetMyCharacterResponse](#holomush-characteraccess-v1-GetMyCharacterResponse)
+    - [ListMyCharactersRequest](#holomush-characteraccess-v1-ListMyCharactersRequest)
+    - [ListMyCharactersResponse](#holomush-characteraccess-v1-ListMyCharactersResponse)
+    - [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter)
+    - [OwnCharacter.ProfileEntry](#holomush-characteraccess-v1-OwnCharacter-ProfileEntry)
     - [ProfileImage](#holomush-characteraccess-v1-ProfileImage)
     - [PublicCharacter](#holomush-characteraccess-v1-PublicCharacter)
     - [PublicCharacter.ProfileEntry](#holomush-characteraccess-v1-PublicCharacter-ProfileEntry)
+    - [UpdateCharacterDescriptionRequest](#holomush-characteraccess-v1-UpdateCharacterDescriptionRequest)
+    - [UpdateCharacterDescriptionResponse](#holomush-characteraccess-v1-UpdateCharacterDescriptionResponse)
+    - [UpdateCharacterProfileRequest](#holomush-characteraccess-v1-UpdateCharacterProfileRequest)
+    - [UpdateCharacterProfileResponse](#holomush-characteraccess-v1-UpdateCharacterProfileResponse)
   
     - [CharacterAccessService](#holomush-characteraccess-v1-CharacterAccessService)
   
@@ -540,6 +550,8 @@ title: "gRPC API Reference"
     - [WebGetCharacterProfileResponse](#holomush-web-v1-WebGetCharacterProfileResponse)
     - [WebGetContentRequest](#holomush-web-v1-WebGetContentRequest)
     - [WebGetContentResponse](#holomush-web-v1-WebGetContentResponse)
+    - [WebGetMyCharacterRequest](#holomush-web-v1-WebGetMyCharacterRequest)
+    - [WebGetMyCharacterResponse](#holomush-web-v1-WebGetMyCharacterResponse)
     - [WebGetPublicSceneArchiveRequest](#holomush-web-v1-WebGetPublicSceneArchiveRequest)
     - [WebGetPublicSceneArchiveResponse](#holomush-web-v1-WebGetPublicSceneArchiveResponse)
     - [WebGetPublishedSceneRequest](#holomush-web-v1-WebGetPublishedSceneRequest)
@@ -563,6 +575,8 @@ title: "gRPC API Reference"
     - [WebListContentResponse](#holomush-web-v1-WebListContentResponse)
     - [WebListFocusPresenceRequest](#holomush-web-v1-WebListFocusPresenceRequest)
     - [WebListFocusPresenceResponse](#holomush-web-v1-WebListFocusPresenceResponse)
+    - [WebListMyCharactersRequest](#holomush-web-v1-WebListMyCharactersRequest)
+    - [WebListMyCharactersResponse](#holomush-web-v1-WebListMyCharactersResponse)
     - [WebListMyScenesRequest](#holomush-web-v1-WebListMyScenesRequest)
     - [WebListMyScenesResponse](#holomush-web-v1-WebListMyScenesResponse)
     - [WebListPlayerSessionsRequest](#holomush-web-v1-WebListPlayerSessionsRequest)
@@ -601,6 +615,10 @@ title: "gRPC API Reference"
     - [WebStartScenePublishResponse](#holomush-web-v1-WebStartScenePublishResponse)
     - [WebTransferOwnershipRequest](#holomush-web-v1-WebTransferOwnershipRequest)
     - [WebTransferOwnershipResponse](#holomush-web-v1-WebTransferOwnershipResponse)
+    - [WebUpdateCharacterDescriptionRequest](#holomush-web-v1-WebUpdateCharacterDescriptionRequest)
+    - [WebUpdateCharacterDescriptionResponse](#holomush-web-v1-WebUpdateCharacterDescriptionResponse)
+    - [WebUpdateCharacterProfileRequest](#holomush-web-v1-WebUpdateCharacterProfileRequest)
+    - [WebUpdateCharacterProfileResponse](#holomush-web-v1-WebUpdateCharacterProfileResponse)
     - [WebUpdateSceneRequest](#holomush-web-v1-WebUpdateSceneRequest)
     - [WebUpdateSceneResponse](#holomush-web-v1-WebUpdateSceneResponse)
     - [WebWatchSceneRequest](#holomush-web-v1-WebWatchSceneRequest)
@@ -2977,6 +2995,116 @@ GetCharacterProfileResponse carries the projected profile.
 
 
 
+<a name="holomush-characteraccess-v1-GetMyCharacterRequest"></a>
+
+### GetMyCharacterRequest
+GetMyCharacterRequest names one owned character to read in full.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the target character&#39;s ULID. Ownership is verified against the session&#39;s player, and a character the caller does not own resolves the same not-found outcome as one that does not exist. |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token; see ListMyCharactersRequest. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-GetMyCharacterResponse"></a>
+
+### GetMyCharacterResponse
+GetMyCharacterResponse carries one character in the owner audience&#39;s shape.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the projection projectOwner built for the owning player. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-ListMyCharactersRequest"></a>
+
+### ListMyCharactersRequest
+ListMyCharactersRequest asks for the caller&#39;s own roster; the session token is
+the only input, because whose roster it is follows from who is asking.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the request header. The player is resolved from it server-side; there is deliberately no player-id field a caller could point at someone else. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-ListMyCharactersResponse"></a>
+
+### ListMyCharactersResponse
+ListMyCharactersResponse carries the roster in the owner audience&#39;s shape.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) | repeated | characters is every character the resolved player owns, retired ones included (01-SPEC §4.5) — a roster that hid them would make un-retire unreachable from the UI. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-OwnCharacter"></a>
+
+### OwnCharacter
+OwnCharacter is the character shape the `owner` audience receives, and it is
+a DISTINCT MESSAGE rather than PublicCharacter plus extra fields (01-SPEC
+§2.2). The two are never interchanged: reusing one for the other audience
+would put the absence guarantee back on per-field runtime discipline, which
+is the arrangement the per-audience split exists to replace.
+
+It will be constructed only by projectOwner (§2.3), the owner-audience
+counterpart of projectPublic in
+internal/grpc/characteraccess_projection.go. It carries the owner&#39;s FULL
+profile map — no tier floor is evaluated on this path, because a floor
+governs what a VIEWER may read, not what an owner may see of their own row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the stable characters.id ULID, the same key the public profile URL is built on and the key every mutation targets. |
+| name | [string](#string) |  | name is characters.name, forwarded as the stored bytes with no normalization, casefolding or re-encoding. |
+| description | [string](#string) |  | description is the in-world `look` text (characters.description) that UpdateCharacterDescription writes. |
+| profile | [OwnCharacter.ProfileEntry](#holomush-characteraccess-v1-OwnCharacter-ProfileEntry) | repeated | profile holds every stored `profile.*` attribute keyed by its governed name, unfiltered — the owner&#39;s own edit surface reads the values it is about to write back. |
+| primary_image | [ProfileImage](#holomush-characteraccess-v1-ProfileImage) |  | primary_image is the `profile.image.primary` row when one exists. v0.13 mints no media identifier, so it is always absent. |
+| gallery | [ProfileImage](#holomush-characteraccess-v1-ProfileImage) | repeated | gallery holds the `profile.image.gallery.00`…`.09` rows, capped at the ten names the storage schema fixes. Always empty in v0.13. |
+| status | [string](#string) |  | status is characters.status, one of exactly `active`, `retired` or `idle`, compared as an exact lowercase literal (01-SPEC §4.2). A reader MUST switch over all three with a denying default; `idle` has no transition into it in v0.13, which is precisely why the default arm may not fall through to permit. |
+| version | [int32](#int32) |  | version is characters.version, the optimistic-concurrency counter a client reads here and sends back as expected_version on its next mutation. Transcribed from the INTEGER column added by migration 000049 and from world.Character.Version. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-OwnCharacter-ProfileEntry"></a>
+
+### OwnCharacter.ProfileEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
+
+
+
+
+
 <a name="holomush-characteraccess-v1-ProfileImage"></a>
 
 ### ProfileImage
@@ -3045,6 +3173,92 @@ client is not told a decision was made.
 
 
 
+
+<a name="holomush-characteraccess-v1-UpdateCharacterDescriptionRequest"></a>
+
+### UpdateCharacterDescriptionRequest
+UpdateCharacterDescriptionRequest replaces the in-world `look` text. It is
+deliberately its own RPC rather than a mask path on the profile edit: the
+description is the intrinsic characters.description COLUMN, reached through
+the shipped world.Service.UpdateCharacterDescription, while every profile
+field is an entity_properties row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character whose column is rewritten; ownership is verified server-side. |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the request header. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller last read; absent and zero are both rejected. See UpdateCharacterProfileRequest for why the scalar carriage costs nothing. |
+| description | [string](#string) |  | description is the replacement `look` text. An empty value CLEARS the column — there is no mask on this RPC, so the field is always applied. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-UpdateCharacterDescriptionResponse"></a>
+
+### UpdateCharacterDescriptionResponse
+UpdateCharacterDescriptionResponse returns the character after the rewrite.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the post-write projection projectOwner built. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-UpdateCharacterProfileRequest"></a>
+
+### UpdateCharacterProfileRequest
+UpdateCharacterProfileRequest is a partial edit of the stored `profile.*`
+rows (01-SPEC §7.2). Every prose field below is applied ONLY when its
+snake_case path appears in update_mask; the value carried by a field outside
+the mask is immaterial and MUST be ignored rather than written.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character whose rows are edited; ownership is verified server-side before the mask is applied. |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the request header. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller last read. It is a plain scalar rather than an `optional` field or a wrapper message on purpose: absent and explicit zero take the SAME rejection branch (§9.4.2), so proto3&#39;s inability to tell them apart costs nothing here. Zero is never a legal input, and it MUST NOT be read as &#34;write without the guard&#34; — the repository layer below does accept zero as an unversioned write, which is exactly why this boundary rejects it first. |
+| pronouns | [string](#string) |  | pronouns replaces the `profile.pronouns` row — half of §8.8&#39;s minimum public identity, and the one profile field seeded at the anonymous floor. |
+| concept | [string](#string) |  | concept replaces the `profile.concept` row: the one-line &#34;what this character is&#34; pitch. |
+| species | [string](#string) |  | species replaces the `profile.species` row. Free text — the platform ships no species vocabulary, because the setting owns that word. |
+| age | [string](#string) |  | age replaces the `profile.age` row. Free text rather than an integer: settings routinely want &#34;ageless&#34;, &#34;early 30s&#34;, or a century. |
+| faction | [string](#string) |  | faction replaces the `profile.faction` row: affiliation, house, crew or allegiance. Free text; there is no faction registry. |
+| appearance | [string](#string) |  | appearance replaces the `profile.appearance` row — extended detail beyond what a single in-world `look` would give a viewer. |
+| personality | [string](#string) |  | personality replaces the `profile.personality` row: disposition and manner. |
+| biography | [string](#string) |  | biography replaces the `profile.biography` row: history and background. |
+| rumors | [string](#string) |  | rumors replaces the `profile.rumors` row — the RP hooks block, the &#34;reasons to approach this character&#34; prose. |
+| currently | [string](#string) |  | currently replaces the `profile.currently` row: the volatile status line for what the character is up to right now. It carries no history and is expected to change often. |
+| rp_preferences | [string](#string) |  | rp_preferences replaces the `profile.rp_preferences` row — the OUT-OF-CHARACTER block about the player&#39;s style, availability and content limits. It is NOT the `characters.preferences` JSONB settings column; the `rp_` qualifier exists so the two cannot be conflated by name alone. |
+| timezone | [string](#string) |  | timezone replaces the `profile.timezone` row, supporting the availability half of the OOC block. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | update_mask is the SET of snake_case field paths to apply. Paths are matched as exact strings against a closed allowlist — no prefix, wildcard, glob or dotted-subtree expansion — and an unlisted path is rejected rather than ignored. Evaluation is order-independent and duplicate paths are idempotent. An EMPTY mask is a no-op success, never &#34;apply every field&#34;, which would turn an under-populated client request into a silent full-row overwrite. Field 99 mirrors the placement UpdateSceneRequest already uses. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-UpdateCharacterProfileResponse"></a>
+
+### UpdateCharacterProfileResponse
+UpdateCharacterProfileResponse returns the character as it stands after the
+partial edit, so a client re-reads its new version rather than guessing it.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the post-write projection projectOwner built. |
+
+
+
+
+
  
 
  
@@ -3069,6 +3283,10 @@ SceneAccessService.
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
 | GetCharacterProfile | [GetCharacterProfileRequest](#holomush-characteraccess-v1-GetCharacterProfileRequest) | [GetCharacterProfileResponse](#holomush-characteraccess-v1-GetCharacterProfileResponse) | GetCharacterProfile resolves one character&#39;s public profile for whichever viewer rung the request&#39;s token resolves to, including no token at all. CharacterAccessServer.GetCharacterProfile evaluates profile reachability first and independently; a viewer below that floor receives exactly the response a character id naming no row receives, so a withheld profile cannot be distinguished from a nonexistent one. |
+| ListMyCharacters | [ListMyCharactersRequest](#holomush-characteraccess-v1-ListMyCharactersRequest) | [ListMyCharactersResponse](#holomush-characteraccess-v1-ListMyCharactersResponse) | ListMyCharacters returns the authenticated player&#39;s own roster, retired characters included, so the web edit surface can offer un-retire without a second lookup. Its handler lands in plan 04-05 and resolves the player from the session token before reading; until then the embedded UnimplementedCharacterAccessServiceServer answers Unimplemented. |
+| GetMyCharacter | [GetMyCharacterRequest](#holomush-characteraccess-v1-GetMyCharacterRequest) | [GetMyCharacterResponse](#holomush-characteraccess-v1-GetMyCharacterResponse) | GetMyCharacter returns one owned character in the shape the edit forms write back, so a client never has to reconstruct the owner view by merging a public projection with a second read. Ownership is verified server-side against the session&#39;s player; handler in plan 04-05. |
+| UpdateCharacterProfile | [UpdateCharacterProfileRequest](#holomush-characteraccess-v1-UpdateCharacterProfileRequest) | [UpdateCharacterProfileResponse](#holomush-characteraccess-v1-UpdateCharacterProfileResponse) | UpdateCharacterProfile applies a partial edit to the character&#39;s stored profile.* rows, driven by an update mask evaluated against a closed allowlist (01-SPEC §9.5) and guarded by the caller&#39;s expected_version. Handler in plan 04-06; the write reaches entity_properties through the world write executor&#39;s same-transaction outbox seam, never a parallel path. |
+| UpdateCharacterDescription | [UpdateCharacterDescriptionRequest](#holomush-characteraccess-v1-UpdateCharacterDescriptionRequest) | [UpdateCharacterDescriptionResponse](#holomush-characteraccess-v1-UpdateCharacterDescriptionResponse) | UpdateCharacterDescription replaces the in-world `look` text — the characters.description column itself, not a profile.* row — by reaching the shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06. |
 
  
 
@@ -9020,6 +9238,38 @@ when no item exists for the key.
 
 
 
+<a name="holomush-web-v1-WebGetMyCharacterRequest"></a>
+
+### WebGetMyCharacterRequest
+WebGetMyCharacterRequest names one owned character. It carries no
+session-token field: Handler.WebGetMyCharacter reads the token from the
+request header rather than the body.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the target character&#39;s ULID, taken from the edit-page URL. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebGetMyCharacterResponse"></a>
+
+### WebGetMyCharacterResponse
+WebGetMyCharacterResponse re-exports the facade&#39;s owner projection verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the projection the facade built for the owning player. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebGetPublicSceneArchiveRequest"></a>
 
 ### WebGetPublicSceneArchiveRequest
@@ -9378,6 +9628,34 @@ current focus context.
 | context | [WebPresenceContext](#holomush-web-v1-WebPresenceContext) |  | context indicates whether the snapshot describes a location or a scene. |
 | context_id | [string](#string) |  | context_id is the ULID of the focus location or scene the snapshot describes. |
 | entries | [WebPresenceEntry](#holomush-web-v1-WebPresenceEntry) | repeated | entries is the set of characters present in the focus context. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebListMyCharactersRequest"></a>
+
+### WebListMyCharactersRequest
+WebListMyCharactersRequest carries NO fields at all, and the emptiness is the
+point: the roster&#39;s owner is the player the session token resolves to, and
+Handler.WebListMyCharacters reads that token from the request header. A
+player-id field here would let a client name a roster it does not own.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebListMyCharactersResponse"></a>
+
+### WebListMyCharactersResponse
+WebListMyCharactersResponse re-exports the facade&#39;s roster verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) | repeated | characters is the owner-audience roster the facade projected, retired entries included; the gateway forwards it unmodified. |
 
 
 
@@ -9995,6 +10273,86 @@ WebTransferOwnershipResponse is empty.
 
 
 
+<a name="holomush-web-v1-WebUpdateCharacterDescriptionRequest"></a>
+
+### WebUpdateCharacterDescriptionRequest
+WebUpdateCharacterDescriptionRequest rewrites the in-world `look` text. It
+carries no session-token field; the token travels in the request header.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character whose description column is rewritten. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the browser last read. |
+| description | [string](#string) |  | description is the replacement `look` text; an empty value clears it. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebUpdateCharacterDescriptionResponse"></a>
+
+### WebUpdateCharacterDescriptionResponse
+WebUpdateCharacterDescriptionResponse re-exports the post-write projection.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the character as it stands after the rewrite. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebUpdateCharacterProfileRequest"></a>
+
+### WebUpdateCharacterProfileRequest
+WebUpdateCharacterProfileRequest mirrors the facade&#39;s partial-edit request
+minus its session-token field, which travels in the request header. Every
+prose field is forwarded verbatim; whether it is APPLIED is decided by the
+facade against update_mask, never by the gateway.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character whose profile rows are edited. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the browser last read; the facade rejects an absent or zero value rather than writing unguarded. |
+| pronouns | [string](#string) |  | pronouns is forwarded to the facade&#39;s `profile.pronouns` edit. |
+| concept | [string](#string) |  | concept is forwarded to the facade&#39;s `profile.concept` edit. |
+| species | [string](#string) |  | species is forwarded to the facade&#39;s `profile.species` edit. |
+| age | [string](#string) |  | age is forwarded to the facade&#39;s `profile.age` edit. |
+| faction | [string](#string) |  | faction is forwarded to the facade&#39;s `profile.faction` edit. |
+| appearance | [string](#string) |  | appearance is forwarded to the facade&#39;s `profile.appearance` edit. |
+| personality | [string](#string) |  | personality is forwarded to the facade&#39;s `profile.personality` edit. |
+| biography | [string](#string) |  | biography is forwarded to the facade&#39;s `profile.biography` edit. |
+| rumors | [string](#string) |  | rumors is forwarded to the facade&#39;s `profile.rumors` edit. |
+| currently | [string](#string) |  | currently is forwarded to the facade&#39;s `profile.currently` edit. |
+| rp_preferences | [string](#string) |  | rp_preferences is forwarded to the facade&#39;s `profile.rp_preferences` edit — the OUT-OF-CHARACTER block, not the characters.preferences settings column. |
+| timezone | [string](#string) |  | timezone is forwarded to the facade&#39;s `profile.timezone` edit. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | update_mask is the set of snake_case paths the facade will apply. The gateway forwards it without inspecting it; an empty mask is a no-op success and the web client is expected to skip the round trip entirely. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebUpdateCharacterProfileResponse"></a>
+
+### WebUpdateCharacterProfileResponse
+WebUpdateCharacterProfileResponse re-exports the post-write projection.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the character as it stands after the partial edit. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebUpdateSceneRequest"></a>
 
 ### WebUpdateSceneRequest
@@ -10236,6 +10594,10 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebWithdrawScenePublish | [WebWithdrawScenePublishRequest](#holomush-web-v1-WebWithdrawScenePublishRequest) | [WebWithdrawScenePublishResponse](#holomush-web-v1-WebWithdrawScenePublishResponse) | WebWithdrawScenePublish proxies WithdrawScenePublish to the facade. |
 | WebGetPublishedScene | [WebGetPublishedSceneRequest](#holomush-web-v1-WebGetPublishedSceneRequest) | [WebGetPublishedSceneResponse](#holomush-web-v1-WebGetPublishedSceneResponse) | WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot). |
 | WebGetCharacterProfile | [WebGetCharacterProfileRequest](#holomush-web-v1-WebGetCharacterProfileRequest) | [WebGetCharacterProfileResponse](#holomush-web-v1-WebGetCharacterProfileResponse) | WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile. Handler.WebGetCharacterProfile lifts the session token from the X-Session-Token header CookieMiddleware injected and forwards it; a request with no cookie is the ordinary logged-out case, not an error. |
+| WebListMyCharacters | [WebListMyCharactersRequest](#holomush-web-v1-WebListMyCharactersRequest) | [WebListMyCharactersResponse](#holomush-web-v1-WebListMyCharactersResponse) | WebListMyCharacters proxies CharacterAccessService.ListMyCharacters. Handler.WebListMyCharacters lifts the session token from the header and forwards nothing else; whose roster is returned follows from the token. |
+| WebGetMyCharacter | [WebGetMyCharacterRequest](#holomush-web-v1-WebGetMyCharacterRequest) | [WebGetMyCharacterResponse](#holomush-web-v1-WebGetMyCharacterResponse) | WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership is verified in the facade, not here. |
+| WebUpdateCharacterProfile | [WebUpdateCharacterProfileRequest](#holomush-web-v1-WebUpdateCharacterProfileRequest) | [WebUpdateCharacterProfileResponse](#holomush-web-v1-WebUpdateCharacterProfileResponse) | WebUpdateCharacterProfile proxies CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile forwards the mask and every prose field verbatim; the gateway neither validates the mask nor decides which fields it reaches. |
+| WebUpdateCharacterDescription | [WebUpdateCharacterDescriptionRequest](#holomush-web-v1-WebUpdateCharacterDescriptionRequest) | [WebUpdateCharacterDescriptionResponse](#holomush-web-v1-WebUpdateCharacterDescriptionResponse) | WebUpdateCharacterDescription proxies CharacterAccessService.UpdateCharacterDescription. |
 
  
 

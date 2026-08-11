@@ -39,6 +39,18 @@ const (
 	// CharacterAccessServiceGetCharacterProfileProcedure is the fully-qualified name of the
 	// CharacterAccessService's GetCharacterProfile RPC.
 	CharacterAccessServiceGetCharacterProfileProcedure = "/holomush.characteraccess.v1.CharacterAccessService/GetCharacterProfile"
+	// CharacterAccessServiceListMyCharactersProcedure is the fully-qualified name of the
+	// CharacterAccessService's ListMyCharacters RPC.
+	CharacterAccessServiceListMyCharactersProcedure = "/holomush.characteraccess.v1.CharacterAccessService/ListMyCharacters"
+	// CharacterAccessServiceGetMyCharacterProcedure is the fully-qualified name of the
+	// CharacterAccessService's GetMyCharacter RPC.
+	CharacterAccessServiceGetMyCharacterProcedure = "/holomush.characteraccess.v1.CharacterAccessService/GetMyCharacter"
+	// CharacterAccessServiceUpdateCharacterProfileProcedure is the fully-qualified name of the
+	// CharacterAccessService's UpdateCharacterProfile RPC.
+	CharacterAccessServiceUpdateCharacterProfileProcedure = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterProfile"
+	// CharacterAccessServiceUpdateCharacterDescriptionProcedure is the fully-qualified name of the
+	// CharacterAccessService's UpdateCharacterDescription RPC.
+	CharacterAccessServiceUpdateCharacterDescriptionProcedure = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterDescription"
 )
 
 // CharacterAccessServiceClient is a client for the
@@ -51,6 +63,27 @@ type CharacterAccessServiceClient interface {
 	// response a character id naming no row receives, so a withheld profile
 	// cannot be distinguished from a nonexistent one.
 	GetCharacterProfile(context.Context, *connect.Request[v1.GetCharacterProfileRequest]) (*connect.Response[v1.GetCharacterProfileResponse], error)
+	// ListMyCharacters returns the authenticated player's own roster, retired
+	// characters included, so the web edit surface can offer un-retire without a
+	// second lookup. Its handler lands in plan 04-05 and resolves the player from
+	// the session token before reading; until then the embedded
+	// UnimplementedCharacterAccessServiceServer answers Unimplemented.
+	ListMyCharacters(context.Context, *connect.Request[v1.ListMyCharactersRequest]) (*connect.Response[v1.ListMyCharactersResponse], error)
+	// GetMyCharacter returns one owned character in the shape the edit forms
+	// write back, so a client never has to reconstruct the owner view by merging
+	// a public projection with a second read. Ownership is verified server-side
+	// against the session's player; handler in plan 04-05.
+	GetMyCharacter(context.Context, *connect.Request[v1.GetMyCharacterRequest]) (*connect.Response[v1.GetMyCharacterResponse], error)
+	// UpdateCharacterProfile applies a partial edit to the character's stored
+	// profile.* rows, driven by an update mask evaluated against a closed
+	// allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
+	// Handler in plan 04-06; the write reaches entity_properties through the
+	// world write executor's same-transaction outbox seam, never a parallel path.
+	UpdateCharacterProfile(context.Context, *connect.Request[v1.UpdateCharacterProfileRequest]) (*connect.Response[v1.UpdateCharacterProfileResponse], error)
+	// UpdateCharacterDescription replaces the in-world `look` text — the
+	// characters.description column itself, not a profile.* row — by reaching the
+	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
+	UpdateCharacterDescription(context.Context, *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error)
 }
 
 // NewCharacterAccessServiceClient constructs a client for the
@@ -71,17 +104,67 @@ func NewCharacterAccessServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(characterAccessServiceMethods.ByName("GetCharacterProfile")),
 			connect.WithClientOptions(opts...),
 		),
+		listMyCharacters: connect.NewClient[v1.ListMyCharactersRequest, v1.ListMyCharactersResponse](
+			httpClient,
+			baseURL+CharacterAccessServiceListMyCharactersProcedure,
+			connect.WithSchema(characterAccessServiceMethods.ByName("ListMyCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		getMyCharacter: connect.NewClient[v1.GetMyCharacterRequest, v1.GetMyCharacterResponse](
+			httpClient,
+			baseURL+CharacterAccessServiceGetMyCharacterProcedure,
+			connect.WithSchema(characterAccessServiceMethods.ByName("GetMyCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		updateCharacterProfile: connect.NewClient[v1.UpdateCharacterProfileRequest, v1.UpdateCharacterProfileResponse](
+			httpClient,
+			baseURL+CharacterAccessServiceUpdateCharacterProfileProcedure,
+			connect.WithSchema(characterAccessServiceMethods.ByName("UpdateCharacterProfile")),
+			connect.WithClientOptions(opts...),
+		),
+		updateCharacterDescription: connect.NewClient[v1.UpdateCharacterDescriptionRequest, v1.UpdateCharacterDescriptionResponse](
+			httpClient,
+			baseURL+CharacterAccessServiceUpdateCharacterDescriptionProcedure,
+			connect.WithSchema(characterAccessServiceMethods.ByName("UpdateCharacterDescription")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // characterAccessServiceClient implements CharacterAccessServiceClient.
 type characterAccessServiceClient struct {
-	getCharacterProfile *connect.Client[v1.GetCharacterProfileRequest, v1.GetCharacterProfileResponse]
+	getCharacterProfile        *connect.Client[v1.GetCharacterProfileRequest, v1.GetCharacterProfileResponse]
+	listMyCharacters           *connect.Client[v1.ListMyCharactersRequest, v1.ListMyCharactersResponse]
+	getMyCharacter             *connect.Client[v1.GetMyCharacterRequest, v1.GetMyCharacterResponse]
+	updateCharacterProfile     *connect.Client[v1.UpdateCharacterProfileRequest, v1.UpdateCharacterProfileResponse]
+	updateCharacterDescription *connect.Client[v1.UpdateCharacterDescriptionRequest, v1.UpdateCharacterDescriptionResponse]
 }
 
 // GetCharacterProfile calls holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile.
 func (c *characterAccessServiceClient) GetCharacterProfile(ctx context.Context, req *connect.Request[v1.GetCharacterProfileRequest]) (*connect.Response[v1.GetCharacterProfileResponse], error) {
 	return c.getCharacterProfile.CallUnary(ctx, req)
+}
+
+// ListMyCharacters calls holomush.characteraccess.v1.CharacterAccessService.ListMyCharacters.
+func (c *characterAccessServiceClient) ListMyCharacters(ctx context.Context, req *connect.Request[v1.ListMyCharactersRequest]) (*connect.Response[v1.ListMyCharactersResponse], error) {
+	return c.listMyCharacters.CallUnary(ctx, req)
+}
+
+// GetMyCharacter calls holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter.
+func (c *characterAccessServiceClient) GetMyCharacter(ctx context.Context, req *connect.Request[v1.GetMyCharacterRequest]) (*connect.Response[v1.GetMyCharacterResponse], error) {
+	return c.getMyCharacter.CallUnary(ctx, req)
+}
+
+// UpdateCharacterProfile calls
+// holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile.
+func (c *characterAccessServiceClient) UpdateCharacterProfile(ctx context.Context, req *connect.Request[v1.UpdateCharacterProfileRequest]) (*connect.Response[v1.UpdateCharacterProfileResponse], error) {
+	return c.updateCharacterProfile.CallUnary(ctx, req)
+}
+
+// UpdateCharacterDescription calls
+// holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription.
+func (c *characterAccessServiceClient) UpdateCharacterDescription(ctx context.Context, req *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error) {
+	return c.updateCharacterDescription.CallUnary(ctx, req)
 }
 
 // CharacterAccessServiceHandler is an implementation of the
@@ -94,6 +177,27 @@ type CharacterAccessServiceHandler interface {
 	// response a character id naming no row receives, so a withheld profile
 	// cannot be distinguished from a nonexistent one.
 	GetCharacterProfile(context.Context, *connect.Request[v1.GetCharacterProfileRequest]) (*connect.Response[v1.GetCharacterProfileResponse], error)
+	// ListMyCharacters returns the authenticated player's own roster, retired
+	// characters included, so the web edit surface can offer un-retire without a
+	// second lookup. Its handler lands in plan 04-05 and resolves the player from
+	// the session token before reading; until then the embedded
+	// UnimplementedCharacterAccessServiceServer answers Unimplemented.
+	ListMyCharacters(context.Context, *connect.Request[v1.ListMyCharactersRequest]) (*connect.Response[v1.ListMyCharactersResponse], error)
+	// GetMyCharacter returns one owned character in the shape the edit forms
+	// write back, so a client never has to reconstruct the owner view by merging
+	// a public projection with a second read. Ownership is verified server-side
+	// against the session's player; handler in plan 04-05.
+	GetMyCharacter(context.Context, *connect.Request[v1.GetMyCharacterRequest]) (*connect.Response[v1.GetMyCharacterResponse], error)
+	// UpdateCharacterProfile applies a partial edit to the character's stored
+	// profile.* rows, driven by an update mask evaluated against a closed
+	// allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
+	// Handler in plan 04-06; the write reaches entity_properties through the
+	// world write executor's same-transaction outbox seam, never a parallel path.
+	UpdateCharacterProfile(context.Context, *connect.Request[v1.UpdateCharacterProfileRequest]) (*connect.Response[v1.UpdateCharacterProfileResponse], error)
+	// UpdateCharacterDescription replaces the in-world `look` text — the
+	// characters.description column itself, not a profile.* row — by reaching the
+	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
+	UpdateCharacterDescription(context.Context, *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error)
 }
 
 // NewCharacterAccessServiceHandler builds an HTTP handler from the service implementation. It
@@ -109,10 +213,42 @@ func NewCharacterAccessServiceHandler(svc CharacterAccessServiceHandler, opts ..
 		connect.WithSchema(characterAccessServiceMethods.ByName("GetCharacterProfile")),
 		connect.WithHandlerOptions(opts...),
 	)
+	characterAccessServiceListMyCharactersHandler := connect.NewUnaryHandler(
+		CharacterAccessServiceListMyCharactersProcedure,
+		svc.ListMyCharacters,
+		connect.WithSchema(characterAccessServiceMethods.ByName("ListMyCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	characterAccessServiceGetMyCharacterHandler := connect.NewUnaryHandler(
+		CharacterAccessServiceGetMyCharacterProcedure,
+		svc.GetMyCharacter,
+		connect.WithSchema(characterAccessServiceMethods.ByName("GetMyCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	characterAccessServiceUpdateCharacterProfileHandler := connect.NewUnaryHandler(
+		CharacterAccessServiceUpdateCharacterProfileProcedure,
+		svc.UpdateCharacterProfile,
+		connect.WithSchema(characterAccessServiceMethods.ByName("UpdateCharacterProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	characterAccessServiceUpdateCharacterDescriptionHandler := connect.NewUnaryHandler(
+		CharacterAccessServiceUpdateCharacterDescriptionProcedure,
+		svc.UpdateCharacterDescription,
+		connect.WithSchema(characterAccessServiceMethods.ByName("UpdateCharacterDescription")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.characteraccess.v1.CharacterAccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CharacterAccessServiceGetCharacterProfileProcedure:
 			characterAccessServiceGetCharacterProfileHandler.ServeHTTP(w, r)
+		case CharacterAccessServiceListMyCharactersProcedure:
+			characterAccessServiceListMyCharactersHandler.ServeHTTP(w, r)
+		case CharacterAccessServiceGetMyCharacterProcedure:
+			characterAccessServiceGetMyCharacterHandler.ServeHTTP(w, r)
+		case CharacterAccessServiceUpdateCharacterProfileProcedure:
+			characterAccessServiceUpdateCharacterProfileHandler.ServeHTTP(w, r)
+		case CharacterAccessServiceUpdateCharacterDescriptionProcedure:
+			characterAccessServiceUpdateCharacterDescriptionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -124,4 +260,20 @@ type UnimplementedCharacterAccessServiceHandler struct{}
 
 func (UnimplementedCharacterAccessServiceHandler) GetCharacterProfile(context.Context, *connect.Request[v1.GetCharacterProfileRequest]) (*connect.Response[v1.GetCharacterProfileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile is not implemented"))
+}
+
+func (UnimplementedCharacterAccessServiceHandler) ListMyCharacters(context.Context, *connect.Request[v1.ListMyCharactersRequest]) (*connect.Response[v1.ListMyCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.ListMyCharacters is not implemented"))
+}
+
+func (UnimplementedCharacterAccessServiceHandler) GetMyCharacter(context.Context, *connect.Request[v1.GetMyCharacterRequest]) (*connect.Response[v1.GetMyCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter is not implemented"))
+}
+
+func (UnimplementedCharacterAccessServiceHandler) UpdateCharacterProfile(context.Context, *connect.Request[v1.UpdateCharacterProfileRequest]) (*connect.Response[v1.UpdateCharacterProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile is not implemented"))
+}
+
+func (UnimplementedCharacterAccessServiceHandler) UpdateCharacterDescription(context.Context, *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription is not implemented"))
 }

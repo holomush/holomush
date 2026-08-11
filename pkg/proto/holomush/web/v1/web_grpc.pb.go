@@ -71,6 +71,10 @@ const (
 	WebService_WebWithdrawScenePublish_FullMethodName       = "/holomush.web.v1.WebService/WebWithdrawScenePublish"
 	WebService_WebGetPublishedScene_FullMethodName          = "/holomush.web.v1.WebService/WebGetPublishedScene"
 	WebService_WebGetCharacterProfile_FullMethodName        = "/holomush.web.v1.WebService/WebGetCharacterProfile"
+	WebService_WebListMyCharacters_FullMethodName           = "/holomush.web.v1.WebService/WebListMyCharacters"
+	WebService_WebGetMyCharacter_FullMethodName             = "/holomush.web.v1.WebService/WebGetMyCharacter"
+	WebService_WebUpdateCharacterProfile_FullMethodName     = "/holomush.web.v1.WebService/WebUpdateCharacterProfile"
+	WebService_WebUpdateCharacterDescription_FullMethodName = "/holomush.web.v1.WebService/WebUpdateCharacterDescription"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -287,6 +291,21 @@ type WebServiceClient interface {
 	// X-Session-Token header CookieMiddleware injected and forwards it; a request
 	// with no cookie is the ordinary logged-out case, not an error.
 	WebGetCharacterProfile(ctx context.Context, in *WebGetCharacterProfileRequest, opts ...grpc.CallOption) (*WebGetCharacterProfileResponse, error)
+	// WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+	// Handler.WebListMyCharacters lifts the session token from the header and
+	// forwards nothing else; whose roster is returned follows from the token.
+	WebListMyCharacters(ctx context.Context, in *WebListMyCharactersRequest, opts ...grpc.CallOption) (*WebListMyCharactersResponse, error)
+	// WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+	// is verified in the facade, not here.
+	WebGetMyCharacter(ctx context.Context, in *WebGetMyCharacterRequest, opts ...grpc.CallOption) (*WebGetMyCharacterResponse, error)
+	// WebUpdateCharacterProfile proxies
+	// CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+	// forwards the mask and every prose field verbatim; the gateway neither
+	// validates the mask nor decides which fields it reaches.
+	WebUpdateCharacterProfile(ctx context.Context, in *WebUpdateCharacterProfileRequest, opts ...grpc.CallOption) (*WebUpdateCharacterProfileResponse, error)
+	// WebUpdateCharacterDescription proxies
+	// CharacterAccessService.UpdateCharacterDescription.
+	WebUpdateCharacterDescription(ctx context.Context, in *WebUpdateCharacterDescriptionRequest, opts ...grpc.CallOption) (*WebUpdateCharacterDescriptionResponse, error)
 }
 
 type webServiceClient struct {
@@ -796,6 +815,46 @@ func (c *webServiceClient) WebGetCharacterProfile(ctx context.Context, in *WebGe
 	return out, nil
 }
 
+func (c *webServiceClient) WebListMyCharacters(ctx context.Context, in *WebListMyCharactersRequest, opts ...grpc.CallOption) (*WebListMyCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListMyCharactersResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListMyCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebGetMyCharacter(ctx context.Context, in *WebGetMyCharacterRequest, opts ...grpc.CallOption) (*WebGetMyCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebGetMyCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebGetMyCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebUpdateCharacterProfile(ctx context.Context, in *WebUpdateCharacterProfileRequest, opts ...grpc.CallOption) (*WebUpdateCharacterProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebUpdateCharacterProfileResponse)
+	err := c.cc.Invoke(ctx, WebService_WebUpdateCharacterProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebUpdateCharacterDescription(ctx context.Context, in *WebUpdateCharacterDescriptionRequest, opts ...grpc.CallOption) (*WebUpdateCharacterDescriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebUpdateCharacterDescriptionResponse)
+	err := c.cc.Invoke(ctx, WebService_WebUpdateCharacterDescription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -1010,6 +1069,21 @@ type WebServiceServer interface {
 	// X-Session-Token header CookieMiddleware injected and forwards it; a request
 	// with no cookie is the ordinary logged-out case, not an error.
 	WebGetCharacterProfile(context.Context, *WebGetCharacterProfileRequest) (*WebGetCharacterProfileResponse, error)
+	// WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+	// Handler.WebListMyCharacters lifts the session token from the header and
+	// forwards nothing else; whose roster is returned follows from the token.
+	WebListMyCharacters(context.Context, *WebListMyCharactersRequest) (*WebListMyCharactersResponse, error)
+	// WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+	// is verified in the facade, not here.
+	WebGetMyCharacter(context.Context, *WebGetMyCharacterRequest) (*WebGetMyCharacterResponse, error)
+	// WebUpdateCharacterProfile proxies
+	// CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+	// forwards the mask and every prose field verbatim; the gateway neither
+	// validates the mask nor decides which fields it reaches.
+	WebUpdateCharacterProfile(context.Context, *WebUpdateCharacterProfileRequest) (*WebUpdateCharacterProfileResponse, error)
+	// WebUpdateCharacterDescription proxies
+	// CharacterAccessService.UpdateCharacterDescription.
+	WebUpdateCharacterDescription(context.Context, *WebUpdateCharacterDescriptionRequest) (*WebUpdateCharacterDescriptionResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -1166,6 +1240,18 @@ func (UnimplementedWebServiceServer) WebGetPublishedScene(context.Context, *WebG
 }
 func (UnimplementedWebServiceServer) WebGetCharacterProfile(context.Context, *WebGetCharacterProfileRequest) (*WebGetCharacterProfileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebGetCharacterProfile not implemented")
+}
+func (UnimplementedWebServiceServer) WebListMyCharacters(context.Context, *WebListMyCharactersRequest) (*WebListMyCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListMyCharacters not implemented")
+}
+func (UnimplementedWebServiceServer) WebGetMyCharacter(context.Context, *WebGetMyCharacterRequest) (*WebGetMyCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebGetMyCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebUpdateCharacterProfile(context.Context, *WebUpdateCharacterProfileRequest) (*WebUpdateCharacterProfileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebUpdateCharacterProfile not implemented")
+}
+func (UnimplementedWebServiceServer) WebUpdateCharacterDescription(context.Context, *WebUpdateCharacterDescriptionRequest) (*WebUpdateCharacterDescriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebUpdateCharacterDescription not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -2063,6 +2149,78 @@ func _WebService_WebGetCharacterProfile_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebListMyCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListMyCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListMyCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListMyCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListMyCharacters(ctx, req.(*WebListMyCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebGetMyCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebGetMyCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebGetMyCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebGetMyCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebGetMyCharacter(ctx, req.(*WebGetMyCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebUpdateCharacterProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebUpdateCharacterProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebUpdateCharacterProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebUpdateCharacterProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebUpdateCharacterProfile(ctx, req.(*WebUpdateCharacterProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebUpdateCharacterDescription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebUpdateCharacterDescriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebUpdateCharacterDescription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebUpdateCharacterDescription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebUpdateCharacterDescription(ctx, req.(*WebUpdateCharacterDescriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2261,6 +2419,22 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebGetCharacterProfile",
 			Handler:    _WebService_WebGetCharacterProfile_Handler,
+		},
+		{
+			MethodName: "WebListMyCharacters",
+			Handler:    _WebService_WebListMyCharacters_Handler,
+		},
+		{
+			MethodName: "WebGetMyCharacter",
+			Handler:    _WebService_WebGetMyCharacter_Handler,
+		},
+		{
+			MethodName: "WebUpdateCharacterProfile",
+			Handler:    _WebService_WebUpdateCharacterProfile_Handler,
+		},
+		{
+			MethodName: "WebUpdateCharacterDescription",
+			Handler:    _WebService_WebUpdateCharacterDescription_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

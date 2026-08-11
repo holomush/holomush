@@ -13,6 +13,7 @@ import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -313,11 +314,730 @@ func (x *GetCharacterProfileResponse) GetCharacter() *PublicCharacter {
 	return nil
 }
 
+// OwnCharacter is the character shape the `owner` audience receives, and it is
+// a DISTINCT MESSAGE rather than PublicCharacter plus extra fields (01-SPEC
+// §2.2). The two are never interchanged: reusing one for the other audience
+// would put the absence guarantee back on per-field runtime discipline, which
+// is the arrangement the per-audience split exists to replace.
+//
+// It will be constructed only by projectOwner (§2.3), the owner-audience
+// counterpart of projectPublic in
+// internal/grpc/characteraccess_projection.go. It carries the owner's FULL
+// profile map — no tier floor is evaluated on this path, because a floor
+// governs what a VIEWER may read, not what an owner may see of their own row.
+type OwnCharacter struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the stable characters.id ULID, the same key the public profile URL is
+	// built on and the key every mutation targets.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// name is characters.name, forwarded as the stored bytes with no
+	// normalization, casefolding or re-encoding.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// description is the in-world `look` text (characters.description) that
+	// UpdateCharacterDescription writes.
+	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// profile holds every stored `profile.*` attribute keyed by its governed
+	// name, unfiltered — the owner's own edit surface reads the values it is
+	// about to write back.
+	Profile map[string]string `protobuf:"bytes,4,rep,name=profile,proto3" json:"profile,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// primary_image is the `profile.image.primary` row when one exists. v0.13
+	// mints no media identifier, so it is always absent.
+	PrimaryImage *ProfileImage `protobuf:"bytes,5,opt,name=primary_image,json=primaryImage,proto3" json:"primary_image,omitempty"`
+	// gallery holds the `profile.image.gallery.00`…`.09` rows, capped at the ten
+	// names the storage schema fixes. Always empty in v0.13.
+	Gallery []*ProfileImage `protobuf:"bytes,6,rep,name=gallery,proto3" json:"gallery,omitempty"`
+	// status is characters.status, one of exactly `active`, `retired` or `idle`,
+	// compared as an exact lowercase literal (01-SPEC §4.2). A reader MUST switch
+	// over all three with a denying default; `idle` has no transition into it in
+	// v0.13, which is precisely why the default arm may not fall through to
+	// permit.
+	Status string `protobuf:"bytes,7,opt,name=status,proto3" json:"status,omitempty"`
+	// version is characters.version, the optimistic-concurrency counter a client
+	// reads here and sends back as expected_version on its next mutation.
+	// Transcribed from the INTEGER column added by migration 000049 and from
+	// world.Character.Version.
+	Version       int32 `protobuf:"varint,8,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OwnCharacter) Reset() {
+	*x = OwnCharacter{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OwnCharacter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OwnCharacter) ProtoMessage() {}
+
+func (x *OwnCharacter) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OwnCharacter.ProtoReflect.Descriptor instead.
+func (*OwnCharacter) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *OwnCharacter) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OwnCharacter) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *OwnCharacter) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *OwnCharacter) GetProfile() map[string]string {
+	if x != nil {
+		return x.Profile
+	}
+	return nil
+}
+
+func (x *OwnCharacter) GetPrimaryImage() *ProfileImage {
+	if x != nil {
+		return x.PrimaryImage
+	}
+	return nil
+}
+
+func (x *OwnCharacter) GetGallery() []*ProfileImage {
+	if x != nil {
+		return x.Gallery
+	}
+	return nil
+}
+
+func (x *OwnCharacter) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *OwnCharacter) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+// ListMyCharactersRequest asks for the caller's own roster; the session token is
+// the only input, because whose roster it is follows from who is asking.
+type ListMyCharactersRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// request header. The player is resolved from it server-side; there is
+	// deliberately no player-id field a caller could point at someone else.
+	PlayerSessionToken string `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ListMyCharactersRequest) Reset() {
+	*x = ListMyCharactersRequest{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyCharactersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyCharactersRequest) ProtoMessage() {}
+
+func (x *ListMyCharactersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyCharactersRequest.ProtoReflect.Descriptor instead.
+func (*ListMyCharactersRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListMyCharactersRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+// ListMyCharactersResponse carries the roster in the owner audience's shape.
+type ListMyCharactersResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// characters is every character the resolved player owns, retired ones
+	// included (01-SPEC §4.5) — a roster that hid them would make un-retire
+	// unreachable from the UI.
+	Characters    []*OwnCharacter `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyCharactersResponse) Reset() {
+	*x = ListMyCharactersResponse{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyCharactersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyCharactersResponse) ProtoMessage() {}
+
+func (x *ListMyCharactersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyCharactersResponse.ProtoReflect.Descriptor instead.
+func (*ListMyCharactersResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListMyCharactersResponse) GetCharacters() []*OwnCharacter {
+	if x != nil {
+		return x.Characters
+	}
+	return nil
+}
+
+// GetMyCharacterRequest names one owned character to read in full.
+type GetMyCharacterRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is the target character's ULID. Ownership is verified against
+	// the session's player, and a character the caller does not own resolves the
+	// same not-found outcome as one that does not exist.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// player_session_token is the raw bearer token; see ListMyCharactersRequest.
+	PlayerSessionToken string `protobuf:"bytes,2,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *GetMyCharacterRequest) Reset() {
+	*x = GetMyCharacterRequest{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMyCharacterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMyCharacterRequest) ProtoMessage() {}
+
+func (x *GetMyCharacterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMyCharacterRequest.ProtoReflect.Descriptor instead.
+func (*GetMyCharacterRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetMyCharacterRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *GetMyCharacterRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+// GetMyCharacterResponse carries one character in the owner audience's shape.
+type GetMyCharacterResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the projection projectOwner built for the owning player.
+	Character     *OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMyCharacterResponse) Reset() {
+	*x = GetMyCharacterResponse{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMyCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMyCharacterResponse) ProtoMessage() {}
+
+func (x *GetMyCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMyCharacterResponse.ProtoReflect.Descriptor instead.
+func (*GetMyCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *GetMyCharacterResponse) GetCharacter() *OwnCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
+// UpdateCharacterProfileRequest is a partial edit of the stored `profile.*`
+// rows (01-SPEC §7.2). Every prose field below is applied ONLY when its
+// snake_case path appears in update_mask; the value carried by a field outside
+// the mask is immaterial and MUST be ignored rather than written.
+type UpdateCharacterProfileRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is the character whose rows are edited; ownership is verified
+	// server-side before the mask is applied.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// request header.
+	PlayerSessionToken string `protobuf:"bytes,2,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	// expected_version is the characters.version the caller last read. It is a
+	// plain scalar rather than an `optional` field or a wrapper message on
+	// purpose: absent and explicit zero take the SAME rejection branch (§9.4.2),
+	// so proto3's inability to tell them apart costs nothing here. Zero is never
+	// a legal input, and it MUST NOT be read as "write without the guard" — the
+	// repository layer below does accept zero as an unversioned write, which is
+	// exactly why this boundary rejects it first.
+	ExpectedVersion int32 `protobuf:"varint,3,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	// pronouns replaces the `profile.pronouns` row — half of §8.8's minimum
+	// public identity, and the one profile field seeded at the anonymous floor.
+	Pronouns string `protobuf:"bytes,4,opt,name=pronouns,proto3" json:"pronouns,omitempty"`
+	// concept replaces the `profile.concept` row: the one-line "what this
+	// character is" pitch.
+	Concept string `protobuf:"bytes,5,opt,name=concept,proto3" json:"concept,omitempty"`
+	// species replaces the `profile.species` row. Free text — the platform ships
+	// no species vocabulary, because the setting owns that word.
+	Species string `protobuf:"bytes,6,opt,name=species,proto3" json:"species,omitempty"`
+	// age replaces the `profile.age` row. Free text rather than an integer:
+	// settings routinely want "ageless", "early 30s", or a century.
+	Age string `protobuf:"bytes,7,opt,name=age,proto3" json:"age,omitempty"`
+	// faction replaces the `profile.faction` row: affiliation, house, crew or
+	// allegiance. Free text; there is no faction registry.
+	Faction string `protobuf:"bytes,8,opt,name=faction,proto3" json:"faction,omitempty"`
+	// appearance replaces the `profile.appearance` row — extended detail beyond
+	// what a single in-world `look` would give a viewer.
+	Appearance string `protobuf:"bytes,9,opt,name=appearance,proto3" json:"appearance,omitempty"`
+	// personality replaces the `profile.personality` row: disposition and manner.
+	Personality string `protobuf:"bytes,10,opt,name=personality,proto3" json:"personality,omitempty"`
+	// biography replaces the `profile.biography` row: history and background.
+	Biography string `protobuf:"bytes,11,opt,name=biography,proto3" json:"biography,omitempty"`
+	// rumors replaces the `profile.rumors` row — the RP hooks block, the
+	// "reasons to approach this character" prose.
+	Rumors string `protobuf:"bytes,12,opt,name=rumors,proto3" json:"rumors,omitempty"`
+	// currently replaces the `profile.currently` row: the volatile status line
+	// for what the character is up to right now. It carries no history and is
+	// expected to change often.
+	Currently string `protobuf:"bytes,13,opt,name=currently,proto3" json:"currently,omitempty"`
+	// rp_preferences replaces the `profile.rp_preferences` row — the
+	// OUT-OF-CHARACTER block about the player's style, availability and content
+	// limits. It is NOT the `characters.preferences` JSONB settings column; the
+	// `rp_` qualifier exists so the two cannot be conflated by name alone.
+	RpPreferences string `protobuf:"bytes,14,opt,name=rp_preferences,json=rpPreferences,proto3" json:"rp_preferences,omitempty"`
+	// timezone replaces the `profile.timezone` row, supporting the availability
+	// half of the OOC block.
+	Timezone string `protobuf:"bytes,15,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	// update_mask is the SET of snake_case field paths to apply. Paths are
+	// matched as exact strings against a closed allowlist — no prefix, wildcard,
+	// glob or dotted-subtree expansion — and an unlisted path is rejected rather
+	// than ignored. Evaluation is order-independent and duplicate paths are
+	// idempotent. An EMPTY mask is a no-op success, never "apply every field",
+	// which would turn an under-populated client request into a silent full-row
+	// overwrite. Field 99 mirrors the placement UpdateSceneRequest already uses.
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,99,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCharacterProfileRequest) Reset() {
+	*x = UpdateCharacterProfileRequest{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCharacterProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCharacterProfileRequest) ProtoMessage() {}
+
+func (x *UpdateCharacterProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCharacterProfileRequest.ProtoReflect.Descriptor instead.
+func (*UpdateCharacterProfileRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *UpdateCharacterProfileRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetExpectedVersion() int32 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+func (x *UpdateCharacterProfileRequest) GetPronouns() string {
+	if x != nil {
+		return x.Pronouns
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetConcept() string {
+	if x != nil {
+		return x.Concept
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetSpecies() string {
+	if x != nil {
+		return x.Species
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetAge() string {
+	if x != nil {
+		return x.Age
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetFaction() string {
+	if x != nil {
+		return x.Faction
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetAppearance() string {
+	if x != nil {
+		return x.Appearance
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetPersonality() string {
+	if x != nil {
+		return x.Personality
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetBiography() string {
+	if x != nil {
+		return x.Biography
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetRumors() string {
+	if x != nil {
+		return x.Rumors
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetCurrently() string {
+	if x != nil {
+		return x.Currently
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetRpPreferences() string {
+	if x != nil {
+		return x.RpPreferences
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *UpdateCharacterProfileRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
+// UpdateCharacterProfileResponse returns the character as it stands after the
+// partial edit, so a client re-reads its new version rather than guessing it.
+type UpdateCharacterProfileResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the post-write projection projectOwner built.
+	Character     *OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCharacterProfileResponse) Reset() {
+	*x = UpdateCharacterProfileResponse{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCharacterProfileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCharacterProfileResponse) ProtoMessage() {}
+
+func (x *UpdateCharacterProfileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCharacterProfileResponse.ProtoReflect.Descriptor instead.
+func (*UpdateCharacterProfileResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *UpdateCharacterProfileResponse) GetCharacter() *OwnCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
+// UpdateCharacterDescriptionRequest replaces the in-world `look` text. It is
+// deliberately its own RPC rather than a mask path on the profile edit: the
+// description is the intrinsic characters.description COLUMN, reached through
+// the shipped world.Service.UpdateCharacterDescription, while every profile
+// field is an entity_properties row.
+type UpdateCharacterDescriptionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is the character whose column is rewritten; ownership is
+	// verified server-side.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// request header.
+	PlayerSessionToken string `protobuf:"bytes,2,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	// expected_version is the characters.version the caller last read; absent and
+	// zero are both rejected. See UpdateCharacterProfileRequest for why the
+	// scalar carriage costs nothing.
+	ExpectedVersion int32 `protobuf:"varint,3,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	// description is the replacement `look` text. An empty value CLEARS the
+	// column — there is no mask on this RPC, so the field is always applied.
+	Description   string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCharacterDescriptionRequest) Reset() {
+	*x = UpdateCharacterDescriptionRequest{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCharacterDescriptionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCharacterDescriptionRequest) ProtoMessage() {}
+
+func (x *UpdateCharacterDescriptionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCharacterDescriptionRequest.ProtoReflect.Descriptor instead.
+func (*UpdateCharacterDescriptionRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateCharacterDescriptionRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *UpdateCharacterDescriptionRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *UpdateCharacterDescriptionRequest) GetExpectedVersion() int32 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+func (x *UpdateCharacterDescriptionRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+// UpdateCharacterDescriptionResponse returns the character after the rewrite.
+type UpdateCharacterDescriptionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the post-write projection projectOwner built.
+	Character     *OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCharacterDescriptionResponse) Reset() {
+	*x = UpdateCharacterDescriptionResponse{}
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCharacterDescriptionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCharacterDescriptionResponse) ProtoMessage() {}
+
+func (x *UpdateCharacterDescriptionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_characteraccess_v1_characteraccess_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCharacterDescriptionResponse.ProtoReflect.Descriptor instead.
+func (*UpdateCharacterDescriptionResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *UpdateCharacterDescriptionResponse) GetCharacter() *OwnCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
 var File_holomush_characteraccess_v1_characteraccess_proto protoreflect.FileDescriptor
 
 const file_holomush_characteraccess_v1_characteraccess_proto_rawDesc = "" +
 	"\n" +
-	"1holomush/characteraccess/v1/characteraccess.proto\x12\x1bholomush.characteraccess.v1\x1a\x1bbuf/validate/validate.proto\"m\n" +
+	"1holomush/characteraccess/v1/characteraccess.proto\x12\x1bholomush.characteraccess.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\"m\n" +
 	"\fProfileImage\x12\x19\n" +
 	"\bmedia_id\x18\x01 \x01(\tR\amediaId\x12\x19\n" +
 	"\balt_text\x18\x02 \x01(\tR\aaltText\x12'\n" +
@@ -337,9 +1057,67 @@ const file_holomush_characteraccess_v1_characteraccess_proto_rawDesc = "" +
 	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x120\n" +
 	"\x14player_session_token\x18\x02 \x01(\tR\x12playerSessionToken\"i\n" +
 	"\x1bGetCharacterProfileResponse\x12J\n" +
-	"\tcharacter\x18\x01 \x01(\v2,.holomush.characteraccess.v1.PublicCharacterR\tcharacter2\xa3\x01\n" +
+	"\tcharacter\x18\x01 \x01(\v2,.holomush.characteraccess.v1.PublicCharacterR\tcharacter\"\xb3\x03\n" +
+	"\fOwnCharacter\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12P\n" +
+	"\aprofile\x18\x04 \x03(\v26.holomush.characteraccess.v1.OwnCharacter.ProfileEntryR\aprofile\x12N\n" +
+	"\rprimary_image\x18\x05 \x01(\v2).holomush.characteraccess.v1.ProfileImageR\fprimaryImage\x12M\n" +
+	"\agallery\x18\x06 \x03(\v2).holomush.characteraccess.v1.ProfileImageB\b\xbaH\x05\x92\x01\x02\x10\n" +
+	"R\agallery\x12\x16\n" +
+	"\x06status\x18\a \x01(\tR\x06status\x12\x18\n" +
+	"\aversion\x18\b \x01(\x05R\aversion\x1a:\n" +
+	"\fProfileEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"T\n" +
+	"\x17ListMyCharactersRequest\x129\n" +
+	"\x14player_session_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\"e\n" +
+	"\x18ListMyCharactersResponse\x12I\n" +
+	"\n" +
+	"characters\x18\x01 \x03(\v2).holomush.characteraccess.v1.OwnCharacterR\n" +
+	"characters\"~\n" +
+	"\x15GetMyCharacterRequest\x12*\n" +
+	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x129\n" +
+	"\x14player_session_token\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\"a\n" +
+	"\x16GetMyCharacterResponse\x12G\n" +
+	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacter\"\xc3\x04\n" +
+	"\x1dUpdateCharacterProfileRequest\x12*\n" +
+	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x129\n" +
+	"\x14player_session_token\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\x12)\n" +
+	"\x10expected_version\x18\x03 \x01(\x05R\x0fexpectedVersion\x12\x1a\n" +
+	"\bpronouns\x18\x04 \x01(\tR\bpronouns\x12\x18\n" +
+	"\aconcept\x18\x05 \x01(\tR\aconcept\x12\x18\n" +
+	"\aspecies\x18\x06 \x01(\tR\aspecies\x12\x10\n" +
+	"\x03age\x18\a \x01(\tR\x03age\x12\x18\n" +
+	"\afaction\x18\b \x01(\tR\afaction\x12\x1e\n" +
+	"\n" +
+	"appearance\x18\t \x01(\tR\n" +
+	"appearance\x12 \n" +
+	"\vpersonality\x18\n" +
+	" \x01(\tR\vpersonality\x12\x1c\n" +
+	"\tbiography\x18\v \x01(\tR\tbiography\x12\x16\n" +
+	"\x06rumors\x18\f \x01(\tR\x06rumors\x12\x1c\n" +
+	"\tcurrently\x18\r \x01(\tR\tcurrently\x12%\n" +
+	"\x0erp_preferences\x18\x0e \x01(\tR\rrpPreferences\x12\x1a\n" +
+	"\btimezone\x18\x0f \x01(\tR\btimezone\x12;\n" +
+	"\vupdate_mask\x18c \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\"i\n" +
+	"\x1eUpdateCharacterProfileResponse\x12G\n" +
+	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacter\"\xd7\x01\n" +
+	"!UpdateCharacterDescriptionRequest\x12*\n" +
+	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x129\n" +
+	"\x14player_session_token\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\x12)\n" +
+	"\x10expected_version\x18\x03 \x01(\x05R\x0fexpectedVersion\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\"m\n" +
+	"\"UpdateCharacterDescriptionResponse\x12G\n" +
+	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacter2\xd3\x05\n" +
 	"\x16CharacterAccessService\x12\x88\x01\n" +
-	"\x13GetCharacterProfile\x127.holomush.characteraccess.v1.GetCharacterProfileRequest\x1a8.holomush.characteraccess.v1.GetCharacterProfileResponseB\x9b\x02\n" +
+	"\x13GetCharacterProfile\x127.holomush.characteraccess.v1.GetCharacterProfileRequest\x1a8.holomush.characteraccess.v1.GetCharacterProfileResponse\x12\x7f\n" +
+	"\x10ListMyCharacters\x124.holomush.characteraccess.v1.ListMyCharactersRequest\x1a5.holomush.characteraccess.v1.ListMyCharactersResponse\x12y\n" +
+	"\x0eGetMyCharacter\x122.holomush.characteraccess.v1.GetMyCharacterRequest\x1a3.holomush.characteraccess.v1.GetMyCharacterResponse\x12\x91\x01\n" +
+	"\x16UpdateCharacterProfile\x12:.holomush.characteraccess.v1.UpdateCharacterProfileRequest\x1a;.holomush.characteraccess.v1.UpdateCharacterProfileResponse\x12\x9d\x01\n" +
+	"\x1aUpdateCharacterDescription\x12>.holomush.characteraccess.v1.UpdateCharacterDescriptionRequest\x1a?.holomush.characteraccess.v1.UpdateCharacterDescriptionResponseB\x9b\x02\n" +
 	"\x1fcom.holomush.characteraccess.v1B\x14CharacteraccessProtoP\x01ZTgithub.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1;characteraccessv1\xa2\x02\x03HCX\xaa\x02\x1bHolomush.Characteraccess.V1\xca\x02\x1bHolomush\\Characteraccess\\V1\xe2\x02'Holomush\\Characteraccess\\V1\\GPBMetadata\xea\x02\x1dHolomush::Characteraccess::V1b\x06proto3"
 
 var (
@@ -354,26 +1132,53 @@ func file_holomush_characteraccess_v1_characteraccess_proto_rawDescGZIP() []byte
 	return file_holomush_characteraccess_v1_characteraccess_proto_rawDescData
 }
 
-var file_holomush_characteraccess_v1_characteraccess_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_holomush_characteraccess_v1_characteraccess_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_holomush_characteraccess_v1_characteraccess_proto_goTypes = []any{
-	(*ProfileImage)(nil),                // 0: holomush.characteraccess.v1.ProfileImage
-	(*PublicCharacter)(nil),             // 1: holomush.characteraccess.v1.PublicCharacter
-	(*GetCharacterProfileRequest)(nil),  // 2: holomush.characteraccess.v1.GetCharacterProfileRequest
-	(*GetCharacterProfileResponse)(nil), // 3: holomush.characteraccess.v1.GetCharacterProfileResponse
-	nil,                                 // 4: holomush.characteraccess.v1.PublicCharacter.ProfileEntry
+	(*ProfileImage)(nil),                       // 0: holomush.characteraccess.v1.ProfileImage
+	(*PublicCharacter)(nil),                    // 1: holomush.characteraccess.v1.PublicCharacter
+	(*GetCharacterProfileRequest)(nil),         // 2: holomush.characteraccess.v1.GetCharacterProfileRequest
+	(*GetCharacterProfileResponse)(nil),        // 3: holomush.characteraccess.v1.GetCharacterProfileResponse
+	(*OwnCharacter)(nil),                       // 4: holomush.characteraccess.v1.OwnCharacter
+	(*ListMyCharactersRequest)(nil),            // 5: holomush.characteraccess.v1.ListMyCharactersRequest
+	(*ListMyCharactersResponse)(nil),           // 6: holomush.characteraccess.v1.ListMyCharactersResponse
+	(*GetMyCharacterRequest)(nil),              // 7: holomush.characteraccess.v1.GetMyCharacterRequest
+	(*GetMyCharacterResponse)(nil),             // 8: holomush.characteraccess.v1.GetMyCharacterResponse
+	(*UpdateCharacterProfileRequest)(nil),      // 9: holomush.characteraccess.v1.UpdateCharacterProfileRequest
+	(*UpdateCharacterProfileResponse)(nil),     // 10: holomush.characteraccess.v1.UpdateCharacterProfileResponse
+	(*UpdateCharacterDescriptionRequest)(nil),  // 11: holomush.characteraccess.v1.UpdateCharacterDescriptionRequest
+	(*UpdateCharacterDescriptionResponse)(nil), // 12: holomush.characteraccess.v1.UpdateCharacterDescriptionResponse
+	nil,                           // 13: holomush.characteraccess.v1.PublicCharacter.ProfileEntry
+	nil,                           // 14: holomush.characteraccess.v1.OwnCharacter.ProfileEntry
+	(*fieldmaskpb.FieldMask)(nil), // 15: google.protobuf.FieldMask
 }
 var file_holomush_characteraccess_v1_characteraccess_proto_depIdxs = []int32{
-	4, // 0: holomush.characteraccess.v1.PublicCharacter.profile:type_name -> holomush.characteraccess.v1.PublicCharacter.ProfileEntry
-	0, // 1: holomush.characteraccess.v1.PublicCharacter.primary_image:type_name -> holomush.characteraccess.v1.ProfileImage
-	0, // 2: holomush.characteraccess.v1.PublicCharacter.gallery:type_name -> holomush.characteraccess.v1.ProfileImage
-	1, // 3: holomush.characteraccess.v1.GetCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.PublicCharacter
-	2, // 4: holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile:input_type -> holomush.characteraccess.v1.GetCharacterProfileRequest
-	3, // 5: holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile:output_type -> holomush.characteraccess.v1.GetCharacterProfileResponse
-	5, // [5:6] is the sub-list for method output_type
-	4, // [4:5] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	13, // 0: holomush.characteraccess.v1.PublicCharacter.profile:type_name -> holomush.characteraccess.v1.PublicCharacter.ProfileEntry
+	0,  // 1: holomush.characteraccess.v1.PublicCharacter.primary_image:type_name -> holomush.characteraccess.v1.ProfileImage
+	0,  // 2: holomush.characteraccess.v1.PublicCharacter.gallery:type_name -> holomush.characteraccess.v1.ProfileImage
+	1,  // 3: holomush.characteraccess.v1.GetCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.PublicCharacter
+	14, // 4: holomush.characteraccess.v1.OwnCharacter.profile:type_name -> holomush.characteraccess.v1.OwnCharacter.ProfileEntry
+	0,  // 5: holomush.characteraccess.v1.OwnCharacter.primary_image:type_name -> holomush.characteraccess.v1.ProfileImage
+	0,  // 6: holomush.characteraccess.v1.OwnCharacter.gallery:type_name -> holomush.characteraccess.v1.ProfileImage
+	4,  // 7: holomush.characteraccess.v1.ListMyCharactersResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
+	4,  // 8: holomush.characteraccess.v1.GetMyCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	15, // 9: holomush.characteraccess.v1.UpdateCharacterProfileRequest.update_mask:type_name -> google.protobuf.FieldMask
+	4,  // 10: holomush.characteraccess.v1.UpdateCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	4,  // 11: holomush.characteraccess.v1.UpdateCharacterDescriptionResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	2,  // 12: holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile:input_type -> holomush.characteraccess.v1.GetCharacterProfileRequest
+	5,  // 13: holomush.characteraccess.v1.CharacterAccessService.ListMyCharacters:input_type -> holomush.characteraccess.v1.ListMyCharactersRequest
+	7,  // 14: holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter:input_type -> holomush.characteraccess.v1.GetMyCharacterRequest
+	9,  // 15: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile:input_type -> holomush.characteraccess.v1.UpdateCharacterProfileRequest
+	11, // 16: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription:input_type -> holomush.characteraccess.v1.UpdateCharacterDescriptionRequest
+	3,  // 17: holomush.characteraccess.v1.CharacterAccessService.GetCharacterProfile:output_type -> holomush.characteraccess.v1.GetCharacterProfileResponse
+	6,  // 18: holomush.characteraccess.v1.CharacterAccessService.ListMyCharacters:output_type -> holomush.characteraccess.v1.ListMyCharactersResponse
+	8,  // 19: holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter:output_type -> holomush.characteraccess.v1.GetMyCharacterResponse
+	10, // 20: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile:output_type -> holomush.characteraccess.v1.UpdateCharacterProfileResponse
+	12, // 21: holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription:output_type -> holomush.characteraccess.v1.UpdateCharacterDescriptionResponse
+	17, // [17:22] is the sub-list for method output_type
+	12, // [12:17] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_holomush_characteraccess_v1_characteraccess_proto_init() }
@@ -387,7 +1192,7 @@ func file_holomush_characteraccess_v1_characteraccess_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_characteraccess_v1_characteraccess_proto_rawDesc), len(file_holomush_characteraccess_v1_characteraccess_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
