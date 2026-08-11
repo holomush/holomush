@@ -5,8 +5,8 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 04
 current_phase_name: shared-facade-helpers-characteraccessservice
 status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-08-11T15:26:40.019Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-08-11T16:17:50.708Z"
 last_activity: 2026-08-11
 last_activity_desc: Phase 04 execution started
 progress:
@@ -35,7 +35,7 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 04 (shared-facade-helpers-characteraccessservice) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
 Status: Ready to execute
 Progress: [█████████████████░░░] 34/40 plans ([█████████░] 92%)
 Last activity: 2026-08-11 — Phase 04 execution started
@@ -262,6 +262,7 @@ no action needed.
 | Phase 04 P02 | 11min | 2 tasks | 4 files |
 | Phase 04 P09 | 17min | 2 tasks | 6 files |
 | Phase 04 P04 | 24min | 3 tasks | 16 files |
+| Phase 04 P05 | 24min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -570,6 +571,9 @@ the next milestone yet.
 - [Phase ?]: 04-04: a row id in the visible map with no row in the enumeration index returns Internal — never a zero-value emit and never a silent skip
 - [Phase ?]: 04-04: determinism is scoped — proto.Equal is the claim, byte equality needs MarshalOptions{Deterministic:true}, and the sentinel absence scan stays on plain proto.Marshal because absence is not an ordering property
 - [Phase ?]: 04-04: criterion 3's configuration-side clause (a config cannot raise name/pronouns above the reachability floor) has NO enforcing mechanism in v0.13 per 01-SPEC 8.8; routed to manual operator review, no Verifies annotation added
+- [Phase ?]: 04-05: the owner audience constructs NO viewer principal — it reads its own rows through the owning character's subject, so D-27's ALL-direction owner peer never governs a path anyone depends on (D-69)
+- [Phase ?]: 04-05: ListMyCharacters carries no profile map by design — §9.2 gives the roster and GetMyCharacter distinct jobs, and enumerating per character would make the detail read redundant and the roster N+1
+- [Phase ?]: 04-05: INV-ACCESS-15 registered and bound; INV-PRIVACY-9 flipped to bound after verifying both preconditions; INV-PRIVACY-10 left pending because binding its facade half alone would be an undetectable partial binding
 
 ### Pending Todos
 
@@ -633,12 +637,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-11T15:26:40.003Z
+Last session: 2026-08-11T16:17:41.915Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 04-04-PLAN.md
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
