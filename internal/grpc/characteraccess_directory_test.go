@@ -106,6 +106,20 @@ func (g *erroringGate) Evaluate(context.Context, types.AccessRequest) (types.Dec
 	return types.Decision{}, oops.Code("POLICY_STORE_UNREACHABLE").Errorf("the policy store is unreachable")
 }
 
+// infraFailureGate is the SIBLING evaluation failure, and the likelier of the
+// two in production: the engine answers without an error, but the decision
+// carries an "infra:" policy id — a DENY that denies because nothing could be
+// evaluated. evaluateGate handles it in a different branch from erroringGate's,
+// and that branch logs profilevis.ErrEvaluationFailed as the error value rather
+// than the engine's own error, which is what the log-absence assertion below has
+// to be able to survive.
+type infraFailureGate struct{ calls int }
+
+func (g *infraFailureGate) Evaluate(context.Context, types.AccessRequest) (types.Decision, error) {
+	g.calls++
+	return types.NewDecision(types.EffectDeny, "the policy store is unreachable", "infra:policy-store"), nil
+}
+
 // selectiveReachability denies profile reachability for a named set of
 // character ids and permits every other. It doubles the MEMBERSHIP layer only:
 // VisibleAttributes is unreachable from the directory handler, so reaching it
@@ -551,37 +565,66 @@ func TestListCharacterDirectoryTreatsAnInfraFailureDenyAsAnEvaluationFailure(t *
 // evaluateGate logs each of its three failure branches with the action and
 // resource that failed and returns profilevis.CodeEvaluationFailed. Its only
 // caller then handed that same error to mapProfileError, which logged it AGAIN —
-// as "profile visibility evaluation failed". So a failure of the
-// character_directory:all GATE (a different resource type, a different action, a
-// decision that never consulted per-attribute visibility) was recorded against a
-// subsystem that was never reached, and every alert rule keyed on either message
-// double-counted.
+// as "character access: profile visibility evaluation failed". So a failure of
+// the character_directory:all GATE (a different resource type, a different
+// action, a decision that never consulted per-attribute visibility) was recorded
+// against a subsystem that was never reached, and every alert rule keyed on
+// either message double-counted.
+//
+// BOTH of evaluateGate's failure branches are driven, because they log different
+// error VALUES and only one of them was covered. The log-absence assertion names
+// the removed logger's FULL prefixed message rather than the bare
+// "profile visibility evaluation failed" — that shorter string is also the
+// literal Error() text of profilevis.ErrEvaluationFailed (profilevis.go:92),
+// which the infra-failure branch legitimately logs as its error value
+// (characteraccess_directory.go:202-205). Forbidding the short form would fail
+// that branch for a reason that has nothing to do with double-logging.
 func TestADirectoryGateOutageIsLoggedOnceAndAttributedToTheGateNotToProfileVisibility(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	tests := []struct {
+		name     string
+		gate     characterAccessPolicyEvaluator
+		originMs string
+	}{
+		{
+			"the engine returns an error",
+			&erroringGate{},
+			"character access: directory gate evaluation failed",
+		},
+		{
+			"the engine answers with an infra-failure DENY",
+			&infraFailureGate{},
+			"character access: directory gate infrastructure failure",
+		},
+	}
 
-	gate := &erroringGate{}
-	h := newDirectoryHarness(t, directoryFixture{
-		tier:  access.ViewerTierAnonymous,
-		chars: []*world.Character{directoryChar("Ada")},
-		gate:  gate,
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+			t.Cleanup(func() { slog.SetDefault(prev) })
 
-	resp, err := h.list(t)
-	require.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Equal(t, codes.Internal, status.Code(err),
-		"an evaluation failure is an outage, never an ordinary denial (§8.10)")
+			h := newDirectoryHarness(t, directoryFixture{
+				tier:  access.ViewerTierAnonymous,
+				chars: []*world.Character{directoryChar("Ada")},
+				gate:  tt.gate,
+			})
 
-	logged := buf.String()
-	assert.Contains(t, logged, "character access: directory gate evaluation failed",
-		"the outage is logged at its origin, with the action and resource that failed")
-	assert.NotContains(t, logged, "profile visibility evaluation failed",
-		"a GATE outage must not be attributed to per-attribute visibility, which was never consulted")
-	assert.Equal(t, 1, strings.Count(logged, "POLICY_STORE_UNREACHABLE"),
-		"exactly one log line per outage — a second would double-count every alert keyed on it")
+			resp, err := h.list(t)
+			require.Error(t, err)
+			assert.Nil(t, resp)
+			assert.Equal(t, codes.Internal, status.Code(err),
+				"an evaluation failure is an outage, never an ordinary denial (§8.10)")
+
+			logged := buf.String()
+			assert.Contains(t, logged, tt.originMs,
+				"the outage is logged at its origin, with the action and resource that failed")
+			assert.NotContains(t, logged, "character access: profile visibility evaluation failed",
+				"a GATE outage must not be attributed to per-attribute visibility, which was never consulted")
+			assert.Equal(t, 1, strings.Count(logged, "the policy store is unreachable"),
+				"exactly one log line per outage — a second would double-count every alert keyed on it")
+		})
+	}
 }
 
 // TestMapProfileErrorLogsOnlyTheUnclassifiedResidue is the paired control for
