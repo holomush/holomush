@@ -76,5 +76,10 @@
   },
   "claude_orchestration": {
     "enabled": true
+  },
+  "review": {
+    "models": {
+      "claude": "claude-fable-5"
+    }
   }
 }
