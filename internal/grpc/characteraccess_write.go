@@ -290,6 +290,20 @@ func (s *CharacterAccessServer) UpdateCharacterProfile(ctx context.Context, req 
 		// 4). It returns the character UNCHANGED so a client re-reads current
 		// state rather than guessing it. No domain write is reached; the
 		// enumeration below is the same authorized read GetMyCharacter performs.
+		//
+		// A STALE CALLER IS ANSWERED, NOT REFUSED — deliberately, and
+		// ASYMMETRICALLY with the domain's own no-op. world.Service's
+		// empty-PARTITION no-op (service.go, the len(creates)==0 return) refuses a
+		// stale expected_version with CodeConcurrentEdit. Both requests are
+		// semantically "nothing to do", so the difference is worth naming: this
+		// path's RESPONSE carries the freshly-read character, version included, so
+		// a stale client is corrected by the answer itself and a refusal would
+		// cost it a round trip to learn the same number. The domain method returns
+		// only an error, so it has no channel to hand the current version back and
+		// refusing is the only way its caller learns it is stale.
+		//
+		// Do not "fix" the inconsistency by making one match the other without
+		// changing the shape it can answer with.
 		profile, profileErr := s.ownedProfileAttributes(ctx, char.ID)
 		if profileErr != nil {
 			return nil, profileErr

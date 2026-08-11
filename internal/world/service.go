@@ -1216,6 +1216,15 @@ func (s *Service) UpdateCharacterProfileAttributes(
 	// against the version just read. That read is outside the write transaction
 	// and therefore weaker than the CAS — but only in the direction that costs
 	// nothing here: a race it misses ends in a call that wrote no row.
+	//
+	// This is ASYMMETRIC with the facade's own no-op, deliberately. The
+	// empty-MASK short-circuit in characteraccess_write.go answers a stale caller
+	// with SUCCESS. Both requests are semantically "nothing to do", so the
+	// difference is worth naming: that path's response carries the freshly-read
+	// character, version included, so a stale client is corrected by the answer
+	// itself. This method returns only an error, so it has no channel to hand the
+	// current version back — refusing is the only way its caller learns it is
+	// stale. Do not collapse the two without changing what each can answer with.
 	if len(creates) == 0 && len(updates) == 0 && len(deletes) == 0 {
 		if char.Version != expectedVersion {
 			return oops.Code(CodeConcurrentEdit).
