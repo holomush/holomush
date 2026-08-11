@@ -142,6 +142,15 @@ title: "gRPC API Reference"
   
     - [ChannelService](#holomush-channel-v1-ChannelService)
   
+- [holomush/characteraccess/v1/characteraccess.proto](#holomush_characteraccess_v1_characteraccess-proto)
+    - [GetCharacterProfileRequest](#holomush-characteraccess-v1-GetCharacterProfileRequest)
+    - [GetCharacterProfileResponse](#holomush-characteraccess-v1-GetCharacterProfileResponse)
+    - [ProfileImage](#holomush-characteraccess-v1-ProfileImage)
+    - [PublicCharacter](#holomush-characteraccess-v1-PublicCharacter)
+    - [PublicCharacter.ProfileEntry](#holomush-characteraccess-v1-PublicCharacter-ProfileEntry)
+  
+    - [CharacterAccessService](#holomush-characteraccess-v1-CharacterAccessService)
+  
 - [holomush/comm/v1/comm.proto](#holomush_comm_v1_comm-proto)
     - [CommunicationContent](#holomush-comm-v1-CommunicationContent)
   
@@ -382,6 +391,8 @@ title: "gRPC API Reference"
     - [GetPublicSceneArchiveResponse](#holomush-scene-v1-GetPublicSceneArchiveResponse)
     - [GetPublishedSceneRequest](#holomush-scene-v1-GetPublishedSceneRequest)
     - [GetPublishedSceneResponse](#holomush-scene-v1-GetPublishedSceneResponse)
+    - [GetSceneNotifyPrefRequest](#holomush-scene-v1-GetSceneNotifyPrefRequest)
+    - [GetSceneNotifyPrefResponse](#holomush-scene-v1-GetSceneNotifyPrefResponse)
     - [GetSceneRequest](#holomush-scene-v1-GetSceneRequest)
     - [GetSceneResponse](#holomush-scene-v1-GetSceneResponse)
     - [InviteToSceneRequest](#holomush-scene-v1-InviteToSceneRequest)
@@ -394,12 +405,16 @@ title: "gRPC API Reference"
     - [LeaveSceneResponse](#holomush-scene-v1-LeaveSceneResponse)
     - [ListCharacterScenesRequest](#holomush-scene-v1-ListCharacterScenesRequest)
     - [ListCharacterScenesResponse](#holomush-scene-v1-ListCharacterScenesResponse)
+    - [ListMutedScenesRequest](#holomush-scene-v1-ListMutedScenesRequest)
+    - [ListMutedScenesResponse](#holomush-scene-v1-ListMutedScenesResponse)
     - [ListPublishedScenesRequest](#holomush-scene-v1-ListPublishedScenesRequest)
     - [ListPublishedScenesResponse](#holomush-scene-v1-ListPublishedScenesResponse)
     - [ListScenePublishAttemptsRequest](#holomush-scene-v1-ListScenePublishAttemptsRequest)
     - [ListScenePublishAttemptsResponse](#holomush-scene-v1-ListScenePublishAttemptsResponse)
     - [ListScenesRequest](#holomush-scene-v1-ListScenesRequest)
     - [ListScenesResponse](#holomush-scene-v1-ListScenesResponse)
+    - [MuteSceneRequest](#holomush-scene-v1-MuteSceneRequest)
+    - [MuteSceneResponse](#holomush-scene-v1-MuteSceneResponse)
     - [ParticipantInfo](#holomush-scene-v1-ParticipantInfo)
     - [PauseSceneRequest](#holomush-scene-v1-PauseSceneRequest)
     - [PauseSceneResponse](#holomush-scene-v1-PauseSceneResponse)
@@ -417,6 +432,8 @@ title: "gRPC API Reference"
     - [ScenePublishVoteAttemptsExtendedEvent](#holomush-scene-v1-ScenePublishVoteAttemptsExtendedEvent)
     - [ScenePublishVoteCastEvent](#holomush-scene-v1-ScenePublishVoteCastEvent)
     - [ScenePublishWithdrawnEvent](#holomush-scene-v1-ScenePublishWithdrawnEvent)
+    - [SetSceneNotifyPrefRequest](#holomush-scene-v1-SetSceneNotifyPrefRequest)
+    - [SetSceneNotifyPrefResponse](#holomush-scene-v1-SetSceneNotifyPrefResponse)
     - [StartScenePublishRequest](#holomush-scene-v1-StartScenePublishRequest)
     - [StartScenePublishResponse](#holomush-scene-v1-StartScenePublishResponse)
     - [TransferOwnershipRequest](#holomush-scene-v1-TransferOwnershipRequest)
@@ -459,12 +476,16 @@ title: "gRPC API Reference"
     - [ListPublishedScenesResponse](#holomush-sceneaccess-v1-ListPublishedScenesResponse)
     - [ListScenesForViewerRequest](#holomush-sceneaccess-v1-ListScenesForViewerRequest)
     - [ListScenesForViewerResponse](#holomush-sceneaccess-v1-ListScenesForViewerResponse)
+    - [MuteSceneRequest](#holomush-sceneaccess-v1-MuteSceneRequest)
+    - [MuteSceneResponse](#holomush-sceneaccess-v1-MuteSceneResponse)
     - [PauseSceneRequest](#holomush-sceneaccess-v1-PauseSceneRequest)
     - [PauseSceneResponse](#holomush-sceneaccess-v1-PauseSceneResponse)
     - [ResumeSceneRequest](#holomush-sceneaccess-v1-ResumeSceneRequest)
     - [ResumeSceneResponse](#holomush-sceneaccess-v1-ResumeSceneResponse)
     - [SetSceneFocusRequest](#holomush-sceneaccess-v1-SetSceneFocusRequest)
     - [SetSceneFocusResponse](#holomush-sceneaccess-v1-SetSceneFocusResponse)
+    - [SetSceneNotifyPrefRequest](#holomush-sceneaccess-v1-SetSceneNotifyPrefRequest)
+    - [SetSceneNotifyPrefResponse](#holomush-sceneaccess-v1-SetSceneNotifyPrefResponse)
     - [StartScenePublishRequest](#holomush-sceneaccess-v1-StartScenePublishRequest)
     - [StartScenePublishResponse](#holomush-sceneaccess-v1-StartScenePublishResponse)
     - [TransferOwnershipRequest](#holomush-sceneaccess-v1-TransferOwnershipRequest)
@@ -515,6 +536,8 @@ title: "gRPC API Reference"
     - [WebEndSceneResponse](#holomush-web-v1-WebEndSceneResponse)
     - [WebExportSceneRequest](#holomush-web-v1-WebExportSceneRequest)
     - [WebExportSceneResponse](#holomush-web-v1-WebExportSceneResponse)
+    - [WebGetCharacterProfileRequest](#holomush-web-v1-WebGetCharacterProfileRequest)
+    - [WebGetCharacterProfileResponse](#holomush-web-v1-WebGetCharacterProfileResponse)
     - [WebGetContentRequest](#holomush-web-v1-WebGetContentRequest)
     - [WebGetContentResponse](#holomush-web-v1-WebGetContentResponse)
     - [WebGetPublicSceneArchiveRequest](#holomush-web-v1-WebGetPublicSceneArchiveRequest)
@@ -552,6 +575,8 @@ title: "gRPC API Reference"
     - [WebListSessionStreamsResponse](#holomush-web-v1-WebListSessionStreamsResponse)
     - [WebLogoutRequest](#holomush-web-v1-WebLogoutRequest)
     - [WebLogoutResponse](#holomush-web-v1-WebLogoutResponse)
+    - [WebMuteSceneRequest](#holomush-web-v1-WebMuteSceneRequest)
+    - [WebMuteSceneResponse](#holomush-web-v1-WebMuteSceneResponse)
     - [WebPauseSceneRequest](#holomush-web-v1-WebPauseSceneRequest)
     - [WebPauseSceneResponse](#holomush-web-v1-WebPauseSceneResponse)
     - [WebPlayerSessionInfo](#holomush-web-v1-WebPlayerSessionInfo)
@@ -570,6 +595,8 @@ title: "gRPC API Reference"
     - [WebSelectCharacterResponse](#holomush-web-v1-WebSelectCharacterResponse)
     - [WebSetSceneFocusRequest](#holomush-web-v1-WebSetSceneFocusRequest)
     - [WebSetSceneFocusResponse](#holomush-web-v1-WebSetSceneFocusResponse)
+    - [WebSetSceneNotifyPrefRequest](#holomush-web-v1-WebSetSceneNotifyPrefRequest)
+    - [WebSetSceneNotifyPrefResponse](#holomush-web-v1-WebSetSceneNotifyPrefResponse)
     - [WebStartScenePublishRequest](#holomush-web-v1-WebStartScenePublishRequest)
     - [WebStartScenePublishResponse](#holomush-web-v1-WebStartScenePublishResponse)
     - [WebTransferOwnershipRequest](#holomush-web-v1-WebTransferOwnershipRequest)
@@ -2906,6 +2933,138 @@ delegates to any of these methods.
 | BanMember | [BanMemberRequest](#holomush-channel-v1-BanMemberRequest) | [BanMemberResponse](#holomush-channel-v1-BanMemberResponse) | BanMember marks a target member as banned, removing them from the channel and preventing any future rejoin until unbanned (owner-or-admin only via ABAC). The channel owner cannot be banned (codes.FailedPrecondition). |
 | KickMember | [KickMemberRequest](#holomush-channel-v1-KickMemberRequest) | [KickMemberResponse](#holomush-channel-v1-KickMemberResponse) | KickMember removes a target member from the channel and unsubscribes their live stream, without the permanent block a ban imposes (owner-or-admin only via ABAC). The channel owner cannot be kicked (codes.FailedPrecondition). Emits a leave notice recording the removal. |
 | TransferOwnership | [TransferOwnershipRequest](#holomush-channel-v1-TransferOwnershipRequest) | [TransferOwnershipResponse](#holomush-channel-v1-TransferOwnershipResponse) | TransferOwnership reassigns channel ownership from the calling owner to a target who MUST already be a member (owner-only via ABAC). The former owner is demoted to member in the same transaction. |
+
+ 
+
+
+
+<a name="holomush_characteraccess_v1_characteraccess-proto"></a>
+<p align="right"><a href="#top">Top</a></p>
+
+## holomush/characteraccess/v1/characteraccess.proto
+
+
+
+<a name="holomush-characteraccess-v1-GetCharacterProfileRequest"></a>
+
+### GetCharacterProfileRequest
+GetCharacterProfileRequest names the character to resolve and carries the
+caller&#39;s optional session token.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the target character&#39;s ULID. A value that does not parse takes the same opaque outcome as one that names no row. |
+| player_session_token | [string](#string) |  | player_session_token is the raw session token the gateway lifted from the X-Session-Token header. It is OPTIONAL: an empty, expired or otherwise unresolvable value resolves the least-privileged rung rather than an authentication error, so a logged-out visitor still reaches the public page. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-GetCharacterProfileResponse"></a>
+
+### GetCharacterProfileResponse
+GetCharacterProfileResponse carries the projected profile.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [PublicCharacter](#holomush-characteraccess-v1-PublicCharacter) |  | character is the projection projectPublic built for this viewer. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-ProfileImage"></a>
+
+### ProfileImage
+ProfileImage is one stored image reference on a profile. The shape ships in
+v0.13 so alt text and content warnings have somewhere to live before any
+upload path exists; projectPublic
+(internal/grpc/characteraccess_projection.go) emits none of these in v0.13,
+because nothing in v0.13 mints a media identifier.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| media_id | [string](#string) |  | media_id is an opaque handle to stored bytes. Its format is deliberately unfixed in v0.13 — no host code parses, validates or generates one. |
+| alt_text | [string](#string) |  | alt_text is the operator-authored textual substitute a screen reader announces in place of the image. |
+| content_warning | [string](#string) |  | content_warning is the advisory a client renders BEFORE revealing the image, so a viewer can decline to see it. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-PublicCharacter"></a>
+
+### PublicCharacter
+PublicCharacter is the character shape the `public` audience receives. It is
+the only message projectPublic constructs, and it carries no player_id and no
+location_id: an owner-only or position-revealing value has no field to land
+in, so the absence is checked by the Go compiler rather than by a handler
+remembering to clear a field.
+
+It carries no visibility hint, mask, flag map or hidden-field list either. A
+value this viewer may not see is absent from the marshaled bytes, and the
+client is not told a decision was made.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the stable characters.id ULID the profile URL is keyed on; it survives rename, which a name-keyed key would not. |
+| name | [string](#string) |  | name is the display name world.Service.GetCharacterDescription read from characters.name, forwarded as the stored bytes with no normalization, casefolding or re-encoding. |
+| description | [string](#string) |  | description is the in-world `look` text (characters.description), gated by the read_description action rather than by any per-attribute floor. |
+| profile | [PublicCharacter.ProfileEntry](#holomush-characteraccess-v1-PublicCharacter-ProfileEntry) | repeated | profile holds the viewer-permitted `profile.*` attributes keyed by their governed names. An attribute whose floor this viewer does not clear is absent from the map, never present-and-empty. |
+| primary_image | [ProfileImage](#holomush-characteraccess-v1-ProfileImage) |  | primary_image is the single `profile.image.primary` row when one is both present and permitted. v0.13 always omits it. |
+| gallery | [ProfileImage](#holomush-characteraccess-v1-ProfileImage) | repeated | gallery holds the permitted `profile.image.gallery.00`…`.09` rows, capped at the ten names the storage schema fixes. v0.13 always leaves it empty. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-PublicCharacter-ProfileEntry"></a>
+
+### PublicCharacter.ProfileEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
+
+
+
+
+ 
+
+ 
+
+ 
+
+
+<a name="holomush-characteraccess-v1-CharacterAccessService"></a>
+
+### CharacterAccessService
+CharacterAccessService is the host-side facade for the web character surface.
+It constructs the viewer principal itself — resolving the optional player
+session token through auth.PlayerSessionRepository and auth.PlayerRepository —
+and owns every reachability and per-attribute visibility decision, so the
+gateway proxies bytes and computes nothing.
+
+Implemented by CharacterAccessServer in
+internal/grpc/characteraccess_service.go. Registered on the core gRPC server
+(not the plugin proxy) in cmd/holomush/sub_grpc.go, beside
+SceneAccessService.
+
+| Method Name | Request Type | Response Type | Description |
+| ----------- | ------------ | ------------- | ------------|
+| GetCharacterProfile | [GetCharacterProfileRequest](#holomush-characteraccess-v1-GetCharacterProfileRequest) | [GetCharacterProfileResponse](#holomush-characteraccess-v1-GetCharacterProfileResponse) | GetCharacterProfile resolves one character&#39;s public profile for whichever viewer rung the request&#39;s token resolves to, including no token at all. CharacterAccessServer.GetCharacterProfile evaluates profile reachability first and independently; a viewer below that floor receives exactly the response a character id naming no row receives, so a withheld profile cannot be distinguished from a nonexistent one. |
 
  
 
@@ -5724,6 +5883,7 @@ Init.
 | required_services | [ServiceConfig.RequiredServicesEntry](#holomush-plugin-v1-ServiceConfig-RequiredServicesEntry) | repeated | Network addresses of the proto services the plugin declared in requires, keyed by service name, for the plugin to dial. (Reserved for future service-to-service wiring.) |
 | plugin_config | [ServiceConfig.PluginConfigEntry](#holomush-plugin-v1-ServiceConfig-PluginConfigEntry) | repeated | Opaque plugin-owned runtime config: the effective (manifest-default &lt; server-override) map the host delivers at init. The host does NOT interpret keys/values; the plugin decodes them per its own schema. |
 | declared_capabilities | [string](#string) | repeated | Capability tokens the plugin declared in its manifest `requires:` (manifest.RequiredCapabilities()). The plugin SDK validates, at Init, that every non-exempt host capability its code can consume (via an implemented *Aware interface) appears here, failing load otherwise (INV-PLUGIN-54). |
+| game_id | [string](#string) |  | The game id the host resolved via gameIDProvider (cmd/holomush/core.go) for this boot, the same value eventbus.Subsystem qualifies every host-side subject with. Plugins that construct fully-qualified &#34;events.&lt;game_id&gt;.…&#34; subjects directly (rather than emitting a domain-relative reference for the host to qualify) MUST use this value instead of a hardcoded literal, or their publishes silently diverge from every subscriber&#39;s qualified filter subjects. Empty when the caller constructed ServiceConfig without setting it (e.g. a test harness); a plugin SHOULD fall back to &#34;main&#34; (eventbus.Config&#39;s own default) in that case. Populated by goplugin.Host.Init from Host.GameID(). |
 
 
 
@@ -5922,6 +6082,7 @@ recent-activity metadata for workspace badge rendering.
 | role | [string](#string) |  | This character&#39;s participant role in the scene (owner/member/observer). |
 | last_activity_ms | [int64](#int64) |  | Epoch-ms timestamp of the newest scene_log row on the scene&#39;s IC subject; 0 when the log is empty. |
 | entry_count | [int64](#int64) |  | Total scene_log rows on the IC subject (workspace activity panel). |
+| muted | [bool](#bool) |  | true when this character has muted this scene (a scene_notify_prefs row read via SceneStore.ListMutedScenes); false otherwise. The persisted per-scene mute the workspace re-renders on reload/reconnect. |
 
 
 
@@ -6257,6 +6418,42 @@ timestamps, and (only when PUBLISHED) its frozen content.
 
 
 
+<a name="holomush-scene-v1-GetSceneNotifyPrefRequest"></a>
+
+### GetSceneNotifyPrefRequest
+GetSceneNotifyPrefRequest names the acting character whose global notify
+preference to read. service.go::GetSceneNotifyPref cross-checks character_id
+against the actor metadata (character-self scope); it carries no scene id.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character&#39;s ID; required (cross-checked against actor metadata). |
+
+
+
+
+
+
+<a name="holomush-scene-v1-GetSceneNotifyPrefResponse"></a>
+
+### GetSceneNotifyPrefResponse
+GetSceneNotifyPrefResponse carries the character&#39;s persisted global notify
+preference as read by SceneStore.GetSceneNotifyPref (default enabled=true,
+mode=&#34;realtime&#34; when the character has no row). The core mute-suppression
+checker consults enabled to honor a notifications-off preference.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| enabled | [bool](#bool) |  | true when scene notifications are on globally for this character; false when the character has turned them off. |
+| mode | [string](#string) |  | The delivery mode for the global pref (the D-05 digest seam); &#34;realtime&#34; by default until digest delivery lands. |
+
+
+
+
+
+
 <a name="holomush-scene-v1-GetSceneRequest"></a>
 
 ### GetSceneRequest
@@ -6427,6 +6624,40 @@ most recently active first.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | scenes | [CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | The character&#39;s scenes, most recently active first. |
+| global_notify_enabled | [bool](#bool) |  | The character&#39;s persisted global notify preference read via SceneStore.GetSceneNotifyPref (default true); false when the character turned scene notifications off. Lets the workspace render the global notify toggle state on reload. |
+
+
+
+
+
+
+<a name="holomush-scene-v1-ListMutedScenesRequest"></a>
+
+### ListMutedScenesRequest
+ListMutedScenesRequest names the acting character whose muted scene ids to
+list. service.go::ListMutedScenes cross-checks character_id against the actor
+metadata (character-self scope); it carries no scene id.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character&#39;s ID; required (cross-checked against actor metadata). |
+
+
+
+
+
+
+<a name="holomush-scene-v1-ListMutedScenesResponse"></a>
+
+### ListMutedScenesResponse
+ListMutedScenesResponse carries the scene ids the character has muted, as
+read by SceneStore.ListMutedScenes.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene_ids | [string](#string) | repeated | The muted scene ids for the calling character; empty when none are muted. |
 
 
 
@@ -6530,6 +6761,37 @@ ListScenesResponse is the scene-board discovery result page.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | scenes | [SceneInfo](#holomush-scene-v1-SceneInfo) | repeated | The matching scenes for this page. |
+
+
+
+
+
+
+<a name="holomush-scene-v1-MuteSceneRequest"></a>
+
+### MuteSceneRequest
+MuteSceneRequest names the acting character, the scene whose mute flag to
+change, and the target flag value. service.go::MuteScene cross-checks
+character_id against the host-vouched actor metadata, then participant-gates
+on &#34;scene:&#34;&#43;scene_id before persisting via SceneStore.SetSceneMute.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character&#39;s ID; required (cross-checked against actor metadata). |
+| scene_id | [string](#string) |  | The scene to mute or unmute for this character; required. |
+| muted | [bool](#bool) |  | true persists a mute (scene notifications suppressed for this character), false clears it; drives the `scene mute` vs `scene unmute` subcommands. |
+
+
+
+
+
+
+<a name="holomush-scene-v1-MuteSceneResponse"></a>
+
+### MuteSceneResponse
+MuteSceneResponse is the empty acknowledgement of a persisted mute change;
+SceneStore.SetSceneMute is idempotent so no post-state row is returned.
 
 
 
@@ -6870,6 +7132,36 @@ withdrawal from a vote failure). Emitted as scene_publish_withdrawn.
 
 
 
+<a name="holomush-scene-v1-SetSceneNotifyPrefRequest"></a>
+
+### SetSceneNotifyPrefRequest
+SetSceneNotifyPrefRequest names the acting character and the desired global
+notify state. service.go::SetSceneNotifyPref cross-checks character_id
+against the actor metadata (character-self scope) then persists via
+SceneStore.SetSceneNotifyPref; it carries no scene id.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character&#39;s ID; required (cross-checked against actor metadata). |
+| enabled | [bool](#bool) |  | true keeps scene notifications on globally, false turns them off; persisted as the NULL-scene_id global row&#39;s inverse-muted flag by the store. |
+
+
+
+
+
+
+<a name="holomush-scene-v1-SetSceneNotifyPrefResponse"></a>
+
+### SetSceneNotifyPrefResponse
+SetSceneNotifyPrefResponse is the empty acknowledgement of a persisted global
+notify-pref write.
+
+
+
+
+
+
 <a name="holomush-scene-v1-StartScenePublishRequest"></a>
 
 ### StartScenePublishRequest
@@ -7061,14 +7353,22 @@ and persists to its own `plugin_core_scenes` schema; it emits IC notice
 events on events.&lt;game_id&gt;.scene.&lt;scene_id&gt;.ic and audits lifecycle
 operations to its plugin-owned audit table.
 
-Authorization model: every mutating RPC trusts that the host&#39;s ABAC engine
-has already authorized the command-execute action at dispatch time
-(owner-only for end/pause/resume/update/invite/kick/transfer, admin-only for
-the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
-(SceneServiceImpl holds no policy engine). The sole exceptions are the
-participant-gate reads (GetPoseOrder and the publish reads), which enforce a
-direct plugin-code participation check (INV-SCENE-60) precisely because it is a
-hard privacy boundary that must not be delegable.
+Authorization model: the host&#39;s ABAC engine authorizes the command-execute
+action at dispatch time, and the plugin additionally runs a host-injected
+ABAC evaluator (SceneServiceImpl.evaluator, wired via SetHostEvaluator) that
+gates several transitions in-handler by calling evaluator.Evaluate(action,
+&#34;scene:&#34;&#43;scene_id) and failing closed on an evaluator error: EndScene and
+PauseScene evaluate the owner-only end/pause actions, ResumeScene the
+participant-wide resume, and MuteScene the participant-gated mute action.
+Owner-only membership operations (update/invite/kick/transfer) and the
+admin-only publish-attempt-budget extension rely on the dispatch-time
+command gate alone. The participant-gate reads (GetPoseOrder and the publish
+reads) enforce a direct plugin-code participation check (INV-SCENE-60)
+because that is a hard privacy boundary that must not be delegable. The
+character-self notify-pref RPCs (SetSceneNotifyPref/GetSceneNotifyPref/
+ListMutedScenes) carry no scene id; they are scoped by a request
+character_id cross-checked against the host-vouched actor metadata rather
+than a scene ABAC policy.
 
 Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
 plugins/core-scenes/publish_service.go.
@@ -7081,6 +7381,10 @@ plugins/core-scenes/publish_service.go.
 | EndScene | [EndSceneRequest](#holomush-scene-v1-EndSceneRequest) | [EndSceneResponse](#holomush-scene-v1-EndSceneResponse) | EndScene transitions a scene to the terminal `ended` state (owner-only via ABAC). Rejected with codes.FailedPrecondition when the scene is already ended or archived. Returns the post-transition scene row. See service.go::EndScene. |
 | PauseScene | [PauseSceneRequest](#holomush-scene-v1-PauseSceneRequest) | [PauseSceneResponse](#holomush-scene-v1-PauseSceneResponse) | PauseScene transitions an `active` scene to `paused` (owner-only via ABAC). Rejected with codes.FailedPrecondition from any non-active state. See service.go::PauseScene. |
 | ResumeScene | [ResumeSceneRequest](#holomush-scene-v1-ResumeSceneRequest) | [ResumeSceneResponse](#holomush-scene-v1-ResumeSceneResponse) | ResumeScene transitions a `paused` scene back to `active` (participant-wide via ABAC — any participant may resume (spec D6)). Rejected with codes.FailedPrecondition from any non-paused state. See service.go::ResumeScene. |
+| MuteScene | [MuteSceneRequest](#holomush-scene-v1-MuteSceneRequest) | [MuteSceneResponse](#holomush-scene-v1-MuteSceneResponse) | MuteScene sets or clears the calling character&#39;s per-scene mute flag, persisting it via SceneStore.SetSceneMute. Participant-gated: the handler evaluates the &#34;mute&#34; action against &#34;scene:&#34;&#43;scene_id and fails closed (PermissionDenied) for a non-participant or an evaluator error, after cross-checking the request character_id against the host-vouched actor metadata. Both the `scene mute` and `scene unmute` telnet subcommands and the web mute control drive this RPC; the muted flag selects mute vs unmute. See service.go::MuteScene. |
+| SetSceneNotifyPref | [SetSceneNotifyPrefRequest](#holomush-scene-v1-SetSceneNotifyPrefRequest) | [SetSceneNotifyPrefResponse](#holomush-scene-v1-SetSceneNotifyPrefResponse) | SetSceneNotifyPref writes the calling character&#39;s global (all-scenes) notify preference via SceneStore.SetSceneNotifyPref. Character-self-scoped: the only authorization is the request character_id matching the host-vouched actor metadata (a caller may write only its own pref); there is no scene id and no scene ABAC evaluation. See service.go::SetSceneNotifyPref. |
+| GetSceneNotifyPref | [GetSceneNotifyPrefRequest](#holomush-scene-v1-GetSceneNotifyPrefRequest) | [GetSceneNotifyPrefResponse](#holomush-scene-v1-GetSceneNotifyPrefResponse) | GetSceneNotifyPref reads the calling character&#39;s persisted global notify preference (default enabled=true when no row exists) via SceneStore.GetSceneNotifyPref. This is the read the core mute-suppression checker consults to honor a character&#39;s notifications-off preference. Character-self-scoped by the request character_id / actor-metadata match. See service.go::GetSceneNotifyPref. |
+| ListMutedScenes | [ListMutedScenesRequest](#holomush-scene-v1-ListMutedScenesRequest) | [ListMutedScenesResponse](#holomush-scene-v1-ListMutedScenesResponse) | ListMutedScenes returns the scene ids the calling character has muted via SceneStore.ListMutedScenes. Character-self-scoped by the request character_id / actor-metadata match; no scene ABAC evaluation. See service.go::ListMutedScenes. |
 | UpdateScene | [UpdateSceneRequest](#holomush-scene-v1-UpdateSceneRequest) | [UpdateSceneResponse](#holomush-scene-v1-UpdateSceneResponse) | UpdateScene applies a partial update to mutable scene metadata, driven by the request&#39;s FieldMask (owner-only via ABAC). An empty mask is a no-op success. A pose-order-mode change auto-emits a pose-order-changed IC notice. See service.go::UpdateScene. |
 | JoinScene | [JoinSceneRequest](#holomush-scene-v1-JoinSceneRequest) | [JoinSceneResponse](#holomush-scene-v1-JoinSceneResponse) | JoinScene adds the calling character to a scene as a `member`. Open scenes accept any join; private scenes require a pre-existing invitation (the invited row is promoted to member). Idempotent: a repeat join by an existing member succeeds without re-emitting a join notice. See service.go::JoinScene. |
 | WatchScene | [WatchSceneRequest](#holomush-scene-v1-WatchSceneRequest) | [WatchSceneResponse](#holomush-scene-v1-WatchSceneResponse) | WatchScene auto-joins the requesting character into an OPEN scene as a role=observer participant and registers the focus membership for the supplied session, so focus/Subscribe/history gates admit the watcher. Gate order is fail-closed per INV-SCENE-61: the plugin-code visibility==open and state checks run BEFORE the ABAC spectate action is evaluated; non-open scenes are rejected without consulting ABAC. See service.go::WatchScene. |
@@ -7089,7 +7393,7 @@ plugins/core-scenes/publish_service.go.
 | KickFromScene | [KickFromSceneRequest](#holomush-scene-v1-KickFromSceneRequest) | [KickFromSceneResponse](#holomush-scene-v1-KickFromSceneResponse) | KickFromScene removes a target character from a scene (owner-only via ABAC). The scene owner cannot be kicked (codes.FailedPrecondition, enforced both at the service layer and by a store WHERE filter). Emits a leave IC notice with reason=kicked. See service.go::KickFromScene. |
 | TransferOwnership | [TransferOwnershipRequest](#holomush-scene-v1-TransferOwnershipRequest) | [TransferOwnershipResponse](#holomush-scene-v1-TransferOwnershipResponse) | TransferOwnership reassigns scene ownership from the calling owner to a target who MUST already be a member (owner-only via ABAC). The former owner is demoted to member. See service.go::TransferOwnership. |
 | CastPublishVote | [CastPublishVoteRequest](#holomush-scene-v1-CastPublishVoteRequest) | [CastPublishVoteResponse](#holomush-scene-v1-CastPublishVoteResponse) | CastPublishVote is DECLARED BUT NOT SERVED. It is the legacy scene-keyed publish-vote shape, superseded by CastPublishSceneVote (which is keyed by published_scene_id and is the served vote RPC). The plugin provides no handler, so a call returns codes.Unimplemented. |
-| GetPoseOrder | [GetPoseOrderRequest](#holomush-scene-v1-GetPoseOrderRequest) | [GetPoseOrderResponse](#holomush-scene-v1-GetPoseOrderResponse) | GetPoseOrder returns the computed pose-order roster for a scene. Enforces the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member, NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate fires before any existence check so a non-participant cannot distinguish a missing scene from one they may not see. See service.go::GetPoseOrder. |
+| GetPoseOrder | [GetPoseOrderRequest](#holomush-scene-v1-GetPoseOrderRequest) | [GetPoseOrderResponse](#holomush-scene-v1-GetPoseOrderResponse) | GetPoseOrder returns the computed pose-order roster for a scene. Enforces the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member, NOT merely invited; the host ABAC evaluator is not consulted for this read). The PermissionDenied gate fires before any existence check so a non-participant cannot distinguish a missing scene from one they may not see. See service.go::GetPoseOrder. |
 | StartScenePublish | [StartScenePublishRequest](#holomush-scene-v1-StartScenePublishRequest) | [StartScenePublishResponse](#holomush-scene-v1-StartScenePublishResponse) | StartScenePublish opens a publication attempt for an `ended` scene (publish.go §5 precondition ladder). The scene must be ended, must not already have a published archive (one-and-done) nor an active attempt, and must not have exhausted its attempt budget. Seeds a COLLECTING attempt with a frozen vote roster. See publish_service.go::StartScenePublish. |
 | CastPublishSceneVote | [CastPublishSceneVoteRequest](#holomush-scene-v1-CastPublishSceneVoteRequest) | [CastPublishSceneVoteResponse](#holomush-scene-v1-CastPublishSceneVoteResponse) | CastPublishSceneVote records a roster member&#39;s yes/no vote on an active publication attempt and runs the §4.3 resolution check, which may transition the attempt (COLLECTING→COOLOFF on all-yes, COLLECTING→ ATTEMPT_FAILED on any-no-after-all-voted, or COOLOFF→COLLECTING on a flip to no). A vote on a terminal attempt is rejected. The recorded vote is the durable effect; a failed resolution or emit is logged but does not fail the cast. See publish_service.go::CastPublishSceneVote. |
 | WithdrawScenePublish | [WithdrawScenePublishRequest](#holomush-scene-v1-WithdrawScenePublishRequest) | [WithdrawScenePublishResponse](#holomush-scene-v1-WithdrawScenePublishResponse) | WithdrawScenePublish lets the scene owner abandon an active publication attempt (COLLECTING or COOLOFF), transitioning it to ATTEMPT_FAILED with failure_reason WITHDRAWN. Owner-gated by ABAC AND a defense-in-depth in-handler owner check (the plugin holds the owner attribute, so this closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish. |
@@ -7529,7 +7833,8 @@ ListMyScenesResponse wraps the plugin&#39;s character-scene participations list.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| scenes | [holomush.scene.v1.CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | scenes is the character&#39;s scene participations, most recently active first. |
+| scenes | [holomush.scene.v1.CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | scenes is the character&#39;s scene participations, most recently active first. Each CharacterSceneInfo carries the per-scene `muted` flag read from the plugin&#39;s ListCharacterScenes (SceneStore.ListMutedScenes), so the workspace renders persisted mute state on reload. |
+| global_notify_enabled | [bool](#bool) |  | global_notify_enabled is the character&#39;s persisted global notify preference, forwarded verbatim from the plugin ListCharacterScenes read (SceneStore.GetSceneNotifyPref); default true, false when the character turned scene notifications off. Lets the workspace render the global notify toggle state on reload. |
 
 
 
@@ -7606,6 +7911,39 @@ ListScenesForViewerResponse wraps the plugin&#39;s scene-board result page.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | scenes | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) | repeated | scenes is the matching public scenes for this page. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-MuteSceneRequest"></a>
+
+### MuteSceneRequest
+MuteSceneRequest is the facade request to toggle a per-scene mute; fields
+mirror ResumeSceneRequest plus the target mute flag. The facade verifies
+ownership of character_id server-side (INV-SCENE-63) and stamps the verified
+id on the forwarded plugin SceneService.MuteScene call.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller (see EndSceneRequest). |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (ownership verified server-side). |
+| scene_id | [string](#string) |  | scene_id identifies the scene whose mute flag to change; required. |
+| muted | [bool](#bool) |  | muted is the target flag: true suppresses this character&#39;s scene notifications, false clears the mute. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-MuteSceneResponse"></a>
+
+### MuteSceneResponse
+MuteSceneResponse is the empty acknowledgement of a persisted mute change;
+the plugin&#39;s SetSceneMute is idempotent so no post-state row is returned.
 
 
 
@@ -7707,6 +8045,39 @@ SetConnectionFocus (INV-SCENE-63).
 ### SetSceneFocusResponse
 SetSceneFocusResponse is intentionally empty — a successful focus set
 carries no body; the client may update its local focus state optimistically.
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-SetSceneNotifyPrefRequest"></a>
+
+### SetSceneNotifyPrefRequest
+SetSceneNotifyPrefRequest is the facade request to write the character&#39;s
+global notify preference (character-self scope, NO scene_id). Fields mirror
+EndSceneRequest minus scene_id, plus the desired enabled flag. The facade
+verifies ownership of character_id server-side (INV-SCENE-63) and stamps the
+verified id on the forwarded plugin SceneService.SetSceneNotifyPref call.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller (see EndSceneRequest). |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (ownership verified server-side). |
+| enabled | [bool](#bool) |  | enabled is the target global preference: true keeps scene notifications on, false turns them off for this character. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-SetSceneNotifyPrefResponse"></a>
+
+### SetSceneNotifyPrefResponse
+SetSceneNotifyPrefResponse is the empty acknowledgement of a persisted global
+notify-pref write.
 
 
 
@@ -7917,6 +8288,8 @@ cmd/holomush/sub_grpc.go.
 | EndScene | [EndSceneRequest](#holomush-sceneaccess-v1-EndSceneRequest) | [EndSceneResponse](#holomush-sceneaccess-v1-EndSceneResponse) | EndScene transitions the verified owner&#39;s scene to `ended`. The facade resolves the acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.EndScene, which self-enforces the ABAC `end` policy (INV-SCENE-65). Returns the post-transition scene row. |
 | PauseScene | [PauseSceneRequest](#holomush-sceneaccess-v1-PauseSceneRequest) | [PauseSceneResponse](#holomush-sceneaccess-v1-PauseSceneResponse) | PauseScene transitions the verified owner&#39;s active scene to `paused`. Same identity/guest gating as EndScene; forwards to SceneService.PauseScene which self-enforces the ABAC `pause` policy (INV-SCENE-65). |
 | ResumeScene | [ResumeSceneRequest](#holomush-sceneaccess-v1-ResumeSceneRequest) | [ResumeSceneResponse](#holomush-sceneaccess-v1-ResumeSceneResponse) | ResumeScene transitions the verified participant&#39;s paused scene to `active`. Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65). |
+| MuteScene | [MuteSceneRequest](#holomush-sceneaccess-v1-MuteSceneRequest) | [MuteSceneResponse](#holomush-sceneaccess-v1-MuteSceneResponse) | MuteScene toggles the verified character&#39;s per-scene notification mute. The facade resolves the acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.MuteScene with the server-verified character_id; the plugin cross-checks that id against the host-vouched actor metadata and participant-gates on the scene&#39;s `mute` ABAC policy before persisting via SceneStore.SetSceneMute. |
+| SetSceneNotifyPref | [SetSceneNotifyPrefRequest](#holomush-sceneaccess-v1-SetSceneNotifyPrefRequest) | [SetSceneNotifyPrefResponse](#holomush-sceneaccess-v1-SetSceneNotifyPrefResponse) | SetSceneNotifyPref writes the verified character&#39;s global scene-notification preference (character-self scope, no scene). Same identity/guest gating as MuteScene; forwards to SceneService.SetSceneNotifyPref with the server- verified character_id, which the plugin cross-checks against the host-vouched actor metadata before persisting the NULL-scene_id global row. |
 | UpdateScene | [UpdateSceneRequest](#holomush-sceneaccess-v1-UpdateSceneRequest) | [UpdateSceneResponse](#holomush-sceneaccess-v1-UpdateSceneResponse) | UpdateScene applies an owner&#39;s partial edit to mutable scene metadata. The facade resolves the acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene, which self-enforces the ABAC `update` policy (owner-only, INV-SCENE-65) and applies only the fields named in update_mask (AIP-134). Returns the post-update scene row. |
 | InviteToScene | [InviteToSceneRequest](#holomush-sceneaccess-v1-InviteToSceneRequest) | [InviteToSceneResponse](#holomush-sceneaccess-v1-InviteToSceneResponse) | InviteToScene resolves the verified acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.InviteToScene, which self-enforces the ABAC `invite` policy (participant-wide per the relaxation, INV-SCENE-65). |
 | KickFromScene | [KickFromSceneRequest](#holomush-sceneaccess-v1-KickFromSceneRequest) | [KickFromSceneResponse](#holomush-sceneaccess-v1-KickFromSceneResponse) | KickFromScene forwards to SceneService.KickFromScene, which self-enforces the owner-only `kick` policy (INV-SCENE-65). Same identity/guest gating as above. |
@@ -8578,6 +8951,39 @@ WebExportSceneResponse re-exports the rendered scene-log document from the facad
 
 
 
+<a name="holomush-web-v1-WebGetCharacterProfileRequest"></a>
+
+### WebGetCharacterProfileRequest
+WebGetCharacterProfileRequest names the character whose public profile the
+browser is rendering. It carries NO session-token field: the gateway reads
+the token from the request header rather than the body, so a client cannot
+assert one Handler.WebGetCharacterProfile did not authenticate.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the target character&#39;s ULID, taken from the profile URL. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebGetCharacterProfileResponse"></a>
+
+### WebGetCharacterProfileResponse
+WebGetCharacterProfileResponse re-exports the facade&#39;s projection verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.characteraccess.v1.PublicCharacter](#holomush-characteraccess-v1-PublicCharacter) |  | character is the projection the facade built; the gateway forwards it unmodified and computes nothing. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebGetContentRequest"></a>
 
 ### WebGetContentRequest
@@ -8999,7 +9405,8 @@ WebListMyScenesResponse re-exports the character&#39;s scene participations from
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| scenes | [holomush.scene.v1.CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | scenes is the character&#39;s scene participations, most recently active first. |
+| scenes | [holomush.scene.v1.CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | scenes is the character&#39;s scene participations, most recently active first. Each CharacterSceneInfo carries the per-scene `muted` flag from the facade ListMyScenes read, so the workspace renders persisted mute state on reload. |
+| global_notify_enabled | [bool](#bool) |  | global_notify_enabled is the character&#39;s persisted global notify preference, forwarded verbatim from SceneAccessService.ListMyScenes (default true; false when the character turned scene notifications off). Lets the web workspace render the global notify toggle state on reload. |
 
 
 
@@ -9154,6 +9561,36 @@ to end is identified by the cookie token.
 WebLogoutResponse is the empty acknowledgement of logout. The meaningful
 effect — clearing the session cookie — is delivered as a response header by
 the gateway, so this body carries no fields.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebMuteSceneRequest"></a>
+
+### WebMuteSceneRequest
+WebMuteSceneRequest proxies to SceneAccessService.MuteScene.
+player_session_token is injected from the X-Session-Token cookie.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| scene_id | [string](#string) |  | scene_id identifies the scene whose mute flag to change; required. |
+| muted | [bool](#bool) |  | muted is the target flag: true suppresses this character&#39;s scene notifications, false clears the mute. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebMuteSceneResponse"></a>
+
+### WebMuteSceneResponse
+WebMuteSceneResponse is empty — the facade MuteScene carries no body; a
+successful mute change is signaled by the absence of error.
 
 
 
@@ -9463,6 +9900,36 @@ carries no body; the client may update its local focus state optimistically.
 
 
 
+<a name="holomush-web-v1-WebSetSceneNotifyPrefRequest"></a>
+
+### WebSetSceneNotifyPrefRequest
+WebSetSceneNotifyPrefRequest proxies to SceneAccessService.SetSceneNotifyPref
+(character-self scope, no scene_id). player_session_token is injected from the
+X-Session-Token cookie.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| enabled | [bool](#bool) |  | enabled is the target global preference: true keeps scene notifications on, false turns them off for this character. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebSetSceneNotifyPrefResponse"></a>
+
+### WebSetSceneNotifyPrefResponse
+WebSetSceneNotifyPrefResponse is empty — the facade SetSceneNotifyPref carries
+no body; success is signaled by the absence of error.
+
+
+
+
+
+
 <a name="holomush-web-v1-WebStartScenePublishRequest"></a>
 
 ### WebStartScenePublishRequest
@@ -9748,6 +10215,8 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebEndScene | [WebEndSceneRequest](#holomush-web-v1-WebEndSceneRequest) | [WebEndSceneResponse](#holomush-web-v1-WebEndSceneResponse) | WebEndScene proxies to SceneAccessService.EndScene. The gateway reads player_session_token from the X-Session-Token cookie; the facade owns authorization. Returns the post-transition scene. |
 | WebPauseScene | [WebPauseSceneRequest](#holomush-web-v1-WebPauseSceneRequest) | [WebPauseSceneResponse](#holomush-web-v1-WebPauseSceneResponse) | WebPauseScene proxies to SceneAccessService.PauseScene (see WebEndScene). |
 | WebResumeScene | [WebResumeSceneRequest](#holomush-web-v1-WebResumeSceneRequest) | [WebResumeSceneResponse](#holomush-web-v1-WebResumeSceneResponse) | WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene). |
+| WebMuteScene | [WebMuteSceneRequest](#holomush-web-v1-WebMuteSceneRequest) | [WebMuteSceneResponse](#holomush-web-v1-WebMuteSceneResponse) | WebMuteScene toggles the verified character&#39;s per-scene notification mute. Proxies to SceneAccessService.MuteScene; the gateway reads player_session_token from the X-Session-Token cookie and the facade owns authorization. A structural GUI write — the typed RPC, never the command path (gateway-boundary). |
+| WebSetSceneNotifyPref | [WebSetSceneNotifyPrefRequest](#holomush-web-v1-WebSetSceneNotifyPrefRequest) | [WebSetSceneNotifyPrefResponse](#holomush-web-v1-WebSetSceneNotifyPrefResponse) | WebSetSceneNotifyPref writes the verified character&#39;s global scene-notify preference (character-self, no scene). Proxies to SceneAccessService.SetSceneNotifyPref (see WebMuteScene). |
 | WebUpdateScene | [WebUpdateSceneRequest](#holomush-web-v1-WebUpdateSceneRequest) | [WebUpdateSceneResponse](#holomush-web-v1-WebUpdateSceneResponse) | WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads player_session_token from the X-Session-Token cookie; the facade owns authorization. Returns the post-update scene. |
 | WebInviteToScene | [WebInviteToSceneRequest](#holomush-web-v1-WebInviteToSceneRequest) | [WebInviteToSceneResponse](#holomush-web-v1-WebInviteToSceneResponse) | WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token). |
 | WebKickFromScene | [WebKickFromSceneRequest](#holomush-web-v1-WebKickFromSceneRequest) | [WebKickFromSceneResponse](#holomush-web-v1-WebKickFromSceneResponse) | WebKickFromScene proxies to SceneAccessService.KickFromScene. |
@@ -9762,6 +10231,7 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebCastPublishSceneVote | [WebCastPublishSceneVoteRequest](#holomush-web-v1-WebCastPublishSceneVoteRequest) | [WebCastPublishSceneVoteResponse](#holomush-web-v1-WebCastPublishSceneVoteResponse) | WebCastPublishSceneVote proxies CastPublishSceneVote to the facade. |
 | WebWithdrawScenePublish | [WebWithdrawScenePublishRequest](#holomush-web-v1-WebWithdrawScenePublishRequest) | [WebWithdrawScenePublishResponse](#holomush-web-v1-WebWithdrawScenePublishResponse) | WebWithdrawScenePublish proxies WithdrawScenePublish to the facade. |
 | WebGetPublishedScene | [WebGetPublishedSceneRequest](#holomush-web-v1-WebGetPublishedSceneRequest) | [WebGetPublishedSceneResponse](#holomush-web-v1-WebGetPublishedSceneResponse) | WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot). |
+| WebGetCharacterProfile | [WebGetCharacterProfileRequest](#holomush-web-v1-WebGetCharacterProfileRequest) | [WebGetCharacterProfileResponse](#holomush-web-v1-WebGetCharacterProfileResponse) | WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile. Handler.WebGetCharacterProfile lifts the session token from the X-Session-Token header CookieMiddleware injected and forwards it; a request with no cookie is the ordinary logged-out case, not an error. |
 
  
 

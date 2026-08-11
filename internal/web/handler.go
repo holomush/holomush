@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/ulidgen"
 	"github.com/holomush/holomush/pkg/errutil"
+	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
@@ -132,6 +133,15 @@ type SceneAccessClient interface {
 	GetPublishedScene(ctx context.Context, req *sceneaccessv1.GetPublishedSceneRequest) (*sceneaccessv1.GetPublishedSceneResponse, error)
 }
 
+// CharacterAccessClient is the gRPC interface used by Handler to reach the
+// core character-access facade. One method per Web* character RPC, all using
+// characteraccessv1 types. The gateway is a pure translation layer — the facade
+// (CharacterAccessService) resolves the viewer rung from the forwarded session
+// token and owns every visibility decision.
+type CharacterAccessClient interface {
+	GetCharacterProfile(ctx context.Context, req *characteraccessv1.GetCharacterProfileRequest) (*characteraccessv1.GetCharacterProfileResponse, error)
+}
+
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
 // The gateway is a protocol translation layer only — it MUST NOT access
 // WorldService or other internal services directly. All game state flows
@@ -139,9 +149,10 @@ type SceneAccessClient interface {
 // database credentials (bd-j2xj); per-connection registration happens
 // inside the core Subscribe RPC.
 type Handler struct {
-	client        CoreClient
-	contentClient ContentClient
-	sceneAccess   SceneAccessClient
+	client          CoreClient
+	contentClient   ContentClient
+	sceneAccess     SceneAccessClient
+	characterAccess CharacterAccessClient
 	// heartbeatInterval controls the StreamEvents heartbeat ticker period.
 	// Zero means 15 seconds (production default). Overridable in tests.
 	heartbeatInterval time.Duration
@@ -165,6 +176,12 @@ func WithContentClient(c ContentClient) HandlerOption {
 // WithSceneAccessClient sets the scene-access facade client for scene Web* RPCs.
 func WithSceneAccessClient(c SceneAccessClient) HandlerOption {
 	return func(h *Handler) { h.sceneAccess = c }
+}
+
+// WithCharacterAccessClient sets the character-access facade client for the
+// character Web* RPCs.
+func WithCharacterAccessClient(c CharacterAccessClient) HandlerOption {
+	return func(h *Handler) { h.characterAccess = c }
 }
 
 // NewHandler creates a new Handler with the given core client and options.

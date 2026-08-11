@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.characteraccess.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1;characteraccessv1";
+
+// CharacterAccessService is the host-side facade for the web character surface.
+// It constructs the viewer principal itself — resolving the optional player
+// session token through auth.PlayerSessionRepository and auth.PlayerRepository —
+// and owns every reachability and per-attribute visibility decision, so the
+// gateway proxies bytes and computes nothing.
+//
+// Implemented by CharacterAccessServer in
+// internal/grpc/characteraccess_service.go. Registered on the core gRPC server
+// (not the plugin proxy) in cmd/holomush/sub_grpc.go, beside
+// SceneAccessService.
+service CharacterAccessService {
+  // GetCharacterProfile resolves one character's public profile for whichever
+  // viewer rung the request's token resolves to, including no token at all.
+  // CharacterAccessServer.GetCharacterProfile evaluates profile reachability
+  // first and independently; a viewer below that floor receives exactly the
+  // response a character id naming no row receives, so a withheld profile
+  // cannot be distinguished from a nonexistent one.
+  rpc GetCharacterProfile(GetCharacterProfileRequest) returns (GetCharacterProfileResponse);
+}
+
+// ProfileImage is one stored image reference on a profile. The shape ships in
+// v0.13 so alt text and content warnings have somewhere to live before any
+// upload path exists; projectPublic
+// (internal/grpc/characteraccess_projection.go) emits none of these in v0.13,
+// because nothing in v0.13 mints a media identifier.
+message ProfileImage {
+  // media_id is an opaque handle to stored bytes. Its format is deliberately
+  // unfixed in v0.13 — no host code parses, validates or generates one.
+  string media_id = 1;
+  // alt_text is the operator-authored textual substitute a screen reader
+  // announces in place of the image.
+  string alt_text = 2;
+  // content_warning is the advisory a client renders BEFORE revealing the
+  // image, so a viewer can decline to see it.
+  string content_warning = 3;
+}
+
+// PublicCharacter is the character shape the `public` audience receives. It is
+// the only message projectPublic constructs, and it carries no player_id and no
+// location_id: an owner-only or position-revealing value has no field to land
+// in, so the absence is checked by the Go compiler rather than by a handler
+// remembering to clear a field.
+//
+// It carries no visibility hint, mask, flag map or hidden-field list either. A
+// value this viewer may not see is absent from the marshaled bytes, and the
+// client is not told a decision was made.
+message PublicCharacter {
+  // id is the stable characters.id ULID the profile URL is keyed on; it
+  // survives rename, which a name-keyed key would not.
+  string id = 1;
+  // name is the display name world.Service.GetCharacterDescription read from
+  // characters.name, forwarded as the stored bytes with no normalization,
+  // casefolding or re-encoding.
+  string name = 2;
+  // description is the in-world `look` text (characters.description), gated by
+  // the read_description action rather than by any per-attribute floor.
+  string description = 3;
+  // profile holds the viewer-permitted `profile.*` attributes keyed by their
+  // governed names. An attribute whose floor this viewer does not clear is
+  // absent from the map, never present-and-empty.
+  map<string, string> profile = 4;
+  // primary_image is the single `profile.image.primary` row when one is both
+  // present and permitted. v0.13 always omits it.
+  ProfileImage primary_image = 5;
+  // gallery holds the permitted `profile.image.gallery.00`…`.09` rows, capped
+  // at the ten names the storage schema fixes. v0.13 always leaves it empty.
+  repeated ProfileImage gallery = 6 [(buf.validate.field).repeated.max_items = 10];
+}
+
+// GetCharacterProfileRequest names the character to resolve and carries the
+// caller's optional session token.
+message GetCharacterProfileRequest {
+  // character_id is the target character's ULID. A value that does not parse
+  // takes the same opaque outcome as one that names no row.
+  string character_id = 1;
+  // player_session_token is the raw session token the gateway lifted from the
+  // X-Session-Token header. It is OPTIONAL: an empty, expired or otherwise
+  // unresolvable value resolves the least-privileged rung rather than an
+  // authentication error, so a logged-out visitor still reaches the public page.
+  string player_session_token = 2;
+}
+
+// GetCharacterProfileResponse carries the projected profile.
+message GetCharacterProfileResponse {
+  // character is the projection projectPublic built for this viewer.
+  PublicCharacter character = 1;
+}

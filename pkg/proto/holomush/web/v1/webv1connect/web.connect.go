@@ -173,6 +173,9 @@ const (
 	// WebServiceWebGetPublishedSceneProcedure is the fully-qualified name of the WebService's
 	// WebGetPublishedScene RPC.
 	WebServiceWebGetPublishedSceneProcedure = "/holomush.web.v1.WebService/WebGetPublishedScene"
+	// WebServiceWebGetCharacterProfileProcedure is the fully-qualified name of the WebService's
+	// WebGetCharacterProfile RPC.
+	WebServiceWebGetCharacterProfileProcedure = "/holomush.web.v1.WebService/WebGetCharacterProfile"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -372,6 +375,11 @@ type WebServiceClient interface {
 	WebWithdrawScenePublish(context.Context, *connect.Request[v1.WebWithdrawScenePublishRequest]) (*connect.Response[v1.WebWithdrawScenePublishResponse], error)
 	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
 	WebGetPublishedScene(context.Context, *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error)
+	// WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+	// Handler.WebGetCharacterProfile lifts the session token from the
+	// X-Session-Token header CookieMiddleware injected and forwards it; a request
+	// with no cookie is the ordinary logged-out case, not an error.
+	WebGetCharacterProfile(context.Context, *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -673,6 +681,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebGetPublishedScene")),
 			connect.WithClientOptions(opts...),
 		),
+		webGetCharacterProfile: connect.NewClient[v1.WebGetCharacterProfileRequest, v1.WebGetCharacterProfileResponse](
+			httpClient,
+			baseURL+WebServiceWebGetCharacterProfileProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebGetCharacterProfile")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -726,6 +740,7 @@ type webServiceClient struct {
 	webCastPublishSceneVote       *connect.Client[v1.WebCastPublishSceneVoteRequest, v1.WebCastPublishSceneVoteResponse]
 	webWithdrawScenePublish       *connect.Client[v1.WebWithdrawScenePublishRequest, v1.WebWithdrawScenePublishResponse]
 	webGetPublishedScene          *connect.Client[v1.WebGetPublishedSceneRequest, v1.WebGetPublishedSceneResponse]
+	webGetCharacterProfile        *connect.Client[v1.WebGetCharacterProfileRequest, v1.WebGetCharacterProfileResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -968,6 +983,11 @@ func (c *webServiceClient) WebGetPublishedScene(ctx context.Context, req *connec
 	return c.webGetPublishedScene.CallUnary(ctx, req)
 }
 
+// WebGetCharacterProfile calls holomush.web.v1.WebService.WebGetCharacterProfile.
+func (c *webServiceClient) WebGetCharacterProfile(ctx context.Context, req *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error) {
+	return c.webGetCharacterProfile.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -1165,6 +1185,11 @@ type WebServiceHandler interface {
 	WebWithdrawScenePublish(context.Context, *connect.Request[v1.WebWithdrawScenePublishRequest]) (*connect.Response[v1.WebWithdrawScenePublishResponse], error)
 	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
 	WebGetPublishedScene(context.Context, *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error)
+	// WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+	// Handler.WebGetCharacterProfile lifts the session token from the
+	// X-Session-Token header CookieMiddleware injected and forwards it; a request
+	// with no cookie is the ordinary logged-out case, not an error.
+	WebGetCharacterProfile(context.Context, *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1462,6 +1487,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebGetPublishedScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebGetCharacterProfileHandler := connect.NewUnaryHandler(
+		WebServiceWebGetCharacterProfileProcedure,
+		svc.WebGetCharacterProfile,
+		connect.WithSchema(webServiceMethods.ByName("WebGetCharacterProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -1560,6 +1591,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebWithdrawScenePublishHandler.ServeHTTP(w, r)
 		case WebServiceWebGetPublishedSceneProcedure:
 			webServiceWebGetPublishedSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebGetCharacterProfileProcedure:
+			webServiceWebGetCharacterProfileHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1759,4 +1792,8 @@ func (UnimplementedWebServiceHandler) WebWithdrawScenePublish(context.Context, *
 
 func (UnimplementedWebServiceHandler) WebGetPublishedScene(context.Context, *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetPublishedScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebGetCharacterProfile(context.Context, *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetCharacterProfile is not implemented"))
 }

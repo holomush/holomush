@@ -70,6 +70,7 @@ const (
 	WebService_WebCastPublishSceneVote_FullMethodName       = "/holomush.web.v1.WebService/WebCastPublishSceneVote"
 	WebService_WebWithdrawScenePublish_FullMethodName       = "/holomush.web.v1.WebService/WebWithdrawScenePublish"
 	WebService_WebGetPublishedScene_FullMethodName          = "/holomush.web.v1.WebService/WebGetPublishedScene"
+	WebService_WebGetCharacterProfile_FullMethodName        = "/holomush.web.v1.WebService/WebGetCharacterProfile"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -281,6 +282,11 @@ type WebServiceClient interface {
 	WebWithdrawScenePublish(ctx context.Context, in *WebWithdrawScenePublishRequest, opts ...grpc.CallOption) (*WebWithdrawScenePublishResponse, error)
 	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
 	WebGetPublishedScene(ctx context.Context, in *WebGetPublishedSceneRequest, opts ...grpc.CallOption) (*WebGetPublishedSceneResponse, error)
+	// WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+	// Handler.WebGetCharacterProfile lifts the session token from the
+	// X-Session-Token header CookieMiddleware injected and forwards it; a request
+	// with no cookie is the ordinary logged-out case, not an error.
+	WebGetCharacterProfile(ctx context.Context, in *WebGetCharacterProfileRequest, opts ...grpc.CallOption) (*WebGetCharacterProfileResponse, error)
 }
 
 type webServiceClient struct {
@@ -780,6 +786,16 @@ func (c *webServiceClient) WebGetPublishedScene(ctx context.Context, in *WebGetP
 	return out, nil
 }
 
+func (c *webServiceClient) WebGetCharacterProfile(ctx context.Context, in *WebGetCharacterProfileRequest, opts ...grpc.CallOption) (*WebGetCharacterProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebGetCharacterProfileResponse)
+	err := c.cc.Invoke(ctx, WebService_WebGetCharacterProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -989,6 +1005,11 @@ type WebServiceServer interface {
 	WebWithdrawScenePublish(context.Context, *WebWithdrawScenePublishRequest) (*WebWithdrawScenePublishResponse, error)
 	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
 	WebGetPublishedScene(context.Context, *WebGetPublishedSceneRequest) (*WebGetPublishedSceneResponse, error)
+	// WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+	// Handler.WebGetCharacterProfile lifts the session token from the
+	// X-Session-Token header CookieMiddleware injected and forwards it; a request
+	// with no cookie is the ordinary logged-out case, not an error.
+	WebGetCharacterProfile(context.Context, *WebGetCharacterProfileRequest) (*WebGetCharacterProfileResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -1142,6 +1163,9 @@ func (UnimplementedWebServiceServer) WebWithdrawScenePublish(context.Context, *W
 }
 func (UnimplementedWebServiceServer) WebGetPublishedScene(context.Context, *WebGetPublishedSceneRequest) (*WebGetPublishedSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebGetPublishedScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebGetCharacterProfile(context.Context, *WebGetCharacterProfileRequest) (*WebGetCharacterProfileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebGetCharacterProfile not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -2021,6 +2045,24 @@ func _WebService_WebGetPublishedScene_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebGetCharacterProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebGetCharacterProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebGetCharacterProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebGetCharacterProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebGetCharacterProfile(ctx, req.(*WebGetCharacterProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2215,6 +2257,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebGetPublishedScene",
 			Handler:    _WebService_WebGetPublishedScene_Handler,
+		},
+		{
+			MethodName: "WebGetCharacterProfile",
+			Handler:    _WebService_WebGetCharacterProfile_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

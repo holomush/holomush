@@ -9,6 +9,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
+import "holomush/characteraccess/v1/characteraccess.proto";
 import "holomush/core/v1/core.proto";
 import "holomush/scene/v1/scene.proto";
 
@@ -358,6 +359,12 @@ service WebService {
   rpc WebWithdrawScenePublish(WebWithdrawScenePublishRequest) returns (WebWithdrawScenePublishResponse);
   // WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
   rpc WebGetPublishedScene(WebGetPublishedSceneRequest) returns (WebGetPublishedSceneResponse);
+
+  // WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+  // Handler.WebGetCharacterProfile lifts the session token from the
+  // X-Session-Token header CookieMiddleware injected and forwards it; a request
+  // with no cookie is the ordinary logged-out case, not an error.
+  rpc WebGetCharacterProfile(WebGetCharacterProfileRequest) returns (WebGetCharacterProfileResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -1481,4 +1488,20 @@ message WebUpdateSceneRequest {
 message WebUpdateSceneResponse {
   // scene is the scene row after the partial update.
   holomush.scene.v1.SceneInfo scene = 1;
+}
+
+// WebGetCharacterProfileRequest names the character whose public profile the
+// browser is rendering. It carries NO session-token field: the gateway reads
+// the token from the request header rather than the body, so a client cannot
+// assert one Handler.WebGetCharacterProfile did not authenticate.
+message WebGetCharacterProfileRequest {
+  // character_id is the target character's ULID, taken from the profile URL.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// WebGetCharacterProfileResponse re-exports the facade's projection verbatim.
+message WebGetCharacterProfileResponse {
+  // character is the projection the facade built; the gateway forwards it
+  // unmodified and computes nothing.
+  holomush.characteraccess.v1.PublicCharacter character = 1;
 }
