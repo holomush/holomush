@@ -266,9 +266,15 @@ func TestPlayerGateOwnedCharacterReturnsTheCharacterWhenThePlayerOwnsIt(t *testi
 // applies verbatim to a per-facade log message.
 //
 // The oops-code assertion is the second half: .claude/rules/grpc-errors.md
-// requires errutil.LogErrorContext, which lifts the oops code and context map
-// into structured fields. The bare form flattens the error to a string and loses
-// the code an operator would filter on in Loki or Sentry.
+// requires errutil.LogErrorContext, which lifts the oops code and context map to
+// TOP-LEVEL log fields. Note what the bare form actually does — it does NOT lose
+// the code. oops.OopsError implements slog.LogValue (samber/oops@v1.22.0
+// error.go:586, which emits slog.Any("code", …)), so slog resolves the LogValuer
+// and the code still reaches the log, NESTED as `error.code` rather than dropped.
+// The difference is the field NAME every downstream Loki/Sentry filter keys on,
+// which is why the assertion below tests the key SHAPE: a bare
+// Contains(logged, "CHARACTER_LIST_FAILED") passes identically under both forms
+// and would let a revert to the bare form ship green.
 func TestPlayerGateAttributesItsFailureLogsToTheConfiguredSurfaceAndCarriesTheOopsCode(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -327,11 +333,19 @@ func TestPlayerGateAttributesItsFailureLogsToTheConfiguredSurfaceAndCarriesTheOo
 			assert.NotContains(t, logged, otherPrefix+":",
 				"a gate MUST NOT attribute its failures to a surface the caller never touched")
 
-			// errutil.LogErrorContext lifts the oops code into a structured field;
-			// a bare slog.ErrorContext(ctx, msg, "error", err) would not.
-			assert.Contains(t, logged, "CHARACTER_LIST_FAILED",
-				"the oops code must reach the log as a structured field, not be flattened into a string")
-			assert.Contains(t, logged, "PLAYER_LOOKUP_FAILED")
+			// errutil.LogErrorContext lifts the oops code to a TOP-LEVEL `code`
+			// key. The bare slog.ErrorContext(ctx, msg, "error", err) form carries
+			// the code too — oops.OopsError implements slog.LogValue — but nested
+			// under `error.`, so it is the NotContains below, not either Contains
+			// above it, that fails if the bare form is ever restored. Verified by
+			// running both forms through this TextHandler:
+			//   bare:    …error.message="" error.err="…" error.code=CHARACTER_LIST_FAILED
+			//   errutil: …error="…" code=CHARACTER_LIST_FAILED
+			assert.Contains(t, logged, "code=CHARACTER_LIST_FAILED")
+			assert.Contains(t, logged, "code=PLAYER_LOOKUP_FAILED")
+			assert.NotContains(t, logged, "error.code=",
+				"a bare slog.ErrorContext(ctx, msg, \"error\", err) nests the oops fields under `error.`; "+
+					"errutil.LogErrorContext flattens them to the top-level keys operators filter on")
 		})
 	}
 }
