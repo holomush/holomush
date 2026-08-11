@@ -54,12 +54,17 @@ func (h *Handler) WebGetCharacterProfile(ctx context.Context, req *connect.Reque
 // exactly: nil-client guard, token from the header, bounded context,
 // field-by-field forward, log-then-pass-through on error. They compute nothing.
 //
-// THEY ANSWER Unimplemented TODAY, AND THAT IS THE INTENDED STATE. Their facade
-// handlers land in plans 04-05 and 04-06; until then
-// UnimplementedCharacterAccessServiceServer answers Unimplemented and these
-// proxies pass it through unchanged. They exist now because
-// webv1connect.WebServiceHandler is asserted at compile time in handler.go, so
-// declaring the RPCs without the methods would break the build.
+// All four facade handlers are LIVE (landed in plans 04-05 and 04-06):
+// CharacterAccessServer.ListMyCharacters, GetMyCharacter,
+// UpdateCharacterProfile, and UpdateCharacterDescription. The routing census
+// (characterWebProxyRPCs in test/meta/characteraccess_routing_census_test.go)
+// pins exactly these four as the owner-audience proxy set by set-equality, so
+// this list cannot drift from the shipped handlers without failing that gate.
+//
+// The ONLY Unimplemented these proxies still produce is their own
+// h.characterAccess == nil guard, and it means an UNWIRED CLIENT in
+// cmd/holomush — never an unbuilt facade. An operator seeing CodeUnimplemented
+// from one of these should look at gateway wiring.
 
 // WebListMyCharacters proxies to CharacterAccessService.ListMyCharacters. The
 // request message carries no fields at all — whose roster is returned follows
