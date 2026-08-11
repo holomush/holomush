@@ -1994,3 +1994,135 @@ Waves 1–2 (04-01, 04-02, 04-03, 04-04, 04-09) and wave 5 (04-07) are execution
 H1 (mandatory) with H2/H3 strongly recommended. Risk: claude assesses MEDIUM overall (down from
 codex's HIGH in cycle 5, reflecting that all residual risk is concentrated in one wave-6 task plus
 one one-line binding gap, with waves 1–5 substance verified sound across two independent reviewers).
+
+---
+
+# Cross-AI Plan Review — Phase 4 · Cycle 7
+
+**Reviewer:** claude (headless Claude CLI, model pinned `claude-fable-5` via `review.models.claude`;
+lane explicitly selected by the user with `--claude`, overriding the runtime-independence skip — the
+lane ran as a fresh non-interactive session with full repo read access) + orchestrator
+source-grounding pass.
+**Reviewed at:** 2026-08-11T00:16Z.
+**Plans reviewed:** all nine. This is a fix-disposition cycle: commit `7fb1334a5` ("docs(04):
+incorporate cycle-6 review findings into plans") revised five plans (04-01, 04-03, 04-05, 04-06,
+04-08) to incorporate all nine cycle-6 findings. The lane independently audited each disposition
+against the revised plans and the source tree at HEAD, then swept the revised text for
+revision-introduced defects (H1-class internal contradictions in particular) and cross-checked the
+four untouched plans (04-02, 04-04, 04-07, 04-09) for edits the revisions might have made necessary.
+Trend (total unresolved, per the handoff §5 accounting): 8 → 6 → 2 → 6 → 8 → 9 → **3** (0 HIGH +
+3 actionable LOW; all nine cycle-6 findings verified RESOLVED — the residue is two wording
+clarifications in revised plans plus one stale handoff note).
+
+
+## Claude Review
+
+## 1. Summary
+
+Commit `7fb1334a5` genuinely closes all nine cycle-6 findings. I verified each disposition against both the revised plan text and the repository at HEAD: the H1 contradiction is replaced by a coherent "literal is the home, comment explains it, derived comparison audits it" rule; the H2 universe is now fail-closed with both promotion vectors explicitly guarded and the must-haves claim rewritten to match the mechanism; H3 gets a derived public-audience counterpart plus a fifth RED demonstration that specifically replays the one-line bypass; M1's factual claim is corrected and I confirmed at HEAD that both couplings are indeed compile-time-only; M2's annotation now has an owner (04-01 Task 1) with correct meta-test line citations, and 04-05's flip is guarded by preconditions that stay inside its `files_modified`; L1's wording is fixed at every site with concrete anti-`\r` fixture guidance (`\x1b`/`\x07`), and no bad wording survives in any of the nine plans; L2's comment filters are present and — I tested this empirically — work correctly even in rg's multi-file/directory invocations; L3's grep is now `rg -in 'exempt|allow[-_ ]?list'`, which catches every case/separator variant; L4 is correctly scoped as a value-fill in 04-03 Task 2 with a verify command, and I confirmed `**Plans**: 8 plans` is unique to the Phase-4 block at HEAD. The sweep for revision-introduced defects found no HIGH issues — only two LOW ambiguities and one stale handoff note.
+
+## 2. Cycle-6 Disposition Audit
+
+| Finding | Verdict | Evidence |
+|---|---|---|
+| **H1** (04-08) | **RESOLVED** | `04-08-PLAN.md:570` now states the intended home explicitly ("the checked-in public-audience literal and its adjacent D-73 comment") and names the old contradiction as corrected; the check-in instruction at `:399-404` and the criterion agree. Residual soft spot noted in §3 (LOW). |
+| **H2** (04-08) | **RESOLVED** | Universe derived permissively (`:357-364`: every exported method incl. value/unnamed receivers, explicitly NOT reusing Task 1's predicate), classifier default-closed (`:366-383`), streaming shape fails by name (fixture-driven, `:201`, `:556`), promotion vectors closed via embedded-field literal + `playerGate` every-method-unexported assertion (`:384-397`, `:557`), `Unimplemented` residue stated and delegated to Task 3's descriptor census (`:445-452`). Must-haves truth 3 (`:24`) rewritten to describe the actual mechanism. New threat row T-04-36 (`:699`). Repo facts hold: `sceneaccess_service.go:95`/`:102` setters exist; `subscribe_handler.go` exists as the streaming-shape exemplar. |
+| **H3** (04-08) | **RESOLVED** | Derived-public counterpart at `:399-415` (step 4), behavior `:203`, criterion `:558`, and RED demo (e) at `:534-542` replays exactly the park-the-name bypass. Grounding verified: `resolveViewerIdentity` is declared as a `CharacterAccessServer` method by 04-01 (`04-01-PLAN.md:260`, `:558`) and called by `GetCharacterProfile` (`:382`); 04-07's directory resolves "through the same pair" (`04-07-PLAN.md:328`). Disjointness assertion (`:419-421`) closes the park-in-both variant. |
+| **M1** (04-06) | **RESOLVED** | Rewritten as "compile-time couplings, both without a production call path today" (`04-06-PLAN.md:409-437` region per diff) and the acceptance criterion reframed as "a COMPILE-AND-FIXTURE check, not a behavioral gate". Verified at HEAD: `NewPropertyCapability` (`internal/plugin/hostfunc/cap_property.go:47`) has zero non-test constructions, and `internal/command/types.go:70` is an interface method with no production implementation call path. |
+| **M2** (04-05/04-01) | **RESOLVED** | 04-01 Task 1 step 7 adds `// Verifies: INV-PRIVACY-9` with an acceptance criterion (`rg -c … returns 1`), and correctly leaves `invariants.yaml` untouched; 04-05 Task 3 adds two flip preconditions and an acceptance check, with the annotated file explicitly outside 04-05's `files_modified` and owned by 04-01. Meta-test citations verified: the pending branch tolerates an annotation and rejects only `asserted_by` (`test/meta/invariant_registry_test.go:215-219`), and a bound entry with zero `// Verifies:` sites fails (`:221-223`). `character_profile_read_test.go` is in 04-01's `files_modified` (`04-01-PLAN.md:25`); `invariants.yaml`/`.md` are in 04-05's (`:15-16`). |
+| **L1** (04-06 ×7, 04-01 ×1) | **RESOLVED** | All sites now read "newline, carriage return, or tab" with explicit anti-`\r` fixture guidance naming `validation.go:191` and suggesting `\x1b`/`\x07` (e.g. 04-06 behavior tests, the `read_first` gloss, and 04-01's edge table row 2). Verified at source: `hasControlCharsExceptWhitespace` permits `\n`, `\r`, `\t` (`internal/world/validation.go:189-195`). A repo-wide sweep of all nine plans finds zero residual "newline and/or tab" wording (only historical REVIEWS/HANDOFF text). The 04-04 echo cycle-6 mentioned does not exist in 04-04 at HEAD — no "newline"/`ValidateDescription`-rule text appears there at all. |
+| **L2** (04-08) | **RESOLVED** | Both formerly-unfiltered counts now carry `rg -v '^\s*//'` (`04-08-PLAN.md:157`, `:562`), matching the three at `:559`. I empirically confirmed the filter behaves correctly in multi-file and directory invocations (rg applies `-v` to line content before adding the filename prefix), so the fix is sound, and the new `:560` caveat about trailing/block comments honestly documents the filter's real limits. |
+| **L3** (04-08) | **RESOLVED** | `:566` uses `rg -in 'exempt|allow[-_ ]?list'` — catches `Allowlist`, `EXEMPT`, `allow-list`, `allow_list`, `allow list`. The `:567` carve-out un-banning `skip` is well-reasoned (the file's own purpose statement needs the word). |
+| **L4** (ROADMAP) | **RESOLVED** (as scoped) | ROADMAP still reads `**Plans**: 8 plans` at HEAD (`:484`) by design — the fix executes with 04-03 Task 2: new must-have (`04-03-PLAN.md:24`), value-fill instruction honoring the tool-owned-artifact rule, automated verify (`… rg -q '\*\*Plans\*\*: 9 plans' … && ! rg -q '…8 plans'`), and acceptance criterion. I confirmed `8 plans` is unique to the Phase-4 block (other phases read `6/6`/`13/13`/`TBD`), so the negative grep cannot false-fire. |
+
+## 3. New Concerns
+
+No HIGH or MEDIUM issues. Three LOW:
+
+- **LOW — 04-08 `:199` vs `:570` needs one clarifying sentence.** Behavior `:199` requires the census to "assert that absence explicitly" (the two public RPCs absent from all three owner sets), while criterion `:570` requires the two names to appear "only in the checked-in public-audience literal and its adjacent D-73 comment." Both are satisfiable simultaneously — but only if the absence assertion *iterates the literal* rather than naming the RPCs as fresh string constants. The plan never says to do that; a naive executor writing `require.NotContains(guestGate, "GetCharacterProfile")` would satisfy `:199` and fail `:570`. Not H1-class (a legal joint solution exists), but worth one sentence: "drive the absence assertion by ranging over the public-audience literal."
+- **LOW — 04-05 action/acceptance tension on the flip fallback.** The Task 3 action's fallback ("if the annotation is absent … leave the entry pending, surface as an execution deviation") coexists with acceptance criteria that unconditionally require the bound flip and `asserted_by` entry. This is fail-closed (the plan blocks rather than fabricating), and 04-01's own acceptance criterion makes the precondition near-certain by wave 3, so it is a contingency-path wording nit, not a defect.
+- **LOW — stale prose in 04-HANDOFF.md:155.** It still records L1 as "**Not yet corrected.**" Now false at HEAD. Handoff docs are historical, but a future session resuming from the handoff would re-open a closed finding; a one-line strike-through or dated addendum would prevent that.
+
+**Untouched plans (04-02, 04-04, 04-07, 04-09):** no edits made necessary by the revisions. 04-08's cross-references into them still hold — `playerGate` origin (04-02) vs. the embed (04-05) are cited consistently (`04-08:40` vs `:386`); `resolveViewerIdentity` grounding in 04-01/04-07 verified above; `ownedCharacterForMutation` remains 04-06 Task 1's construct; 04-04 carries no L1 wording. Tally checks pass: Task 2's "all twelve behaviors" matches the twelve `<behavior>` bullets, "five verbatim census failures" matches demos (a)–(e), and the threat register's five-RED claim agrees.
+
+## 4. Suggestions
+
+1. 04-08 Task 2: add "the explicit-absence assertion (behavior 7) must range over the public-audience literal rather than restating the names" — closes the `:199`/`:570` soft spot.
+2. 04-05 Task 3: prefix the acceptance criteria with "assuming the annotation precondition held" or mark the fallback path as a deliberate blocked-state (one clause).
+3. 04-HANDOFF.md: append a dated note that item 3 (L1) was corrected in `7fb1334a5`.
+
+None of these blocks execution.
+
+## 5. Risk Assessment
+
+**Overall: LOW.** All nine cycle-6 findings are genuinely closed with repo-verified evidence; the residual items are wording clarifications an attentive executor would resolve correctly anyway, and every load-bearing repo fact the revised text cites (validation.go:189-195, invariant_registry_test.go:215-223, sceneaccess counts 24/21 and lines :95/:102/:124, envelope-census helpers :145/:162, ROADMAP:484 uniqueness, cap_property.go:47/types.go:70) checked out at HEAD.
+
+Per-plan execution readiness: **04-01 READY · 04-02 READY · 04-03 READY · 04-04 READY · 04-05 READY** (LOW wording nit) · **04-06 READY · 04-07 READY · 04-08 READY** (LOW wording nit; the wave-6 blocker is lifted — H1/H2/H3 all resolved) · **04-09 READY**.
+
+---
+
+## Orchestrator source-grounding pass — Cycle 7
+
+The orchestrator independently re-verified the lane's disposition verdicts and the load-bearing
+repo facts before accepting the cycle:
+
+| Claim | Status | Evidence |
+|---|---|---|
+| H1 contradiction removed | VERIFIED | `04-08-PLAN.md:570` now names the literal + adjacent D-73 comment as the intended home and explicitly records the cycle-6 correction; `:399-404` (check-in-as-literal) and the criterion agree |
+| H2 universe fail-closed | VERIFIED | `04-08-PLAN.md:357-364` derives the universe permissively (every exported method, value/unnamed receivers included, explicitly NOT reusing Task 1's predicate); must-haves truth 3 (`:24`) rewritten to describe the fail-closed partition with both promotion vectors (embedded `playerGate`, generated `Unimplemented` embed) closed or descriptor-audited |
+| H3 derived public counterpart + RED demo (e) | VERIFIED | `:399-415` gives the literal a derived counterpart; demo (e) at `:534-542` replays the exact one-line bypass and records the census still failing in the derived-public missing group |
+| M1 reworded to compile-time couplings | VERIFIED | `04-06-PLAN.md:409` ("compile-time couplings"), `:481`/`:683` reframed as "a COMPILE-AND-FIXTURE check, not a behavioral gate"; at HEAD `NewPropertyCapability` has zero non-test callers (`rg -n 'NewPropertyCapability' --type go` minus tests → only `cap_property.go:46-47`) |
+| M2 annotation owned by 04-01, preconditioned in 04-05 | VERIFIED | `04-01-PLAN.md:350` (annotation instruction) + `:372` (acceptance: `rg -c` returns 1); `04-05-PLAN.md:295-309` (two flip preconditions with a fail-closed leave-pending fallback), `:269` read-first; meta-test behavior confirmed at `test/meta/invariant_registry_test.go:215-223` (pending+asserted_by rejected; bound with zero `// Verifies:` sites rejected) |
+| L1 wording fixed at all sites | VERIFIED | `rg -n 'newline (and\|or) tab' 04-0[1-9]-PLAN.md` → no match (exit 1); `carriage return` present ×6 in 04-06; source confirmed: `internal/world/validation.go:191` permits `\n`, `\r`, `\t` |
+| L2 comment filters present | VERIFIED | `04-08-PLAN.md:157`, `:562` now carry `rg -v '^\s*//'`; new `:561` caveat honestly documents the whole-line-only limit of the filter |
+| L3 case-insensitive grep | VERIFIED | `04-08-PLAN.md:566`: `rg -in 'exempt\|allow[-_ ]?list'`; `:567` documents the deliberate `skip` carve-out |
+| L4 value-fill in 04-03 Task 2 | VERIFIED | `04-03-PLAN.md:24` (must-have), `:177-185` (instruction, tool-owned-artifact rule honored), `:201` (automated verify incl. `9 plans` positive + `8 plans` negative grep), `:209` (criterion); `**Plans**: 8 plans` confirmed unique to the Phase-4 block at HEAD |
+| Stale handoff note | VERIFIED (and extended) | `04-HANDOFF.md` §9 items **2 (M1)** and **3 (L1)** both still read "**Not yet corrected.**" — both are now false at HEAD after `7fb1334a5`. The lane cited item 3; item 2 is equally stale. Same one-line dated-addendum fix applies to both |
+
+All nine dispositions accepted as RESOLVED. The three new LOW findings were checked and accepted:
+the `:199`/`:570` absence-assertion ambiguity is real but jointly satisfiable (not H1-class); the
+04-05 fallback/acceptance tension is fail-closed by construction; the handoff staleness is
+confirmed (and covers two items, not one).
+
+## Consensus Summary — Cycle 7
+
+Two independent reviewer identities across cycles 5–7 (codex `gpt-5`-class at `xhigh`, claude
+`claude-fable-5`) have now converged: every finding either reviewer raised across the six prior
+cycles is closed on disk and verified closed by an independent lane. Cycle 7 raised no HIGH and no
+MEDIUM concerns.
+
+### Agreed Strengths
+
+- The census partition rework (04-08 Task 2) now embodies the principle every prior cycle circled:
+  every checked-in expected set has a derived counterpart that recomputes membership from the code,
+  with a fail-closed universe and five recorded RED demonstrations including a replay of the exact
+  cycle-6 H3 bypass.
+- The revisions are internally consistent — the sweep specifically hunting H1-class contradictions
+  introduced by the edits found none, and the tally/count discipline (twelve behaviors, five RED
+  demos, comment-filtered counts) survived the rework intact.
+- Cross-plan coherence held without touching the other four plans: 04-02's `playerGate` origin,
+  04-07's shared read pipeline, and 04-09's census cross-references all still agree with the
+  revised 04-08 text.
+
+### Open Concerns (all LOW)
+
+- **L-c7-1 (04-08)** — behavior `:199` (assert the two public RPCs' absence explicitly) and
+  criterion `:570` (the names appear only in the literal + comment) are jointly satisfiable only if
+  the absence assertion ranges over the public-audience literal; one clarifying sentence closes it.
+- **L-c7-2 (04-05)** — Task 3's fail-closed fallback ("leave pending, surface as deviation")
+  coexists with unconditional acceptance criteria for the bound flip; a one-clause "assuming the
+  precondition held" qualifier would remove the tension.
+- **L-c7-3 (04-HANDOFF.md)** — §9 items 2 and 3 still read "Not yet corrected"; both were corrected
+  by `7fb1334a5`. A dated addendum prevents a future session re-opening closed findings.
+
+### Divergent Views
+
+None.
+
+### Execution-readiness (joint position)
+
+All nine plans are execution-ready as written: **04-01, 04-02, 04-03 (wave 1), 04-04 + 04-09
+(wave 2), 04-05 (wave 3), 04-06 (wave 4), 04-07 (wave 5), 04-08 (wave 6)**. The wave-6 blocker is
+lifted — H1/H2/H3 are all resolved with repo-verified evidence. Overall risk: **LOW**. The three
+open LOW items are wording clarifications an attentive executor would resolve correctly anyway;
+none blocks execution.
