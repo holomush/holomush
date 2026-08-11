@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 04
 current_phase_name: shared-facade-helpers-characteraccessservice
 status: executing
-stopped_at: Completed 04-06-PLAN.md
-last_updated: "2026-08-11T17:03:26.108Z"
+stopped_at: Completed 04-07-PLAN.md
+last_updated: "2026-08-11T17:49:32.291Z"
 last_activity: 2026-08-11
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 49
-  completed_plans: 47
+  completed_plans: 48
   percent: 67
 ---
 
@@ -37,7 +37,7 @@ Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 04 (shared-facade-helpers-characteraccessservice) — EXECUTING
 Plan: 8 of 9
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 96%)
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 98%)
 Last activity: 2026-08-11 — Phase 04 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -264,6 +264,7 @@ no action needed.
 | Phase 04 P04 | 24min | 3 tasks | 16 files |
 | Phase 04 P05 | 24min | 3 tasks | 12 files |
 | Phase 04 P06 | 68min | 3 tasks | 14 files |
+| Phase 04 P07 | 39min | 3 tasks | 38 files |
 
 ## Accumulated Context
 
@@ -579,6 +580,9 @@ the next milestone yet.
 - [Phase ?]: 04-06: issue #4954 closed — world.Service.UpdateCharacterDescription performed NO validation; routed through char.SetDescription with CodeCharacterInvalid, behavioral RED captured first
 - [Phase ?]: 04-06: the description path's version guard is a TOCTOU narrowing, not a CAS (the domain command takes no expectedVersion) — pinned by a documenting test, option (b) filed as issue #4956
 - [Phase ?]: 04-06: exactly one layer caps each field — the twelve profile.* fields in the facade (D-82), characters.description in the domain
+- [Phase ?]: 04-07: a directory-gate denial is PermissionDenied, not the 8.7 not-found-equivalent — the singleton character_directory resource names no character and carries no count, so its existence is a product fact rather than a secret
+- [Phase ?]: 04-07: the 9.2 gate and the 8.7 membership rule are proven separable in BOTH directions at both tiers — a closed gate with reachability wide open, and a raised reachability floor with the gate open
+- [Phase ?]: 04-07: WebListAllCharacters retired outright with no forwarder; CoreService.ListAllCharacters and grpcclient.Client.ListAllCharacters untouched, and internal/web's CoreClient loses the method because no caller survives there
 
 ### Pending Todos
 
@@ -642,12 +646,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-11T17:03:19.137Z
+Last session: 2026-08-11T17:49:06.209Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 04-06-PLAN.md
+Stopped at: Completed 04-07-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
