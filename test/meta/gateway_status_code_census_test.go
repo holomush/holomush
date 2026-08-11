@@ -125,7 +125,7 @@ func collectReturnedGRPCCodes(t *testing.T, dir string) map[string]struct{} {
 			if !ok || pkg.Name != statusLocal {
 				return true
 			}
-			if _, ok := statusConstructors[fn.Sel.Name]; !ok {
+			if _, isConstructor := statusConstructors[fn.Sel.Name]; !isConstructor {
 				return true
 			}
 			arg, ok := call.Args[0].(*ast.SelectorExpr)
