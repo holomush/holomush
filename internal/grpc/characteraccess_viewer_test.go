@@ -101,6 +101,11 @@ func newCAServerForToken(
 		vis,
 		sessionRepo,
 		playerRepo,
+		// The viewer-identity seam never reaches the owner audience, so a
+		// STRICT mock with no expectations is the right double: a regression
+		// that routed a public read through the gate fails here loudly rather
+		// than nil-panicking.
+		authmocks.NewMockCharacterRepository(t),
 	)
 	return srv, vis
 }

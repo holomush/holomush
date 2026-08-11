@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/access/profilevis"
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/store"
@@ -123,6 +124,11 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 			&profilevis.Evaluator{Engine: engine},
 			psRepo,
 			playerRep,
+			// The owner audience's repository. No spec in this file reaches it
+			// — every spec here drives the PUBLIC read — but the production
+			// adapter is wired anyway rather than nil, so a spec added later
+			// exercises the same shape cmd/holomush does.
+			setup.NewCharRepoAdapter(env.pool, env.charRepo),
 		)
 	}
 

@@ -1208,6 +1208,7 @@ func (s *Server) NewCharacterAccessServer() *holoGRPC.CharacterAccessServer {
 		&profilevis.Evaluator{Engine: s.accessEngine},
 		s.playerSessionStore,
 		s.playerRepo,
+		s.charRepo,
 	)
 }
 

@@ -863,6 +863,7 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		&profilevis.Evaluator{Engine: policyEngine},
 		authPlayerSessionRepo,
 		authPlayerRepo,
+		authCharRepo,
 	))
 	slog.InfoContext(ctx, "characterAccessService facade registered")
 

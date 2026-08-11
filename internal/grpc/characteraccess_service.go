@@ -59,6 +59,14 @@ type characterAccessProfileVisibility interface {
 // contain the internal code string.
 const characterProfileNotFoundMessage = "character profile not found"
 
+// characterGuestDenialMessage is the wire message the character facade's OWNER
+// audience denies a guest with. It is deliberately NOT sceneGuestDenialMessage:
+// a caller reaching ListMyCharacters never touched the scene subsystem, and a
+// denial naming one would disclose the shape of a surface the request never
+// reached (01-SPEC §9.6's wire-opacity posture). It names no subsystem the
+// caller cannot see and no reason beyond the one that applies.
+const characterGuestDenialMessage = "guests do not have characters of their own"
+
 // characterParentType is the entity_properties.parent_type discriminator the
 // profile enumeration filters on. Profile rows hang off the character row, not
 // off a location or an object.
@@ -75,31 +83,46 @@ const codeProfileJoinDivergence = "CHARACTER_PROFILE_ATTRIBUTE_JOIN_DIVERGENCE"
 type CharacterAccessServer struct {
 	characteraccessv1.UnimplementedCharacterAccessServiceServer
 
+	// playerGate is the shared OWNER-audience gate (plan 04-02): the one guest
+	// gate (INV-SCENE-64) and the one server-side ownership resolution
+	// (INV-SCENE-63) in this package. It is embedded BARE, so both methods and
+	// all three repository handles promote onto this type.
+	//
+	// IT IS ALSO THE VIEWER-IDENTITY SEAM'S STORAGE. D-83 locks that the viewer
+	// tier is resolved IN THE FACADE, at viewer-principal construction, and that
+	// the facade is the ONLY layer holding the session — a facade with no
+	// session repository cannot satisfy that sentence. Those handles live here
+	// rather than in a second pair of fields of the facade's own: two copies of
+	// one repository handle on one struct is a divergence waiting to happen, so
+	// resolveViewerIdentity reads s.playerSessionRepo and s.playerRepo through
+	// promotion.
+	//
+	// EMBEDDING THE GATE DOES NOT UNIFY THE TWO AUDIENCES. resolveAndGate
+	// denies EVERY guest; the public read must YIELD a guest rung. Both
+	// resolvers ship and answer different questions — see resolveViewerIdentity.
+	playerGate
+
 	world      characterAccessWorldReader
 	profileVis characterAccessProfileVisibility
-
-	// playerSessionRepo and playerRepo are the viewer-identity seam. D-83 locks
-	// that the viewer tier is resolved IN THE FACADE, at viewer-principal
-	// construction, and that the facade is the ONLY layer holding the session —
-	// a facade with no session repository cannot satisfy that sentence.
-	playerSessionRepo auth.PlayerSessionRepository
-	playerRepo        auth.PlayerRepository
 }
 
-// NewCharacterAccessServer constructs a CharacterAccessServer. All four
-// dependencies are required; there are no optional setters, because every one of
-// them is on the single RPC this facade serves.
+// NewCharacterAccessServer constructs a CharacterAccessServer. Every dependency
+// is required; there are no optional setters.
+//
+// charRepo is the one handle the owner audience adds over plan 04-01's four:
+// the session and player repositories were already here for the viewer-identity
+// seam, so building the shared gate costs one argument rather than three.
 func NewCharacterAccessServer(
 	worldReader characterAccessWorldReader,
 	profileVis characterAccessProfileVisibility,
 	playerSessionRepo auth.PlayerSessionRepository,
 	playerRepo auth.PlayerRepository,
+	charRepo auth.CharacterRepository,
 ) *CharacterAccessServer {
 	return &CharacterAccessServer{
-		world:             worldReader,
-		profileVis:        profileVis,
-		playerSessionRepo: playerSessionRepo,
-		playerRepo:        playerRepo,
+		playerGate: newPlayerGate(playerSessionRepo, playerRepo, charRepo, characterGuestDenialMessage),
+		world:      worldReader,
+		profileVis: profileVis,
 	}
 }
 

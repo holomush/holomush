@@ -108,6 +108,83 @@ func projectPublic(characterID string, desc world.CharacterDescription, profile 
 	return out
 }
 
+// projectOwner is the SOLE constructor of an OwnCharacter (01-SPEC §2.3), the
+// owner-audience counterpart of projectPublic. The two are never interchanged:
+// OwnCharacter is a DISTINCT message rather than PublicCharacter plus fields,
+// so an owner-only value has no field to land in on the public side and the
+// absence is checked by the compiler rather than by a handler remembering to
+// clear something.
+//
+// IT EVALUATES NO TIER FLOOR AND TAKES NO VIEWER SUBJECT. Its `profile`
+// argument is every row the owning character's own subject could read, and the
+// omission of any filtering here is deliberate: a floor governs what a VIEWER
+// may see of someone else's character (§8.6), never what an owner sees of their
+// own. The audience split is what makes that safe — see
+// characteraccess_owner.go.
+//
+// It carries the two fields PublicCharacter structurally cannot hold: `status`,
+// the closed three-value lifecycle vocabulary (§4.2), and `version`, the
+// optimistic-concurrency token the client sends back as expected_version on its
+// next mutation.
+//
+// ABSENCE, NEVER EMPTINESS, exactly as projectPublic (§7.5). An empty-valued
+// row is dropped rather than emitted present-and-empty — not to hide it from
+// the owner, who authored it, but because the edit surface reads these values
+// to write them back, and a present-and-empty key round-trips as a blank row
+// nobody authored. `status` is omitted when the row carries none, which a
+// full-entity read never produces: the id/name projections that leave Status
+// zero (world.Character's own doc comment names them) must not reach here.
+//
+// A nil `profile` is the ROSTER shape, not a missing profile: ListMyCharacters
+// deliberately does not enumerate property rows per character. See its doc.
+func projectOwner(char *world.Character, profile map[string]string) *characteraccessv1.OwnCharacter {
+	out := &characteraccessv1.OwnCharacter{
+		Id:          char.ID.String(),
+		Name:        char.Name,
+		Description: char.Description,
+		// characters.version is a Postgres INTEGER (migration 000049), so the
+		// stored value cannot exceed int32 range.
+		Version: int32(char.Version), //nolint:gosec // characters.version is a 32-bit INTEGER column
+	}
+	if char.Status != "" {
+		out.Status = string(char.Status)
+	}
+
+	for name, value := range profile {
+		if value == "" {
+			continue
+		}
+		// Media rows route to their own fields rather than being duplicated
+		// into the text map — §7.2's twelve prose names and §7.3's eleven media
+		// names are disjoint sets, and a media handle in the text map would be
+		// rendered as prose by any client walking it.
+		if name == profileImagePrimaryName || isProfileGallerySlotName(name) {
+			continue
+		}
+		if out.Profile == nil {
+			out.Profile = make(map[string]string, len(profile))
+		}
+		out.Profile[name] = value
+	}
+
+	if mediaID := profile[profileImagePrimaryName]; mediaID != "" {
+		out.PrimaryImage = &characteraccessv1.ProfileImage{MediaId: mediaID}
+	}
+
+	// The slice is the ordering mechanism, as in projectPublic: iterating it
+	// keeps Go's map-iteration order out of a repeated field whose element
+	// order is carried on the wire.
+	for _, slot := range profileGallerySlotNames {
+		mediaID := profile[slot]
+		if mediaID == "" {
+			continue
+		}
+		out.Gallery = append(out.Gallery, &characteraccessv1.ProfileImage{MediaId: mediaID})
+	}
+
+	return out
+}
+
 // isProfileGallerySlotName reports whether name is one of the ten gallery slot
 // names, compared as an exact whole string.
 func isProfileGallerySlotName(name string) bool {
