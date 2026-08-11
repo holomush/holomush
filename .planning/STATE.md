@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 04
 current_phase_name: shared-facade-helpers-characteraccessservice
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-08-11T14:55:36.745Z"
+stopped_at: Completed 04-09-PLAN.md
+last_updated: "2026-08-11T15:16:30.499Z"
 last_activity: 2026-08-11
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 49
-  completed_plans: 43
+  completed_plans: 44
   percent: 67
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 04 (shared-facade-helpers-characteraccessservice) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([█████████░] 88%)
+Progress: [█████████████████░░░] 34/40 plans ([█████████░] 90%)
 Last activity: 2026-08-11 — Phase 04 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -260,6 +260,7 @@ no action needed.
 | Phase 04 P01 | 35min | 3 tasks | 28 files |
 | Phase 04 P03 | ~20min | 2 tasks | 2 files |
 | Phase 04 P02 | 11min | 2 tasks | 4 files |
+| Phase 04 P09 | 17min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -560,6 +561,10 @@ the next milestone yet.
 - [Phase ?]: 04-03: Phase-4 plan-count (cycle-6 L4) needed no edit — roadmap update-plan-progress had already written '1/9 plans executed'; hand-forcing the literal '9 plans' would have replaced a tool-owned shape
 - [Phase ?]: 04-02: resolveAndGate (INV-SCENE-64) + ownedCharacter (INV-SCENE-63) extracted onto an embedded playerGate; method promotion kept all 45 SceneAccessServer call sites byte-identical, and the guest-denial wire message is now a per-facade constructor parameter defaulting to the scene literal
 - [Phase ?]: 04-02: ownedCharacter opacity is a TWO-way equality (malformed id == non-owned id); the repository-failure path stays codes.Internal with a distinct message, pinned by a separate inequality assertion so an outage is never masked as NotFound
+- [Phase ?]: 04-09: the profile write is gated by ABAC write on character:<id>, never the property resource — a create has no property id and PropertyProvider.ResolveResource fails closed, so a property-resource gate would default-deny the FIRST write of every profile.* attribute
+- [Phase ?]: 04-09: every created entity_properties row sets Visibility explicitly to "public" — Create passes p.Visibility into the INSERT and applies no defaulting, so the column DEFAULT never applies and an empty string fails the CHECK; the withholding lever is the per-attribute tier floor, not this column
+- [Phase ?]: 04-09: character_profile_update payload carries the changed attribute NAMES, never values (erasure-safe); the partition reads outside the tx safely because the character CAS is the aggregate lock and this is the only production property writer
+- [Phase ?]: 04-09: IDENT-02 NOT marked complete — its server-enforced length caps belong to the facade RPC per 01-SPEC 9.3, not the world command (same revert 04-02/04-03 made)
 
 ### Pending Todos
 
@@ -623,12 +628,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-11T14:55:35.982Z
+Last session: 2026-08-11T15:16:30.484Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 04-02-PLAN.md
+Stopped at: Completed 04-09-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
