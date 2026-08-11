@@ -24,7 +24,9 @@ import (
 // per-type payload schema version), so a single kind's payload can evolve
 // independently of this registry revision. Revision 2 (plan 03-01) adds the
 // character lifecycle kinds KindCharacterRetired and KindCharacterUnretired.
-const AppSchemaVersion = 2
+// Revision 3 (plan 04-09) adds KindCharacterProfileUpdate, the character
+// profile-attribute write.
+const AppSchemaVersion = 3
 
 // The declared world-change envelope kinds. These are the taxonomy VOCABULARY the
 // mechanical emission rollout (05-10/05-11) wires each world write command to; the
@@ -74,6 +76,14 @@ const (
 	// the census bijection is one-producer-of-record, and separate kinds are
 	// what let a consumer react to the two directions differently.
 	KindCharacterUnretired = "character_unretired"
+	// KindCharacterProfileUpdate is the character PROFILE-ATTRIBUTE write: the
+	// entity_properties rows under the profile.* name prefix (01-SPEC §7.1/§7.2),
+	// which are part of the character aggregate but are NOT columns on
+	// characters. It carries its own kind for the same reason
+	// KindCharacterPreferencesUpdate does — the census bijection is
+	// one-producer-of-record and character_updated already belongs to
+	// UpdateCharacterDescription.
+	KindCharacterProfileUpdate = "character_profile_update"
 )
 
 // PayloadField describes one field of a kind's intent-level, new-values-only
@@ -133,6 +143,7 @@ var registry = func() map[string]KindSchema {
 		{Kind: KindCharacterPreferencesUpdate, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterPreferencesPayload},
 		{Kind: KindCharacterRetired, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterLifecyclePayload},
 		{Kind: KindCharacterUnretired, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterLifecyclePayload},
+		{Kind: KindCharacterProfileUpdate, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterProfilePayload},
 	}
 	m := make(map[string]KindSchema, len(entries))
 	for _, e := range entries {
@@ -190,6 +201,16 @@ var (
 	characterLifecyclePayload = []PayloadField{
 		{Name: "character_id", Type: "ulid"},
 		{Name: "status", Type: "string"},
+	}
+	// characterProfilePayload declares the character id plus the NAMES of the
+	// profile attributes the write changed — never their values. Profile prose is
+	// player-authored personal content, and the registry rule for every payload is
+	// new-values-only AND erasure-safe: a consumer needs to know THAT a profile
+	// changed and which fields, and can read the current values through the
+	// authorized read path, where the per-attribute tier floor still applies.
+	characterProfilePayload = []PayloadField{
+		{Name: "character_id", Type: "ulid"},
+		{Name: "changed_attributes", Type: "json"},
 	}
 )
 

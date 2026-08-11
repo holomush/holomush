@@ -5,6 +5,7 @@ package world
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/oklog/ulid/v2"
 
@@ -315,6 +316,15 @@ type CharacterLifecycleChangePayload struct {
 	Status      string `json:"status"`
 }
 
+// CharacterProfileUpdateChangePayload is the new-values-only payload for a
+// character_profile_update envelope. It carries the character id and the SORTED
+// names of the profile attributes the write changed — creates, updates and
+// clears alike — never the values themselves.
+type CharacterProfileUpdateChangePayload struct {
+	CharacterID       string   `json:"character_id"`
+	ChangedAttributes []string `json:"changed_attributes"`
+}
+
 // TombstonePayload is the payload for a delete envelope: only the id of the
 // deleted aggregate. Cascaded aggregates (a location's exits, a bidirectional
 // exit's reverse) are represented in the envelope's affected-aggregates manifest
@@ -428,6 +438,29 @@ func BuildCharacterLifecyclePayload(characterID ulid.ULID, status Status) ([]byt
 	})
 	if err != nil {
 		return nil, oops.Wrapf(err, "marshal character lifecycle payload")
+	}
+	return payload, nil
+}
+
+// BuildCharacterProfileUpdatePayload marshals the new-values-only character
+// profile payload (character id + the NAMES of the profile attributes the write
+// changed) for a character_profile_update envelope.
+//
+// The VALUES are deliberately absent. Profile prose is player-authored personal
+// content and the taxonomy's payload rule is new-values-only AND erasure-safe: a
+// consumer needs to know that a profile changed and which fields did, and reads
+// the current values through the authorized read path where the per-attribute
+// tier floor (01-SPEC §8.6) still applies.
+func BuildCharacterProfileUpdatePayload(characterID ulid.ULID, changedAttributes []string) ([]byte, error) {
+	names := make([]string, len(changedAttributes))
+	copy(names, changedAttributes)
+	slices.Sort(names)
+	payload, err := json.Marshal(CharacterProfileUpdateChangePayload{
+		CharacterID:       characterID.String(),
+		ChangedAttributes: names,
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal character profile update payload")
 	}
 	return payload, nil
 }

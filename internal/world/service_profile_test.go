@@ -34,7 +34,7 @@ func TestWorldServiceUpdateCharacterProfileAttributesFirstWrite(t *testing.T) {
 		// resolving resource.property.owner requires fetching a row that does not
 		// exist yet and PropertyProvider.ResolveResource fails closed. The gate is
 		// ABAC `write` on character:<id> (01-SPEC §9.3).
-		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, "write", charID)
+		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, charID)
 		require.Empty(t, props.rows, "the fixture starts with no property rows")
 
 		stored := &world.Character{ID: charID, Name: "Alice", Version: 2, Status: world.StatusActive}

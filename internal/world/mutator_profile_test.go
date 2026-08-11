@@ -46,12 +46,8 @@ type fakeProfilePropertyStore struct {
 	failErr    error
 }
 
-func newFakeProfilePropertyStore(seed ...world.EntityProperty) *fakeProfilePropertyStore {
-	s := &fakeProfilePropertyStore{rows: make(map[ulid.ULID]world.EntityProperty, len(seed))}
-	for _, p := range seed {
-		s.rows[p.ID] = p
-	}
-	return s
+func newFakeProfilePropertyStore() *fakeProfilePropertyStore {
+	return &fakeProfilePropertyStore{rows: map[ulid.ULID]world.EntityProperty{}}
 }
 
 func (s *fakeProfilePropertyStore) snapshot() map[ulid.ULID]world.EntityProperty {
@@ -176,17 +172,18 @@ func (tr *profileRollbackTransactor) InTransaction(ctx context.Context, fn func(
 }
 
 // profileTxFixture wires a Service over a mocked character repository plus the
-// transactional fake stack, granting the given ABAC action on the character.
+// transactional fake stack, granting the command's `write` action on the
+// character. The returned store starts EMPTY; a spec that needs a pre-existing
+// row seeds it directly.
 func profileTxFixture(
 	t *testing.T,
-	subjectID, action string,
+	subjectID string,
 	charID ulid.ULID,
-	seed ...world.EntityProperty,
 ) (*world.Service, *worldtest.MockCharacterRepository, *fakeProfilePropertyStore, *profileTxOutbox) {
 	t.Helper()
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockCharacterRepository(t)
-	props := newFakeProfilePropertyStore(seed...)
+	props := newFakeProfilePropertyStore()
 	outbox := &profileTxOutbox{}
 	svc := world.NewService(world.ServiceConfig{
 		CharacterRepo: mockRepo,
@@ -195,7 +192,7 @@ func profileTxFixture(
 		Transactor:    &profileRollbackTransactor{props: props, outbox: outbox},
 		OutboxWriter:  outbox,
 	})
-	engine.Grant(subjectID, action, access.CharacterResource(charID.String()))
+	engine.Grant(subjectID, "write", access.CharacterResource(charID.String()))
 	return svc, mockRepo, props, outbox
 }
 
@@ -205,7 +202,7 @@ func TestWorldServiceUpdateCharacterProfileAttributesExecutorSeam(t *testing.T) 
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("commits the attribute row and exactly one envelope from the guarded character update's delta", func(t *testing.T) {
-		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, "write", charID)
+		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, charID)
 
 		stored := &world.Character{ID: charID, Name: "Alice", Version: 3, Status: world.StatusActive}
 		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
@@ -237,7 +234,7 @@ func TestWorldServiceUpdateCharacterProfileAttributesExecutorSeam(t *testing.T) 
 	})
 
 	t.Run("rolls back both the attribute row and the envelope when a write inside the closure fails", func(t *testing.T) {
-		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, "write", charID)
+		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, charID)
 		// Fail on the SECOND attribute (names are applied in sorted order), so the
 		// assertion is that the first attribute's committed row does not survive —
 		// not merely that a failing write wrote nothing.
@@ -263,7 +260,7 @@ func TestWorldServiceUpdateCharacterProfileAttributesExecutorSeam(t *testing.T) 
 	})
 
 	t.Run("aborts on a stale expected version with the concurrent-edit signal and writes no attribute row", func(t *testing.T) {
-		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, "write", charID)
+		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, charID)
 
 		// The stored version is 9 and the CALLER's expected version is 4. The mock
 		// is armed ONLY for a CAS carrying 4, so an implementation that guarded on

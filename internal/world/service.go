@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,6 +55,7 @@ const (
 	kindCharacterPreferencesUpdate = "character_preferences_update"
 	kindCharacterRetired           = "character_retired"
 	kindCharacterUnretired         = "character_unretired"
+	kindCharacterProfileUpdate     = "character_profile_update"
 	worldSchemaVersion             = 1
 )
 
@@ -910,6 +912,213 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID Call
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update character %s", characterID)
 		}
 		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "update character %s", characterID)
+	}
+	return nil
+}
+
+// profileAttributeNames is the CLOSED set of character profile attribute names
+// 01-SPEC §7.2 declares (D-82 enumerates the twelve). Every profile field is an
+// entity_properties row addressed as parent_type='character', parent_id=<id>,
+// name='profile.<field>' (§7.1) — the names below are those property names
+// verbatim, not bare field names.
+//
+// It is enforced HERE, at the domain command, so the write surface is closed at
+// the domain layer and not only at the facade: without it, an ABAC-gated write
+// would accept ANY property name on the character, which is an unbounded write
+// surface rather than a missing feature. A facade allowlist is defense in depth
+// on top of this, never the only gate.
+var profileAttributeNames = map[string]struct{}{
+	"profile.pronouns":       {},
+	"profile.concept":        {},
+	"profile.species":        {},
+	"profile.age":            {},
+	"profile.faction":        {},
+	"profile.currently":      {},
+	"profile.timezone":       {},
+	"profile.appearance":     {},
+	"profile.personality":    {},
+	"profile.biography":      {},
+	"profile.rumors":         {},
+	"profile.rp_preferences": {},
+}
+
+// UpdateCharacterProfileAttributes writes a character's profile attributes — the
+// entity_properties rows under the profile.* name prefix (01-SPEC §7.1/§7.2) —
+// and emits exactly one character_profile_update envelope in the SAME
+// transaction.
+//
+// attributes maps a §7.2 property name to its new value. A name with no row is
+// created, a name with a row is updated, and the EMPTY STRING removes the row so
+// a cleared field becomes ABSENT rather than present-and-empty.
+//
+// # The guard chain, in this order
+//
+//  0. expectedVersion <= 0 -> CHARACTER_VERSION_REQUIRED, BEFORE any read. The
+//     repository's expectedVersion == 0 unversioned-write affordance exists for
+//     repo-level callers; INV-WORLD-7 requires an existing-row character
+//     mutation to CARRY an expected version, and the executor's CAS is built on
+//     that guarantee — without this rejection the CAS would run against a
+//     meaningless version.
+//  1. The closed §7.2 name set, before any read or write (above).
+//  2. checkAccess with action "write" on the CHARACTER resource.
+//  3. Read the character, then read its existing rows through the propertyRepo
+//     READER view — the write itself goes through the executor — and partition
+//     the requested changes into creates, updates and deletes.
+//  4. The executor's version-guarded CAS carrying the CALLER's expectedVersion,
+//     never the freshly-read char.Version.
+//
+// The partition in step 3 reads OUTSIDE the write transaction, and that is safe
+// rather than a TOCTOU hole: the character-row CAS is the aggregate's lock, so a
+// concurrent profile write that would invalidate the partition must have bumped
+// the character version and is refused by step 4 before any property row is
+// touched. This command is the only production property writer, so no other
+// writer can move a profile row without moving that version.
+//
+// # Why the gate is on character:<id> and NOT on the property resource
+//
+// 01-SPEC §9.3 states the gate directly, and it is also the only one that can
+// work. access.PropertyResource takes a property id, which a not-yet-created row
+// does not have, and resolving resource.property.owner requires
+// PropertyProvider.ResolveResource to FETCH the row — which fails closed with
+// PROPERTY_FETCH_FAILED when there is none. A property-resource gate would
+// therefore default-deny the FIRST write of every profile attribute, so IDENT-02
+// could never work. One decision per command, on the character, before any read;
+// for an owning character it resolves against the shipped seed:player-self-access
+// permit.
+//
+// The created rows still carry Owner set to the owning character, so
+// seed:property-owner-write remains available as defense in depth for any later
+// per-row write path. No second per-property check is added here: a second gate
+// over coverage the character gate already has is the duplicate-gate cost
+// 01-SPEC §2.6 names.
+func (s *Service) UpdateCharacterProfileAttributes(
+	ctx context.Context,
+	caller Caller,
+	characterID ulid.ULID,
+	expectedVersion int,
+	attributes map[string]string,
+) error {
+	// (0) Reject an absent/zero/negative caller version BEFORE any read.
+	if expectedVersion <= 0 {
+		return oops.Code("CHARACTER_VERSION_REQUIRED").
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			Errorf("a profile write requires a caller-supplied expected_version >= 1")
+	}
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").Errorf("character repository not configured")
+	}
+	if s.propertyRepo == nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").Errorf("property repository not configured")
+	}
+	// (1) The closed §7.2 name set, before any read or write.
+	names := make([]string, 0, len(attributes))
+	for name := range attributes {
+		if _, declared := profileAttributeNames[name]; !declared {
+			return oops.Code("CHARACTER_PROFILE_ATTRIBUTE_UNKNOWN").
+				With("character_id", characterID.String()).
+				With("attribute", name).
+				Errorf("%q is not one of the twelve profile attributes 01-SPEC §7.2 declares", name)
+		}
+		names = append(names, name)
+	}
+	// Sorted so the applied order, and the envelope payload, are deterministic.
+	slices.Sort(names)
+	// (2) Authorization on the CHARACTER resource (01-SPEC §9.3).
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, caller, "write", resource, prefixCharacter); err != nil {
+		return err
+	}
+	// (3) Read the character and its existing rows, then partition.
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", characterID)
+		}
+		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+	existing, err := s.propertyRepo.ListByParent(ctx, "character", characterID)
+	if err != nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+			Wrapf(err, "list properties for character %s", characterID)
+	}
+	byName := make(map[string]*EntityProperty, len(existing))
+	for _, p := range existing {
+		byName[p.Name] = p
+	}
+	var (
+		creates []*EntityProperty
+		updates []*EntityProperty
+		deletes []ulid.ULID
+		now     = time.Now().UTC()
+	)
+	for _, name := range names {
+		value := attributes[name]
+		current, found := byName[name]
+		switch {
+		case value == "":
+			// The empty string REMOVES the row. With no row there is nothing to
+			// remove, so a clear of an unset field is a no-op rather than a create
+			// of an empty value.
+			if found {
+				deletes = append(deletes, current.ID)
+			}
+		case found:
+			// Carry the row's ID, Owner, Visibility and CreatedAt forward
+			// unchanged and move only the value: an update must not silently
+			// re-home ownership or re-open visibility.
+			row := *current
+			newValue := value
+			row.Value = &newValue
+			updates = append(updates, &row)
+		default:
+			// Every field is set EXPLICITLY. PropertyRepository.Create passes
+			// p.Visibility straight into the INSERT and applies no visibility
+			// defaulting, so the column's DEFAULT 'public' never applies and an
+			// empty string fails the CHECK constraint. Visibility is "public"
+			// because the viewer path's term B permits exactly that; the
+			// withholding lever for a profile field is the per-attribute tier
+			// floor (01-SPEC §8.6), not this column. v0.13 has no game-configured
+			// property-visibility default to consult.
+			newValue := value
+			owner := characterID.String()
+			creates = append(creates, &EntityProperty{
+				ID:         idgen.New(),
+				ParentType: "character",
+				ParentID:   characterID,
+				Name:       name,
+				Value:      &newValue,
+				Owner:      &owner,
+				Visibility: "public",
+				CreatedAt:  now,
+			})
+		}
+	}
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+			Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	payload, err := BuildCharacterProfileUpdatePayload(characterID, names)
+	if err != nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+			Wrapf(err, "build character profile update payload %s", characterID)
+	}
+	// (4) The rows and their ONE envelope commit or roll back together. The CAS
+	// carries the CALLER's expectedVersion, never the freshly-read char.Version.
+	char.Version = expectedVersion
+	intent := s.buildIntent(kindCharacterProfileUpdate, wmodel.AggregateCharacter, characterID, caller.subject, payload)
+	if _, err := s.mutator.updateCharacterProfileAttributes(ctx, intent, char, creates, updates, deletes); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				With("expected_version", expectedVersion).
+				Wrap(err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update profile attributes for character %s", characterID)
+		}
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+			Wrapf(err, "update profile attributes for character %s", characterID)
 	}
 	return nil
 }

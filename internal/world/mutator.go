@@ -103,6 +103,7 @@ var writeCommands = []WriteCommandDescriptor{
 	{Command: "UpdateCharacterPreferences", Kind: kindCharacterPreferencesUpdate},
 	{Command: "RetireCharacter", Kind: kindCharacterRetired},
 	{Command: "UnretireCharacter", Kind: kindCharacterUnretired},
+	{Command: "UpdateCharacterProfileAttributes", Kind: kindCharacterProfileUpdate},
 }
 
 // WriteCommands returns the explicit closed write-command descriptor set (a copy),
@@ -287,6 +288,78 @@ func (m *worldMutator) setCharacterStatus(
 func (m *worldMutator) updateCharacter(ctx context.Context, intent wmodel.EnvelopeIntent, char *Character) (*wmodel.MutationDelta, error) {
 	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
 		return m.characterWriter.Update(txCtx, char)
+	})
+}
+
+// updateCharacterProfileAttributes builds the character profile-attribute write
+// closure — capturing the PRIVATE character writer AND the PRIVATE property
+// writer — and routes it through mutate(). It is the FIRST production property
+// writer: before 04-09 the only production use of the property repository was a
+// ListByParent read plus the delete-cascade DeleteByParent, so there is no older
+// property write path to stay consistent with.
+//
+// Two seams differ from every other closure builder here.
+//
+// THE CAS GUARD. Property rows carry no version of their own; the character row
+// does, and the profile is part of the character aggregate. So the closure runs
+// the version-guarded characterWriter.Update FIRST and fails fast on a stale
+// version before doing any property work. char.Version is the CALLER's expected
+// version threaded from service.go, NOT a freshly-read one — passing the
+// just-read version would make the guard vacuous for caller staleness
+// (INV-WORLD-7). It also bumps the character version on a profile-only write,
+// which is the intended aggregate-level behavior: the aggregate carries exactly
+// one optimistic-concurrency token.
+//
+// THE DELTA. characterWriter.Update returns a *wmodel.MutationDelta; the three
+// property writers return a bare error. The closure returns the character
+// update's delta and constructs none of its own — mutate() finalizes the
+// envelope's manifest from a REAL repo delta, never from command inputs.
+//
+// creates, updates and deletes are the partition service.go computed against the
+// character's existing rows. Every row in creates is fully specified by the
+// caller (id, parent, name, value, owner, visibility) — the property repository
+// applies NO visibility defaulting, so a row built here with an empty Visibility
+// would fail the column's CHECK constraint.
+func (m *worldMutator) updateCharacterProfileAttributes(
+	ctx context.Context,
+	intent wmodel.EnvelopeIntent,
+	char *Character,
+	creates []*EntityProperty,
+	updates []*EntityProperty,
+	deletes []ulid.ULID,
+) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		// The version-guarded character update runs FIRST: a stale caller is
+		// refused before any property row is touched.
+		delta, err := m.characterWriter.Update(txCtx, char)
+		if err != nil {
+			return nil, oops.Wrap(err)
+		}
+		for _, p := range creates {
+			if err := m.propertyWriter.Create(txCtx, p); err != nil {
+				return nil, oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+					With("operation", "create_profile_attribute").
+					With("attribute", p.Name).
+					Wrapf(err, "create profile attribute %q for character %s", p.Name, char.ID)
+			}
+		}
+		for _, p := range updates {
+			if err := m.propertyWriter.Update(txCtx, p); err != nil {
+				return nil, oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+					With("operation", "update_profile_attribute").
+					With("attribute", p.Name).
+					Wrapf(err, "update profile attribute %q for character %s", p.Name, char.ID)
+			}
+		}
+		for _, id := range deletes {
+			if err := m.propertyWriter.Delete(txCtx, id); err != nil {
+				return nil, oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+					With("operation", "delete_profile_attribute").
+					With("property_id", id.String()).
+					Wrapf(err, "delete profile attribute %s for character %s", id, char.ID)
+			}
+		}
+		return delta, nil
 	})
 }
 
