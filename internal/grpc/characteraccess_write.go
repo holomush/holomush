@@ -322,10 +322,36 @@ func (s *CharacterAccessServer) UpdateCharacterProfile(ctx context.Context, req 
 // the bumped characters.version the client sends back as its next
 // expected_version. Guessing it client-side is how a correct client becomes a
 // stale one after its first successful edit.
+//
+// EVERY CALLER REACHES IT ONLY AFTER THE DOMAIN WRITE COMMITTED, so NO branch of
+// it may claim an authorization outcome. It therefore does NOT route through
+// ownedCharacterForMutation: that helper's PermissionDenied rewrite is correct
+// for the PRE-write gate, where all three ownership causes genuinely collapse,
+// and wrong here on both counts. The row being gone in the window (a concurrent
+// DeleteCharacter or reap) would tell the client "no such character on your
+// roster" for an edit that LANDED, and a client reacting by retrying with the
+// version it still holds then gets Aborted — both natural recoveries pointing
+// away from the truth. 01-SPEC §8.10's rule is that an outage must not be
+// rendered as a policy answer; this leg would render a committed write plus an
+// outage as one.
+//
+// codes.Internal is the honest answer for the whole leg: the write is durable,
+// only the read-back failed, and the client's recovery is to re-read.
 func (s *CharacterAccessServer) ownerMutationResponse(ctx context.Context, playerID ulid.ULID, charIDStr string) (*characteraccessv1.OwnCharacter, error) {
-	char, err := s.ownedCharacterForMutation(ctx, playerID, charIDStr)
+	char, err := s.ownedCharacter(ctx, playerID, charIDStr)
 	if err != nil {
-		return nil, err
+		// A repository failure is already codes.Internal and was already logged
+		// at its origin inside the gate; propagate it verbatim rather than
+		// logging the same outage twice.
+		if status.Code(err) == codes.Internal {
+			return nil, err
+		}
+		// The gate's codes.NotFound reached here, which post-commit means the row
+		// vanished in the window rather than that the caller never owned it. That
+		// is an outage, and the gate does not log it, so it is logged here.
+		errutil.LogErrorContext(ctx, "character access: post-write re-read found no owned character; the write COMMITTED", err,
+			"character_id", charIDStr)
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
 	}
 	profile, err := s.ownedProfileAttributes(ctx, char.ID)
 	if err != nil {

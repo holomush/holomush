@@ -133,6 +133,14 @@ type writeFixture struct {
 	// profileErr / descErr are what the mutator returns.
 	profileErr error
 	descErr    error
+	// vanishAfterWrite makes the SECOND roster lookup — the POST-COMMIT
+	// re-read — return an empty roster, modelling a concurrent DeleteCharacter
+	// or reap landing in the window after the domain write committed. The first
+	// lookup, the pre-write ownership gate, still succeeds.
+	vanishAfterWrite bool
+	// postWriteListErr fails the SECOND roster lookup with a repository error,
+	// the post-commit counterpart of listErr.
+	postWriteListErr error
 }
 
 func newWriteHarness(t *testing.T, f writeFixture) *writeHarness {
@@ -157,7 +165,16 @@ func newWriteHarness(t *testing.T, f writeFixture) *writeHarness {
 	}
 
 	charRepo := authmocks.NewMockCharacterRepository(t)
-	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return(owned, f.listErr).Maybe()
+	switch {
+	case f.vanishAfterWrite:
+		charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return(owned, nil).Once()
+		charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return(nil, nil).Maybe()
+	case f.postWriteListErr != nil:
+		charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return(owned, nil).Once()
+		charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return(nil, f.postWriteListErr).Maybe()
+	default:
+		charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return(owned, f.listErr).Maybe()
+	}
 
 	reader := &ownerWorldReader{
 		rows: f.rows,
@@ -764,4 +781,68 @@ func TestUpdateCharacterDescriptionDoesNotDetectAWriterInsideTheReadToReReadWind
 	require.Len(t, h.mutator.descWrites, 2, "both writers reach the domain")
 	assert.Equal(t, "written by the second writer", h.mutator.descWrites[1].description,
 		"last write wins inside the read-to-re-read window (issue #4956)")
+}
+
+// TestMutationsReportAPostCommitReReadFailureAsInternalNeverAsAnOwnershipRefusal
+// pins the post-COMMIT leg's error mapping.
+//
+// ownerMutationResponse runs only AFTER the domain write returned nil, so no
+// branch of it may claim an authorization outcome. Routing it through
+// ownedCharacterForMutation — whose PermissionDenied rewrite is correct for the
+// PRE-write gate, where all three ownership causes genuinely collapse — told a
+// client "you do not own this character" for an edit that LANDED, and a client
+// reacting by retrying with the version it still holds then gets Aborted. Both
+// natural recoveries point away from the truth.
+//
+// The two failure shapes are driven separately because they arrive from the gate
+// with different codes: the row vanishing in the window arrives as NotFound (the
+// gate does not log it), a repository outage as Internal (the gate does).
+func TestMutationsReportAPostCommitReReadFailureAsInternalNeverAsAnOwnershipRefusal(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		fixture writeFixture
+	}{
+		{"the character row vanished in the window after the write committed", writeFixture{vanishAfterWrite: true}},
+		{"the roster repository failed after the write committed", writeFixture{postWriteListErr: oops.Code("REPO_DOWN").Errorf("roster unavailable")}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("UpdateCharacterProfile", func(t *testing.T) {
+				t.Parallel()
+				h := newWriteHarness(t, tc.fixture)
+				req := h.profileRequest("profile.pronouns")
+				req.Pronouns = "they/them"
+
+				_, err := h.srv.UpdateCharacterProfile(context.Background(), req)
+
+				require.Error(t, err)
+				assert.Equal(t, codes.Internal, status.Code(err),
+					"the write COMMITTED; only the read-back failed, and an outage is not a policy answer (§8.10)")
+				assert.NotEqual(t, codes.PermissionDenied, status.Code(err),
+					"a committed edit must never be reported as an ownership refusal")
+				assert.NotEqual(t, characterNotOwnedMessage, status.Convert(err).Message())
+				require.Len(t, h.mutator.profileWrites, 1,
+					"the domain write must have been reached — otherwise this spec proves nothing about the POST-commit leg")
+			})
+
+			t.Run("UpdateCharacterDescription", func(t *testing.T) {
+				t.Parallel()
+				h := newWriteHarness(t, tc.fixture)
+
+				_, err := h.srv.UpdateCharacterDescription(context.Background(),
+					h.descriptionRequest("a tall figure in a travelling cloak"))
+
+				require.Error(t, err)
+				assert.Equal(t, codes.Internal, status.Code(err))
+				assert.NotEqual(t, characterNotOwnedMessage, status.Convert(err).Message())
+				require.Len(t, h.mutator.descWrites, 1,
+					"the domain write must have been reached — otherwise this spec proves nothing about the POST-commit leg")
+			})
+		})
+	}
 }
