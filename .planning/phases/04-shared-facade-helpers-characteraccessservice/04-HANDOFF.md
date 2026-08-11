@@ -156,6 +156,8 @@ Cycle 5 also recorded: waves 1–5 carry no unresolved findings.
 4. **`rg -h` misuse, corrected in-session.** The plan-phase §13 requirements-coverage gate was translated from GSD's `grep -h` snippet. In ripgrep `-h` is `--help`, not `--no-filename`; the pipeline printed help, matched nothing, and reported a false "0/7 requirements uncovered". Corrected to `--no-filename`; the real result is 7/7. Captured as engram memory `7j08gehwz1`.
 5. **`harness.go:1191` → `:1197` propagation, corrected on second attempt.** A `perl` substitution assumed the citation was contiguous (`harness.go:1191`); the actual text is `` `harness.go:876`, exposed by `AccessEngine()` at `:1191` ``, so it did not match. Caught by review cycle 3 and fixed in `18411efad`.
 
+> **Addendum (2026-08-11):** Items 2 (M1) and 3 (L1) above were corrected at HEAD by commit `7fb1334a5` (`docs(04): incorporate cycle-6 review findings into plans`), together with the rest of the cycle-6 findings resolved in that same commit. The "**Not yet corrected**" markers above are preserved as history of record; they no longer describe HEAD.
+
 ---
 
 ## 10. Repo/tooling facts established this session
