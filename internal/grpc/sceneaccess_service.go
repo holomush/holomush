@@ -44,16 +44,19 @@ type sceneDEKAdder interface {
 // (INV-SCENE-64) for all scene-surface RPCs. It wraps the plugin SceneService,
 // ensuring that every downstream call carries a server-verified, player-owned
 // character identity.
+//
+// Both of those helpers live on the embedded playerGate, which is the single
+// definition shared with every other owner-audience facade in this package;
+// method promotion is what lets every call site here read as a plain s.<helper>.
 type SceneAccessServer struct {
 	sceneaccessv1.UnimplementedSceneAccessServiceServer
 
-	playerSessionRepo auth.PlayerSessionRepository
-	playerRepo        auth.PlayerRepository
-	charRepo          auth.CharacterRepository
-	sessionStore      session.Store
-	coordinator       holoFocus.Coordinator
-	sceneClient       scenev1.SceneServiceClient
-	pluginManager     sceneAccessPluginManager
+	playerGate
+
+	sessionStore  session.Store
+	coordinator   holoFocus.Coordinator
+	sceneClient   scenev1.SceneServiceClient
+	pluginManager sceneAccessPluginManager
 
 	// dekAdder is optional. When non-nil, SetSceneFocus seeds the focusing
 	// character as a DEK participant after the participation gate passes, so
@@ -79,13 +82,11 @@ func NewSceneAccessServer(
 	pluginManager sceneAccessPluginManager,
 ) *SceneAccessServer {
 	return &SceneAccessServer{
-		playerSessionRepo: playerSessionRepo,
-		playerRepo:        playerRepo,
-		charRepo:          charRepo,
-		sessionStore:      sessionStore,
-		coordinator:       coordinator,
-		sceneClient:       sceneClient,
-		pluginManager:     pluginManager,
+		playerGate:    newPlayerGate(playerSessionRepo, playerRepo, charRepo, sceneGuestDenialMessage),
+		sessionStore:  sessionStore,
+		coordinator:   coordinator,
+		sceneClient:   sceneClient,
+		pluginManager: pluginManager,
 	}
 }
 
@@ -101,50 +102,6 @@ func (s *SceneAccessServer) WithSceneDEKAdder(a sceneDEKAdder) {
 // CharacterName with the resolved display name (ULID fallback on a miss).
 func (s *SceneAccessServer) WithCharacterNameResolver(r characterNameResolver) {
 	s.characterNameResolver = r
-}
-
-// ownedCharacter verifies that charIDStr is a valid ULID and is owned by
-// playerID. Returns (verified *world.Character, nil) on success or
-// (nil, codes.NotFound) when the character is absent from the player's list.
-func (s *SceneAccessServer) ownedCharacter(ctx context.Context, playerID ulid.ULID, charIDStr string) (*world.Character, error) {
-	charID, err := ulid.Parse(charIDStr)
-	if err != nil {
-		return nil, status.Error(codes.NotFound, "character not found") //nolint:wrapcheck // gRPC status error at handler boundary
-	}
-	chars, err := s.charRepo.ListByPlayer(ctx, playerID)
-	if err != nil {
-		slog.ErrorContext(ctx, "scene access: list characters failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
-	}
-	for _, c := range chars {
-		if c.ID == charID {
-			return c, nil
-		}
-	}
-	return nil, status.Error(codes.NotFound, "character not found") //nolint:wrapcheck // gRPC status error at handler boundary
-}
-
-// resolveAndGate resolves the player session from rawToken, loads the player,
-// and enforces the guest gate (INV-SCENE-64). Returns the validated PlayerSession
-// or a gRPC status error.
-func (s *SceneAccessServer) resolveAndGate(ctx context.Context, rawToken string) (*auth.PlayerSession, error) {
-	ps, err := resolvePlayerSessionWithRepo(ctx, s.playerSessionRepo, rawToken)
-	if err != nil {
-		if oe, ok := oops.AsOops(err); ok && oe.Code() == "NOT_CONFIGURED" {
-			return nil, status.Error(codes.Unimplemented, "player session service not configured") //nolint:wrapcheck // gRPC status error at handler boundary
-		}
-		return nil, status.Error(codes.Unauthenticated, "unauthenticated") //nolint:wrapcheck // gRPC status error at handler boundary
-	}
-
-	player, err := s.playerRepo.GetByID(ctx, ps.PlayerID)
-	if err != nil {
-		slog.ErrorContext(ctx, "scene access: player lookup failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
-	}
-	if player.IsGuest {
-		return nil, status.Error(codes.PermissionDenied, "guests cannot access scenes") //nolint:wrapcheck // gRPC status error at handler boundary
-	}
-	return ps, nil
 }
 
 // beginDispatch wraps BeginServiceDispatch for the verified character actor.
