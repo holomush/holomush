@@ -529,3 +529,190 @@ func TestGetCharacterProfileEmitsGalleryEntriesInAscendingSlotOrder(t *testing.T
 	assert.Empty(t, resp.GetCharacter().GetProfile(),
 		"media rows are projected into the image fields, never duplicated into the text map")
 }
+
+// The criterion-2 sentinels. Each is far longer than a real profile value would
+// need to be, carries a hyphenated uppercase marker, and contains characters no
+// proto field name may contain — so a match in a marshaled body is the seeded
+// value and cannot be an accidental collision with framing, a field name, or
+// another fixture.
+//
+// They are seeded NON-EMPTY on purpose. A withholding test written against an
+// empty fixture passes while the property under test is false, which is exactly
+// the vacuity PORTAL-10 names.
+const (
+	biographySentinel     = "SENTINEL-BIOGRAPHY-BELOW-ANON-FLOOR-4f9c2ba7"
+	rpPreferencesSentinel = "SENTINEL-RP-PREFERENCES-BELOW-ANON-FLOOR-1d63e805"
+)
+
+// TestGetCharacterProfileWithholdsABelowFloorFieldFromTheMarshaledBytes is
+// criterion 2 (D-80): the guarantee is asserted at the WIRE, not at the Go
+// value. A response whose profile map omitted the key while some other field
+// still carried the text would satisfy a Go-level assertion and leak anyway.
+//
+// PLAIN proto.Marshal IS CORRECT HERE, and deliberately not
+// proto.MarshalOptions{Deterministic: true}. Byte ABSENCE is not an ordering
+// property: no permutation of a message that does not contain the sentinel can
+// produce bytes that do. The determinism test elsewhere in this file needs the
+// opt-in because it compares two encodings for EQUALITY; this one does not, and
+// unifying the two would suggest determinism is load-bearing for absence when it
+// is not.
+func TestGetCharacterProfileWithholdsABelowFloorFieldFromTheMarshaledBytes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		attribute string
+		sentinel  string
+	}{
+		{"the biography block", "profile.biography", biographySentinel},
+		{"the OOC RP-preferences block", "profile.rp_preferences", rpPreferencesSentinel},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name+" is absent from an anonymous viewer's bytes and present for a guest", func(t *testing.T) {
+			t.Parallel()
+
+			seeds := []profileSeed{publicSeed(tt.attribute, tt.sentinel)}
+
+			anonResp, err := newProfileHarness(t, access.ViewerTierAnonymous, seeds).read(t)
+			require.NoError(t, err, "a below-floor field withholds the FIELD, never the whole profile")
+			anonBody, err := proto.Marshal(anonResp)
+			require.NoError(t, err)
+			assert.NotContains(t, string(anonBody), tt.sentinel,
+				"%s sits at the GUEST floor; its bytes MUST NOT appear anywhere in an anonymous viewer's response", tt.attribute)
+
+			// Paired positive control, on the same fixture through the same code
+			// path. Without it the assertion above cannot distinguish "the floor
+			// worked" from "nothing was seeded".
+			guestResp, err := newProfileHarness(t, access.ViewerTierGuest, seeds).read(t)
+			require.NoError(t, err)
+			guestBody, err := proto.Marshal(guestResp)
+			require.NoError(t, err)
+			assert.Contains(t, string(guestBody), tt.sentinel,
+				"the guest rung clears %s's floor, so the sentinel MUST reach the wire — proving the fixture was populated", tt.attribute)
+		})
+	}
+}
+
+// TestGetCharacterProfileDeniesAnUnrecognizedViewerTierWithNoPrincipalAtAll is
+// threat T-04-09. The property is not merely "an unrecognized rung is denied"
+// but that the default arm produces NO VIEWER PRINCIPAL AT ALL — an empty
+// subject, so there is nothing downstream that could match a policy by accident.
+//
+// SCOPE, STATED PLAINLY. The denial half is asserted on resolveViewerTier
+// directly because the unrecognized rung is UNREACHABLE through
+// resolveViewerIdentity by construction: that function returns one of exactly
+// three tier constants. Driving the handler with a fabricated identity would
+// require a seam that does not exist, and inventing one to make an end-to-end
+// assertion possible would be testing the seam rather than the switch. The
+// positive control IS driven end to end, so the pair still distinguishes "the
+// default arm denies" from "this path denies everything".
+func TestGetCharacterProfileDeniesAnUnrecognizedViewerTierWithNoPrincipalAtAll(t *testing.T) {
+	t.Parallel()
+
+	unrecognized := []viewerIdentity{
+		{tier: "spectator", playerID: idgen.New().String()},
+		{tier: "moderator", playerID: idgen.New().String()},
+		{tier: "ANONYMOUS", playerID: ""},
+		{tier: " anonymous", playerID: ""},
+		{},
+	}
+
+	for _, id := range unrecognized {
+		subject, ok := resolveViewerTier(id)
+		assert.False(t, ok, "tier %q is outside the closed set and MUST be denied by the default arm", id.tier)
+		assert.Empty(t, subject,
+			"the default arm MUST produce no subject at all — a fabricated subject string would fail closed only by luck")
+	}
+
+	// Paired positive control: the same field, the same handler, at a rung the
+	// switch does recognize.
+	h := newProfileHarness(t, access.ViewerTierPlayer, []profileSeed{
+		publicSeed("profile.biography", "Born in the salt flats."),
+	})
+	resp, err := h.read(t)
+	require.NoError(t, err)
+	assert.Equal(t, "Born in the salt flats.", resp.GetCharacter().GetProfile()["profile.biography"],
+		"a RECOGNIZED rung publishes the same field the unrecognized ones are denied")
+}
+
+// TestGetCharacterProfileDeniesASystemVisibilityRowAtEveryRung covers the fifth
+// value in entity_properties' visibility CHECK vocabulary
+// (public|private|restricted|system|admin), which no §8.6 row discusses.
+//
+// It is denied because NO term-B policy matches it, not because anything
+// enumerates it — which is the default-deny engine doing its job, and is the
+// reason a new visibility value cannot publish itself by being added to the
+// CHECK constraint alone.
+func TestGetCharacterProfileDeniesASystemVisibilityRowAtEveryRung(t *testing.T) {
+	t.Parallel()
+
+	for _, tier := range []string{access.ViewerTierAnonymous, access.ViewerTierGuest, access.ViewerTierPlayer} {
+		t.Run("the "+tier+" rung is denied a system-visibility row", func(t *testing.T) {
+			t.Parallel()
+
+			systemRow := profileSeed{
+				id:         idgen.New(),
+				name:       "profile.pronouns",
+				value:      "they/them",
+				visibility: "system",
+			}
+			resp, err := newProfileHarness(t, tier, []profileSeed{systemRow}).read(t)
+			require.NoError(t, err)
+
+			_, present := resp.GetCharacter().GetProfile()["profile.pronouns"]
+			assert.False(t, present,
+				"visibility=system matches no term-B permit, so the conjunction is false at every rung")
+
+			// Paired positive control: the SAME name and the SAME value at the
+			// public visibility, at the same rung. Only the row's visibility
+			// differs, so the denial above is that column and nothing else.
+			publicResp, err := newProfileHarness(t, tier, []profileSeed{
+				publicSeed("profile.pronouns", "they/them"),
+			}).read(t)
+			require.NoError(t, err)
+			assert.Equal(t, "they/them", publicResp.GetCharacter().GetProfile()["profile.pronouns"])
+		})
+	}
+}
+
+// TestGetCharacterProfileResolvesNameAndPronounsAtTheSeededReachabilityFloor is
+// §8.8's minimum-identity floor, driven FROM THE CORPUS rather than from a
+// hardcoded rung name: the floor is discovered by probing the ladder from the
+// bottom, so raising seed:profile-reachable moves this test with it instead of
+// turning it red for the wrong reason.
+//
+// THE BELOW-FLOOR LEG IS NOT ASSERTED HERE, and its absence is deliberate rather
+// than an omission. In the shipped v0.13 corpus the reachability floor is the
+// BOTTOM rung, so no rung below it exists to drive — a below-floor viewer can
+// only be produced by narrowing the corpus, which the unit tier's full-corpus
+// engine cannot do. That leg lives in
+// test/integration/access/character_profile_read_test.go, where profileCorpusStore
+// swaps the reachability permit for a guest-and-player-only variant and the
+// anonymous rung genuinely falls below the floor.
+func TestGetCharacterProfileResolvesNameAndPronounsAtTheSeededReachabilityFloor(t *testing.T) {
+	t.Parallel()
+
+	// The §8.2 ladder, LOWEST rung first. Order is the test's own, not an
+	// ordinal the policies compare on — §8.2.1 makes clearing set membership.
+	ladder := []string{access.ViewerTierAnonymous, access.ViewerTierGuest, access.ViewerTierPlayer}
+	seeds := []profileSeed{publicSeed("profile.pronouns", "they/them")}
+
+	floor := ""
+	for _, tier := range ladder {
+		if _, err := newProfileHarness(t, tier, seeds).read(t); err == nil {
+			floor = tier
+			break
+		}
+	}
+	require.NotEmpty(t, floor, "some rung MUST clear the seeded reachability floor, or the surface is unreachable outright")
+	assert.Equal(t, ladder[0], floor,
+		"v0.13 seeds the reachability floor at the bottom rung; a change here means the corpus moved, not that this test broke")
+
+	resp, err := newProfileHarness(t, floor, seeds).read(t)
+	require.NoError(t, err)
+	assert.Equal(t, profileTestCharacterName, resp.GetCharacter().GetName(),
+		"a viewer EXACTLY at the floor receives the name")
+	assert.Equal(t, "they/them", resp.GetCharacter().GetProfile()["profile.pronouns"],
+		"...and the pronouns, which §8.8 makes the other half of the minimum public identity")
+}

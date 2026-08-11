@@ -46,6 +46,13 @@ const descriptionPolicyName = "seed:viewer-character-description-read"
 // `anonymous`.
 const reachabilityPolicyName = "seed:profile-reachable"
 
+// integrationBiographySentinel is the criterion-2 marker for the full-stack
+// absence assertion. It is long, hyphenated and uppercase so a match in a
+// marshaled body is the seeded value rather than framing, a field name or
+// another fixture — and it is seeded NON-EMPTY, because a withholding spec
+// written against an empty row passes while the property is false.
+const integrationBiographySentinel = "SENTINEL-INTEGRATION-BIOGRAPHY-BELOW-ANON-FLOOR-9b41ce07"
+
 // profileCorpusStore is the paired-positive-control corpus for this file: the
 // real seeded corpus with named policies removed and/or extra ones appended.
 //
@@ -141,6 +148,17 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 			CharacterId:        id,
 			PlayerSessionToken: token,
 		})
+	}
+
+	// insertProperty writes one real entity_properties row, so the enumeration
+	// under test is world.Service's own ABAC-filtered read over the real
+	// repository rather than a fixture slice.
+	insertProperty := func(ctx context.Context, parentID ulid.ULID, name, value, visibility string) {
+		_, err := env.pool.Exec(ctx, `
+			INSERT INTO entity_properties (id, parent_type, parent_id, name, value, visibility)
+			VALUES ($1, 'character', $2, $3, $4, $5)`,
+			core.NewULID().String(), parentID.String(), name, value, visibility)
+		Expect(err).NotTo(HaveOccurred())
 	}
 
 	BeforeEach(func() {
@@ -340,6 +358,67 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 		})
 	})
 
+	// The full-stack half of criterion 2. The unit tier
+	// (internal/grpc/characteraccess_profile_test.go) drives the same sentinels
+	// through the real seeded corpus with a doubled world reader; these specs
+	// drive them through the real world.Service, the real property repository and
+	// real rows in Postgres, so the guarantee is asserted against the enumeration
+	// the production path actually makes.
+	Describe("a field below the viewer's floor is absent from the marshaled bytes (§8.9, D-80)", func() {
+		It("P7: the biography sentinel is absent for an anonymous viewer and present for a guest", func() {
+			ctx := context.Background()
+			insertProperty(ctx, charID, "profile.biography", integrationBiographySentinel, "public")
+
+			anonResp, err := read(charID.String(), anonToken)
+			Expect(err).NotTo(HaveOccurred(),
+				"a below-floor field withholds the FIELD, never the whole profile")
+			anonBody, mErr := proto.Marshal(anonResp)
+			Expect(mErr).NotTo(HaveOccurred())
+			Expect(strings.Contains(string(anonBody), integrationBiographySentinel)).To(BeFalse(),
+				"profile.biography sits at the GUEST floor; its bytes must not appear anywhere in an anonymous response")
+
+			// Paired positive control on the identical row through the identical
+			// path: without it the assertion above cannot tell "the floor worked"
+			// from "the INSERT never landed".
+			guestResp, guestErr := read(charID.String(), guestToken)
+			Expect(guestErr).NotTo(HaveOccurred())
+			guestBody, mErr := proto.Marshal(guestResp)
+			Expect(mErr).NotTo(HaveOccurred())
+			Expect(strings.Contains(string(guestBody), integrationBiographySentinel)).To(BeTrue(),
+				"the guest rung clears the biography floor, so the seeded sentinel must reach the wire")
+		})
+
+		It("P8: a system-visibility row is denied at every rung, while the same name at public publishes", func() {
+			ctx := context.Background()
+
+			// `system` is the fifth value in entity_properties' visibility CHECK
+			// vocabulary and appears in no §8.6 row. No term-B policy matches it,
+			// so the default-deny engine withholds it without anything having to
+			// enumerate it.
+			insertProperty(ctx, charID, "profile.pronouns", "they/them", "system")
+
+			for _, token := range []string{anonToken, guestToken} {
+				resp, err := read(charID.String(), token)
+				Expect(err).NotTo(HaveOccurred())
+				_, present := resp.GetCharacter().GetProfile()["profile.pronouns"]
+				Expect(present).To(BeFalse(),
+					"visibility=system matches no term-B permit at any rung")
+			}
+
+			// Paired positive control: the SAME name and value, differing only in
+			// the visibility column.
+			_, err := env.pool.Exec(ctx,
+				`UPDATE entity_properties SET visibility = 'public' WHERE parent_id = $1 AND name = $2`,
+				charID.String(), "profile.pronouns")
+			Expect(err).NotTo(HaveOccurred())
+
+			resp, err := read(charID.String(), anonToken)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetCharacter().GetProfile()["profile.pronouns"]).To(Equal("they/them"),
+				"only the visibility column changed, so the denial above was that column and nothing else")
+		})
+	})
+
 	Describe("the public path resolves its own viewer rung from the session token (D-83)", func() {
 		It("P6: a guest token reaches a profile the anonymous rung cannot — the rung resolveAndGate would have refused outright", func() {
 			ctx := context.Background()
@@ -370,6 +449,52 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 			Expect(guestErr).NotTo(HaveOccurred(),
 				"a GUEST player's session token must resolve the guest rung — playerGate.resolveAndGate would have returned PermissionDenied here (INV-SCENE-64)")
 			Expect(resp.GetCharacter().GetName()).To(Equal(charName))
+		})
+
+		It("P9: a viewer exactly at the reachability floor receives name AND pronouns; one rung below receives the not-found-equivalent", func() {
+			ctx := context.Background()
+			insertProperty(ctx, charID, "profile.pronouns", "they/them", "public")
+
+			// The floor is RAISED to guest so a below-floor rung exists at all.
+			// In the shipped corpus the floor is the bottom rung, so there is no
+			// viewer below it — narrowing the corpus is the only way to drive the
+			// boundary, and it is also what a game raising its floor would do.
+			guestFloor := newServer(newCorpusEngine(ctx, []string{reachabilityPolicyName},
+				&policystore.StoredPolicy{
+					ID:      core.NewULID().String(),
+					Name:    "test:profile-reachable-floor-at-guest",
+					Effect:  types.PolicyEffectPermit,
+					Source:  "admin",
+					Enabled: true,
+					DSLText: `permit(principal is viewer, action in ["read"], resource is profile) when { principal.viewer.tier in ["guest", "player"] };`,
+				}))
+
+			atFloor, err := guestFloor.GetCharacterProfile(ctx,
+				&characteraccessv1.GetCharacterProfileRequest{
+					CharacterId:        charID.String(),
+					PlayerSessionToken: guestToken,
+				})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(atFloor.GetCharacter().GetName()).To(Equal(charName),
+				"§8.8's minimum public identity is name…")
+			Expect(atFloor.GetCharacter().GetProfile()["profile.pronouns"]).To(Equal("they/them"),
+				"…and pronouns, both delivered to a viewer standing exactly at the floor")
+
+			belowResp, belowErr := guestFloor.GetCharacterProfile(ctx,
+				&characteraccessv1.GetCharacterProfileRequest{CharacterId: charID.String()})
+			Expect(belowErr).To(HaveOccurred())
+			Expect(belowResp).To(BeNil())
+			Expect(status.Code(belowErr)).To(Equal(codes.NotFound))
+
+			// The not-found-EQUIVALENCE is asserted as a differential against a
+			// character id naming no row, rather than against a literal copied
+			// out of the facade. A literal would still pass if both branches
+			// drifted together; the differential is the property §8.7 states.
+			_, absentErr := guestFloor.GetCharacterProfile(ctx,
+				&characteraccessv1.GetCharacterProfileRequest{CharacterId: core.NewULID().String()})
+			Expect(absentErr).To(HaveOccurred())
+			Expect(status.Convert(belowErr).Message()).To(Equal(status.Convert(absentErr).Message()),
+				"one rung below the floor is the UNIFORM not-found-equivalent, not a distinguishable denial")
 		})
 	})
 })
