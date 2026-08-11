@@ -373,6 +373,83 @@ func TestWorldServiceUpdateCharacterProfileAttributesEnvelopeNamesOnlyWhatTheWri
 		"a clear of an unset field wrote no row, so the envelope must not claim it changed")
 }
 
+// TestWorldServiceUpdateCharacterProfileAttributesEnvelopeOmitsAnIdenticalValueResubmit
+// pins the second half of the same contract: a resubmit of the value already
+// stored rewrites the row but changes nothing, so it must not be named.
+//
+// This is the case a web edit form hits most often — the form PUTs every field
+// it rendered, of which the user touched one. Every untouched field arrives as
+// an identical value and was named as changed, so a consumer saw twelve changed
+// attributes for a one-word edit with no values in the payload to detect the
+// false positives with.
+//
+// The gate is on the CLAIM, not on the write: the row still lands in `updates`,
+// so the write, the CAS and the version bump are unconditional. Both subtests
+// EXPECT characterRepo.Update, which is the assertion that write semantics are
+// unchanged — mockery fails if the guarded update is skipped.
+func TestWorldServiceUpdateCharacterProfileAttributesEnvelopeOmitsAnIdenticalValueResubmit(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	t.Run("an all-identical resubmit still writes the row and ships an envelope naming nothing", func(t *testing.T) {
+		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, charID)
+		seedProfileRow(props, charID, "profile.concept", "a wandering archivist")
+		seedProfileRow(props, charID, "profile.species", "corvid")
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.StatusActive}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+		// EXPECTED, not forbidden: the row rewrite, the CAS and the version bump
+		// are unconditional. Only the envelope's claim is gated.
+		mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+			Return(&wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateCharacter, ID: charID}}, nil).Once()
+
+		err := svc.UpdateCharacterProfileAttributes(ctx, world.HumanCaller(subjectID), charID, 5, map[string]string{
+			"profile.concept": "a wandering archivist",
+			"profile.species": "corvid",
+		})
+		require.NoError(t, err)
+
+		require.Len(t, outbox.rows, 1, "the row write still ships its one envelope")
+		got := decodeProfileChangePayload(t, outbox.rows[0])
+		assert.Empty(t, got.ChangedAttributes,
+			"re-submitting the stored bytes changed nothing, and the schema puts no non-empty floor on changed_attributes")
+	})
+
+	t.Run("a mixed submit names only the attribute whose value actually differs", func(t *testing.T) {
+		svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, charID)
+		seedProfileRow(props, charID, "profile.concept", "a wandering archivist")
+		seedProfileRow(props, charID, "profile.species", "corvid")
+		seedProfileRow(props, charID, "profile.pronouns", "they/them")
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.StatusActive}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+		mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+			Return(&wmodel.MutationDelta{Primary: wmodel.AffectedAggregate{Type: wmodel.AggregateCharacter, ID: charID}}, nil).Once()
+
+		err := svc.UpdateCharacterProfileAttributes(ctx, world.HumanCaller(subjectID), charID, 5, map[string]string{
+			// The one field the user actually edited.
+			"profile.concept": "a retired archivist",
+			// The rest of the form, resubmitted verbatim.
+			"profile.species":  "corvid",
+			"profile.pronouns": "they/them",
+		})
+		require.NoError(t, err)
+
+		require.Len(t, outbox.rows, 1)
+		got := decodeProfileChangePayload(t, outbox.rows[0])
+		assert.Equal(t, []string{"profile.concept"}, got.ChangedAttributes,
+			"a one-word edit submitted through a full form names one attribute, not the whole form")
+
+		// The untouched rows were still rewritten with their own values, so the
+		// resubmit is a genuine write rather than a silently-dropped one.
+		row, ok := props.lookup("character", charID, "profile.species")
+		require.True(t, ok)
+		require.NotNil(t, row.Value)
+		assert.Equal(t, "corvid", *row.Value)
+	})
+}
+
 // TestWorldServiceUpdateCharacterProfileAttributesWritesNothingWhenThePartitionIsEmpty
 // pins WR-07: an all-no-op request must not touch the aggregate.
 //

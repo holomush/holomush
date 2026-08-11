@@ -1113,13 +1113,25 @@ func (s *Service) UpdateCharacterProfileAttributes(
 		creates []*EntityProperty
 		updates []*EntityProperty
 		deletes []ulid.ULID
-		// changed is the envelope's changed_attributes, accumulated BY THE
-		// PARTITION rather than taken from the request. The two differ: the
-		// partition drops work `names` has already claimed — a clear of a field
-		// with no row is a documented no-op below, yet the name was still
-		// shipped as changed. The payload carries no values, so a consumer
-		// (cache invalidation, moderation feed, search re-index) has no way to
-		// detect the false positive.
+		// changed is the envelope's changed_attributes, accumulated
+		// INDEPENDENTLY of the three write partitions rather than taken from the
+		// request. All three sets differ from `names`, and `changed` differs
+		// from the partitions in turn:
+		//
+		//   - a clear of a field with no row is a documented no-op below, so it
+		//     writes nothing AND changes nothing;
+		//   - a resubmit of the value already stored DOES rewrite the row (it
+		//     lands in `updates`, so the write, the CAS and the version bump are
+		//     unconditional) but changes nothing. This is the common case, not
+		//     an edge: a web edit form PUTs every field it rendered, of which
+		//     the user touched one.
+		//
+		// The payload carries no values, so a consumer (cache invalidation,
+		// moderation feed, search re-index) has no way to detect a false
+		// positive. changed_attributes is contracted as what the write CHANGED
+		// (payloads.go, outbox/taxonomy.go), and the schema puts no non-empty
+		// floor on it, so an all-identical resubmit shipping an empty list
+		// alongside a real row write is both representable and honest.
 		changed []string
 		now     = time.Now().UTC()
 	)
@@ -1143,7 +1155,13 @@ func (s *Service) UpdateCharacterProfileAttributes(
 			newValue := value
 			row.Value = &newValue
 			updates = append(updates, &row)
-			changed = append(changed, name)
+			// The ROW is rewritten either way — this stays in `updates`, so the
+			// write, the CAS and the version bump are unconditional and the
+			// empty-partition return below is unaffected. Only the CLAIM is
+			// gated: re-submitting the stored bytes changed nothing.
+			if current.Value == nil || *current.Value != value {
+				changed = append(changed, name)
+			}
 		default:
 			// Every field is set EXPLICITLY. PropertyRepository.Create passes
 			// p.Visibility straight into the INSERT and applies no visibility
