@@ -58,6 +58,14 @@ const characterMaskPathMessage = "update_mask contains an unsupported path"
 // structured reason goes to errutil.LogErrorContext.
 const characterProfileFieldInvalidMessage = "a profile field value is not acceptable"
 
+// characterValueInvalidMessage is the wire message a value the DOMAIN refused
+// is rendered with — today, a description failing world.ValidateDescription
+// (issue #4954). It is separate from characterProfileFieldInvalidMessage because
+// that one belongs to the facade's own §7.2 caps; keeping them apart is what
+// makes "which layer rejected this" readable in a log without either message
+// naming a field.
+const characterValueInvalidMessage = "the submitted value is not acceptable"
+
 // characterConcurrentEditMessage is the wire message the loser of a concurrent
 // edit receives.
 const characterConcurrentEditMessage = "the character was modified by someone else; re-read it and retry"
@@ -351,7 +359,99 @@ func (s *CharacterAccessServer) mapCharacterWriteError(ctx context.Context, err 
 			"character_id", characterID.String())
 		return status.Error(codes.PermissionDenied, characterNotOwnedMessage) //nolint:wrapcheck // gRPC status error at handler boundary
 	}
+	if isDomainValueRejection(err) {
+		errutil.LogErrorContext(ctx, "character access: the domain refused the submitted value", err,
+			"character_id", characterID.String())
+		return status.Error(codes.InvalidArgument, characterValueInvalidMessage) //nolint:wrapcheck // gRPC status error at handler boundary
+	}
 	errutil.LogErrorContext(ctx, "character access: character mutation failed", err,
 		"character_id", characterID.String())
 	return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
+}
+
+// isDomainValueRejection reports whether err is the domain's own input-validation
+// refusal. The CODE is matched, never the error string.
+func isDomainValueRejection(err error) bool {
+	var oe oops.OopsError
+	return errors.As(err, &oe) && oe.Code() == world.CodeCharacterInvalid
+}
+
+// UpdateCharacterDescription replaces an owned character's in-world `look` text
+// — the intrinsic characters.description COLUMN — by reaching the shipped
+// world.Service.UpdateCharacterDescription.
+//
+// # It reaches the shipped command, not a parallel path
+//
+// That is what makes the write inherit the command's same-transaction outbox
+// emission and, as of this plan's Task 2, its validation. A second write path
+// would have neither.
+//
+// # Which layer owns this cap (do NOT add one here)
+//
+// The description's cap, its UTF-8 rule and its control-character rule live in
+// the DOMAIN: world.Service.UpdateCharacterDescription routes the assignment
+// through Character.SetDescription -> ValidateDescription. This handler
+// CONVERTS the resulting CodeCharacterInvalid into codes.InvalidArgument and
+// performs no length or encoding check of its own. That is the exact opposite of
+// UpdateCharacterProfile above, whose §7.2 caps live here (D-82) because 04-09's
+// domain command deliberately does not enforce them. Exactly one layer owns each
+// field; a second check here would create the divergent-cap pair both plans warn
+// against.
+//
+// The cap is measured in BYTES. An EMPTY description is legal — the domain
+// validator returns early for it — so clearing the column is a supported edit,
+// and the result is an OMITTED description on the public profile rather than an
+// empty one.
+//
+// # The version guard is a TOCTOU NARROWING, not optimistic concurrency control
+//
+// world.Service.UpdateCharacterDescription takes NO expectedVersion parameter:
+// it re-reads the row and guards on its own freshly-read char.Version. So this
+// handler compares the caller's expected_version against the version it read
+// during ownership resolution and refuses a mismatch BEFORE calling the command.
+//
+// That detects a client submitting an out-of-date version — the common real
+// case, a stale edit form. It does NOT close the window: a writer landing
+// between this read and the domain's re-read is not detected and still
+// last-write-wins. The limit is pinned by an explicit documenting test rather
+// than left to be discovered. Closing it means extending the domain signature,
+// which is load-bearing across the command-layer interface and the plugin
+// capability ABI — filed as issue #4956.
+//
+// The sibling profile write has no such gap: its domain command accepts the
+// caller's version natively, so its guard is a genuine CAS.
+func (s *CharacterAccessServer) UpdateCharacterDescription(ctx context.Context, req *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacterForMutation(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	if versionErr := requireGuardedVersion(ctx, req.GetExpectedVersion(), char.ID); versionErr != nil {
+		return nil, versionErr
+	}
+	if int(req.GetExpectedVersion()) != char.Version {
+		// The narrowing. char carries the `version` column ListByPlayer selects,
+		// so no second read is needed for the compare.
+		errutil.LogErrorContext(ctx, "character access: description edit carried a stale version",
+			oops.Code(world.CodeConcurrentEdit).
+				With("character_id", char.ID.String()).
+				With("expected_version", req.GetExpectedVersion()).
+				With("read_version", char.Version).
+				Errorf("the caller's expected_version does not match the version read"))
+		return nil, status.Error(codes.Aborted, characterConcurrentEditMessage) //nolint:wrapcheck // gRPC status error at handler boundary
+	}
+
+	caller := world.HumanCaller(access.CharacterSubject(char.ID.String()))
+	if writeErr := s.worldMutator.UpdateCharacterDescription(ctx, caller, char.ID, req.GetDescription()); writeErr != nil {
+		return nil, s.mapCharacterWriteError(ctx, writeErr, char.ID)
+	}
+
+	out, err := s.ownerMutationResponse(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+	return &characteraccessv1.UpdateCharacterDescriptionResponse{Character: out}, nil
 }

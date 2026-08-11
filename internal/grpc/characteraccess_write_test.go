@@ -584,3 +584,184 @@ func TestUpdateCharacterProfileMaskablePathsAreExactlyTheTwelve(t *testing.T) {
 			"%s: caps reuse the shipped world constants rather than minting new numbers", path)
 	}
 }
+
+// descriptionRequest builds a well-formed guarded description edit.
+func (h *writeHarness) descriptionRequest(description string) *characteraccessv1.UpdateCharacterDescriptionRequest {
+	return &characteraccessv1.UpdateCharacterDescriptionRequest{
+		CharacterId:        h.owned.ID.String(),
+		PlayerSessionToken: h.token,
+		ExpectedVersion:    int32(h.owned.Version), //nolint:gosec // characters.version is a 32-bit INTEGER column
+		Description:        description,
+	}
+}
+
+// TestUpdateCharacterDescriptionReachesTheShippedWorldCommand is behaviors 1 and
+// 2: the handler drives world.Service.UpdateCharacterDescription — the command
+// that carries the same-transaction outbox emission and, as of issue #4954, the
+// validation — rather than a repository or a parallel write path.
+func TestUpdateCharacterDescriptionReachesTheShippedWorldCommand(t *testing.T) {
+	t.Parallel()
+
+	h := newWriteHarness(t, writeFixture{})
+
+	resp, err := h.srv.UpdateCharacterDescription(context.Background(),
+		h.descriptionRequest("A tall figure wrapped in a travelling cloak."))
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetCharacter())
+	assert.Equal(t, h.owned.ID.String(), resp.GetCharacter().GetId())
+
+	require.Len(t, h.mutator.descWrites, 1, "exactly one domain command call")
+	assert.Empty(t, h.mutator.profileWrites, "the description is a COLUMN, not a profile.* row")
+	got := h.mutator.descWrites[0]
+	assert.Equal(t, "A tall figure wrapped in a travelling cloak.", got.description)
+	assert.Equal(t, h.owned.ID, got.characterID)
+	assert.Equal(t, world.HumanCaller(access.CharacterSubject(h.owned.ID.String())), got.caller,
+		"the subject string becomes the outbox envelope actor")
+}
+
+// TestUpdateCharacterDescriptionAcceptsAnEmptyDescription: clearing the column is
+// a supported edit. The domain validator returns early for the empty string.
+func TestUpdateCharacterDescriptionAcceptsAnEmptyDescription(t *testing.T) {
+	t.Parallel()
+
+	h := newWriteHarness(t, writeFixture{})
+
+	_, err := h.srv.UpdateCharacterDescription(context.Background(), h.descriptionRequest(""))
+	require.NoError(t, err)
+	require.Len(t, h.mutator.descWrites, 1)
+	assert.Empty(t, h.mutator.descWrites[0].description)
+}
+
+// TestUpdateCharacterDescriptionConvertsTheDomainsValidationRejection is
+// behavior 3, and the emphasis is on CONVERTS.
+//
+// The cap, the UTF-8 rule and the control-character rule are enforced by the
+// DOMAIN (issue #4954, closed in this plan's Task 2). At this tier the handler's
+// only job is to render that rejection as codes.InvalidArgument with a generic
+// message. There is deliberately NO unit test asserting the handler itself
+// rejects a 4001-byte value against a double — that would be asserting a
+// facade-side check this plan forbids. The boundary cases run at the integration
+// tier, against the real world.Service.
+func TestUpdateCharacterDescriptionConvertsTheDomainsValidationRejection(t *testing.T) {
+	t.Parallel()
+
+	inner := &world.ValidationError{Field: "description", Message: "exceeds maximum length of 4000"}
+	h := newWriteHarness(t, writeFixture{
+		descErr: oops.Code(world.CodeCharacterInvalid).Wrap(inner),
+	})
+
+	_, err := h.srv.UpdateCharacterDescription(context.Background(), h.descriptionRequest("anything"))
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	msg := status.Convert(err).Message()
+	assert.Equal(t, characterValueInvalidMessage, msg)
+	assert.NotContains(t, msg, "exceeds maximum length",
+		"the inner error is never interpolated into the wire message")
+	assert.NotContains(t, msg, world.CodeCharacterInvalid)
+}
+
+// TestUpdateCharacterDescriptionDeniesEveryOwnershipCauseUniformly pins the
+// gate error matrix row 3 on the SECOND mutation surface. Both mutations reach
+// it through the one ownedCharacterForMutation wrapper, so this is a check that
+// neither handler grew its own resolution.
+func TestUpdateCharacterDescriptionDeniesEveryOwnershipCauseUniformly(t *testing.T) {
+	t.Parallel()
+
+	h := newWriteHarness(t, writeFixture{failOnWrite: true})
+
+	unparseable := h.descriptionRequest("x")
+	unparseable.CharacterId = "not-a-ulid"
+	noSuchRow := h.descriptionRequest("x")
+	noSuchRow.CharacterId = idgen.New().String()
+
+	_, unparseableErr := h.srv.UpdateCharacterDescription(context.Background(), unparseable)
+	_, noSuchRowErr := h.srv.UpdateCharacterDescription(context.Background(), noSuchRow)
+	require.Error(t, unparseableErr)
+	require.Error(t, noSuchRowErr)
+
+	assert.Equal(t, codes.PermissionDenied, status.Code(unparseableErr))
+	assert.Equal(t, codes.PermissionDenied, status.Code(noSuchRowErr))
+	require.Equal(t, status.Convert(unparseableErr).Message(), status.Convert(noSuchRowErr).Message())
+	assert.Equal(t, characterNotOwnedMessage, status.Convert(noSuchRowErr).Message())
+}
+
+// TestUpdateCharacterDescriptionRejectsAnUnguardedWriteBeforeAnyDomainCall is
+// behavior 7.
+func TestUpdateCharacterDescriptionRejectsAnUnguardedWriteBeforeAnyDomainCall(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		version int32
+	}{
+		{"absent or explicitly zero", 0},
+		{"negative", -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newWriteHarness(t, writeFixture{failOnWrite: true})
+
+			req := h.descriptionRequest("a new description")
+			req.ExpectedVersion = tc.version
+
+			_, err := h.srv.UpdateCharacterDescription(context.Background(), req)
+			require.Error(t, err)
+			assert.Equal(t, codes.InvalidArgument, status.Code(err))
+			assert.Empty(t, h.mutator.descWrites)
+		})
+	}
+}
+
+// TestUpdateCharacterDescriptionRejectsAStaleVersionBeforeTheDomainCall is
+// behavior 8.
+//
+// The shipped domain command takes NO expectedVersion parameter, so this compare
+// is the ONLY place a stale client version is detected — see the documenting
+// test below for what that does and does not buy.
+func TestUpdateCharacterDescriptionRejectsAStaleVersionBeforeTheDomainCall(t *testing.T) {
+	t.Parallel()
+
+	h := newWriteHarness(t, writeFixture{failOnWrite: true})
+	require.Equal(t, 7, h.owned.Version, "the fixture's stored version")
+
+	req := h.descriptionRequest("a new description")
+	req.ExpectedVersion = 3
+
+	_, err := h.srv.UpdateCharacterDescription(context.Background(), req)
+	require.Error(t, err)
+	assert.Equal(t, codes.Aborted, status.Code(err))
+	assert.Equal(t, characterConcurrentEditMessage, status.Convert(err).Message())
+	assert.Empty(t, h.mutator.descWrites, "a stale client never reaches the domain")
+}
+
+// TestUpdateCharacterDescriptionDoesNotDetectAWriterInsideTheReadToReReadWindow
+// names the LIMIT of the description path's guard, so it is pinned as known
+// behavior rather than mistaken for a guarantee.
+//
+// world.Service.UpdateCharacterDescription takes no expectedVersion parameter:
+// it re-reads the row and uses its OWN freshly-read char.Version as the CAS
+// guard. The facade's compare is therefore a TOCTOU NARROWING, not a guarantee —
+// it catches a client submitting an out-of-date version (the common real case, a
+// stale edit form) and does NOT catch a writer landing between the facade's read
+// and the domain's re-read. That writer still last-write-wins.
+//
+// Below, two writers both read version 7 and both submit it. Both are admitted
+// and BOTH reach the domain, so the second silently overwrites the first — the
+// facade compares only against the version it read, and nothing it sends
+// constrains the domain's write. Closing the window is issue #4956 (extend the
+// domain signature); this test must be REPLACED, not deleted, when that lands.
+func TestUpdateCharacterDescriptionDoesNotDetectAWriterInsideTheReadToReReadWindow(t *testing.T) {
+	t.Parallel()
+
+	h := newWriteHarness(t, writeFixture{})
+
+	_, firstErr := h.srv.UpdateCharacterDescription(context.Background(), h.descriptionRequest("written by the first writer"))
+	_, secondErr := h.srv.UpdateCharacterDescription(context.Background(), h.descriptionRequest("written by the second writer"))
+
+	require.NoError(t, firstErr)
+	require.NoError(t, secondErr, "the second writer is NOT refused — this is the window, not a bug in the test")
+	require.Len(t, h.mutator.descWrites, 2, "both writers reach the domain")
+	assert.Equal(t, "written by the second writer", h.mutator.descWrites[1].description,
+		"last write wins inside the read-to-re-read window (issue #4956)")
+}
