@@ -2167,7 +2167,21 @@ invariants:
     summary: "A character profile below its configured reachability floor returns a not-found-equivalent whose wire shape
       is identical to the response for a character id that does not exist — no distinct 'this profile is private' signal,
       error code or status, which would disclose that the character exists."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "test/integration/access/character_profile_read_test.go"
+  # INV-PRIVACY-10 STAYS PENDING ON PURPOSE (plan 04-05 Task 3). Its statement has
+  # TWO clauses. The facade half — a reachable profile carries name and pronouns —
+  # is asserted (04-04's floor-probe unit test and spec P9). The CONFIGURATION half
+  # is not, and cannot be in v0.13: 01-SPEC §8.8 records that nothing enforces it,
+  # because the engine is deny-overrides and an admin-authored `forbid` row beats
+  # the seeded permit, so an operator CAN put name or pronouns out of reach of a
+  # viewer who reached the profile. That failure is closed (the viewer sees less,
+  # never more) and §8.12 ships no editing surface, but it rests on operator
+  # discipline rather than on a mechanism; 04-VALIDATION.md carries it as a
+  # manual-only row. Binding this entry to a test proving only the facade half
+  # would be a PARTIAL binding, and TestBoundInvariantsAreGenuinelyAsserted cannot
+  # detect a partial one — it would be a false green with nothing to catch it.
   - id: INV-PRIVACY-10
     scope: INV-PRIVACY
     origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
@@ -2366,6 +2380,27 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/retirement/reactor_test.go"
+
+  # -- v0.13 web portal viewer/owner audience split (milestone v0.13, Phase 4, D-69/D-71).
+  # Hand-registered, same reason INV-PRIVACY-11 records: the orphan check walks only
+  # docs/superpowers/specs/, so a .planning/-origin spec's INV ids are never auto-caught.
+  # INV-ACCESS rather than INV-PRIVACY because this scope's description names attribute-provider
+  # invariants explicitly, while INV-PRIVACY's boundary forwards ABAC policy evaluation here by name.
+  - id: INV-ACCESS-15
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/04-shared-facade-helpers-characteraccessservice/04-CONTEXT.md"
+    summary: "The viewer read path never widens a character-keyed grant into a grant to the PLAYER behind that character.
+      The permit-side player-keyed peers attribute.PropertyProvider derives from a property row's character-keyed fields (owner_player_id,
+      visible_to_players) resolve in the ALL direction — a player enters only when EVERY character of theirs appears in the
+      row's field — so for the single-valued owner column a private row owned by one of a MULTI-ALT player's characters is
+      NOT readable through that player's viewer principal, while the same row on a SINGLE-ALT player's character is. The forbid-side
+      peer (excluded_from_players) leans the opposite way, ANY, because losing an exclusion is the widening on that side.
+      Consequence and reason: the owner audience reaches its own rows through the owning CHARACTER's subject and constructs
+      no viewer principal at all (D-69), rather than the permit side being flattened to ANY for symmetry — that one-line diff
+      reads as cleanup and would broadcast alt linkage across every character a player owns."
+    binding: bound
+    asserted_by:
+      - "test/integration/access/viewer_alt_linkage_test.go"
 
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
