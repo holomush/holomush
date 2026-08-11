@@ -4,7 +4,11 @@
 package grpc
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -539,4 +543,105 @@ func TestListCharacterDirectoryTreatsAnInfraFailureDenyAsAnEvaluationFailure(t *
 	assert.Equal(t, codes.Internal, status.Code(err),
 		"an infra-failure DENY is an OUTAGE, not a policy answer — rendering it as PermissionDenied is the §8.10 masking")
 	assert.Equal(t, 0, h.reader.listCalls)
+}
+
+// TestADirectoryGateOutageIsLoggedOnceAndAttributedToTheGateNotToProfileVisibility
+// pins mapProfileError as a CLASSIFIER for errors already logged at their origin.
+//
+// evaluateGate logs each of its three failure branches with the action and
+// resource that failed and returns profilevis.CodeEvaluationFailed. Its only
+// caller then handed that same error to mapProfileError, which logged it AGAIN —
+// as "profile visibility evaluation failed". So a failure of the
+// character_directory:all GATE (a different resource type, a different action, a
+// decision that never consulted per-attribute visibility) was recorded against a
+// subsystem that was never reached, and every alert rule keyed on either message
+// double-counted.
+func TestADirectoryGateOutageIsLoggedOnceAndAttributedToTheGateNotToProfileVisibility(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	gate := &erroringGate{}
+	h := newDirectoryHarness(t, directoryFixture{
+		tier:  access.ViewerTierAnonymous,
+		chars: []*world.Character{directoryChar("Ada")},
+		gate:  gate,
+	})
+
+	resp, err := h.list(t)
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Equal(t, codes.Internal, status.Code(err),
+		"an evaluation failure is an outage, never an ordinary denial (§8.10)")
+
+	logged := buf.String()
+	assert.Contains(t, logged, "character access: directory gate evaluation failed",
+		"the outage is logged at its origin, with the action and resource that failed")
+	assert.NotContains(t, logged, "profile visibility evaluation failed",
+		"a GATE outage must not be attributed to per-attribute visibility, which was never consulted")
+	assert.Equal(t, 1, strings.Count(logged, "POLICY_STORE_UNREACHABLE"),
+		"exactly one log line per outage — a second would double-count every alert keyed on it")
+}
+
+// TestMapProfileErrorLogsOnlyTheUnclassifiedResidue is the paired control for
+// the spec above: an error carrying neither profilevis code is nobody's
+// already-logged failure, so mapProfileError still records it.
+func TestMapProfileErrorLogsOnlyTheUnclassifiedResidue(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantCode codes.Code
+		wantLog  bool
+	}{
+		{
+			"an unreachable profile is a policy answer and is not logged",
+			oops.Code(profilevis.CodeProfileUnreachable).Wrap(profilevis.ErrProfileUnreachable),
+			codes.NotFound, false,
+		},
+		{
+			"an evaluation failure was already logged at its origin",
+			oops.Code(profilevis.CodeEvaluationFailed).Wrap(profilevis.ErrEvaluationFailed),
+			codes.Internal, false,
+		},
+		{
+			// The shape mapProfileError got wrong before: the engine's own
+			// oops code is DEEPER in the chain, so keying on Code() sent a
+			// real outage down the residue arm.
+			"an evaluation failure wrapping an engine error that carries its own oops code",
+			oops.Code(profilevis.CodeEvaluationFailed).
+				Wrap(errors.Join(profilevis.ErrEvaluationFailed, oops.Code("POLICY_STORE_UNREACHABLE").Errorf("unreachable"))),
+			codes.Internal, false,
+		},
+		{
+			"an error carrying neither sentinel is nobody's already-logged failure",
+			oops.Code("SOMETHING_ELSE_ENTIRELY").Errorf("unclaimed"),
+			codes.Internal, true,
+		},
+		{
+			"a bare error carrying no oops code at all is likewise unclaimed",
+			errors.New("a plain error"),
+			codes.Internal, true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+
+			got := mapProfileError(context.Background(), tt.err)
+
+			require.Error(t, got)
+			assert.Equal(t, tt.wantCode, status.Code(got))
+			if tt.wantLog {
+				assert.Contains(t, buf.String(), "character access: unclassified visibility failure")
+			} else {
+				assert.Empty(t, buf.String(),
+					"a classified error was already logged where it originated; logging it again double-counts")
+			}
+		})
+	}
 }

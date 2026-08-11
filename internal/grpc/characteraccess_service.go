@@ -330,19 +330,42 @@ func resolveViewerTier(id viewerIdentity) (string, bool) {
 	}
 }
 
-// mapProfileError renders a profilevis failure as a gRPC status.
+// mapProfileError renders an already-logged evaluation failure as a gRPC status.
 //
 // CodeProfileUnreachable is a POLICY answer and takes the uniform §8.7
 // not-found-equivalent. CodeEvaluationFailed is an OUTAGE and takes Internal
-// with a generic message, logged first — §8.10 forbids masking it as a
-// legitimately sparse profile. An inner error is never interpolated into a
-// returned status message (.claude/rules/grpc-errors.md).
+// with a generic message — §8.10 forbids masking it as a legitimately sparse
+// profile. An inner error is never interpolated into a returned status message
+// (.claude/rules/grpc-errors.md).
+//
+// IT IS A CLASSIFIER, NOT A LOGGER, for everything it recognizes. Every
+// CodeEvaluationFailed reaching here was already logged at its origin — by
+// profilevis.evaluate / malformed, or by evaluateGate — WITH the action and
+// resource that failed. Logging again here recorded a directory-GATE outage
+// (a different resource type, a different action, a decision that has nothing
+// to do with per-attribute visibility) as "profile visibility evaluation
+// failed", and double-counted every profile-path outage for any alert rule
+// keyed on either message.
+//
+// The unclassified residue is still logged, because by definition nothing
+// upstream claimed it.
+//
+// IT KEYS ON THE SENTINELS, NOT ON THE OOPS CODE. oops.OopsError.Code() returns
+// the DEEPEST code in the chain (samber/oops@v1.22.0, getDeepestErrorCode), so an
+// evaluation failure wrapping an engine error that carries its own code reports
+// that inner code and never profilevis's — which would send every real outage
+// down the residue arm. profilevis.ErrEvaluationFailed and ErrProfileUnreachable
+// are joined into EVERY branch of both producers (profilevis.evaluate /
+// malformed and this facade's evaluateGate) and neither ever appears in the
+// other's chain, so the classification is exact in both directions.
 func mapProfileError(ctx context.Context, err error) error {
-	var oe oops.OopsError
-	if errors.As(err, &oe) && oe.Code() == profilevis.CodeProfileUnreachable {
+	switch {
+	case errors.Is(err, profilevis.ErrProfileUnreachable):
 		return status.Error(codes.NotFound, characterProfileNotFoundMessage) //nolint:wrapcheck // gRPC status error at handler boundary
+	case errors.Is(err, profilevis.ErrEvaluationFailed):
+		return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
 	}
-	errutil.LogErrorContext(ctx, "character access: profile visibility evaluation failed", err)
+	errutil.LogErrorContext(ctx, "character access: unclassified visibility failure", err)
 	return status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
 }
 
