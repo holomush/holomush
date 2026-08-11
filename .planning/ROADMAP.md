@@ -481,7 +481,7 @@ Plans:
 5. The profile read path is built **exclusively** from the viewer-filtered property slice — a direct `PropertyReader.ListByParent`/`PropertyRepository.ListByParent` call from the facade fails the build or the test — and the proto ships the media shape now, empty: `ProfileImage{media_id, alt_text, content_warning}` + `primary_image` + `repeated gallery [max_items = 10]`.
 6. An off-location viewer can **read** a character's in-world description where `seed:player-character-colocation` previously **denied** it — the half of Phase 2's criterion 4 deferred here by D-29. It ships only together with the criterion-2 projection narrowing, so the read path returns `description` without `PlayerId` or `LocationId`, and only after an audit establishes exactly which existing character descriptions it exposes. A permit of the bare shape `permit(principal is character, action in ["read"], resource is character)` — unconditional, gating the whole `CharacterInfo` projection — does **not** satisfy this criterion.
 
-**Plans**: 1/9 plans executed
+**Plans**: 2/9 plans executed
 **UI hint**: no
 
 **Sketch findings** (must be answered in this phase): **A3** — `AdminSearchCharacters` (§9.2) currently "searches names" (character names); the admin list needs it extended to player usernames. **ACCEPTED** as the design, implemented in **Phase 6** — D-72 defers the admin RPCs; answered 2026-08-10 by D-81, no Phase-4 code. **A2's RPC half** — the list RPC must accept a sort key for the joined `players.username`. **ACCEPTED** as the design, implemented in **Phase 6**; §11.3's row was already amended in Phase 2 by D-26. **Admin rename census decision** (see Phase 3) — **WITHDRAWN.** Phase 3 D-44 removed rename from v0.13, so sketch 004's `Rename…` affordance is not live in v0.13 and sketch 009 finding #5 ("names are reserved, not permanent") is false for v0.13; answered 2026-08-10 by D-81, no code. Source: `.planning/sketches/002-*/README.md`.
@@ -491,7 +491,7 @@ Plans:
 
 - [x] 04-01-PLAN.md — Tracer: an anonymous off-location visitor reads a character's name and in-world description end to end (proto slice, `read_description` seeds, facade, web proxy, wiring)
 - [ ] 04-02-PLAN.md — Extract `resolveAndGate` and `ownedCharacter` onto one embedded `playerGate`
-- [ ] 04-03-PLAN.md — Amend 01-SPEC §9.3/§9.4.2 for the struck `RenameCharacter` row; record the three sketch verdicts
+- [x] 04-03-PLAN.md — Amend 01-SPEC §9.3/§9.4.2 for the struck `RenameCharacter` row; record the three sketch verdicts
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -571,7 +571,7 @@ Plans:
 | 1. Channels Subsystem | v0.11 | 6/6 | In Progress|  |
 | 2. Scenes Lineage Completion | v0.11 | 13/13 | In Progress|  |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 6/6 | Complete    | 2026-08-10 |
-| 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 1/9 | In Progress|  |
+| 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 2/9 | In Progress|  |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
