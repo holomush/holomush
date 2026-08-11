@@ -2009,16 +2009,16 @@ Every row below is a **mutation**. Every mutation that targets an **existing
 character row** carries `expected_version` on its request per §9.4.
 `CreateCharacter` is the one exclusion — the table marks it — because a create
 has no prior row and therefore no prior version to be guarded against. What
-guards a create instead is §6.1.3's `UNIQUE` index on the stored normalized name,
-the same index the `RenameCharacter` row below collides against. §9.4.2 states
-the exclusion normatively.
+guards a create instead is §6.1.3's `UNIQUE` index on the stored normalized name.
+(Rename left v0.13 on 2026-08-06 for backlog Phase 999.20 — Phase 3 D-44,
+recorded against IDENT-03 in REQUIREMENTS — so no row below collides against that
+index.) §9.4.2 states the exclusion normatively.
 
 | RPC | Caller | Audience of the response | Gate | Description |
 | --- | --- | --- | --- | --- |
 | `CharacterAccessService.CreateCharacter` | authenticated player | `owner` | session resolution | **No `expected_version` — it creates the row a version guard would protect (§9.4.2).** Structured identity card (IDENT-01): name, pronouns, concept, species, age, faction. **Reshaped, not new** — see below. |
 | `CharacterAccessService.UpdateCharacterProfile` | owner | `owner` | ABAC `write` on `character:<id>` | Partial update of the `profile.*` prose fields (§7.2), driven by an update mask (§9.5). Server-enforced length caps (IDENT-02). |
 | `CharacterAccessService.UpdateCharacterDescription` | owner | `owner` | ABAC `write` on `character:<id>` | The in-world `look` text — the intrinsic `characters.description` column, **not** a `profile.*` row (IDENT-02a). Reaches the shipped `world.Service.UpdateCharacterDescription` (`internal/world/service.go:799-836`), never a parallel write path. |
-| `CharacterAccessService.RenameCharacter` | owner | `owner` | ABAC `write` on `character:<id>` | Rename (IDENT-03). Runs §6.1's pipeline, the mixed-script and skeleton checks, and the block list; collides against the §6.1.3 unique index. |
 | `CharacterAccessService.RetireCharacter` | owner | `owner` | ABAC `write` on `character:<id>` | Soft retire (IDENT-04). Sets `status` to `retired`. Does **not** release the name (§4.4). |
 | `CharacterAccessService.UnretireCharacter` | owner | `owner` | ABAC `write` on `character:<id>` | Returns `status` to `active` (§4.5 property 1). |
 | `CharacterAccessService.AdminUpdateCharacter` | admin | `admin` | ABAC on `admin_section:characters` | Administrative character edit, driven by the §10.6 field-mask allowlist. |
@@ -2113,10 +2113,9 @@ non-zero value would be a fabrication about a row that does not exist yet.
 **What guards a create instead.** Two concurrent creates do not race over a
 version — they race over a **name**, and §6.1.3's `UNIQUE` index on the stored
 normalized name is what decides them, surfacing as `CHARACTER_NAME_TAKEN` (§9.6).
-That is the same index the `RenameCharacter` row collides against. Creation's
-concurrency safety is therefore already specified, in the section that specifies
-it for rename; it is not missing, and Phase 4 **MUST NOT** invent a
-version-shaped substitute for it.
+Creation's concurrency safety is therefore already specified — §6.1.3 defines
+that index and the collision it decides; it is not missing, and Phase 4 **MUST
+NOT** invent a version-shaped substitute for it.
 
 **This rule is load-bearing against a live affordance, not hypothetical.** The
 shipped repository layer treats a zero version as an *unversioned* write:
