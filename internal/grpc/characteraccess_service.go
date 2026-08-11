@@ -59,6 +59,16 @@ type characterAccessProfileVisibility interface {
 // contain the internal code string.
 const characterProfileNotFoundMessage = "character profile not found"
 
+// characterParentType is the entity_properties.parent_type discriminator the
+// profile enumeration filters on. Profile rows hang off the character row, not
+// off a location or an object.
+const characterParentType = "character"
+
+// codeProfileJoinDivergence marks the one impossible-by-construction outcome of
+// the admissibility-set/value-source join: the visibility evaluator named a row
+// id the enumeration never supplied. See resolveVisibleProfile.
+const codeProfileJoinDivergence = "CHARACTER_PROFILE_ATTRIBUTE_JOIN_DIVERGENCE"
+
 // CharacterAccessServer is the host-side facade for the web character surface.
 // It constructs the viewer principal itself and owns every reachability and
 // visibility decision, so the gateway forwards bytes and computes nothing.
@@ -240,11 +250,111 @@ func (s *CharacterAccessServer) GetCharacterProfile(ctx context.Context, req *ch
 		return nil, s.mapDescriptionError(ctx, err)
 	}
 
-	// The profile map, primary image and gallery stay empty in the tracer slice;
-	// the viewer-filtered property slice arrives with plan 04-02.
+	profile, err := s.resolveVisibleProfile(ctx, viewerSubject, characterID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &characteraccessv1.GetCharacterProfileResponse{
-		Character: projectPublic(characterID.String(), desc, nil),
+		Character: projectPublic(characterID.String(), desc, profile),
 	}, nil
+}
+
+// resolveVisibleProfile returns the (name, value) pairs 01-SPEC §8.5.1's
+// conjunction admits for this viewer, and nothing else.
+//
+// # One enumeration, two views of it
+//
+// ListPropertiesByParent is called EXACTLY ONCE, with the viewer's own Caller.
+// That call applies TERM B only — it evaluates `read` on `property:<id>` and
+// nothing else. Its result slice is then walked ONCE and read two ways:
+//
+//   - byID, keyed on the row id — the VALUE SOURCE;
+//   - candidates, carrying that same id and the row name — the EVALUATOR INPUT.
+//
+// VisibleAttributes then re-evaluates reachability and, per row, term A
+// (read_profile_attribute) AND term B (read). Its returned map is the
+// ADMISSIBILITY SET, NOT A VALUE SOURCE: profilevis.Property is {ID, Name} and
+// nothing else, carrying no value, no image payload and no gallery entry by
+// design. A projection built from it alone yields a response with the right
+// KEYS and EMPTY VALUES — which is why the values are joined back out of byID.
+//
+// Do NOT "fix" a missing value by enumerating a second time, by widening
+// profilevis.Property to carry one, or by reaching for a property repository.
+// The last does not compile (the facade's narrow interfaces name no
+// ListByParent, D-79) and the first two are exactly the unfiltered-source
+// improvisation criterion 5 forbids. byID is built from the IDENTICAL
+// term-B-filtered slice that fed the evaluator; there is no second read and no
+// unfiltered source anywhere in this function.
+//
+// # Term B is deliberately evaluated twice
+//
+// Once by the enumeration and once inside the conjunction. `A and B and B` is
+// `A and B`, so the redundancy costs a policy evaluation and changes no verdict.
+// The alternative — enumerating with a non-viewer caller — either requests the
+// system bypass (handing the facade every row, contradicting criterion 5
+// outright) or empties the compile fence of meaning. The redundancy is the
+// cheaper of the two.
+//
+// # A divergence is an error
+//
+// An id in the visible map with no row in byID cannot happen: both sets come
+// from one slice. If it does, the evaluator returned something the enumeration
+// never supplied, and neither available shortcut is acceptable — emitting the
+// field with a zero value is the empty-value regression, and dropping it
+// silently renders a broken evaluator as a legitimately sparse profile, which
+// §8.10 forbids. It returns Internal through the same logged path an evaluation
+// failure takes.
+func (s *CharacterAccessServer) resolveVisibleProfile(ctx context.Context, viewerSubject string, characterID ulid.ULID) (map[string]string, error) {
+	rows, err := s.world.ListPropertiesByParent(ctx, world.HumanCaller(viewerSubject), characterParentType, characterID)
+	if err != nil {
+		// An enumeration failure is an OUTAGE. world.Service filters an ordinary
+		// policy denial out of the slice silently and returns an error only when
+		// nothing could be evaluated, so surfacing this as a successful sparse
+		// profile would be §8.10's forbidden masking.
+		errutil.LogErrorContext(ctx, "character access: profile property enumeration failed", err,
+			"character_id", characterID.String())
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
+	}
+
+	byID := make(map[string]*world.EntityProperty, len(rows))
+	candidates := make([]profilevis.Property, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		id := row.ID.String()
+		byID[id] = row
+		candidates = append(candidates, profilevis.Property{ID: id, Name: row.Name})
+	}
+
+	visible, err := s.profileVis.VisibleAttributes(ctx, viewerSubject, characterID.String(), candidates)
+	if err != nil {
+		return nil, mapProfileError(ctx, err)
+	}
+
+	admitted := make(map[string]string, len(visible))
+	for name, prop := range visible {
+		row, ok := byID[prop.ID]
+		if !ok {
+			divergence := oops.Code(codeProfileJoinDivergence).
+				With("attribute", name).
+				With("property_id", prop.ID).
+				With("character_id", characterID.String()).
+				Errorf("the visibility evaluator admitted a property row the enumeration never supplied")
+			errutil.LogErrorContext(ctx, "character access: profile attribute join diverged", divergence)
+			return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
+		}
+		if row.Value == nil {
+			// A NULL value column is a flag-style row, not a blank field. Either
+			// way it is OMITTED: §7.5 requires a blank field and a withheld field
+			// to be indistinguishable on the wire. projectPublic drops the
+			// empty-string case for the same reason.
+			continue
+		}
+		admitted[name] = *row.Value
+	}
+	return admitted, nil
 }
 
 // mapDescriptionError renders a world.Service read failure as a gRPC status.
