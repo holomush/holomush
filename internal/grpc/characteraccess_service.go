@@ -38,6 +38,32 @@ type characterAccessWorldReader interface {
 	GetCharacterDescription(ctx context.Context, subjectID world.Caller, characterID ulid.ULID) (world.CharacterDescription, error)
 }
 
+// characterAccessWorldMutator is the narrow interface CharacterAccessServer
+// needs from world.Service — only the two authorized WRITE commands the owner
+// mutation surface issues, and no third.
+//
+// THE ABSENCES ARE LOAD-BEARING HERE TOO, and this is where the D-79 compile
+// fence matters most. PropertyRepository.ListByParent, PropertyReader.ListByParent
+// and every other property-repository method are deliberately absent from this
+// type set, exactly as they are from characterAccessWorldReader, so a direct
+// property write from this facade is a compile error rather than a review
+// finding. The profile-attribute write reaches entity_properties rows ONLY
+// through world.Service.UpdateCharacterProfileAttributes, which owns the
+// create/update/delete partition, the caller-version CAS and the
+// same-transaction envelope. This facade names the two commands and nothing
+// beneath them.
+//
+// IT IS A SEPARATE INTERFACE FROM characterAccessWorldReader ON PURPOSE. Widening
+// the reader with these two methods would need no wiring at all — *world.Service
+// already satisfies both — which is precisely its appeal and precisely why it is
+// wrong: the type's name and its contract both say READER, and a reader that
+// writes hands the next reader a precedent for routing any domain call through
+// it. One interface per capability.
+type characterAccessWorldMutator interface {
+	UpdateCharacterDescription(ctx context.Context, subjectID world.Caller, characterID ulid.ULID, description string) error
+	UpdateCharacterProfileAttributes(ctx context.Context, caller world.Caller, characterID ulid.ULID, expectedVersion int, attributes map[string]string) error
+}
+
 // characterAccessProfileVisibility is the narrow interface CharacterAccessServer
 // needs from profilevis — only the reachability gate and the per-attribute
 // conjunction.
@@ -102,8 +128,13 @@ type CharacterAccessServer struct {
 	// resolvers ship and answer different questions — see resolveViewerIdentity.
 	playerGate
 
-	world      characterAccessWorldReader
-	profileVis characterAccessProfileVisibility
+	world characterAccessWorldReader
+	// worldMutator is the owner mutation surface's ONLY route to the domain.
+	// It is satisfied at both construction sites by the same *world.Service
+	// value `world` above receives — one added constructor argument, no new
+	// production type and no third construction site.
+	worldMutator characterAccessWorldMutator
+	profileVis   characterAccessProfileVisibility
 }
 
 // NewCharacterAccessServer constructs a CharacterAccessServer. Every dependency
@@ -112,17 +143,23 @@ type CharacterAccessServer struct {
 // charRepo is the one handle the owner audience adds over plan 04-01's four:
 // the session and player repositories were already here for the viewer-identity
 // seam, so building the shared gate costs one argument rather than three.
+//
+// worldMutator is the one handle the owner MUTATION surface adds. Both call
+// sites pass the same *world.Service value they already pass for worldReader, so
+// the write surface costs one argument and no new production type.
 func NewCharacterAccessServer(
 	worldReader characterAccessWorldReader,
+	worldMutator characterAccessWorldMutator,
 	profileVis characterAccessProfileVisibility,
 	playerSessionRepo auth.PlayerSessionRepository,
 	playerRepo auth.PlayerRepository,
 	charRepo auth.CharacterRepository,
 ) *CharacterAccessServer {
 	return &CharacterAccessServer{
-		playerGate: newPlayerGate(playerSessionRepo, playerRepo, charRepo, characterGuestDenialMessage),
-		world:      worldReader,
-		profileVis: profileVis,
+		playerGate:   newPlayerGate(playerSessionRepo, playerRepo, charRepo, characterGuestDenialMessage),
+		world:        worldReader,
+		worldMutator: worldMutator,
+		profileVis:   profileVis,
 	}
 }
 

@@ -121,6 +121,7 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 		})
 		return holoGRPC.NewCharacterAccessServer(
 			worldSvc,
+			worldSvc,
 			&profilevis.Evaluator{Engine: engine},
 			psRepo,
 			playerRep,

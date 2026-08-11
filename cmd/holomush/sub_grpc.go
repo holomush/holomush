@@ -860,6 +860,7 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	// here adds an argument, never a second construction site.
 	characteraccessv1.RegisterCharacterAccessServiceServer(s.grpcServer, holoGRPC.NewCharacterAccessServer(
 		worldService,
+		worldService,
 		&profilevis.Evaluator{Engine: policyEngine},
 		authPlayerSessionRepo,
 		authPlayerRepo,

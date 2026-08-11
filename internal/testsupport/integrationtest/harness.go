@@ -1205,6 +1205,7 @@ func (s *Server) NewCharacterAccessServer() *holoGRPC.CharacterAccessServer {
 	}
 	return holoGRPC.NewCharacterAccessServer(
 		s.worldSvc,
+		s.worldSvc,
 		&profilevis.Evaluator{Engine: s.accessEngine},
 		s.playerSessionStore,
 		s.playerRepo,

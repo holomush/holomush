@@ -98,6 +98,9 @@ func newCAServerForToken(
 	vis := &recordingProfileVisibility{reachable: true}
 	srv := NewCharacterAccessServer(
 		&stubCharacterWorldReader{desc: world.CharacterDescription{Name: "Ada", Description: "A tinkerer."}},
+		// The public read path never mutates: a double that fails on call keeps
+		// that continuously enforced.
+		&recordingWorldMutator{t: t, failOnCall: true},
 		vis,
 		sessionRepo,
 		playerRepo,
