@@ -5,16 +5,16 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 04
 current_phase_name: shared-facade-helpers-characteraccessservice
 status: executing
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-08-11T17:49:32.291Z"
+stopped_at: Completed 04-08-PLAN.md
+last_updated: "2026-08-11T18:30:20.202Z"
 last_activity: 2026-08-11
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 49
-  completed_plans: 48
-  percent: 67
+  completed_plans: 49
+  percent: 78
 ---
 
 # Project State
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 04 (shared-facade-helpers-characteraccessservice) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 98%)
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
 Last activity: 2026-08-11 — Phase 04 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -265,6 +265,7 @@ no action needed.
 | Phase 04 P05 | 24min | 3 tasks | 12 files |
 | Phase 04 P06 | 68min | 3 tasks | 14 files |
 | Phase 04 P07 | 39min | 3 tasks | 38 files |
+| Phase 04 P08 | 37min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -583,6 +584,10 @@ the next milestone yet.
 - [Phase ?]: 04-07: a directory-gate denial is PermissionDenied, not the 8.7 not-found-equivalent — the singleton character_directory resource names no character and carries no count, so its existence is a product fact rather than a secret
 - [Phase ?]: 04-07: the 9.2 gate and the 8.7 membership rule are proven separable in BOTH directions at both tiers — a closed gate with reachability wide open, and a raised reachability floor with the gate open
 - [Phase ?]: 04-07: WebListAllCharacters retired outright with no forwarder; CoreService.ListAllCharacters and grpcclient.Client.ListAllCharacters untouched, and internal/web's CoreClient loses the method because no caller survives there
+- [Phase ?]: 04-08: the routing census teaches its ownership predicate BOTH names (ownedCharacter and the checked-in ownedCharacterForMutation), and asserts the wrapper's own body reaches the shared resolution before the comparison consumes it — so this phase's two write RPCs are inside criterion 1's proof rather than dropped from it
+- [Phase ?]: 04-08: criterion 1 needed a fail-closed audience PARTITION, not three set comparisons. Membership is derived from what a body references, so an ungated handler joins no derived set and no expected set and passes silently; the partition plus a DERIVED public-audience counterpart closes both that case and its one-line 'fix'
+- [Phase ?]: 04-08: WorldQueryService.QueryCharacter is a name-reachable census member, not type-reachable — its response declares id/player_id/name/description inline as bare scalars, so no typed message exists for a descriptor predicate to find. The descriptor census found this on its first run
+- [Phase ?]: 04-08: 01-SPEC 2.6's substring example does not hold literally (ListCharacters is not a substring of ListAllCharacters), but the trap is live one level down — no fully-qualified name collapses, while 17 pairs of METHOD names do. That is why the key is the fully-qualified name and why a Go handler identifier is forbidden as one
 
 ### Pending Todos
 
@@ -646,12 +651,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-11T17:49:06.209Z
+Last session: 2026-08-11T18:30:11.346Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 04-07-PLAN.md
+Stopped at: Completed 04-08-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
