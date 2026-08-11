@@ -1168,9 +1168,44 @@ func (s *Service) UpdateCharacterProfileAttributes(
 			changed = append(changed, name)
 		}
 	}
+	// The executor check stays AHEAD of the empty-partition return below: a
+	// misconfigured service must fail loudly on every call, not only on the ones
+	// that happen to have work.
 	if s.mutator == nil {
 		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
 			Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	// NOTHING TO WRITE — return before the executor. The partition can come out
+	// empty two ways: `attributes` empty outright, and every entry a clear of a
+	// field that has no row (`{"profile.pronouns": ""}` against a character with
+	// no pronouns row goes straight through the name check and the gate). Running
+	// the version-guarded characterWriter.Update anyway would advance
+	// characters.version — invalidating every other client's held
+	// expected_version for a write that touched no row — and ship a
+	// character_profile_update envelope with an empty changed set.
+	//
+	// It sits AFTER the version guard, the closed name set and the ABAC decision,
+	// so a stale or unauthorized caller is still refused rather than quietly
+	// succeeding, and a no-op cannot be used as an existence oracle.
+	//
+	// The facade short-circuits the empty-MASK case before this
+	// (characteraccess_write.go), but this method is the layer that closes the
+	// write surface — "a facade allowlist is defense in depth on top of this,
+	// never the only gate".
+	//
+	// A STALE CALLER IS STILL REFUSED. Skipping the write also skips the
+	// executor's CAS, so the staleness the CAS would have caught is checked
+	// against the version just read. That read is outside the write transaction
+	// and therefore weaker than the CAS — but only in the direction that costs
+	// nothing here: a race it misses ends in a call that wrote no row.
+	if len(creates) == 0 && len(updates) == 0 && len(deletes) == 0 {
+		if char.Version != expectedVersion {
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				With("expected_version", expectedVersion).
+				Wrap(ErrConcurrentEdit)
+		}
+		return nil
 	}
 	payload, err := BuildCharacterProfileUpdatePayload(characterID, changed)
 	if err != nil {

@@ -6,6 +6,7 @@ package world_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -372,3 +373,70 @@ func TestWorldServiceUpdateCharacterProfileAttributesEnvelopeNamesOnlyWhatTheWri
 		"a clear of an unset field wrote no row, so the envelope must not claim it changed")
 }
 
+// TestWorldServiceUpdateCharacterProfileAttributesWritesNothingWhenThePartitionIsEmpty
+// pins WR-07: an all-no-op request must not touch the aggregate.
+//
+// Nothing rejected a request whose partition came out empty. The closed-name loop
+// was skipped, creates/updates/deletes were all nil, and the executor still ran
+// the version-guarded characterWriter.Update and wrote one envelope. Net effect:
+// characters.version advanced — invalidating every other client's held
+// expected_version for a write that touched no row — and a
+// character_profile_update shipped with an empty changed set.
+//
+// The all-clears-are-no-ops shape is reachable in production: the facade
+// short-circuits an empty MASK, but `{"profile.pronouns": ""}` against a
+// character with no pronouns row goes straight through.
+func TestWorldServiceUpdateCharacterProfileAttributesWritesNothingWhenThePartitionIsEmpty(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	cases := []struct {
+		name       string
+		attributes map[string]string
+	}{
+		{"every entry is a clear of a field that has no row", map[string]string{
+			"profile.pronouns": "",
+			"profile.rumors":   "",
+		}},
+		{"the attribute map is empty outright", map[string]string{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, mockRepo, props, outbox := profileTxFixture(t, subjectID, charID)
+
+			stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.StatusActive}
+			mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+			// Update is deliberately NOT expected. mockery fails the test if the
+			// guarded character update is reached, which is the whole assertion:
+			// no CAS means no version bump.
+
+			err := svc.UpdateCharacterProfileAttributes(ctx, world.HumanCaller(subjectID), charID, 5, tc.attributes)
+			require.NoError(t, err, "a no-op is a success, not an error")
+
+			assert.Empty(t, outbox.rows,
+				"no row changed, so no character_profile_update envelope may ship")
+			assert.Empty(t, props.rows, "no property row was created by a clear of an unset field")
+		})
+	}
+
+	t.Run("a STALE caller is still refused rather than quietly succeeding", func(t *testing.T) {
+		svc, mockRepo, _, outbox := profileTxFixture(t, subjectID, charID)
+
+		// The stored version has moved on; the caller still holds 5. Skipping the
+		// write also skips the executor's CAS, so the staleness the CAS would have
+		// caught is checked against the version just read.
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 9, Status: world.StatusActive}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+
+		err := svc.UpdateCharacterProfileAttributes(ctx, world.HumanCaller(subjectID), charID, 5,
+			map[string]string{"profile.pronouns": ""})
+
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, world.ErrConcurrentEdit),
+			"a stale caller must not be told its no-op succeeded — it would keep holding a dead version")
+		errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
+		assert.Empty(t, outbox.rows)
+	})
+}
