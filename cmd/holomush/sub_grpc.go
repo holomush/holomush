@@ -21,6 +21,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/holomush/holomush/internal/access/profilevis"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
@@ -57,6 +58,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
+	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -847,6 +849,22 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		sceneAccessSrv = &sceneaccessv1.UnimplementedSceneAccessServiceServer{}
 	}
 	sceneaccessv1.RegisterSceneAccessServiceServer(s.grpcServer, sceneAccessSrv)
+
+	// 9b. Create CharacterAccessService facade, register with gRPC.
+	// Unlike the scene facade this one has no plugin dependency: it reads the
+	// world model and the ABAC engine directly, and it resolves the viewer rung
+	// itself from the request's optional session token (D-83 — the facade is the
+	// only layer holding the session). The auth repositories are the SAME two
+	// handed to NewSceneAccessServer above, and the profile-visibility evaluator
+	// is built over policyEngine, the engine already in scope — a new dependency
+	// here adds an argument, never a second construction site.
+	characteraccessv1.RegisterCharacterAccessServiceServer(s.grpcServer, holoGRPC.NewCharacterAccessServer(
+		worldService,
+		&profilevis.Evaluator{Engine: policyEngine},
+		authPlayerSessionRepo,
+		authPlayerRepo,
+	))
+	slog.InfoContext(ctx, "characterAccessService facade registered")
 
 	// 10. Construct the session reaper (launch deferred to Activate — row 16).
 	reaperCtx, reaperCancel := context.WithCancel(context.Background())

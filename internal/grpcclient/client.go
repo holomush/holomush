@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
+	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
@@ -29,10 +30,11 @@ import (
 
 // Client wraps a gRPC connection to the Core service.
 type Client struct {
-	conn              *grpc.ClientConn
-	client            corev1.CoreServiceClient
-	contentClient     contentv1.ContentServiceClient
-	sceneAccessClient sceneaccessv1.SceneAccessServiceClient
+	conn                  *grpc.ClientConn
+	client                corev1.CoreServiceClient
+	contentClient         contentv1.ContentServiceClient
+	sceneAccessClient     sceneaccessv1.SceneAccessServiceClient
+	characterAccessClient characteraccessv1.CharacterAccessServiceClient
 }
 
 // ClientConfig holds configuration for the gRPC client.
@@ -89,10 +91,11 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 	}
 
 	return &Client{
-		conn:              conn,
-		client:            corev1.NewCoreServiceClient(conn),
-		contentClient:     contentv1.NewContentServiceClient(conn),
-		sceneAccessClient: sceneaccessv1.NewSceneAccessServiceClient(conn),
+		conn:                  conn,
+		client:                corev1.NewCoreServiceClient(conn),
+		contentClient:         contentv1.NewContentServiceClient(conn),
+		sceneAccessClient:     sceneaccessv1.NewSceneAccessServiceClient(conn),
+		characterAccessClient: characteraccessv1.NewCharacterAccessServiceClient(conn),
 	}, nil
 }
 
@@ -382,6 +385,17 @@ func (c *Client) ListContent(ctx context.Context, req *contentv1.ListContentRequ
 // CoreClient returns the underlying gRPC CoreClient interface for advanced usage.
 func (c *Client) CoreClient() corev1.CoreServiceClient {
 	return c.client
+}
+
+// GetCharacterProfile reads one character's public profile from the character-
+// access facade. The gateway forwards the caller's optional session token; the
+// facade resolves the viewer rung from it and owns every visibility decision.
+func (c *Client) GetCharacterProfile(ctx context.Context, req *characteraccessv1.GetCharacterProfileRequest) (*characteraccessv1.GetCharacterProfileResponse, error) {
+	resp, err := c.characterAccessClient.GetCharacterProfile(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "GetCharacterProfile").Wrap(err)
+	}
+	return resp, nil
 }
 
 // ListScenesForViewer returns the public scene board filtered by the player's preferences.

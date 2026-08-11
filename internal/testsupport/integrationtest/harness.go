@@ -73,6 +73,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/access/profilevis"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
@@ -1186,6 +1187,28 @@ func (s *Server) NewSceneAccessServer() *holoGRPC.SceneAccessServer {
 	)
 	facade.WithCharacterNameResolver(holoGRPC.NewRepoCharacterNameResolver(s.worldCharRepo))
 	return facade
+}
+
+// NewCharacterAccessServer constructs a CharacterAccessServer wired with the
+// harness's real world.Service, its real auth repositories, and a
+// profilevis.Evaluator over the harness's own ABAC engine. This is the
+// production-equivalent wiring (mirroring cmd/holomush/sub_grpc.go).
+//
+// It requires NO plugins and no focus coordinator — the character-access facade
+// has neither dependency. It DOES require a policy engine that can actually
+// deny: compose with WithRealABAC, because the harness default is the allow-all
+// engine and every visibility assertion would pass against it whether or not the
+// seeded corpus permits the read.
+func (s *Server) NewCharacterAccessServer() *holoGRPC.CharacterAccessServer {
+	if s.accessEngine == nil {
+		s.t.Fatalf("integrationtest.Server.NewCharacterAccessServer: requires an access engine (accessEngine is nil)")
+	}
+	return holoGRPC.NewCharacterAccessServer(
+		s.worldSvc,
+		&profilevis.Evaluator{Engine: s.accessEngine},
+		s.playerSessionStore,
+		s.playerRepo,
+	)
 }
 
 // AccessEngine returns the ABAC policy engine the stack evaluates against.
