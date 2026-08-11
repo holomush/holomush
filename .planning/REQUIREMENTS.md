@@ -96,10 +96,10 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [ ] **IDENT-01**: A player can create a character through a **structured identity card** (name,
       pronouns as its own field, concept, species, age, faction), replacing the current name-only stub.
 
-- [ ] **IDENT-02**: A player can edit their character's prose fields — appearance, personality,
+- [x] **IDENT-02**: A player can edit their character's prose fields — appearance, personality,
       biography — with **server-enforced length caps**.
 
-- [ ] **IDENT-02a**: A player can edit their character's **in-world description** (the "look at" text) —
+- [x] **IDENT-02a**: A player can edit their character's **in-world description** (the "look at" text) —
       the intrinsic `characters.description` column, already served by
       `world.Service.UpdateCharacterDescription` (`internal/world/service.go:799-836`). This is a
       *column*, not a `profile.*` property row, and is distinct from the profile prose fields above.
@@ -366,8 +366,8 @@ Which phases cover which requirements. Filled during roadmap creation.
 | PORTAL-09 | Phase 1 | Pending |
 | PORTAL-10 | Phase 1 | Pending |
 | IDENT-01 | Phase 5 | Pending |
-| IDENT-02 | Phase 4 | Pending |
-| IDENT-02a | Phase 4 | Pending |
+| IDENT-02 | Phase 4 | Complete |
+| IDENT-02a | Phase 4 | Complete |
 | IDENT-03 | Backlog 999.20 | Pending |
 | IDENT-04 | Phase 3 | Complete |
 | IDENT-05 | Phase 5 | Pending |

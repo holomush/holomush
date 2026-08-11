@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 04
 current_phase_name: shared-facade-helpers-characteraccessservice
 status: executing
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-08-11T16:17:50.708Z"
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-08-11T17:03:26.108Z"
 last_activity: 2026-08-11
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 49
-  completed_plans: 45
+  completed_plans: 47
   percent: 67
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 04 (shared-facade-helpers-characteraccessservice) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([█████████░] 92%)
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 96%)
 Last activity: 2026-08-11 — Phase 04 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -263,6 +263,7 @@ no action needed.
 | Phase 04 P09 | 17min | 2 tasks | 6 files |
 | Phase 04 P04 | 24min | 3 tasks | 16 files |
 | Phase 04 P05 | 24min | 3 tasks | 12 files |
+| Phase 04 P06 | 68min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -574,6 +575,10 @@ the next milestone yet.
 - [Phase ?]: 04-05: the owner audience constructs NO viewer principal — it reads its own rows through the owning character's subject, so D-27's ALL-direction owner peer never governs a path anyone depends on (D-69)
 - [Phase ?]: 04-05: ListMyCharacters carries no profile map by design — §9.2 gives the roster and GetMyCharacter distinct jobs, and enumerating per character would make the detail read redundant and the roster N+1
 - [Phase ?]: 04-05: INV-ACCESS-15 registered and bound; INV-PRIVACY-9 flipped to bound after verifying both preconditions; INV-PRIVACY-10 left pending because binding its facade half alone would be an undetectable partial binding
+- [Phase ?]: 04-06: update_mask paths are the §7.2 property names verbatim (profile.pronouns), not bare proto field names — 01-SPEC §9.5 rule 2 settles it by example
+- [Phase ?]: 04-06: issue #4954 closed — world.Service.UpdateCharacterDescription performed NO validation; routed through char.SetDescription with CodeCharacterInvalid, behavioral RED captured first
+- [Phase ?]: 04-06: the description path's version guard is a TOCTOU narrowing, not a CAS (the domain command takes no expectedVersion) — pinned by a documenting test, option (b) filed as issue #4956
+- [Phase ?]: 04-06: exactly one layer caps each field — the twelve profile.* fields in the facade (D-82), characters.description in the domain
 
 ### Pending Todos
 
@@ -637,12 +642,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-11T16:17:41.915Z
+Last session: 2026-08-11T17:03:19.137Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 04-05-PLAN.md
+Stopped at: Completed 04-06-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
