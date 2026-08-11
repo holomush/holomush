@@ -9,18 +9,18 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { listAllCharacters, type DirectoryCharacter } from '$lib/scenes/directoryClient';
 
-	let {
-		characterId,
-		selected = [],
-		onChange,
-	}: { characterId: string; selected?: string[]; onChange: (ids: string[]) => void } = $props();
+	// No acting-character prop: the directory read is viewer-scoped. The rung
+	// follows from the session cookie the gateway forwards, so naming an alt here
+	// would be an input the facade does not read.
+	let { selected = [], onChange }: { selected?: string[]; onChange: (ids: string[]) => void } =
+		$props();
 
 	let open = $state(false);
 	let chars = $state<DirectoryCharacter[]>([]);
 	let loadError = $state(false);
 
 	$effect(() => {
-		listAllCharacters(characterId)
+		listAllCharacters()
 			.then((c) => (chars = c))
 			.catch(() => (loadError = true));
 	});

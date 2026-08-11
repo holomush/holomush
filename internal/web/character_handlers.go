@@ -189,3 +189,42 @@ func (h *Handler) WebUpdateCharacterDescription(ctx context.Context, req *connec
 		Character: resp.GetCharacter(),
 	}), nil
 }
+
+// WebListCharacterDirectory proxies to
+// CharacterAccessService.ListCharacterDirectory. The request message carries no
+// fields at all — the listing is viewer-scoped, so the header token is the whole
+// input and a client cannot name an acting character the gateway did not
+// authenticate.
+//
+// It REPLACES WebListAllCharacters, which proxied CoreService.ListAllCharacters
+// and re-exported that RPC's roster verbatim. That surface is gone rather than
+// forwarded: the replacement answers a different question (which characters this
+// VIEWER may reach, as identity only) against a different facade, and a
+// forwarder would have preserved a contract with no consumer.
+//
+// The gateway computes nothing here in particular: it does not filter the list,
+// does not re-sort it, and does not learn why a character is absent. Reachability
+// and ordering are decided in the facade.
+func (h *Handler) WebListCharacterDirectory(ctx context.Context, req *connect.Request[webv1.WebListCharacterDirectoryRequest]) (*connect.Response[webv1.WebListCharacterDirectoryResponse], error) {
+	slog.DebugContext(ctx, "web: WebListCharacterDirectory")
+	if h.characterAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("character access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.characterAccess.ListCharacterDirectory(rpcCtx, &characteraccessv1.ListCharacterDirectoryRequest{
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: list character directory RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebListCharacterDirectoryResponse{
+		Characters: resp.GetCharacters(),
+	}), nil
+}

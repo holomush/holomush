@@ -318,6 +318,10 @@ func (m *mockGRPCClient) UpdateCharacterDescription(_ context.Context, _ *charac
 	return nil, nil
 }
 
+func (m *mockGRPCClient) ListCharacterDirectory(_ context.Context, _ *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
+	return nil, nil
+}
+
 // mockListener implements net.Listener for testing.
 type mockListener struct {
 	acceptFunc func() (net.Conn, error)

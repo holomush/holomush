@@ -8,9 +8,11 @@ export interface DirectoryCharacter {
 	name: string;
 }
 
-/** Lists every character (id + name) for the invite picker. Names only.
- *  characterId is the acting alt (forwarded as the ABAC subject). */
-export async function listAllCharacters(characterId: string): Promise<DirectoryCharacter[]> {
-	const res = await client.webListAllCharacters({ characterId });
-	return res.characters.map((c) => ({ id: c.characterId, name: c.name }));
+/** Lists the characters this viewer can reach, id + name only, for the invite
+ *  picker. The call is viewer-scoped: the rung follows from the session cookie
+ *  the gateway forwards, so there is no acting-character argument to pass. A
+ *  character the viewer cannot reach is simply absent from the result. */
+export async function listAllCharacters(): Promise<DirectoryCharacter[]> {
+	const res = await client.webListCharacterDirectory({});
+	return res.characters.map((c) => ({ id: c.id, name: c.name }));
 }

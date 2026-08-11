@@ -444,6 +444,16 @@ func (c *Client) UpdateCharacterDescription(ctx context.Context, req *charactera
 	return resp, nil
 }
 
+// ListCharacterDirectory lists the characters whose profiles the calling viewer
+// can reach, as identity rows only.
+func (c *Client) ListCharacterDirectory(ctx context.Context, req *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
+	resp, err := c.characterAccessClient.ListCharacterDirectory(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListCharacterDirectory").Wrap(err)
+	}
+	return resp, nil
+}
+
 // ListScenesForViewer returns the public scene board filtered by the player's preferences.
 func (c *Client) ListScenesForViewer(ctx context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
 	resp, err := c.sceneAccessClient.ListScenesForViewer(ctx, req)

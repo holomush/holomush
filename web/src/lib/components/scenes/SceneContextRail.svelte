@@ -292,11 +292,7 @@
       <!-- Invite picker + Leave for participants (owner/member) -->
       {#if isParticipant}
         <div class="mt-2 space-y-1.5">
-          <CharacterMultiSelect
-            characterId={scene.asCharacterId}
-            selected={inviteIds}
-            onChange={(ids) => (inviteIds = ids)}
-          />
+          <CharacterMultiSelect selected={inviteIds} onChange={(ids) => (inviteIds = ids)} />
           {#if inviteIds.length}
             <Button
               size="sm"
