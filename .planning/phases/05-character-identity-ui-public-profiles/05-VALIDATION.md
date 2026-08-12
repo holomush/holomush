@@ -99,7 +99,7 @@ created: 2026-08-12
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| Every web unit / component assertion | IDENT-01, PROFILE-02, EXT-08, both UI-SPEC backstops | `web/package.json` declares `test:unit`, but **no Taskfile target and no CI job** invokes vitest or `svelte-check` — verified by absence in both `Taskfile.yaml` and `.github/workflows/ci.yaml` | `cd web && pnpm test:unit` after each web task; record the result in the task commit. Adding a `web:test` task + `pr-prep` step is a **real gate over a surface no gate covers** (not a duplicate under rule `7zy1161fh1`) but is scope this phase did not ask for — file a GitHub issue rather than widening Phase 5. |
+| Every web unit / component assertion | IDENT-01, PROFILE-02, EXT-08, both UI-SPEC backstops | `web/package.json` declares `test:unit`, but **no Taskfile target and no CI job** invokes vitest or `svelte-check` — verified by absence in both `Taskfile.yaml` and `.github/workflows/ci.yaml` | `cd web && pnpm test:unit` after each web task, and **paste vitest's own summary lines (`Test Files ... passed` / `Tests ... passed`) into that task's commit body** — an ungated runner's result is evidence only if its output is carried forward. Adding a `web:test` task + `pr-prep` step is a **real gate over a surface no gate covers** (not a duplicate under rule `7zy1161fh1`) but is scope this phase did not ask for. **The deferral is assigned, not hoped for: plan 05-05 Task 3 files it as its own GitHub issue** (a second `gh issue create`, separate from the four-amendment register), and the SUMMARY records the number. |
 
 ---
 
