@@ -110,6 +110,30 @@ func (s *profileCorpusStore) ListEnabled(ctx context.Context) ([]*policystore.St
 // resource that matches nothing still compiles and still passes Cache.Reload.
 // Effect is each spec's own paired positive control to establish.
 func newCorpusEngine(ctx context.Context, excluded []string, appended ...*policystore.StoredPolicy) *policy.Engine {
+	engine, _, _ := newReloadableCorpusEngine(ctx, excluded, appended...)
+	return engine
+}
+
+// newReloadableCorpusEngine is newCorpusEngine plus the two handles a spec needs
+// to change the corpus AFTER the engine is built: the *policy.Cache the engine
+// reads through, and the *profileCorpusStore that cache reads through.
+//
+// It carries BOTH of newCorpusEngine's guards, and newCorpusEngine delegates to
+// it, so there is exactly ONE definition of them. That matters more than the
+// three saved lines: the refusal and the `removed` count are what stop a
+// disarmed control from passing while still LOOKING like a control, and a second
+// copy is how one of them gets dropped.
+//
+// The three-value return exists because a spec proving the floor is read at READ
+// TIME has to mutate the corpus and reload the SAME cache the SAME server value
+// already holds. Rebuilding the server between the two reads would leave two
+// variables — the corpus and the server — and the spec could no longer say which
+// one moved the answer.
+func newReloadableCorpusEngine(
+	ctx context.Context,
+	excluded []string,
+	appended ...*policystore.StoredPolicy,
+) (*policy.Engine, *policy.Cache, *profileCorpusStore) {
 	exSet := make(map[string]bool, len(excluded))
 	for _, name := range excluded {
 		exSet[name] = true
@@ -128,7 +152,7 @@ func newCorpusEngine(ctx context.Context, excluded []string, appended ...*policy
 	Expect(corpus.removed).To(Equal(len(excluded)),
 		"the control corpus must exclude exactly %d policies (%v) — a 0 here means the name no longer matches anything seeded and the control is disarmed",
 		len(excluded), excluded)
-	return policy.NewEngine(env.resolver, cache, &noopSessionResolver{}, env.auditLogger)
+	return policy.NewEngine(env.resolver, cache, &noopSessionResolver{}, env.auditLogger), cache, corpus
 }
 
 var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile read", func() {
