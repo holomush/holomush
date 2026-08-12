@@ -47,6 +47,36 @@ const (
 	msgCharacterNameBlocked     = "that character name is not available"
 	msgCharacterNameMixedScript = "character names cannot mix writing systems; please use one"
 
+	// The three charname verdicts the catalogue above LACKED, added by plan
+	// 05-03 because the structured create surface renders them individually
+	// rather than collapsing them into msgGenericRequestFailed.
+	//
+	// The first two are ONE code with TWO messages, and the split is not
+	// cosmetic. charname.Normalize (internal/charname/pipeline.go:109-130) stamps
+	// NAME_EMPTY_NORMAL_FORM for both a blank box and a submission made wholly of
+	// invisible codepoints, because the server-side fact is identical — the name
+	// has no normal form and is never stored. To the PLAYER they are different
+	// events: someone who typed a run of zero-width joiners sees exactly what a
+	// blank box looks like, so "please enter a character name" tells them to do
+	// the thing they believe they already did. Both literals are transcribed
+	// verbatim from the pipeline so the two layers cannot drift into two
+	// different sentences for one refusal.
+	//
+	// Which of the two a create renders is decided on the HANDLER'S OWN INPUT
+	// (strings.TrimSpace of the submitted name), never by reading an error
+	// string — see mapCharacterCreateError.
+	msgCharacterNameBlank              = "please enter a character name"
+	msgCharacterNameNoVisibleCharacter = "that name contains no visible characters; please use letters"
+
+	// msgCharacterNameUnassignedScript is charname.ScriptSet's verdict for a
+	// codepoint this server's Unicode tables cannot classify
+	// (internal/charname/mixedscript.go:102-107). It is a refusal of the
+	// SUBMISSION and names no existing character, so it is safe copy; and it is
+	// deliberately NOT folded into msgCharacterNameMixedScript, which tells the
+	// player to pick one writing system — advice that cannot help when the
+	// problem is a codepoint with no writing system at all.
+	msgCharacterNameUnassignedScript = "character name contains a character this server cannot classify"
+
 	// msgCharacterNameUnverifiable is the D-30 fail-closed state, and it reads
 	// as TRANSIENT on purpose: the name was not rejected. The corpus simply
 	// could not answer the confusability question yet (some row's skeleton is

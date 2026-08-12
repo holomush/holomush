@@ -188,9 +188,14 @@ func ownershipWrapperMethods() map[string]struct{} {
 }
 
 // characterGuestGateRPCs is the checked-in expected set for the guest gate: every
-// OWNER-audience facade RPC must reach the one shared gate. Five members.
+// OWNER-audience facade RPC must reach the one shared gate. Six members.
 func characterGuestGateRPCs() map[string]struct{} {
 	return map[string]struct{}{
+		// 05-03, the structured create. It names no EXISTING character id, so it
+		// is deliberately absent from characterOwnershipRPCs below — but the
+		// caller who seats a character is an owner-audience non-guest like every
+		// sibling, so it takes the same gate.
+		"CreateCharacter": {},
 		// 04-05, the two owner reads.
 		"ListMyCharacters": {},
 		"GetMyCharacter":   {},
