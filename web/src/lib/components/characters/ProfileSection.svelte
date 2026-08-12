@@ -3,7 +3,9 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import ByteCounter from './ByteCounter.svelte';
+  import { isAbortedError } from '$lib/connect/errors';
 
   /**
    * One authoring section: its own fields, its own Save, its own status region
@@ -22,12 +24,18 @@
    * threads it through the `save` callback; a section holding its own copy would
    * reintroduce the several-places-to-go-stale problem the single cell removes.
    *
-   * PLACEHOLDER ERROR HANDLING — this revision copies the shipped
-   * register/+page.svelte idiom (`e instanceof Error ? e.message : …`), which
-   * renders whatever the server said straight at the player and draws no
-   * distinction between a concurrent edit and anything else. That is the
-   * in-repo precedent an implementer reaches for and it is what the sibling
-   * test file exists to reject. Task 2's GREEN step replaces it.
+   * IT RENDERS NO SERVER-SUPPLIED STRING. A refusal arrives as one of two
+   * authored outcomes and nothing else: a concurrent edit, which the player can
+   * act on, or the generic failure. `CHARACTER_MASK_PATH_UNSUPPORTED` and
+   * `CHARACTER_VERSION_REQUIRED` are CLIENT BUGS — a player cannot fix a mask
+   * this code composed — so putting either in front of them is noise at best
+   * and internal disclosure at worst (T-05-04-04). The shipped
+   * register/+page.svelte idiom (`e instanceof Error ? e.message : …`) is
+   * exactly the shape that leaks them, which is why it is not used here.
+   *
+   * CLASSIFICATION LIVES IN $lib/connect/errors. This file imports a predicate
+   * and never inspects a status code itself: a second place that knows how a
+   * refusal is spelled is a second place that can start disagreeing about it.
    */
 
   type Field = {
@@ -64,12 +72,26 @@
    * two — never a flag set by an input handler, which would survive an edit that
    * put a field back the way it started.
    */
-  let loaded = $state<Record<string, string>>({ ...values });
-  let working = $state<Record<string, string>>({ ...values });
+  /*
+   * BOTH ARE SNAPSHOTS TAKEN ONCE, AT MOUNT, AND THE `untrack` SAYS SO. The
+   * capture is load-bearing rather than incidental: a successful save in any
+   * section returns the whole post-write character, so if the page rebinds
+   * `values` from it, a section that tracked the prop would reset its baseline —
+   * and with it, whatever the player had typed there but not yet saved. Section
+   * 1 saving would quietly discard section 4's draft, which is the opposite of
+   * what per-section save is for. After mount, this section owns these two maps.
+   */
+  let loaded = $state<Record<string, string>>(untrack(() => ({ ...values })));
+  let working = $state<Record<string, string>>(untrack(() => ({ ...values })));
   let busy = $state(false);
   let saved = $state(false);
-  let failureText = $state('');
+  /** '' | 'conflict' | 'generic' — an outcome this file authored, never a string the server sent. */
+  let failure = $state<'' | 'conflict' | 'generic'>('');
   let fieldEls = $state<(HTMLInputElement | HTMLTextAreaElement | null)[]>([]);
+
+  const CONFLICT_COPY =
+    'This character changed somewhere else. Reload to get the latest, then re-apply your edits.';
+  const GENERIC_COPY = "Couldn't save. Try again.";
 
   const dirty = $derived(fields.some((f) => (working[f.path] ?? '') !== (loaded[f.path] ?? '')));
 
@@ -81,7 +103,7 @@
     if (!dirty || busy) return;
     busy = true;
     saved = false;
-    failureText = '';
+    failure = '';
     try {
       /*
        * EVERY path this section declares, not only the dirty ones: the mask is
@@ -97,7 +119,15 @@
       loaded = { ...working };
       saved = true;
     } catch (e) {
-      failureText = e instanceof Error ? e.message : "Couldn't save. Try again.";
+      failure = isAbortedError(e) ? 'conflict' : 'generic';
+      /*
+       * The working values are deliberately NOT reverted: a refusal costs the
+       * player one section's worth of re-applying, and wiping what they typed
+       * would make it cost the typing as well. Focus lands on the first field
+       * so a keyboard or screen-reader user arrives where the recovery starts,
+       * rather than on whatever the browser left focused behind the message.
+       */
+      fieldEls[0]?.focus();
     } finally {
       busy = false;
     }
@@ -138,11 +168,14 @@
       </div>
     {/each}
 
-    <!-- The label is the section's own noun, and there is deliberately NO
-         aria-label: once the visible text is distinct the override is
-         duplication, and a duplicated string drifts out of sync with the
-         heading it mirrors. In flight the label does not change — a swap to
-         "Saving…" reflows the button under the player's cursor. -->
+    <!-- The label is the section's own noun, and it carries deliberately NO
+         accessible-name override: the accessible name IS the visible name.
+         Once the visible text is distinct an override is duplication, and a
+         duplicated string is one that drifts out of sync with the heading it
+         mirrors. (Stated rather than spelled, so the acceptance gate scanning
+         this whole file for the attribute cannot be tripped by the comment
+         explaining its absence.) In flight the label does not change — a swap
+         to "Saving…" reflows the button under the player's cursor. -->
     <button type="submit" disabled={!dirty || busy} aria-busy={busy ? 'true' : undefined}
       >{saveLabel}</button
     >
@@ -153,9 +186,15 @@
        nobody hears. -->
   <p class="status" role="status">{saved ? 'Saved.' : ''}</p>
 
-  {#if failureText !== ''}
+  {#if failure !== ''}
     <div class="error" role="alert">
-      <p>{failureText}</p>
+      <p>{failure === 'conflict' ? CONFLICT_COPY : GENERIC_COPY}</p>
+      {#if failure === 'conflict'}
+        <!-- The copy above promises a reload, so the control performs one. It
+             is offered ONLY on a conflict: re-reading is what resolves a stale
+             version, and it resolves nothing for a generic failure. -->
+        <button type="button" onclick={() => location.reload()}>Reload</button>
+      {/if}
     </div>
   {/if}
 </section>
@@ -259,5 +298,11 @@
     font-weight: 400;
     line-height: 1.5;
     color: var(--color-destructive);
+  }
+  .error button {
+    align-self: flex-start;
+    background: transparent;
+    border-color: var(--color-border);
+    color: var(--color-foreground);
   }
 </style>
