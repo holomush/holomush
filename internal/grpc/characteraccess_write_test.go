@@ -60,6 +60,15 @@ type recordedDescriptionWrite struct {
 	description string
 }
 
+// recordedDefaultWrite is one observed PlayerRepository.UpdateDefaultCharacter
+// call. Both arguments are recorded, not just the character: a handler that
+// wrote the RIGHT character onto the WRONG player's row would satisfy an
+// assertion that looked only at the target.
+type recordedDefaultWrite struct {
+	playerID    ulid.ULID
+	characterID ulid.ULID
+}
+
 // recordingWorldMutator is the domain double behind characterAccessWorldMutator.
 //
 // failOnCall is the load-bearing mode: several behaviors here are "the handler
@@ -115,6 +124,9 @@ type writeHarness struct {
 	owned    *world.Character
 	playerID ulid.ULID
 	token    string
+	// defaultWrites is every UpdateDefaultCharacter call the facade made,
+	// in order.
+	defaultWrites *[]recordedDefaultWrite
 }
 
 // writeFixture describes the caller and the domain doubles a spec wants.
@@ -141,6 +153,15 @@ type writeFixture struct {
 	// postWriteListErr fails the SECOND roster lookup with a repository error,
 	// the post-commit counterpart of listErr.
 	postWriteListErr error
+	// defaultWriteErr is what the player repository's narrow
+	// default_character_id write returns.
+	defaultWriteErr error
+	// failOnDefaultWrite leaves UpdateDefaultCharacter UNREGISTERED on the
+	// player-repository mock. Reaching it then fails the test through mockery's
+	// unexpected-call panic, which is what several specs here need: their
+	// behavior is "the handler refuses BEFORE any write", and a double that
+	// quietly returned nil would let a regression that DOES write pass.
+	failOnDefaultWrite bool
 }
 
 func newWriteHarness(t *testing.T, f writeFixture) *writeHarness {
@@ -158,6 +179,15 @@ func newWriteHarness(t *testing.T, f writeFixture) *writeHarness {
 	playerRepo := authmocks.NewMockPlayerRepository(t)
 	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
 		Return(&auth.Player{ID: playerID, IsGuest: f.isGuest}, nil).Maybe()
+
+	defaultWrites := &[]recordedDefaultWrite{}
+	if !f.failOnDefaultWrite {
+		playerRepo.EXPECT().UpdateDefaultCharacter(mock.Anything, mock.Anything, mock.Anything).
+			RunAndReturn(func(_ context.Context, pid, characterID ulid.ULID) error {
+				*defaultWrites = append(*defaultWrites, recordedDefaultWrite{playerID: pid, characterID: characterID})
+				return f.defaultWriteErr
+			}).Maybe()
+	}
 
 	owned := f.owned
 	if owned == nil {
@@ -193,12 +223,13 @@ func newWriteHarness(t *testing.T, f writeFixture) *writeHarness {
 	}
 
 	return &writeHarness{
-		srv:      NewCharacterAccessServer(reader, mutator, &failOnCallProfileVisibility{t: t}, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, charRepo),
-		reader:   reader,
-		mutator:  mutator,
-		owned:    first,
-		playerID: playerID,
-		token:    writeTestToken,
+		srv:           NewCharacterAccessServer(reader, mutator, &failOnCallProfileVisibility{t: t}, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, charRepo),
+		reader:        reader,
+		mutator:       mutator,
+		owned:         first,
+		playerID:      playerID,
+		token:         writeTestToken,
+		defaultWrites: defaultWrites,
 	}
 }
 
@@ -845,4 +876,207 @@ func TestMutationsReportAPostCommitReReadFailureAsInternalNeverAsAnOwnershipRefu
 			})
 		})
 	}
+}
+
+// The default-character write's refusal paths (IDENT-05).
+//
+// EVERY DENIAL BELOW IS ASSERTED AT THE WIRE, and every one carries a permitted
+// twin on the SAME fixture (PORTAL-10 rule 2). Two consequences for how these
+// read:
+//
+//   - status.Code(err) and status.Convert(err).Message() are the assertions.
+//     errutil.AssertErrorCode and oops.AsOops(err).Code() both resolve the
+//     DEEPEST code in the chain under the pinned samber/oops v1.22.0 (#4902), so
+//     neither says anything about what the caller actually received. They are
+//     not used here.
+//   - a denial with no twin proves only that SOMETHING was refused. A handler
+//     that refused every request would satisfy it. The twin is what separates
+//     "this rule fires" from "nothing works".
+
+// setDefaultRequest builds a well-formed default-character request for one id.
+func (h *writeHarness) setDefaultRequest(characterID string) *characteraccessv1.SetDefaultCharacterRequest {
+	return &characteraccessv1.SetDefaultCharacterRequest{
+		CharacterId:        characterID,
+		PlayerSessionToken: h.token,
+	}
+}
+
+// TestSetDefaultCharacterDeniesAGuestAndPermitsTheSameFixturesOwner is the
+// guest gate reached through this surface, with its paired positive control.
+func TestSetDefaultCharacterDeniesAGuestAndPermitsTheSameFixturesOwner(t *testing.T) {
+	t.Parallel()
+
+	t.Run("denies a guest, before any write", func(t *testing.T) {
+		t.Parallel()
+		h := newWriteHarness(t, writeFixture{isGuest: true, failOnDefaultWrite: true})
+
+		resp, err := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest(h.owned.ID.String()))
+		require.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+		assert.Equal(t, characterGuestDenialMessage, status.Convert(err).Message(),
+			"the CHARACTER facade's own guest message — a caller here never touched the scene subsystem")
+	})
+
+	t.Run("permits the same fixture's non-guest owner", func(t *testing.T) {
+		t.Parallel()
+		h := newWriteHarness(t, writeFixture{})
+
+		resp, err := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest(h.owned.ID.String()))
+		require.NoError(t, err)
+		require.Len(t, resp.GetCharacters(), 1, "the response is the caller's roster, not an acknowledgement")
+		assert.Equal(t, h.owned.ID.String(), resp.GetCharacters()[0].GetId())
+
+		require.Len(t, *h.defaultWrites, 1, "exactly one narrow write per accepted request")
+		assert.Equal(t, h.playerID, (*h.defaultWrites)[0].playerID)
+		assert.Equal(t, h.owned.ID, (*h.defaultWrites)[0].characterID)
+	})
+}
+
+// TestSetDefaultCharacterCollapsesAnUnparseableAndANotOwnedIdOntoOneOutcome
+// asserts the two refusals are byte-identical, in ONE test body so a future edit
+// that gives either leg its own literal fails here rather than passing two
+// independently-green specs.
+//
+// The comparison is the point: the ids are compared as ULIDs, never as names, so
+// "not a ULID at all" and "a real ULID belonging to someone else" must be
+// indistinguishable — otherwise a caller learns which character ids parse and,
+// worse, which exist.
+func TestSetDefaultCharacterCollapsesAnUnparseableAndANotOwnedIdOntoOneOutcome(t *testing.T) {
+	t.Parallel()
+
+	h := newWriteHarness(t, writeFixture{failOnDefaultWrite: true})
+
+	_, unparseableErr := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest("Ada"))
+	require.Error(t, unparseableErr)
+
+	_, notOwnedErr := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest(idgen.New().String()))
+	require.Error(t, notOwnedErr)
+
+	assert.Equal(t, codes.PermissionDenied, status.Code(unparseableErr))
+	assert.Equal(t, status.Code(notOwnedErr), status.Code(unparseableErr),
+		"a malformed id and a well-formed id the caller does not own take the SAME status")
+	assert.Equal(t, characterNotOwnedMessage, status.Convert(unparseableErr).Message())
+	assert.Equal(t, status.Convert(notOwnedErr).Message(), status.Convert(unparseableErr).Message(),
+		"and the SAME message — a divergence here is an existence oracle")
+	assert.Empty(t, *h.defaultWrites)
+}
+
+// TestSetDefaultCharacterRefusesARetiredCharacterAndPermitsTheActiveSibling is
+// Q4, with its paired positive control on the same roster.
+//
+// The refusal exists because world.Service's retire path clears
+// default_character_id in the same transaction as the status write; permitting
+// the set here would rebuild exactly the state that code prevents, through a
+// path that transaction cannot see.
+func TestSetDefaultCharacterRefusesARetiredCharacterAndPermitsTheActiveSibling(t *testing.T) {
+	t.Parallel()
+
+	// ONE roster carrying both lifecycle states, so the two legs below are the
+	// same fixture answering differently rather than two fixtures built to
+	// disagree. ownedCharacterFixture's playerID argument is immaterial to the
+	// gate — ownedCharacter matches ids against whatever ListByPlayer returned
+	// for the SESSION's player — so seeding it here rather than from the harness
+	// costs nothing and keeps the roster a single value both legs share.
+	rosterPlayerID := idgen.New()
+	active := ownedCharacterFixture(rosterPlayerID, "Ada", world.StatusActive)
+	retired := ownedCharacterFixture(rosterPlayerID, "Withdrawn", world.StatusRetired)
+	roster := []*world.Character{active, retired}
+
+	t.Run("refuses the retired character with FailedPrecondition and writes nothing", func(t *testing.T) {
+		t.Parallel()
+		h := newWriteHarness(t, writeFixture{owned: roster, failOnDefaultWrite: true})
+
+		resp, err := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest(retired.ID.String()))
+		require.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Equal(t, codes.FailedPrecondition, status.Code(err),
+			"ownership was already proven, so this is a precondition failure and not an ownership refusal")
+		assert.Equal(t, characterNotPlayableMessage, status.Convert(err).Message())
+	})
+
+	t.Run("permits the active sibling on the same roster", func(t *testing.T) {
+		t.Parallel()
+		h := newWriteHarness(t, writeFixture{owned: roster})
+
+		resp, err := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest(active.ID.String()))
+		require.NoError(t, err)
+		require.Len(t, resp.GetCharacters(), 2, "the roster carries the retired entry too (D-90, §4.5)")
+
+		require.Len(t, *h.defaultWrites, 1)
+		assert.Equal(t, active.ID, (*h.defaultWrites)[0].characterID)
+	})
+}
+
+// TestSetDefaultCharacterReturnsInternalAndNoRosterWhenTheNarrowWriteFails is
+// the outage leg. The repository's failure is an outage, not an authorization
+// answer (§8.10), and its text never reaches the caller.
+func TestSetDefaultCharacterReturnsInternalAndNoRosterWhenTheNarrowWriteFails(t *testing.T) {
+	t.Parallel()
+
+	h := newWriteHarness(t, writeFixture{
+		defaultWriteErr: oops.Code("PLAYER_UPDATE_DEFAULT_CHARACTER_FAILED").
+			With("id", "the-players-id").
+			Errorf("connection refused reaching players"),
+	})
+
+	resp, err := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest(h.owned.ID.String()))
+	require.Error(t, err)
+	assert.Nil(t, resp, "no roster is returned on the failure path")
+	assert.Equal(t, codes.Internal, status.Code(err))
+	assert.Equal(t, "internal error", status.Convert(err).Message())
+	assert.NotContains(t, status.Convert(err).Message(), "connection refused",
+		"the inner error is logged, never interpolated into the returned status")
+}
+
+// TestSetDefaultCharacterWireMessagesCarryNoInternalCodeString sweeps every
+// refusal leg for the internal code strings this surface stamps.
+//
+// The codes are useful in a log and are a disclosure on the wire: they name
+// which internal rule fired, which is precisely what the uniform ownership
+// message exists to withhold.
+func TestSetDefaultCharacterWireMessagesCarryNoInternalCodeString(t *testing.T) {
+	t.Parallel()
+
+	internalCodes := []string{
+		codeCharacterNotOwned,
+		codeCharacterNotPlayable,
+		"PLAYER_UPDATE_DEFAULT_CHARACTER_FAILED",
+	}
+
+	t.Run("the ownership refusal", func(t *testing.T) {
+		t.Parallel()
+		h := newWriteHarness(t, writeFixture{failOnDefaultWrite: true})
+		_, err := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest(idgen.New().String()))
+		require.Error(t, err)
+		for _, code := range internalCodes {
+			assert.NotContains(t, status.Convert(err).Message(), code)
+		}
+	})
+
+	t.Run("the retired refusal", func(t *testing.T) {
+		t.Parallel()
+		retired := ownedCharacterFixture(idgen.New(), "Withdrawn", world.StatusRetired)
+		h := newWriteHarness(t, writeFixture{
+			failOnDefaultWrite: true,
+			owned:              []*world.Character{retired},
+		})
+		_, err := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest(retired.ID.String()))
+		require.Error(t, err)
+		for _, code := range internalCodes {
+			assert.NotContains(t, status.Convert(err).Message(), code)
+		}
+	})
+
+	t.Run("the repository outage", func(t *testing.T) {
+		t.Parallel()
+		h := newWriteHarness(t, writeFixture{
+			defaultWriteErr: oops.Code("PLAYER_UPDATE_DEFAULT_CHARACTER_FAILED").Errorf("boom"),
+		})
+		_, err := h.srv.SetDefaultCharacter(context.Background(), h.setDefaultRequest(h.owned.ID.String()))
+		require.Error(t, err)
+		for _, code := range internalCodes {
+			assert.NotContains(t, status.Convert(err).Message(), code)
+		}
+	})
 }
