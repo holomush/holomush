@@ -234,7 +234,7 @@ cannot be dropped as "nice to have" during planning.
 - [ ] **EXT-04**: A **meta-test asserts set equality** between the section registry and the descriptor
       set, so the extensibility guarantee is non-vacuous from day one.
 
-- [ ] **EXT-05**: The media model is proven by **inserting 1 primary + 10 gallery property rows through
+- [x] **EXT-05**: The media model is proven by **inserting 1 primary + 10 gallery property rows through
       the real schema** in v0.13, with no uploader — demonstrating the "no migration later" claim rather
       than asserting it. `UNIQUE(parent_type,parent_id,name)` enforces exactly-one-primary in the
       database.

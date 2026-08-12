@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 05
 current_phase_name: character-identity-ui-public-profiles
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-08-12T22:42:13.105Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-08-12T23:07:29.237Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 53
+  completed_plans: 54
   percent: 78
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 05 (character-identity-ui-public-profiles) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([█████████░] 93%)
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 95%)
 Last activity: 2026-08-12 — Phase 05 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -270,6 +270,7 @@ no action needed.
 | Phase 05 P02 | 15min | 3 tasks | 8 files |
 | Phase 05 P03 | 78min | 3 tasks | 41 files |
 | Phase 05 P04 | 15min | 3 tasks | 5 files |
+| Phase 05 P05 | 55m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -607,6 +608,9 @@ the next milestone yet.
 - [Phase ?]: 05-03: the WebCreateCharacter census row MOVED from characterNameReachableRPCs to characterReadSurfaceInventory rather than being duplicated (Q6)
 - [Phase ?]: 05-04: per-section save on /characters/[id] — five sections over two RPCs sharing one characters.version cell; the four profile masks partition exactly the twelve shipped allowlist paths
 - [Phase ?]: 05-04: the concurrent-edit Reload performs a full page reload as the authored copy promises, at the known cost of discarding unsaved text in the other four sections
+- [Phase ?]: INV-ACCESS-10 bound clause-by-clause: all three summary clauses have a genuine asserting site; the clause-to-site table is recorded because the registry's genuinely-asserted guard cannot detect a partial binding
+- [Phase ?]: ROADMAP criterion 4's 'next load' latency wording overclaims (policy poller defaults to 10s) — filed as amendment #4963 rather than encoded as a test assertion
+- [Phase ?]: Web unit/component tests are ungated (no Taskfile target, no CI job runs vitest or svelte-check) — filed as #4964
 
 ### Pending Todos
 
@@ -670,12 +674,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-12T22:41:53.067Z
+Last session: 2026-08-12T23:07:29.210Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 05-04-PLAN.md
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
