@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 5
-current_phase_name: Character Identity UI & Public Profiles
+current_phase: 05
+current_phase_name: character-identity-ui-public-profiles
 status: executing
-stopped_at: Phase 5 UI-SPEC approved
-last_updated: "2026-08-12T17:38:23.531Z"
-last_activity: 2026-08-11
-last_activity_desc: Phase 04 execution started
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-08-12T20:40:47.605Z"
+last_activity: 2026-08-12
+last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 49
+  completed_plans: 50
   percent: 78
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-09)
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 04 — shared-facade-helpers-characteraccessservice
+**Current focus:** Phase 05 — character-identity-ui-public-profiles
 unchanged: complete the character identity surface (creation, management, public profiles with privacy) and
 stand up the `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces
 without rework.
@@ -34,11 +34,11 @@ without rework.
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 5 — Character Identity UI & Public Profiles
-Plan: Not started
+Phase: 05 (character-identity-ui-public-profiles) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
-Last activity: 2026-08-11 — Phase 4 complete, transitioned to Phase 5
+Progress: [█████████████████░░░] 34/40 plans ([█████████░] 88%)
+Last activity: 2026-08-12 — Phase 05 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
 (`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
@@ -266,6 +266,7 @@ no action needed.
 | Phase 04 P06 | 68min | 3 tasks | 14 files |
 | Phase 04 P07 | 39min | 3 tasks | 38 files |
 | Phase 04 P08 | 37min | 3 tasks | 3 files |
+| Phase 05 P01 | 29min | 3 tasks | 38 files |
 
 ## Accumulated Context
 
@@ -590,6 +591,10 @@ the next milestone yet.
 - [Phase ?]: 04-08: 01-SPEC 2.6's substring example does not hold literally (ListCharacters is not a substring of ListAllCharacters), but the trap is live one level down — no fully-qualified name collapses, while 17 pairs of METHOD names do. That is why the key is the fully-qualified name and why a Go handler identifier is forbidden as one
 - [Phase ?]: Phase 5 criterion 4 AMENDMENT OWED (D-97): 'next load' overclaims. internal/access/policy/cache.go holds a compiled snapshot refreshed by a poller on a 10s default interval (poller.go:35), so a viewer-tier config change is visible on the next load AFTER the cache reloads, not the next load. Substance (read-time evaluation, never stamped onto a row, no backfill) is intact. Reword to 'next load after the policy cache reloads (poller interval, default 10s)'. No gsd-tools verb rewrites a phase's success criteria (phase verbs: uat-passed/next-decimal/add/add-batch/insert/remove/complete/list-plans; roadmap verbs: analyze/get-phase/update-plan-progress/annotate-dependencies/validate/upgrade), so this is recorded here rather than hand-edited per rule a32nfcekfc.
 - [Phase ?]: Phase 5 PROFILE-12 AMENDMENT OWED (D-91): criterion 4's 'both the retirement flow and the surface where a player authors profile fields' cannot hold — there is NO player-facing retirement flow in v0.13. IDENT-04 records player self-retire as 'deferred beyond v0.13'; the only retire path is AdminRetireCharacter in Phase 6. Strike 'both the retirement flow and' from Phase 5 criterion 4; the retirement half of PROFILE-12 moves to Phase 6 alongside AdminRetireCharacter. REQUIREMENTS' PROFILE-12 row needs the same note. Recorded not hand-edited per rule a32nfcekfc.
+- [Phase ?]: 05-01: SetDefaultCharacter carries no expected_version and never calls requireGuardedVersion — the target is a players row with no version column to predicate a CAS on (D-89); the handler doc says so because the omission looks exactly like a bug to fix.
+- [Phase ?]: 05-01: a retired character is refused codes.FailedPrecondition with its own literal, not the uniform ownership message — ownership is already proven at that point, so a lookup-shaped refusal misreports a working rule and buys no opacity (Q4); the predicate is world.Selectable (INV-WORLD-5), never a != retired test.
+- [Phase ?]: 05-01: the plan's Q2-corollary grounding was wrong — default_character_id was NOT on WebCheckSessionResponse (web.proto:567 is WebAuthenticatePlayerResponse). Added as field 5 to CheckPlayerSessionResponse + WebCheckSessionResponse, populated from the player row CheckPlayerSession already loads; moves no census row and preserves the no-extra-round-trip property.
+- [Phase ?]: 05-01: ListMyCharacters' projection loop extracted into the shared unexported ownerRoster helper, so D-90's 'OwnCharacter is never a struct literal' holds by construction rather than by two loops agreeing.
 
 ### Pending Todos
 
@@ -653,13 +658,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-12T11:47:42.879Z
+Last session: 2026-08-12T20:40:47.589Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Phase 5 UI-SPEC approved
-Resume file: .planning/phases/05-character-identity-ui-public-profiles/05-UI-SPEC.md
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.

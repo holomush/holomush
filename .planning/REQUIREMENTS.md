@@ -113,7 +113,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       deferred beyond v0.13); the character leaves active play, its record and name are preserved, and
       the operation is reversible.
 
-- [ ] **IDENT-05**: A player can manage **all of their characters from one place** (multi-alt
+- [x] **IDENT-05**: A player can manage **all of their characters from one place** (multi-alt
       management), including which is default.
 
 - [x] **IDENT-06**: Character names permit non-Latin scripts but are normalized with **NFKC**, stripping
