@@ -1,10 +1,11 @@
 ---
 phase: 5
 slug: character-identity-ui-public-profiles
-status: draft
+status: approved
 shadcn_initialized: true
 preset: "shadcn-svelte — style nova, baseColor slate (pre-existing web/components.json)"
 created: 2026-08-11
+reviewed_at: 2026-08-11
 ---
 
 # Phase 5 — UI Design Contract
@@ -136,8 +137,8 @@ phase introduces **no new token**.
    (`color-mix(in srgb, var(--color-primary) 16%, transparent)` fill,
    `color-mix(… 32% …)` border, letter in `--color-primary`).
 2. The focus ring on any input, button or link-card (`--color-ring`, same hex).
-3. The primary submit button of each form section (`Create character`, each section `Save`) —
-   solid `--color-primary` on `--color-primary-foreground`.
+3. The primary submit button of each form section (`Create character`, and each section's own
+   `Save …` button) — solid `--color-primary` on `--color-primary-foreground`.
 4. The hover border on a clickable roster card (`border-color: var(--color-primary)`).
 5. The `View public profile →` link on `/characters/[id]` and `View profile →` on a
    not-playable roster card.
@@ -187,7 +188,7 @@ carries an icon-free `role="alert"` and text, the `Default` badge carries the wo
 
 `/c/[id]` is a sibling of `/login` and `/register`, inheriting the root `+layout.svelte`
 exactly as they do (D-84). **No new chrome ships** (D-85): the root layout already renders
-`TopBar`, whose anonymous branch (`TopBar.svelte:141-144`) renders `Login` / `Register`
+`TopBar`, whose anonymous branch (`TopBar.svelte:142-144`) renders `Login` / `Register`
 unconditionally for every anonymous viewer on every page. That pair *is* the unconditional
 sign-in invitation 007-C permits, and it is why **no profile-local sign-in notice may ever
 be added**.
@@ -377,10 +378,21 @@ Terminology is binding (`.claude/rules/terminology.md`): **character**, **player
 | `/characters` create card | `+ Create a character` |
 | `/characters` playable card, not default | `Make default` |
 | `/characters/new` submit | `Create character` |
-| `/characters/[id]` per section | `Save` (with `aria-label="Save {section heading}"`) |
+| `/characters/[id]` section 1 | `Save identity` |
+| `/characters/[id]` section 2 | `Save in-world description` |
+| `/characters/[id]` section 3 | `Save appearance & history` |
+| `/characters/[id]` section 4 | `Save hooks & current` |
+| `/characters/[id]` section 5 | `Save out of character` |
 | `/characters/[id]` → public view | `View public profile →` |
 | Not-playable roster card | `View profile →` |
 | Not-found page | `Home` |
+
+**The five Saves carry distinct visible labels — verb + that section's own noun — because
+`/characters/[id]` renders all five at once.** Each label is the section heading it belongs
+to, so a sighted player scanning the page can tell the five buttons apart without reaching
+for context. There is **no `aria-label` override** on any of them: once the visible text is
+distinct the override is duplication, and a duplicated string is a string that drifts out of
+sync with the heading it is supposed to mirror. The accessible name is the visible name.
 
 ### Static explanatory copy
 
@@ -481,7 +493,19 @@ The roster copy MUST NOT imply a player can retire, delete or rename a character
 
 ## UI Considerations
 
-Applicable state considerations resolved: **18 covered, 2 backstop, 2 unresolved**
+Applicable state considerations resolved: **21 covered, 2 backstop, 4 dismissed, 1 unresolved** (28 rows)
+
+> Provenance: authored surface-by-surface, then cross-checked against the `ui-consideration-probe`
+> engine's element × category intersection (8 elements × the closed 8-category taxonomy → 32
+> applicable pairs). 24 rows were already present and covered the full category axis; the probe's
+> delta is recorded below. The one row it earned outright is `partial | /characters/new` — a
+> combination surface-by-surface enumeration missed, and which turns out to carry a precondition of
+> the locked submit-and-report decision.
+>
+> The tally above is a recount. The prior line read `18 covered, 2 backstop, 2 unresolved` against a
+> table that already held 20 covered rows — an authored count that drifted from the rows it
+> summarised and survived a checker pass. Re-derive it from the table on every edit rather than
+> incrementing it.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -498,16 +522,20 @@ Applicable state considerations resolved: **18 covered, 2 backstop, 2 unresolved
 | error | `/characters/[id]` (form) | ✅ covered | `WORLD_CONCURRENT_EDIT` renders in the failing section only, with a `Reload` control; the other four sections keep their text. Client-bug codes collapse to the generic copy. |
 | error | roster (list-collection) | ✅ covered | `Couldn't load your characters. Try again.` |
 | populated | `/c/[id]` profile (static-content) | ✅ covered | Full card (portrait, name, pronouns, concept, description, five fact pills) plus five long-form sections in fixed order, OOC last. |
-| populated | `/c/[id]` media (media) | 🧪 backstop | The gallery/primary/`content_warning` renderer **cannot be exercised by running v0.13** — §7.3 ships zero upload behavior, so no media row can exist. Needs a fixture-driven held-out render test asserting: primary replaces the portrait, `alt_text` becomes `alt`, a non-empty `content_warning` blurs behind a reveal, and zero rows render nothing. |
+| populated + error | `/c/[id]` media (media) | 🧪 backstop | The gallery/primary/`content_warning` renderer **cannot be exercised by running v0.13** — §7.3 ships zero upload behavior, so no media row can exist. Needs a fixture-driven held-out render test asserting: primary replaces the portrait, `alt_text` becomes `alt`, a non-empty `content_warning` blurs behind a reveal, and zero rows render nothing. **Media `error` folds here** rather than dismissing: *absent* media (no row → initial-letter placeholder) is already specified, but *broken* media (a row exists and the image fails to load) was not, and the renderer carrying that failure mode **is written in this phase** — only the data is unreachable. The same held-out test MUST assert an `<img>` whose `src` fails to load falls back to the identical initial-letter placeholder, so a shipped renderer does not carry an unhandled failure behind a "revisit when the uploader lands" promise. |
 | populated | roster (list-collection) | ✅ covered | `auto-fill minmax(200px,1fr)` grid, `md` gap, single column below 768px; badge matrix fixed (default / session / retired). |
 | partial | `/characters/[id]` (form) | ✅ covered | Partial *is* the steady state — per-section save (D-93). Each section carries its own dirty flag, Save, status region and error region; `version` lives in exactly one place and is refreshed from every response. |
 | partial | roster (list-collection) | ✅ covered | Mixed playable / not-playable is the designed case: two sections, uniform clickability in the top grid, session badge suppressed on every non-`active` lifecycle. |
+| partial | `/characters/new` (form) | ✅ covered | **A rejected submit MUST preserve every value the player entered.** On `CHARACTER_NAME_TAKEN` / `CHARACTER_NAME_INVALID` / the catch-all, the form re-renders with `name`, `pronouns`, `concept`, `species`, `age` and `faction` still carrying their submitted values; only the error region changes. Focus moves to the `name` field. **This is a precondition of a locked decision, not a nicety:** creation is submit-and-report (009-A) — the design deliberately accepts that a collision is learned only *after* submitting, because a pre-check cannot be honest across check-then-insert. That trade is defensible only if the round trip is cheap. A submit that discards five typed fields to report one collision converts submit-and-report into the hostile option, on the one surface where a first-time player forms their impression. §Copywriting fixes the *message*; this row fixes the *state*. |
 | overflow | `/c/[id]` prose + pills (static-content) | ✅ covered | Long-form prose wraps (`pre-wrap`) and is never truncated — it is the content, and it is bounded at 4000 bytes server-side. The fact-pill row wraps (`flex-wrap`); a pill never ellipsizes. |
 | overflow | roster grid + collapse chip (list-collection) | ✅ covered | Grid reflows via `auto-fill`; single column below 768px; the collapse chip removes the not-playable grid from the flow rather than scrolling it. |
 | zero-one-many | roster (list-collection) | ✅ covered | Zero → empty copy; one → the single card plus the create card, no section chrome change; many → grid reflow, and the collapse-chip label reads singular vs plural correctly. |
 | long-text | character name (static-content, form) | ✅ covered | **Resolves sketch 009 open question 3.** A cap *does* exist: `internal/charname/syntax/syntax.go:39-42` — `MinNameLength = 2`, `MaxNameLength = 32` **runes**. The profile heading, roster card and create field are all bounded by it; no truncation logic is needed anywhere. |
 | long-text | short `profile.*` fields (form) | 🧪 backstop | The short-field cap is **100 BYTES**, not 100 characters (`world.MaxNameLength` via `characteraccess_write.go:119-137`). A ~34-rune CJK value is server-rejected while looking short to the player. The client's byte counter must use `TextEncoder`, not `.length`. Needs a held-out test with a multi-byte value at 99 / 100 / 101 bytes proving counter and server agree. |
-| nav | Command palette on `/c/[id]` (nav) | ⚠ unresolved | `visibleSections()` gates only on `isGuest`, so an **anonymous** viewer pressing ⌘K on a public profile is offered `Room` (`/terminal`) and `Scenes` — both under `(authed)`, both of which redirect to `/login`. Pre-existing (`/login` and `/register` already render the palette), but `/c/[id]` is the first *shareable public* page to expose it. A fix means widening `SectionVisibility` beyond `isGuest`, which touches a shared registry with an ADR behind it (`holomush-stds8`) and its explicit fail-safe posture. Planner treats as an assumption; not silently in scope. |
+| nav | Command palette on `/c/[id]` (nav) | ⊘ dismissed → [#4962](https://github.com/holomush/holomush/issues/4962) | `visibleSections()` gates only on `isGuest`, so an **anonymous** viewer pressing ⌘K on a public profile is offered `Room` (`/terminal`) and `Scenes` — both under `(authed)`, both of which redirect to `/login`. Pre-existing (`/login` and `/register` already render the palette), but `/c/[id]` is the first *shareable public* page to expose it. Not a leak — the redirect is the fail-safe working. **Out of scope for Phase 5:** a fix means widening `SectionVisibility` beyond `isGuest`, a shared registry carrying ADR `holomush-stds8` and its explicit fail-safe posture; changing a security-adjacent default incidentally, inside a UI phase, is the wrong shape. **Filed as #4962** — this is a decided deferral with a tracker anchor, not an open assumption, so the planner carries nothing. (Previously worded as "the planner MUST file this"; a deferral whose survival depends on a downstream reader noticing a sentence is a hope, not a deferral.) |
+| loading, error, overflow, long-text | Command palette on `/c/[id]` (nav) | ⊘ dismissed → [#4962](https://github.com/holomush/holomush/issues/4962) | The probe raises the palette's own four state considerations on this surface. Phase 5 neither builds nor modifies the palette — `/c/[id]` merely exposes shipped infrastructure on a public route. Specifying another component's states from this spec is scope creep; the states travel with #4962 if that work reopens the component. |
+| error, long-text | Save / Make-default controls (interactive-control) | ⊘ dismissed | Probe delta. A control's *error* is not its own state here — a failed save renders in the owning section's error region, already contracted in the `error \| /characters/[id]` row. A control's *long-text* cannot arise: every button label is an authored constant from §Copywriting (`Save identity` … `Save out of character`, `Make default`), not user or server data. Nothing to specify. |
+| long-text, overflow | Sheet + web-DM named slots (static-content) | ⊘ dismissed | Probe delta. Both slots carry fixed authored copy under the named-slot rule (D-94) and interpolate no user or server data, so neither can overflow or run long. Their one live state — being empty — is contracted in the `empty \| Sheet + web-DM slot` row above. |
 | populated | roster ordering within `Playable` (list-collection) | ⚠ unresolved | Sketch 008 open question 4: ordering is not specified for this surface at all. 008-B's sectioning defuses the sharp edge (a retired character can no longer float to the top of a `Last played` sort, because it is in the other section), but the order *within* `Playable` remains undefined — registry order is what ships today. Planner treats as an assumption. |
 
 ---
@@ -538,6 +566,9 @@ Each of these was made or nearly made in the sketch corpus. Reintroducing any is
 - [ ] No copy saying names are "permanent"; no copy implying a player can rename.
 - [ ] No `/c/{name}` link — the key is the id (§9.2). Sketch 008's HTML is stale here.
 - [ ] No live availability check, no debounced name lookup, no client-side normalizer mirror.
+- [ ] No cleared create form on a rejected submit — every entered value survives the round trip.
+      Submit-and-report (009-A) is only defensible if the round trip is cheap; discarding five
+      typed fields to report one name collision makes it the hostile option.
 - [ ] No client-side field allowlist diffed against the response (absence is a wire property).
 - [ ] No amber outside the cursor.
 - [ ] No hardcoded `HoloMUSH` in player-facing copy.
@@ -553,11 +584,18 @@ Each of these was made or nearly made in the sketch corpus. Reintroducing any is
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved (gsd-ui-checker, 2026-08-11 — re-check after one revision cycle)
+
+Iteration 1 returned `## ISSUES FOUND` with a single Dimension 1 blocker: the per-section CTA
+was the bare label `Save`, rendered five times on `/characters/[id]`, with an
+`aria-label="Save {section heading}"` override that repaired only the accessible name. Resolved
+by giving each section's button a distinct visible verb+noun label matching its own `§Layout`
+heading and dropping the now-redundant override. Iteration 2 verified the fix against the file
+and confirmed it did not regress the closed six-item accent reserved-for list.
