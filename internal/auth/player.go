@@ -199,6 +199,23 @@ type PlayerRepository interface {
 	// clears lockout state (failed_attempts = 0, locked_until = NULL).
 	UpdatePasswordAndClearLockout(ctx context.Context, id ulid.ULID, passwordHash string) error
 
+	// UpdateDefaultCharacter points the player's default_character_id column at
+	// characterID and touches nothing else.
+	//
+	// IT IS NARROW ON PURPOSE, exactly as UpdatePassword above is. The obvious
+	// alternative — GetByID, mutate the struct, Update — issues a full-row
+	// UPDATE that rewrites password_hash, email, failed_attempts and
+	// locked_until from a copy read moments earlier, with no version guard, so a
+	// concurrent password change or lockout is silently reverted by a
+	// preference edit. Callers MUST reach this method rather than compose that
+	// pair.
+	//
+	// It does NOT verify that characterID exists or that the player owns it.
+	// Ownership is the caller's obligation and is proven in the facade before
+	// this is reached; the column carries a foreign key, so a nonexistent id is
+	// refused by the database rather than accepted here.
+	UpdateDefaultCharacter(ctx context.Context, id, characterID ulid.ULID) error
+
 	// Delete removes a player.
 	Delete(ctx context.Context, id ulid.ULID) error
 

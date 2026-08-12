@@ -71,6 +71,10 @@ func (s *stubCharacterAccessClient) UpdateCharacterDescription(context.Context, 
 	return nil, s.err
 }
 
+func (s *stubCharacterAccessClient) SetDefaultCharacter(context.Context, *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error) {
+	return nil, s.err
+}
+
 func (s *stubCharacterAccessClient) ListCharacterDirectory(context.Context, *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
 	return nil, s.err
 }

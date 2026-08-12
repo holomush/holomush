@@ -185,6 +185,9 @@ const (
 	// WebServiceWebUpdateCharacterDescriptionProcedure is the fully-qualified name of the WebService's
 	// WebUpdateCharacterDescription RPC.
 	WebServiceWebUpdateCharacterDescriptionProcedure = "/holomush.web.v1.WebService/WebUpdateCharacterDescription"
+	// WebServiceWebSetDefaultCharacterProcedure is the fully-qualified name of the WebService's
+	// WebSetDefaultCharacter RPC.
+	WebServiceWebSetDefaultCharacterProcedure = "/holomush.web.v1.WebService/WebSetDefaultCharacter"
 	// WebServiceWebListCharacterDirectoryProcedure is the fully-qualified name of the WebService's
 	// WebListCharacterDirectory RPC.
 	WebServiceWebListCharacterDirectoryProcedure = "/holomush.web.v1.WebService/WebListCharacterDirectory"
@@ -403,6 +406,11 @@ type WebServiceClient interface {
 	// WebUpdateCharacterDescription proxies
 	// CharacterAccessService.UpdateCharacterDescription.
 	WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error)
+	// WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+	// Handler.WebSetDefaultCharacter lifts the session token from the header and
+	// forwards only the character id; whose default is repointed follows from the
+	// token, and ownership is proven in the facade rather than here.
+	WebSetDefaultCharacter(context.Context, *connect.Request[v1.WebSetDefaultCharacterRequest]) (*connect.Response[v1.WebSetDefaultCharacterResponse], error)
 	// WebListCharacterDirectory proxies
 	// CharacterAccessService.ListCharacterDirectory.
 	// Handler.WebListCharacterDirectory lifts the session token from the
@@ -735,6 +743,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterDescription")),
 			connect.WithClientOptions(opts...),
 		),
+		webSetDefaultCharacter: connect.NewClient[v1.WebSetDefaultCharacterRequest, v1.WebSetDefaultCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebSetDefaultCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebSetDefaultCharacter")),
+			connect.WithClientOptions(opts...),
+		),
 		webListCharacterDirectory: connect.NewClient[v1.WebListCharacterDirectoryRequest, v1.WebListCharacterDirectoryResponse](
 			httpClient,
 			baseURL+WebServiceWebListCharacterDirectoryProcedure,
@@ -798,6 +812,7 @@ type webServiceClient struct {
 	webGetMyCharacter             *connect.Client[v1.WebGetMyCharacterRequest, v1.WebGetMyCharacterResponse]
 	webUpdateCharacterProfile     *connect.Client[v1.WebUpdateCharacterProfileRequest, v1.WebUpdateCharacterProfileResponse]
 	webUpdateCharacterDescription *connect.Client[v1.WebUpdateCharacterDescriptionRequest, v1.WebUpdateCharacterDescriptionResponse]
+	webSetDefaultCharacter        *connect.Client[v1.WebSetDefaultCharacterRequest, v1.WebSetDefaultCharacterResponse]
 	webListCharacterDirectory     *connect.Client[v1.WebListCharacterDirectoryRequest, v1.WebListCharacterDirectoryResponse]
 }
 
@@ -1061,6 +1076,11 @@ func (c *webServiceClient) WebUpdateCharacterDescription(ctx context.Context, re
 	return c.webUpdateCharacterDescription.CallUnary(ctx, req)
 }
 
+// WebSetDefaultCharacter calls holomush.web.v1.WebService.WebSetDefaultCharacter.
+func (c *webServiceClient) WebSetDefaultCharacter(ctx context.Context, req *connect.Request[v1.WebSetDefaultCharacterRequest]) (*connect.Response[v1.WebSetDefaultCharacterResponse], error) {
+	return c.webSetDefaultCharacter.CallUnary(ctx, req)
+}
+
 // WebListCharacterDirectory calls holomush.web.v1.WebService.WebListCharacterDirectory.
 func (c *webServiceClient) WebListCharacterDirectory(ctx context.Context, req *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error) {
 	return c.webListCharacterDirectory.CallUnary(ctx, req)
@@ -1279,6 +1299,11 @@ type WebServiceHandler interface {
 	// WebUpdateCharacterDescription proxies
 	// CharacterAccessService.UpdateCharacterDescription.
 	WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error)
+	// WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+	// Handler.WebSetDefaultCharacter lifts the session token from the header and
+	// forwards only the character id; whose default is repointed follows from the
+	// token, and ownership is proven in the facade rather than here.
+	WebSetDefaultCharacter(context.Context, *connect.Request[v1.WebSetDefaultCharacterRequest]) (*connect.Response[v1.WebSetDefaultCharacterResponse], error)
 	// WebListCharacterDirectory proxies
 	// CharacterAccessService.ListCharacterDirectory.
 	// Handler.WebListCharacterDirectory lifts the session token from the
@@ -1607,6 +1632,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterDescription")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebSetDefaultCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebSetDefaultCharacterProcedure,
+		svc.WebSetDefaultCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebSetDefaultCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
 	webServiceWebListCharacterDirectoryHandler := connect.NewUnaryHandler(
 		WebServiceWebListCharacterDirectoryProcedure,
 		svc.WebListCharacterDirectory,
@@ -1719,6 +1750,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebUpdateCharacterProfileHandler.ServeHTTP(w, r)
 		case WebServiceWebUpdateCharacterDescriptionProcedure:
 			webServiceWebUpdateCharacterDescriptionHandler.ServeHTTP(w, r)
+		case WebServiceWebSetDefaultCharacterProcedure:
+			webServiceWebSetDefaultCharacterHandler.ServeHTTP(w, r)
 		case WebServiceWebListCharacterDirectoryProcedure:
 			webServiceWebListCharacterDirectoryHandler.ServeHTTP(w, r)
 		default:
@@ -1936,6 +1969,10 @@ func (UnimplementedWebServiceHandler) WebUpdateCharacterProfile(context.Context,
 
 func (UnimplementedWebServiceHandler) WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebUpdateCharacterDescription is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebSetDefaultCharacter(context.Context, *connect.Request[v1.WebSetDefaultCharacterRequest]) (*connect.Response[v1.WebSetDefaultCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebSetDefaultCharacter is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error) {

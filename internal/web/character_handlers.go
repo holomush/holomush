@@ -50,16 +50,18 @@ func (h *Handler) WebGetCharacterProfile(ctx context.Context, req *connect.Reque
 	}), nil
 }
 
-// The four owner-audience proxies below copy WebGetCharacterProfile's shape
+// The five owner-audience proxies below copy WebGetCharacterProfile's shape
 // exactly: nil-client guard, token from the header, bounded context,
 // field-by-field forward, log-then-pass-through on error. They compute nothing.
 //
-// All four facade handlers are LIVE (landed in plans 04-05 and 04-06):
-// CharacterAccessServer.ListMyCharacters, GetMyCharacter,
-// UpdateCharacterProfile, and UpdateCharacterDescription. The routing census
-// (characterWebProxyRPCs in test/meta/characteraccess_routing_census_test.go)
-// pins exactly these four as the owner-audience proxy set by set-equality, so
-// this list cannot drift from the shipped handlers without failing that gate.
+// All five facade handlers are LIVE: CharacterAccessServer.ListMyCharacters,
+// GetMyCharacter, UpdateCharacterProfile and UpdateCharacterDescription landed
+// in plans 04-05 and 04-06; SetDefaultCharacter landed in plan 05-01. The
+// routing census (characterWebProxyRPCs in
+// test/meta/characteraccess_routing_census_test.go) pins exactly this set as the
+// owner-audience proxy set by set-equality, so this list cannot drift from the
+// shipped handlers without failing that gate — the count above is re-derived
+// from the handlers in this file rather than incremented.
 //
 // The ONLY Unimplemented these proxies still produce is their own
 // h.characterAccess == nil guard, and it means an UNWIRED CLIENT in
@@ -192,6 +194,38 @@ func (h *Handler) WebUpdateCharacterDescription(ctx context.Context, req *connec
 
 	return connect.NewResponse(&webv1.WebUpdateCharacterDescriptionResponse{
 		Character: resp.GetCharacter(),
+	}), nil
+}
+
+// WebSetDefaultCharacter proxies to
+// CharacterAccessService.SetDefaultCharacter — the caller's
+// players.default_character_id column, not a characters row.
+//
+// It forwards the character id and the header token and nothing else. There is
+// no expected_version to forward: the facade's write targets a players row,
+// which carries no concurrency token, so the request message declares none.
+func (h *Handler) WebSetDefaultCharacter(ctx context.Context, req *connect.Request[webv1.WebSetDefaultCharacterRequest]) (*connect.Response[webv1.WebSetDefaultCharacterResponse], error) {
+	slog.DebugContext(ctx, "web: WebSetDefaultCharacter", "character_id", req.Msg.GetCharacterId())
+	if h.characterAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("character access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.characterAccess.SetDefaultCharacter(rpcCtx, &characteraccessv1.SetDefaultCharacterRequest{
+		CharacterId:        req.Msg.GetCharacterId(),
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: set default character RPC failed", err, "character_id", req.Msg.GetCharacterId())
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebSetDefaultCharacterResponse{
+		Characters: resp.GetCharacters(),
 	}), nil
 }
 

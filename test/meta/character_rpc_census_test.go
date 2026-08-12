@@ -195,6 +195,12 @@ func characterReadSurfaceInventory() map[string]struct{} {
 		// OwnCharacter, so both are members) ---
 		"holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile":     {},
 		"holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription": {},
+		// §3.4 / §9.3: the default-character write. Its response is
+		// ListMyCharactersResponse-shaped (D-90) so the browser re-renders from
+		// server truth, which makes it a character-returning RPC and therefore a
+		// census member — the write targets a `players` column, but what it
+		// ANSWERS with is the owner roster.
+		"holomush.characteraccess.v1.CharacterAccessService.SetDefaultCharacter": {},
 
 		// --- §2.4 / §9.2, the web halves of the pairs above. §9.2 records that a
 		// proxy pair is a CENSUS PAIR: §3.3 already lists core-side and web-side
@@ -205,6 +211,7 @@ func characterReadSurfaceInventory() map[string]struct{} {
 		"holomush.web.v1.WebService.WebGetMyCharacter":             {},
 		"holomush.web.v1.WebService.WebUpdateCharacterProfile":     {},
 		"holomush.web.v1.WebService.WebUpdateCharacterDescription": {},
+		"holomush.web.v1.WebService.WebSetDefaultCharacter":        {},
 	}
 	// The §3.2 name-reachable rows are inventory members too, and are written down
 	// exactly once — in characterNameReachableRPCs, beside their justifying

@@ -71,13 +71,33 @@ func (s *CharacterAccessServer) ListMyCharacters(ctx context.Context, req *chara
 		return nil, err
 	}
 
-	chars, err := s.charRepo.ListByPlayer(ctx, ps.PlayerID)
+	out, err := s.ownerRoster(ctx, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	return &characteraccessv1.ListMyCharactersResponse{Characters: out}, nil
+}
+
+// ownerRoster reads one player's whole roster and projects it into the owner
+// audience's shape.
+//
+// IT IS SHARED RATHER THAN COPIED. SetDefaultCharacter answers with a
+// ListMyCharactersResponse-shaped roster (D-90), and a second projection loop
+// beside this one is how the two shapes drift — a struct literal on one path
+// and projectOwner on the other, agreeing until one of them gains a field.
+// There is exactly one place a roster is built, so §2.3's "constructed only by
+// projectOwner" holds by construction rather than by discipline.
+//
+// It takes a player id rather than a session because both callers have already
+// run the guest gate; nothing here re-authorizes, and nothing here may.
+func (s *CharacterAccessServer) ownerRoster(ctx context.Context, playerID ulid.ULID) ([]*characteraccessv1.OwnCharacter, error) {
+	chars, err := s.charRepo.ListByPlayer(ctx, playerID)
 	if err != nil {
 		// An OUTAGE, not an empty roster. Collapsing the two would render an
 		// unreachable repository as a player who owns nothing — a working
 		// feature with no rows, which §8.10 forbids.
 		errutil.LogErrorContext(ctx, "character access: owner roster lookup failed", err,
-			"player_id", ps.PlayerID.String())
+			"player_id", playerID.String())
 		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
 	}
 
@@ -88,7 +108,7 @@ func (s *CharacterAccessServer) ListMyCharacters(ctx context.Context, req *chara
 		}
 		out = append(out, projectOwner(char, nil))
 	}
-	return &characteraccessv1.ListMyCharactersResponse{Characters: out}, nil
+	return out, nil
 }
 
 // GetMyCharacter returns one owned character in the shape the edit forms write

@@ -375,6 +375,11 @@ service WebService {
   // WebUpdateCharacterDescription proxies
   // CharacterAccessService.UpdateCharacterDescription.
   rpc WebUpdateCharacterDescription(WebUpdateCharacterDescriptionRequest) returns (WebUpdateCharacterDescriptionResponse);
+  // WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+  // Handler.WebSetDefaultCharacter lifts the session token from the header and
+  // forwards only the character id; whose default is repointed follows from the
+  // token, and ownership is proven in the facade rather than here.
+  rpc WebSetDefaultCharacter(WebSetDefaultCharacterRequest) returns (WebSetDefaultCharacterResponse);
   // WebListCharacterDirectory proxies
   // CharacterAccessService.ListCharacterDirectory.
   // Handler.WebListCharacterDirectory lifts the session token from the
@@ -1599,6 +1604,25 @@ message WebUpdateCharacterDescriptionRequest {
 message WebUpdateCharacterDescriptionResponse {
   // character is the character as it stands after the rewrite.
   holomush.characteraccess.v1.OwnCharacter character = 1;
+}
+
+// WebSetDefaultCharacterRequest names the character to make the caller's
+// default. It carries no session-token field: Handler.WebSetDefaultCharacter
+// reads the token from the request header, so a body-supplied identity is not
+// representable.
+message WebSetDefaultCharacterRequest {
+  // character_id is the character the roster card's control named. The gateway
+  // forwards it unread; whether the caller owns it and whether it is playable
+  // are the facade's decisions.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// WebSetDefaultCharacterResponse re-exports the facade's post-write roster
+// verbatim, so the browser re-renders its cards from server truth.
+message WebSetDefaultCharacterResponse {
+  // characters is the owner-audience roster the facade projected after the
+  // column moved, retired entries included; the gateway forwards it unmodified.
+  repeated holomush.characteraccess.v1.OwnCharacter characters = 1;
 }
 
 // WebListCharacterDirectoryRequest carries NO fields at all, and the emptiness

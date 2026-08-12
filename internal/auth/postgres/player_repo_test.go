@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/testsupport/chartest"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestPlayerRepository_Create(t *testing.T) {
@@ -406,6 +407,56 @@ func TestPlayerRepository_UpdatePassword(t *testing.T) {
 		nonExistentID := ulid.Make()
 		err := repo.UpdatePassword(ctx, nonExistentID, "new_hash")
 		assert.ErrorIs(t, err, auth.ErrNotFound)
+	})
+}
+
+// TestPlayerRepositoryUpdateDefaultCharacterWritesOnlyThatColumn pins the
+// NARROWNESS of the write, not merely its effect. The obvious alternative
+// implementation — GetByID, mutate the struct, Update — produces the same
+// default_character_id and silently rewrites password_hash from a copy read
+// moments earlier; only the untouched-column assertions below tell the two apart.
+func TestPlayerRepositoryUpdateDefaultCharacterWritesOnlyThatColumn(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewPlayerRepository(testPool)
+
+	t.Run("points default_character_id at an owned character and leaves the credentials alone", func(t *testing.T) {
+		player := &auth.Player{
+			ID:           ulid.Make(),
+			Username:     "setdefault_user",
+			PasswordHash: "the_original_hash",
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
+		}
+		require.NoError(t, repo.Create(ctx, player))
+
+		charID := ulid.Make()
+		charName := "Default Fixture " + charID.String()[20:]
+		_, err := testPool.Exec(ctx, `
+			INSERT INTO characters (id, player_id, name, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			append([]any{charID.String(), player.ID.String(), charName}, chartest.Columns(charName)...)...)
+		require.NoError(t, err)
+
+		t.Cleanup(func() {
+			_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charID.String())
+			_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, player.ID.String())
+		})
+
+		require.NoError(t, repo.UpdateDefaultCharacter(ctx, player.ID, charID))
+
+		result, err := repo.GetByID(ctx, player.ID)
+		require.NoError(t, err)
+		require.NotNil(t, result.DefaultCharacterID)
+		assert.Equal(t, charID, *result.DefaultCharacterID)
+		assert.Equal(t, "the_original_hash", result.PasswordHash,
+			"a full-row UPDATE would rewrite the hash; this write names one column")
+		assert.Equal(t, player.Username, result.Username)
+	})
+
+	t.Run("returns ErrNotFound for a player id that names no row", func(t *testing.T) {
+		err := repo.UpdateDefaultCharacter(ctx, ulid.Make(), ulid.Make())
+		assert.ErrorIs(t, err, auth.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "PLAYER_NOT_FOUND")
 	})
 }
 

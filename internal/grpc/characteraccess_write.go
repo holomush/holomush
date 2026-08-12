@@ -70,6 +70,25 @@ const characterValueInvalidMessage = "the submitted value is not acceptable"
 // edit receives.
 const characterConcurrentEditMessage = "the character was modified by someone else; re-read it and retry"
 
+// characterNotPlayableMessage is the wire message a default-character request
+// naming a non-playable character is refused with.
+//
+// IT NAMES THE REASON, which the ownership refusals deliberately do not, and the
+// asymmetry is the point. characterNotOwnedMessage is uniform because the three
+// causes it covers include "this id does not exist", and distinguishing them
+// would let a caller enumerate real character ids. Here existence and ownership
+// have ALREADY been proven — the caller is looking at the card on their own
+// roster — so a generic "no such character on your roster" would report a
+// working refusal as a lookup failure and buy no opacity at all.
+//
+// It says "retired" because retirement is the only transition out of `active`
+// that exists in v0.13: world.StatusIdle is declared with no transition into it
+// (internal/world/lifecycle.go:24-29). If a transition into `idle` ever lands,
+// this literal needs revisiting; the PREDICATE does not, because it is
+// world.Selectable's exhaustive switch rather than a comparison against
+// `retired`.
+const characterNotPlayableMessage = "that character is retired and cannot be your default"
+
 // The internal oops codes this file stamps. Every one is transcribed from
 // 01-SPEC §9.6's table; none is invented here except
 // codeCharacterProfileFieldInvalid, which §9.6 leaves to the handler because
@@ -79,6 +98,11 @@ const (
 	codeCharacterVersionRequired     = "CHARACTER_VERSION_REQUIRED"
 	codeCharacterMaskPathUnsupported = "CHARACTER_MASK_PATH_UNSUPPORTED"
 	codeCharacterProfileFieldInvalid = "CHARACTER_PROFILE_FIELD_INVALID"
+	// codeCharacterNotPlayable marks a default-character request whose target
+	// cleared ownership but failed world.Selectable. §9.6's table has no row for
+	// it because the default-character write is not one of its mutations; it is
+	// minted here beside the message it explains.
+	codeCharacterNotPlayable = "CHARACTER_NOT_PLAYABLE"
 )
 
 // profileMaskField is what one maskable path resolves to: the request accessor
@@ -494,4 +518,83 @@ func (s *CharacterAccessServer) UpdateCharacterDescription(ctx context.Context, 
 		return nil, err
 	}
 	return &characteraccessv1.UpdateCharacterDescriptionResponse{Character: out}, nil
+}
+
+// SetDefaultCharacter points the caller's `players.default_character_id` column
+// at one owned, playable character.
+//
+// # It writes a players row, so §9.4's version guard does not reach it
+//
+// There is NO requireGuardedVersion call below, and the omission is correct
+// rather than forgotten. Optimistic concurrency here is a property of the
+// `characters` aggregate: expected_version is the characters.version column, and
+// the two edits above thread it into a version-predicated UPDATE on that row.
+// This RPC's target is a `players` row, which carries no version column and no
+// CAS to predicate on, so a guard here would refuse callers on a token that
+// governs a different table. SetDefaultCharacterRequest deliberately declares no
+// expected_version field for the same reason. Do not "restore" either one.
+//
+// The character it names is nonetheless resolved through the SAME shared gates
+// the guarded mutations use — resolveAndGate then ownedCharacterForMutation — so
+// the routing census's guest-gate and ownership set-equality proofs cover this
+// handler exactly as they cover the two edits.
+//
+// # A retired character may not become the default (Q4)
+//
+// world.Service's retire path clears default_character_id in the SAME
+// transaction as the status write (internal/world/postgres/character_repo.go),
+// so permitting a set-to-retired here would reconstruct precisely the state that
+// code exists to prevent — and it would do so through a path the retire
+// transaction cannot see. The predicate is world.Selectable, the ONE
+// selectability predicate (INV-WORLD-5), not a comparison against `retired`: a
+// fourth lifecycle value added later is excluded by the same code path.
+//
+// The refusal is codes.FailedPrecondition with its own literal rather than the
+// uniform ownership message, because ownership was already proven above — see
+// characterNotPlayableMessage for why the asymmetry costs no opacity.
+//
+// # The response is the whole roster (D-90)
+//
+// It answers with ListMyCharactersResponse's shape, built by the SAME
+// ownerRoster helper the roster read uses, so the browser re-renders its cards
+// from server truth rather than patching a local copy. OwnCharacter carries no
+// is-default flag: which character is now the default is the id the caller just
+// asked for, which the success status makes true.
+func (s *CharacterAccessServer) SetDefaultCharacter(ctx context.Context, req *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error) {
+	ps, err := s.resolveAndGate(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+	char, err := s.ownedCharacterForMutation(ctx, ps.PlayerID, req.GetCharacterId())
+	if err != nil {
+		return nil, err
+	}
+
+	if !world.Selectable(char.Status) {
+		errutil.LogErrorContext(ctx, "character access: default-character request named a non-playable character",
+			oops.Code(codeCharacterNotPlayable).
+				With("character_id", char.ID.String()).
+				With("status", string(char.Status)).
+				Errorf("a character outside the selectable lifecycle state cannot be a default"))
+		return nil, status.Error(codes.FailedPrecondition, characterNotPlayableMessage) //nolint:wrapcheck // gRPC status error at handler boundary
+	}
+
+	// playerRepo is promoted from the embedded playerGate, so this write costs no
+	// constructor argument and adds no second handle on the facade.
+	if writeErr := s.playerRepo.UpdateDefaultCharacter(ctx, ps.PlayerID, char.ID); writeErr != nil {
+		// An OUTAGE. The narrow UPDATE's only non-infrastructure failure is a
+		// zero-row result, which means the caller's own player row vanished
+		// between the session resolution and this write — still an outage, not an
+		// authorization answer (§8.10). The inner error is logged, never
+		// interpolated into the returned status.
+		errutil.LogErrorContext(ctx, "character access: default character write failed", writeErr,
+			"player_id", ps.PlayerID.String(), "character_id", char.ID.String())
+		return nil, status.Error(codes.Internal, "internal error") //nolint:wrapcheck // gRPC status error at handler boundary
+	}
+
+	out, err := s.ownerRoster(ctx, ps.PlayerID)
+	if err != nil {
+		return nil, err
+	}
+	return &characteraccessv1.SetDefaultCharacterResponse{Characters: out}, nil
 }

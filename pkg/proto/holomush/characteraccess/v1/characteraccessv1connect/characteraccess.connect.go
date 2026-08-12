@@ -51,6 +51,9 @@ const (
 	// CharacterAccessServiceUpdateCharacterDescriptionProcedure is the fully-qualified name of the
 	// CharacterAccessService's UpdateCharacterDescription RPC.
 	CharacterAccessServiceUpdateCharacterDescriptionProcedure = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterDescription"
+	// CharacterAccessServiceSetDefaultCharacterProcedure is the fully-qualified name of the
+	// CharacterAccessService's SetDefaultCharacter RPC.
+	CharacterAccessServiceSetDefaultCharacterProcedure = "/holomush.characteraccess.v1.CharacterAccessService/SetDefaultCharacter"
 	// CharacterAccessServiceListCharacterDirectoryProcedure is the fully-qualified name of the
 	// CharacterAccessService's ListCharacterDirectory RPC.
 	CharacterAccessServiceListCharacterDirectoryProcedure = "/holomush.characteraccess.v1.CharacterAccessService/ListCharacterDirectory"
@@ -87,6 +90,17 @@ type CharacterAccessServiceClient interface {
 	// characters.description column itself, not a profile.* row — by reaching the
 	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
 	UpdateCharacterDescription(context.Context, *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error)
+	// SetDefaultCharacter points the caller's `players.default_character_id`
+	// column at one owned, playable character — the character the login and
+	// session-restore paths preselect.
+	// CharacterAccessServer.SetDefaultCharacter
+	// (internal/grpc/characteraccess_write.go) resolves the session, proves
+	// ownership, refuses a non-`active` target, and then reaches
+	// auth.PlayerRepository.UpdateDefaultCharacter, a single-column UPDATE that
+	// leaves every other players column alone. It is the ONLY write path to that
+	// column: the value is read at login and cleared when a character retires,
+	// and before this RPC nothing in the tree ever set it.
+	SetDefaultCharacter(context.Context, *connect.Request[v1.SetDefaultCharacterRequest]) (*connect.Response[v1.SetDefaultCharacterResponse], error)
 	// ListCharacterDirectory enumerates, as identity rows, the characters whose
 	// profiles the calling viewer can reach.
 	// CharacterAccessServer.ListCharacterDirectory
@@ -141,6 +155,12 @@ func NewCharacterAccessServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(characterAccessServiceMethods.ByName("UpdateCharacterDescription")),
 			connect.WithClientOptions(opts...),
 		),
+		setDefaultCharacter: connect.NewClient[v1.SetDefaultCharacterRequest, v1.SetDefaultCharacterResponse](
+			httpClient,
+			baseURL+CharacterAccessServiceSetDefaultCharacterProcedure,
+			connect.WithSchema(characterAccessServiceMethods.ByName("SetDefaultCharacter")),
+			connect.WithClientOptions(opts...),
+		),
 		listCharacterDirectory: connect.NewClient[v1.ListCharacterDirectoryRequest, v1.ListCharacterDirectoryResponse](
 			httpClient,
 			baseURL+CharacterAccessServiceListCharacterDirectoryProcedure,
@@ -157,6 +177,7 @@ type characterAccessServiceClient struct {
 	getMyCharacter             *connect.Client[v1.GetMyCharacterRequest, v1.GetMyCharacterResponse]
 	updateCharacterProfile     *connect.Client[v1.UpdateCharacterProfileRequest, v1.UpdateCharacterProfileResponse]
 	updateCharacterDescription *connect.Client[v1.UpdateCharacterDescriptionRequest, v1.UpdateCharacterDescriptionResponse]
+	setDefaultCharacter        *connect.Client[v1.SetDefaultCharacterRequest, v1.SetDefaultCharacterResponse]
 	listCharacterDirectory     *connect.Client[v1.ListCharacterDirectoryRequest, v1.ListCharacterDirectoryResponse]
 }
 
@@ -185,6 +206,11 @@ func (c *characterAccessServiceClient) UpdateCharacterProfile(ctx context.Contex
 // holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription.
 func (c *characterAccessServiceClient) UpdateCharacterDescription(ctx context.Context, req *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error) {
 	return c.updateCharacterDescription.CallUnary(ctx, req)
+}
+
+// SetDefaultCharacter calls holomush.characteraccess.v1.CharacterAccessService.SetDefaultCharacter.
+func (c *characterAccessServiceClient) SetDefaultCharacter(ctx context.Context, req *connect.Request[v1.SetDefaultCharacterRequest]) (*connect.Response[v1.SetDefaultCharacterResponse], error) {
+	return c.setDefaultCharacter.CallUnary(ctx, req)
 }
 
 // ListCharacterDirectory calls
@@ -224,6 +250,17 @@ type CharacterAccessServiceHandler interface {
 	// characters.description column itself, not a profile.* row — by reaching the
 	// shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
 	UpdateCharacterDescription(context.Context, *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error)
+	// SetDefaultCharacter points the caller's `players.default_character_id`
+	// column at one owned, playable character — the character the login and
+	// session-restore paths preselect.
+	// CharacterAccessServer.SetDefaultCharacter
+	// (internal/grpc/characteraccess_write.go) resolves the session, proves
+	// ownership, refuses a non-`active` target, and then reaches
+	// auth.PlayerRepository.UpdateDefaultCharacter, a single-column UPDATE that
+	// leaves every other players column alone. It is the ONLY write path to that
+	// column: the value is read at login and cleared when a character retires,
+	// and before this RPC nothing in the tree ever set it.
+	SetDefaultCharacter(context.Context, *connect.Request[v1.SetDefaultCharacterRequest]) (*connect.Response[v1.SetDefaultCharacterResponse], error)
 	// ListCharacterDirectory enumerates, as identity rows, the characters whose
 	// profiles the calling viewer can reach.
 	// CharacterAccessServer.ListCharacterDirectory
@@ -273,6 +310,12 @@ func NewCharacterAccessServiceHandler(svc CharacterAccessServiceHandler, opts ..
 		connect.WithSchema(characterAccessServiceMethods.ByName("UpdateCharacterDescription")),
 		connect.WithHandlerOptions(opts...),
 	)
+	characterAccessServiceSetDefaultCharacterHandler := connect.NewUnaryHandler(
+		CharacterAccessServiceSetDefaultCharacterProcedure,
+		svc.SetDefaultCharacter,
+		connect.WithSchema(characterAccessServiceMethods.ByName("SetDefaultCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
 	characterAccessServiceListCharacterDirectoryHandler := connect.NewUnaryHandler(
 		CharacterAccessServiceListCharacterDirectoryProcedure,
 		svc.ListCharacterDirectory,
@@ -291,6 +334,8 @@ func NewCharacterAccessServiceHandler(svc CharacterAccessServiceHandler, opts ..
 			characterAccessServiceUpdateCharacterProfileHandler.ServeHTTP(w, r)
 		case CharacterAccessServiceUpdateCharacterDescriptionProcedure:
 			characterAccessServiceUpdateCharacterDescriptionHandler.ServeHTTP(w, r)
+		case CharacterAccessServiceSetDefaultCharacterProcedure:
+			characterAccessServiceSetDefaultCharacterHandler.ServeHTTP(w, r)
 		case CharacterAccessServiceListCharacterDirectoryProcedure:
 			characterAccessServiceListCharacterDirectoryHandler.ServeHTTP(w, r)
 		default:
@@ -320,6 +365,10 @@ func (UnimplementedCharacterAccessServiceHandler) UpdateCharacterProfile(context
 
 func (UnimplementedCharacterAccessServiceHandler) UpdateCharacterDescription(context.Context, *connect.Request[v1.UpdateCharacterDescriptionRequest]) (*connect.Response[v1.UpdateCharacterDescriptionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription is not implemented"))
+}
+
+func (UnimplementedCharacterAccessServiceHandler) SetDefaultCharacter(context.Context, *connect.Request[v1.SetDefaultCharacterRequest]) (*connect.Response[v1.SetDefaultCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.SetDefaultCharacter is not implemented"))
 }
 
 func (UnimplementedCharacterAccessServiceHandler) ListCharacterDirectory(context.Context, *connect.Request[v1.ListCharacterDirectoryRequest]) (*connect.Response[v1.ListCharacterDirectoryResponse], error) {

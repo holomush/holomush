@@ -74,6 +74,7 @@ const (
 	WebService_WebGetMyCharacter_FullMethodName             = "/holomush.web.v1.WebService/WebGetMyCharacter"
 	WebService_WebUpdateCharacterProfile_FullMethodName     = "/holomush.web.v1.WebService/WebUpdateCharacterProfile"
 	WebService_WebUpdateCharacterDescription_FullMethodName = "/holomush.web.v1.WebService/WebUpdateCharacterDescription"
+	WebService_WebSetDefaultCharacter_FullMethodName        = "/holomush.web.v1.WebService/WebSetDefaultCharacter"
 	WebService_WebListCharacterDirectory_FullMethodName     = "/holomush.web.v1.WebService/WebListCharacterDirectory"
 )
 
@@ -302,6 +303,11 @@ type WebServiceClient interface {
 	// WebUpdateCharacterDescription proxies
 	// CharacterAccessService.UpdateCharacterDescription.
 	WebUpdateCharacterDescription(ctx context.Context, in *WebUpdateCharacterDescriptionRequest, opts ...grpc.CallOption) (*WebUpdateCharacterDescriptionResponse, error)
+	// WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+	// Handler.WebSetDefaultCharacter lifts the session token from the header and
+	// forwards only the character id; whose default is repointed follows from the
+	// token, and ownership is proven in the facade rather than here.
+	WebSetDefaultCharacter(ctx context.Context, in *WebSetDefaultCharacterRequest, opts ...grpc.CallOption) (*WebSetDefaultCharacterResponse, error)
 	// WebListCharacterDirectory proxies
 	// CharacterAccessService.ListCharacterDirectory.
 	// Handler.WebListCharacterDirectory lifts the session token from the
@@ -848,6 +854,16 @@ func (c *webServiceClient) WebUpdateCharacterDescription(ctx context.Context, in
 	return out, nil
 }
 
+func (c *webServiceClient) WebSetDefaultCharacter(ctx context.Context, in *WebSetDefaultCharacterRequest, opts ...grpc.CallOption) (*WebSetDefaultCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebSetDefaultCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebSetDefaultCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *webServiceClient) WebListCharacterDirectory(ctx context.Context, in *WebListCharacterDirectoryRequest, opts ...grpc.CallOption) (*WebListCharacterDirectoryResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebListCharacterDirectoryResponse)
@@ -1083,6 +1099,11 @@ type WebServiceServer interface {
 	// WebUpdateCharacterDescription proxies
 	// CharacterAccessService.UpdateCharacterDescription.
 	WebUpdateCharacterDescription(context.Context, *WebUpdateCharacterDescriptionRequest) (*WebUpdateCharacterDescriptionResponse, error)
+	// WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+	// Handler.WebSetDefaultCharacter lifts the session token from the header and
+	// forwards only the character id; whose default is repointed follows from the
+	// token, and ownership is proven in the facade rather than here.
+	WebSetDefaultCharacter(context.Context, *WebSetDefaultCharacterRequest) (*WebSetDefaultCharacterResponse, error)
 	// WebListCharacterDirectory proxies
 	// CharacterAccessService.ListCharacterDirectory.
 	// Handler.WebListCharacterDirectory lifts the session token from the
@@ -1255,6 +1276,9 @@ func (UnimplementedWebServiceServer) WebUpdateCharacterProfile(context.Context, 
 }
 func (UnimplementedWebServiceServer) WebUpdateCharacterDescription(context.Context, *WebUpdateCharacterDescriptionRequest) (*WebUpdateCharacterDescriptionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebUpdateCharacterDescription not implemented")
+}
+func (UnimplementedWebServiceServer) WebSetDefaultCharacter(context.Context, *WebSetDefaultCharacterRequest) (*WebSetDefaultCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebSetDefaultCharacter not implemented")
 }
 func (UnimplementedWebServiceServer) WebListCharacterDirectory(context.Context, *WebListCharacterDirectoryRequest) (*WebListCharacterDirectoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebListCharacterDirectory not implemented")
@@ -2209,6 +2233,24 @@ func _WebService_WebUpdateCharacterDescription_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebSetDefaultCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebSetDefaultCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebSetDefaultCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebSetDefaultCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebSetDefaultCharacter(ctx, req.(*WebSetDefaultCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WebService_WebListCharacterDirectory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WebListCharacterDirectoryRequest)
 	if err := dec(in); err != nil {
@@ -2437,6 +2479,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebUpdateCharacterDescription",
 			Handler:    _WebService_WebUpdateCharacterDescription_Handler,
+		},
+		{
+			MethodName: "WebSetDefaultCharacter",
+			Handler:    _WebService_WebSetDefaultCharacter_Handler,
 		},
 		{
 			MethodName: "WebListCharacterDirectory",

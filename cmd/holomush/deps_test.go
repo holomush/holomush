@@ -318,6 +318,10 @@ func (m *mockGRPCClient) UpdateCharacterDescription(_ context.Context, _ *charac
 	return nil, nil
 }
 
+func (m *mockGRPCClient) SetDefaultCharacter(_ context.Context, _ *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) ListCharacterDirectory(_ context.Context, _ *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
 	return nil, nil
 }

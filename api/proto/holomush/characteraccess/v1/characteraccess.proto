@@ -54,6 +54,18 @@ service CharacterAccessService {
   // shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06.
   rpc UpdateCharacterDescription(UpdateCharacterDescriptionRequest) returns (UpdateCharacterDescriptionResponse);
 
+  // SetDefaultCharacter points the caller's `players.default_character_id`
+  // column at one owned, playable character — the character the login and
+  // session-restore paths preselect.
+  // CharacterAccessServer.SetDefaultCharacter
+  // (internal/grpc/characteraccess_write.go) resolves the session, proves
+  // ownership, refuses a non-`active` target, and then reaches
+  // auth.PlayerRepository.UpdateDefaultCharacter, a single-column UPDATE that
+  // leaves every other players column alone. It is the ONLY write path to that
+  // column: the value is read at login and cleared when a character retires,
+  // and before this RPC nothing in the tree ever set it.
+  rpc SetDefaultCharacter(SetDefaultCharacterRequest) returns (SetDefaultCharacterResponse);
+
   // ListCharacterDirectory enumerates, as identity rows, the characters whose
   // profiles the calling viewer can reach.
   // CharacterAccessServer.ListCharacterDirectory
@@ -363,4 +375,36 @@ message UpdateCharacterDescriptionRequest {
 message UpdateCharacterDescriptionResponse {
   // character is the post-write projection projectOwner built.
   OwnCharacter character = 1;
+}
+
+// SetDefaultCharacterRequest names the owned character to point the caller's
+// `players.default_character_id` column at.
+//
+// IT CARRIES NO expected_version FIELD, AND THE ABSENCE IS DELIBERATE. The
+// optimistic-concurrency rule the two edits above obey governs a `characters`
+// row; this write targets a `players` row, which carries no version column and
+// which requireGuardedVersion is therefore never called for. A reviewer looking
+// for the guard here should not add one.
+message SetDefaultCharacterRequest {
+  // character_id is the target character's ULID. It is compared as a ULID and
+  // never as a name: an unparseable value, an id naming no row and a well-formed
+  // id the caller does not own all take the single opaque ownership refusal
+  // ownedCharacterForMutation returns.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // X-Session-Token header. Whose column is written follows from it, so there is
+  // no player-id field a caller could point at someone else.
+  string player_session_token = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// SetDefaultCharacterResponse returns the caller's whole roster rather than an
+// acknowledgement, so the browser re-renders its cards from server truth instead
+// of patching a local copy. The shape is ListMyCharactersResponse's, built by
+// the same projectOwner loop CharacterAccessServer.ListMyCharacters uses.
+message SetDefaultCharacterResponse {
+  // characters is every character the resolved player owns, retired ones
+  // included, exactly as the roster read returns them. Which one is now the
+  // default is the character_id the caller just asked for, which a success
+  // status makes true; OwnCharacter deliberately carries no is-default flag.
+  repeated OwnCharacter characters = 1;
 }

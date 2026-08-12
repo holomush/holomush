@@ -46,6 +46,10 @@ func (f *fakePlayerRepo) UpdatePassword(_ context.Context, _ ulid.ULID, _ string
 func (f *fakePlayerRepo) UpdatePasswordAndClearLockout(_ context.Context, _ ulid.ULID, _ string) error {
 	return nil
 }
+
+func (f *fakePlayerRepo) UpdateDefaultCharacter(_ context.Context, _ ulid.ULID, _ ulid.ULID) error {
+	return nil
+}
 func (f *fakePlayerRepo) Delete(_ context.Context, _ ulid.ULID) error { return nil }
 func (f *fakePlayerRepo) ListIdleGuests(_ context.Context, _ time.Time) ([]*auth.Player, error) {
 	return nil, nil

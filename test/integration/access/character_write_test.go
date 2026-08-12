@@ -406,3 +406,244 @@ var _ = Describe("IDENT-02/IDENT-02a: the owner edits prose profile fields and t
 		})
 	})
 })
+
+// The default-character write, end to end (IDENT-05).
+//
+// # Why these specs run against real Postgres rather than a repository double
+//
+// The property under test is that ONE column moved and no other did. A double
+// can only report the call it was told to expect, so it proves the handler
+// reached a method — not that the SQL behind it is narrow. The trap this guards
+// (RESEARCH pitfall 3) is the obvious alternative implementation, GetByID +
+// PlayerRepository.Update, which issues a full-row UPDATE rewriting
+// password_hash, email, failed_attempts and locked_until from a struct read
+// moments earlier, with no version guard. Against a mock that implementation
+// passes; against these specs the before/after column comparison fails.
+var _ = Describe("IDENT-05: the player sets which of their characters is the default", func() {
+	const (
+		ownerToken = "set-default-owner-session-token"
+		guestToken = "set-default-guest-session-token"
+	)
+
+	var (
+		ownerID   ulid.ULID
+		activeID  ulid.ULID
+		secondID  ulid.ULID
+		retiredID ulid.ULID
+		locID     ulid.ULID
+		srv       *holoGRPC.CharacterAccessServer
+	)
+
+	newServer := func() *holoGRPC.CharacterAccessServer {
+		worldSvc := world.NewService(world.ServiceConfig{
+			CharacterRepo: env.charRepo,
+			PropertyRepo:  env.propRepo,
+			Engine:        env.engine,
+			Transactor:    worldpg.NewTransactor(env.pool),
+			OutboxWriter:  worldpg.NewOutboxStore(env.pool),
+		})
+		return holoGRPC.NewCharacterAccessServer(
+			worldSvc,
+			worldSvc,
+			&profilevis.Evaluator{Engine: env.engine},
+			env.engine,
+			setup.NewCharRepoAdapter(env.pool, env.charRepo),
+			store.NewPostgresPlayerSessionStore(env.pool),
+			authpg.NewPlayerRepository(env.pool),
+			setup.NewCharRepoAdapter(env.pool, env.charRepo),
+		)
+	}
+
+	// storedDefault reads the column under test directly. A read through
+	// PlayerRepository.GetByID would be answered by the same code path the write
+	// went through, so a shared misinterpretation of the column would agree with
+	// itself; raw SQL cannot.
+	storedDefault := func() string {
+		var got *string
+		Expect(env.pool.QueryRow(context.Background(),
+			`SELECT default_character_id FROM players WHERE id = $1`, ownerID.String()).Scan(&got)).To(Succeed())
+		if got == nil {
+			return ""
+		}
+		return *got
+	}
+
+	// playerCredentialColumns is every column the narrow UPDATE must leave alone.
+	// `locked_until` is nullable, hence the coalesce into a comparable scalar.
+	type credentials struct {
+		passwordHash   string
+		email          *string
+		failedAttempts int
+		lockedUntil    int64
+	}
+	storedCredentials := func() credentials {
+		var got credentials
+		Expect(env.pool.QueryRow(context.Background(),
+			`SELECT password_hash, email, failed_attempts, coalesce(locked_until, 0)
+			 FROM players WHERE id = $1`, ownerID.String()).
+			Scan(&got.passwordHash, &got.email, &got.failedAttempts, &got.lockedUntil)).To(Succeed())
+		return got
+	}
+
+	setDefault := func(token string, characterID ulid.ULID) (*characteraccessv1.SetDefaultCharacterResponse, error) {
+		return srv.SetDefaultCharacter(context.Background(), &characteraccessv1.SetDefaultCharacterRequest{
+			CharacterId:        characterID.String(),
+			PlayerSessionToken: token,
+		})
+	}
+
+	insertCharacter := func(ctx context.Context, id ulid.ULID, playerID ulid.ULID, base string, status string) {
+		name := uniqueCharFixtureName(base, id)
+		_, err := env.pool.Exec(ctx, `
+			INSERT INTO characters (id, player_id, name, description, location_id, status, normalized_name, name_skeleton, name_skeleton_unicode_version)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			append([]any{id.String(), playerID.String(), name, "A character.", locID.String(), status},
+				chartest.Columns(name)...)...)
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	BeforeEach(func() {
+		ctx := context.Background()
+
+		for _, table := range []string{
+			"outbox",
+			"player_character_bindings",
+			"objects",
+			"entity_properties",
+			"characters",
+			"player_sessions",
+			"players",
+			"locations",
+		} {
+			_, err := env.pool.Exec(ctx, "DELETE FROM "+table)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		playerRep := authpg.NewPlayerRepository(env.pool)
+		psRepo := store.NewPostgresPlayerSessionStore(env.pool)
+
+		locID = core.NewULID()
+		_, err := env.pool.Exec(ctx, `
+			INSERT INTO locations (id, name, description, type, replay_policy)
+			VALUES ($1, 'Default Hall', 'A hall.', 'persistent', 'last:0')`,
+			locID.String())
+		Expect(err).NotTo(HaveOccurred())
+
+		ownerID = core.NewULID()
+		email := "owner_" + ownerID.String()[20:] + "@example.test"
+		Expect(playerRep.Create(ctx, &auth.Player{
+			ID:           ownerID,
+			Username:     "owner_" + ownerID.String()[20:],
+			PasswordHash: "the-owners-original-password-hash",
+			Email:        &email,
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
+		})).To(Succeed())
+
+		sess, err := auth.NewPlayerSession(ownerID, auth.HashSessionToken(ownerToken), "", "", auth.PlayerSessionTTL)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(psRepo.Create(ctx, sess)).To(Succeed())
+
+		guestID := core.NewULID()
+		Expect(playerRep.Create(ctx, &auth.Player{
+			ID:           guestID,
+			Username:     "guest_" + guestID.String()[20:],
+			PasswordHash: "hash",
+			IsGuest:      true,
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
+		})).To(Succeed())
+		guestSess, err := auth.NewPlayerSession(guestID, auth.HashSessionToken(guestToken), "", "", auth.PlayerSessionTTL)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(psRepo.Create(ctx, guestSess)).To(Succeed())
+
+		activeID = core.NewULID()
+		secondID = core.NewULID()
+		retiredID = core.NewULID()
+		insertCharacter(ctx, activeID, ownerID, "Primary", string(world.StatusActive))
+		insertCharacter(ctx, secondID, ownerID, "Secondary", string(world.StatusActive))
+		insertCharacter(ctx, retiredID, ownerID, "Withdrawn", string(world.StatusRetired))
+
+		srv = newServer()
+		env.auditWriter.Reset()
+	})
+
+	It("D1: an owner's request moves players.default_character_id and answers with the whole roster", func() {
+		Expect(storedDefault()).To(BeEmpty(), "the fixture starts with no default, which is the state IDENT-05 exists to leave")
+
+		resp, err := setDefault(ownerToken, activeID)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(storedDefault()).To(Equal(activeID.String()),
+			"the column holds the character's ULID — this is the write nothing in the tree performed before")
+
+		ids := make([]string, 0, len(resp.GetCharacters()))
+		for _, c := range resp.GetCharacters() {
+			ids = append(ids, c.GetId())
+		}
+		Expect(ids).To(ConsistOf(activeID.String(), secondID.String(), retiredID.String()),
+			"the response is the caller's WHOLE roster, retired entries included (D-90)")
+	})
+
+	It("D2: setting the character that is already the default succeeds and leaves the column byte-identical", func() {
+		_, err := setDefault(ownerToken, activeID)
+		Expect(err).NotTo(HaveOccurred())
+		first := storedDefault()
+
+		resp, err := setDefault(ownerToken, activeID)
+		Expect(err).NotTo(HaveOccurred(), "a repeat is idempotent, not a conflict")
+		Expect(storedDefault()).To(Equal(first))
+		Expect(resp.GetCharacters()).To(HaveLen(3), "and the full roster still comes back")
+	})
+
+	// The paired positive control (PORTAL-10 rule 2) for D1: the write is not a
+	// constant that happens to agree with the first fixture's id.
+	It("D3: the owner's OTHER character can also be made the default", func() {
+		_, err := setDefault(ownerToken, activeID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(storedDefault()).To(Equal(activeID.String()))
+
+		_, err = setDefault(ownerToken, secondID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(storedDefault()).To(Equal(secondID.String()),
+			"the second request moved the pointer — a hardcoded write would still read the first id")
+	})
+
+	It("D4: the write leaves password_hash, email, failed_attempts and locked_until untouched", func() {
+		before := storedCredentials()
+
+		_, err := setDefault(ownerToken, activeID)
+		Expect(err).NotTo(HaveOccurred())
+
+		after := storedCredentials()
+		Expect(after.passwordHash).To(Equal(before.passwordHash),
+			"a full-row UPDATE would rewrite the hash from a stale read (RESEARCH pitfall 3)")
+		Expect(after.email).To(Equal(before.email))
+		Expect(after.failedAttempts).To(Equal(before.failedAttempts))
+		Expect(after.lockedUntil).To(Equal(before.lockedUntil))
+	})
+
+	It("D5: a RETIRED owned character is refused with FailedPrecondition and the column does not move", func() {
+		_, err := setDefault(ownerToken, activeID)
+		Expect(err).NotTo(HaveOccurred())
+		before := storedDefault()
+
+		_, err = setDefault(ownerToken, retiredID)
+		Expect(err).To(HaveOccurred())
+		Expect(status.Code(err)).To(Equal(codes.FailedPrecondition),
+			"the retire path clears this column in the same transaction as the status write (Q4); permitting the set would reconstruct exactly the state that code prevents")
+		Expect(storedDefault()).To(Equal(before))
+	})
+
+	It("D6: a guest is denied, and the same fixture's non-guest owner is permitted", func() {
+		_, err := setDefault(guestToken, activeID)
+		Expect(err).To(HaveOccurred())
+		Expect(status.Code(err)).To(Equal(codes.PermissionDenied))
+		Expect(status.Convert(err).Message()).To(Equal("guests do not have characters of their own"),
+			"the character facade's OWN guest message, not the scene facade's")
+
+		_, err = setDefault(ownerToken, activeID)
+		Expect(err).NotTo(HaveOccurred(), "the paired positive control: the same fixture permits a non-guest owner")
+		Expect(storedDefault()).To(Equal(activeID.String()))
+	})
+})

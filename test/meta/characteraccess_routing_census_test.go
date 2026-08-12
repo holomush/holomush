@@ -188,7 +188,7 @@ func ownershipWrapperMethods() map[string]struct{} {
 }
 
 // characterGuestGateRPCs is the checked-in expected set for the guest gate: every
-// OWNER-audience facade RPC must reach the one shared gate. Four members.
+// OWNER-audience facade RPC must reach the one shared gate. Five members.
 func characterGuestGateRPCs() map[string]struct{} {
 	return map[string]struct{}{
 		// 04-05, the two owner reads.
@@ -197,21 +197,29 @@ func characterGuestGateRPCs() map[string]struct{} {
 		// 04-06, the two owner writes.
 		"UpdateCharacterProfile":     {},
 		"UpdateCharacterDescription": {},
+		// 05-01, the default-character write. It writes a `players` column rather
+		// than a `characters` row, which is why it carries no version guard — but
+		// its CALLER is still an owner-audience non-guest, so it takes the same
+		// guest gate as every sibling.
+		"SetDefaultCharacter": {},
 	}
 }
 
 // characterOwnershipRPCs is the checked-in expected set for the ownership
-// resolution. Three members — this set is scoped to the owner-audience handlers
+// resolution. Four members — this set is scoped to the owner-audience handlers
 // that NAME A CHARACTER ID.
 //
 // ListMyCharacters is deliberately NOT a member: it names no character id and
 // resolves the caller's own roster from the session, so there is nothing to check
-// ownership of. Its absence is a decision, not an oversight.
+// ownership of. Its absence is a decision, not an oversight. SetDefaultCharacter
+// IS a member for the mirror-image reason: it names an existing character id, and
+// a caller must not be able to point their default at someone else's row.
 func characterOwnershipRPCs() map[string]struct{} {
 	return map[string]struct{}{
 		"GetMyCharacter":             {},
 		"UpdateCharacterProfile":     {},
 		"UpdateCharacterDescription": {},
+		"SetDefaultCharacter":        {},
 	}
 }
 
@@ -267,14 +275,15 @@ func characterFacadeEmbeddedFields() map[string]struct{} {
 }
 
 // characterWebProxyRPCs is the checked-in expected set for the WEB half: the
-// owner-audience proxies, keyed by proxy name. Four members, one per owner-audience
-// facade RPC (04-04, 04-06).
+// owner-audience proxies, keyed by proxy name. Five members, one per owner-audience
+// facade RPC (04-04, 04-06, 05-01).
 func characterWebProxyRPCs() map[string]struct{} {
 	return map[string]struct{}{
 		"WebListMyCharacters":           {},
 		"WebGetMyCharacter":             {},
 		"WebUpdateCharacterProfile":     {},
 		"WebUpdateCharacterDescription": {},
+		"WebSetDefaultCharacter":        {},
 	}
 }
 

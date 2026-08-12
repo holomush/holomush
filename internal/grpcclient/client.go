@@ -444,6 +444,16 @@ func (c *Client) UpdateCharacterDescription(ctx context.Context, req *charactera
 	return resp, nil
 }
 
+// SetDefaultCharacter repoints the authenticated player's default character.
+// The facade proves ownership and playability; the gateway names neither.
+func (c *Client) SetDefaultCharacter(ctx context.Context, req *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error) {
+	resp, err := c.characterAccessClient.SetDefaultCharacter(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "SetDefaultCharacter").Wrap(err)
+	}
+	return resp, nil
+}
+
 // ListCharacterDirectory lists the characters whose profiles the calling viewer
 // can reach, as identity rows only.
 func (c *Client) ListCharacterDirectory(ctx context.Context, req *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
