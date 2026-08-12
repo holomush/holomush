@@ -110,6 +110,7 @@ func newScriptedEngine() *scriptedEngine {
 
 // --- Task 1: the conjunction ---
 
+// Verifies: INV-ACCESS-10
 func TestAttributeVisibleIssuesExactlyTwoEvaluationsSeparatedByTheActionToken(t *testing.T) {
 	engine := newScriptedEngine()
 	e := &Evaluator{Engine: engine}
@@ -341,6 +342,7 @@ func TestVisibleAttributesReturnsTheSamePermittedSetWhenTheInputOrderIsReversed(
 	assert.NotContains(t, forward, "profile.rumors")
 }
 
+// Verifies: INV-ACCESS-10
 func TestVisibleAttributesAbortsTheWholeCallWhenAnyEvaluationFails(t *testing.T) {
 	const (
 		okID   = "01J0PROPERTY000000000000HH"

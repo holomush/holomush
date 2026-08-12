@@ -100,6 +100,8 @@ func biographyFloorPolicy(rungs ...string) *policystore.StoredPolicy {
 //   - an infrastructure failure in that evaluation resolves DENY —
 //     TestVisibleAttributesAbortsTheWholeCallWhenAnyEvaluationFails
 //     (internal/access/profilevis/profilevis_test.go:344).
+//
+// Verifies: INV-ACCESS-10
 var _ = Describe("PROFILE-01: the viewer-tier floor is evaluated at read time and never stamped onto a row", func() {
 	const anonToken = ""
 

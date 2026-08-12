@@ -2301,14 +2301,33 @@ invariants:
   # The two EVALUATION guarantees of the profile visibility model: the read-time
   # authorization decision and the wire shape that decision enforces. The paired
   # DISCLOSURE guarantees live in INV-PRIVACY-9/10.
-  # binding: pending — asserting tests land in Phase 4 (policy family seeded in Phase 2).
+  #
+  # INV-ACCESS-10 IS BOUND CLAUSE BY CLAUSE (plan 05-05 Task 3). Its summary
+  # carries three, and TestBoundInvariantsAreGenuinelyAsserted cannot detect a
+  # PARTIAL binding, so the mapping is written out here rather than left implicit:
+  #   (a) evaluated at READ TIME, against the attribute NAME and the viewer's TIER
+  #       — character_readtime_floor_test.go's R1 moves one attribute's clearing
+  #       set and reloads, and the same anonymous viewer's answer changes while a
+  #       second character's untouched attribute does not; the two-evaluations
+  #       structure inside (a) is profilevis_test.go:113.
+  #   (b) NEVER STAMPED onto the row — the same R1 snapshots characters.version
+  #       and the character's complete (id, name, value, visibility) property-row
+  #       set by direct SQL either side of the change and asserts both identical,
+  #       so the answer moved with nothing written and no backfill exists.
+  #   (c) an infrastructure failure resolves DENY — profilevis_test.go:344
+  #       (TestVisibleAttributesAbortsTheWholeCallWhenAnyEvaluationFails) requires
+  #       the error and asserts the returned set is nil, which is §8.10's "never
+  #       permit and never a silently sparse profile".
   - id: INV-ACCESS-10
     scope: INV-ACCESS
     origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
     summary: "The viewer-tier floor governing a profile attribute is evaluated at READ TIME by the default-deny ABAC engine
       against the attribute name and the viewer's tier (anonymous < guest < player), never stamped onto entity_properties.visibility
       per row; and an infrastructure failure in that evaluation resolves DENY, never permit and never a silently sparse profile."
-    binding: pending
+    binding: bound
+    asserted_by:
+      - "test/integration/access/character_readtime_floor_test.go"
+      - "internal/access/profilevis/profilevis_test.go"
   - id: INV-ACCESS-11
     scope: INV-ACCESS
     origin_spec: ".planning/phases/01-portal-spec/01-SPEC.md"
