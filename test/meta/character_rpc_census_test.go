@@ -133,10 +133,21 @@ func characterShapedMessages() map[string]struct{} {
 func characterNameReachableRPCs() map[string]struct{} {
 	return map[string]struct{}{
 		// §3.3: a bare `character_name` display scalar on the response.
-		"holomush.core.v1.CoreService.SelectCharacter":  {},
+		"holomush.core.v1.CoreService.SelectCharacter": {},
+		// It KEEPS this row through 05-03's reshape. Its web namesake moved out
+		// (see below), but this RPC is unchanged: it still answers with a bare
+		// character_name and internal/telnet/gateway_handler.go still drives it
+		// from the CREATE verb.
 		"holomush.core.v1.CoreService.CreateCharacter":  {},
 		"holomush.web.v1.WebService.WebSelectCharacter": {},
-		"holomush.web.v1.WebService.WebCreateCharacter": {},
+		// holomush.web.v1.WebService.WebCreateCharacter is DELIBERATELY ABSENT as
+		// of 05-03. Its response no longer carries a bare character_name scalar —
+		// it carries holomush.characteraccess.v1.OwnCharacter — so the §3.1 type
+		// predicate reaches it on its own and its inventory row lives in
+		// characterReadSurfaceInventory's web-pair block. Keeping a hand-listed
+		// entry here as well would leave both comparisons green (both paths add
+		// the same key) while parking a self-certifying member in a class whose
+		// own doc says it exists only for surfaces a predicate CANNOT reach.
 		// §3.3: the plugin-facing twin of GetCharacter. Its "character-shaped
 		// message returned" column is the inline field list
 		// `id/player_id/name/description/location_id`, not a message name — the
@@ -221,6 +232,12 @@ func characterReadSurfaceInventory() map[string]struct{} {
 		"holomush.web.v1.WebService.WebUpdateCharacterProfile":     {},
 		"holomush.web.v1.WebService.WebUpdateCharacterDescription": {},
 		"holomush.web.v1.WebService.WebSetDefaultCharacter":        {},
+		// The create pair's web half (05-03). It MOVED here out of
+		// characterNameReachableRPCs rather than being added alongside its old
+		// row: WebCreateCharacterResponse's `success`/`character_name` pair is
+		// gone and the message now carries OwnCharacter, which is exactly the
+		// condition that makes a surface type-reachable.
+		"holomush.web.v1.WebService.WebCreateCharacter": {},
 	}
 	// The §3.2 name-reachable rows are inventory members too, and are written down
 	// exactly once — in characterNameReachableRPCs, beside their justifying

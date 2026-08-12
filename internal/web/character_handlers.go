@@ -50,13 +50,14 @@ func (h *Handler) WebGetCharacterProfile(ctx context.Context, req *connect.Reque
 	}), nil
 }
 
-// The five owner-audience proxies below copy WebGetCharacterProfile's shape
+// The six owner-audience proxies below copy WebGetCharacterProfile's shape
 // exactly: nil-client guard, token from the header, bounded context,
 // field-by-field forward, log-then-pass-through on error. They compute nothing.
 //
-// All five facade handlers are LIVE: CharacterAccessServer.ListMyCharacters,
+// All six facade handlers are LIVE: CharacterAccessServer.ListMyCharacters,
 // GetMyCharacter, UpdateCharacterProfile and UpdateCharacterDescription landed
-// in plans 04-05 and 04-06; SetDefaultCharacter landed in plan 05-01. The
+// in plans 04-05 and 04-06; SetDefaultCharacter landed in plan 05-01, and
+// CreateCharacter in plan 05-03. The
 // routing census (characterWebProxyRPCs in
 // test/meta/characteraccess_routing_census_test.go) pins exactly this set as the
 // owner-audience proxy set by set-equality, so this list cannot drift from the
@@ -226,6 +227,57 @@ func (h *Handler) WebSetDefaultCharacter(ctx context.Context, req *connect.Reque
 
 	return connect.NewResponse(&webv1.WebSetDefaultCharacterResponse{
 		Characters: resp.GetCharacters(),
+	}), nil
+}
+
+// WebCreateCharacter proxies to CharacterAccessService.CreateCharacter.
+//
+// IT NO LONGER REACHES CoreService.CreateCharacter, and that RPC is deliberately
+// still alive: internal/telnet/gateway_handler.go drives it from the CREATE
+// verb, and it still answers with a bare character_name scalar. What moved is
+// the WEB surface only.
+//
+// The rewrite is not just a change of client. The shipped handler synthesised a
+// success/error_message pair from the core RPC's own boolean and returned HTTP
+// 200 for a refusal; the facade returns a gRPC status instead — AlreadyExists,
+// InvalidArgument, FailedPrecondition, Unavailable — so this proxy passes the
+// error THROUGH rather than translating it into a body field. A gateway that
+// classified the refusal itself would be a second, drifting copy of the
+// facade's mapping.
+//
+// There is no expected_version to forward: 01-SPEC §9.4.2 makes creation the one
+// carve-out from the version guard, and neither request message declares one.
+func (h *Handler) WebCreateCharacter(ctx context.Context, req *connect.Request[webv1.WebCreateCharacterRequest]) (*connect.Response[webv1.WebCreateCharacterResponse], error) {
+	slog.DebugContext(ctx, "web: WebCreateCharacter")
+	if h.characterAccess == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("character access client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.characterAccess.CreateCharacter(rpcCtx, &characteraccessv1.CreateCharacterRequest{
+		PlayerSessionToken: token,
+		Name:               req.Msg.GetName(),
+		Pronouns:           req.Msg.GetPronouns(),
+		Concept:            req.Msg.GetConcept(),
+		Species:            req.Msg.GetSpecies(),
+		Age:                req.Msg.GetAge(),
+		Faction:            req.Msg.GetFaction(),
+	})
+	if err != nil {
+		// The submitted NAME is deliberately absent from this log line and from
+		// the response. It is attacker-controlled text on a path whose refusals
+		// are already an enumeration surface (§6.1.2); the facade logs the
+		// structured reason on its own side, where the player is resolved.
+		errutil.LogErrorContext(ctx, "web: create character RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebCreateCharacterResponse{
+		Character: resp.GetCharacter(),
 	}), nil
 }
 

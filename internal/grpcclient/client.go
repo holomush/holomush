@@ -454,6 +454,31 @@ func (c *Client) SetDefaultCharacter(ctx context.Context, req *characteraccessv1
 	return resp, nil
 }
 
+// CreateOwnCharacter seats a new character from the structured identity card
+// and answers with it in the owner audience's shape.
+//
+// # Why the Go name is not CreateCharacter
+//
+// TWO services in this codebase declare an RPC named CreateCharacter:
+// holomush.core.v1.CoreService's, which the telnet CREATE verb drives and
+// which answers with a bare character_name scalar, and
+// holomush.characteraccess.v1.CharacterAccessService's, which this method
+// reaches. Both are live and neither is going away, but *Client is ONE Go type
+// and a Go type cannot carry two methods with one name.
+//
+// So the collision is resolved HERE, at the only place both surfaces meet,
+// rather than by renaming an RPC or dropping one of them. The proto method
+// name is unchanged on both sides — this is a Go-identifier accommodation and
+// nothing else. cmd/holomush's characterAccessGateway adapter re-exposes this
+// method under the interface name web.CharacterAccessClient expects.
+func (c *Client) CreateOwnCharacter(ctx context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error) {
+	resp, err := c.characterAccessClient.CreateCharacter(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "CreateCharacter").Wrap(err)
+	}
+	return resp, nil
+}
+
 // ListCharacterDirectory lists the characters whose profiles the calling viewer
 // can reach, as identity rows only.
 func (c *Client) ListCharacterDirectory(ctx context.Context, req *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {

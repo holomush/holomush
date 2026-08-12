@@ -172,8 +172,14 @@ service WebService {
   // cookie-collision gate first.
   rpc WebCreateGuest(WebCreateGuestRequest) returns (WebCreateGuestResponse);
 
-  // WebCreateCharacter adds a character to the authenticated player. Proxies
-  // to CoreService.CreateCharacter using the cookie-derived session token.
+  // WebCreateCharacter adds a character to the authenticated player from a
+  // structured identity card. Proxies to
+  // CharacterAccessService.CreateCharacter — NOT CoreService.CreateCharacter,
+  // which still serves the telnet CREATE verb and still answers with a bare
+  // character_name scalar. web.Handler.WebCreateCharacter forwards the six
+  // submitted values plus the cookie-derived session token and computes
+  // nothing; a refusal arrives as a gRPC status the client classifies, so
+  // there is no gateway-synthesised success boolean.
   rpc WebCreateCharacter(WebCreateCharacterRequest) returns (WebCreateCharacterResponse);
 
   // WebListCharacters returns the authenticated player's character roster.
@@ -666,25 +672,49 @@ message WebCreateGuestResponse {
   string current_player_name = 6;
 }
 
-// WebCreateCharacterRequest names the new character to add to the authenticated
-// player. The player is identified by the cookie session token, not a body
-// field.
+// WebCreateCharacterRequest is the structured identity card a creation form
+// submits. The player is identified by the cookie session token, never a body
+// field — field 1 stays retired from the cookie cutover for exactly that
+// reason.
+//
+// The five prose values are OPTIONAL and their names match
+// CreateCharacterRequest's, because web.Handler.WebCreateCharacter forwards
+// them one-for-one. A value left empty is not written at all, so a name-only
+// submission seeds no profile rows.
 message WebCreateCharacterRequest {
-  // character_name is the desired display name for the new character. Field
-  // number is 2 (field 1 retired with the cookie cutover).
-  string character_name = 2;
+  // name is the submitted character name, forwarded verbatim.
+  // CharacterAccessServer.CreateCharacter hands it to
+  // auth.CharacterService.CreateBound, which normalizes it server-side; the
+  // gateway neither normalizes nor pre-checks it, so there is one normalizer.
+  // Field number is 2 (field 1 retired with the cookie cutover).
+  string name = 2;
+  // pronouns seeds the `profile.pronouns` row.
+  string pronouns = 3;
+  // concept seeds the `profile.concept` row.
+  string concept = 4;
+  // species seeds the `profile.species` row.
+  string species = 5;
+  // age seeds the `profile.age` row.
+  string age = 6;
+  // faction seeds the `profile.faction` row.
+  string faction = 7;
 }
 
-// WebCreateCharacterResponse reports the result of creating a character.
+// WebCreateCharacterResponse carries the created character in the owner
+// audience's shape, forwarded verbatim from
+// CharacterAccessServer.CreateCharacter.
+//
+// IT CARRIES NO success/error_message PAIR, and the absence is the contract
+// change. The gateway no longer synthesises a boolean from a downstream
+// outcome: a refusal is the facade's own gRPC status — AlreadyExists for a
+// taken name, InvalidArgument for a name the admission gate declined,
+// FailedPrecondition for a reached character limit — which the client
+// classifies directly.
 message WebCreateCharacterResponse {
-  // success is true when the character was created.
-  bool success = 1;
-  // character_id is the new character's ULID identity.
-  string character_id = 2;
-  // character_name is the created character's display name.
-  string character_name = 3;
-  // error_message is a human-readable failure detail on the non-success path.
-  string error_message = 4;
+  // character is the newly seated character. Its `name` is the SERVER-stored
+  // display form, which is what the post-submit echo shows the player; its
+  // `profile` map holds whichever of the five supplied values were written.
+  holomush.characteraccess.v1.OwnCharacter character = 1;
 }
 
 // WebListCharactersRequest is the empty request for the authenticated player's

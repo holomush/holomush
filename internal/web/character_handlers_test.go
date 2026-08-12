@@ -36,6 +36,10 @@ type recordingCharacterAccessClient struct {
 	setDefaultReq  *characteraccessv1.SetDefaultCharacterRequest
 	setDefaultResp *characteraccessv1.SetDefaultCharacterResponse
 	setDefaultErr  error
+
+	createReq  *characteraccessv1.CreateCharacterRequest
+	createResp *characteraccessv1.CreateCharacterResponse
+	createErr  error
 }
 
 var _ CharacterAccessClient = (*recordingCharacterAccessClient)(nil)
@@ -67,6 +71,11 @@ func (c *recordingCharacterAccessClient) SetDefaultCharacter(_ context.Context, 
 
 func (c *recordingCharacterAccessClient) ListCharacterDirectory(context.Context, *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
 	return nil, nil
+}
+
+func (c *recordingCharacterAccessClient) CreateCharacter(_ context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error) {
+	c.createReq = req
+	return c.createResp, c.createErr
 }
 
 // TestWebSetDefaultCharacterForwardsTheHeaderTokenAndTheCharacterIdVerbatim is
@@ -128,6 +137,97 @@ func TestWebSetDefaultCharacterReturnsUnimplementedWhenClientAbsent(t *testing.T
 
 	_, err := h.WebSetDefaultCharacter(context.Background(),
 		connect.NewRequest(&webv1.WebSetDefaultCharacterRequest{CharacterId: "char-01"}))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnimplemented, connectErr.Code())
+}
+
+// The three WebCreateCharacter specs below RELOCATED here from
+// auth_handlers_test.go with plan 05-03's reshape, and they assert a different
+// contract than the ones they replace. The shipped proxy reached
+// CoreService.CreateCharacter and synthesised a success/error_message pair; this
+// one reaches the character facade and passes a refusal through as a status.
+
+// TestWebCreateCharacterForwardsTheHeaderTokenAndAllSixSubmittedValues is the
+// proxy's whole contract: the token comes from the HEADER — the request message
+// declares no token field and field 1 stays retired — and every submitted value
+// crosses verbatim, because which of them are acceptable is the facade's
+// decision and a gateway that filtered would be a second, drifting allowlist.
+func TestWebCreateCharacterForwardsTheHeaderTokenAndAllSixSubmittedValues(t *testing.T) {
+	const token = "tok-create"
+	cc := &recordingCharacterAccessClient{
+		createResp: &characteraccessv1.CreateCharacterResponse{
+			Character: &characteraccessv1.OwnCharacter{
+				Id:      "char-new",
+				Name:    "Ada Lovelace",
+				Status:  "active",
+				Version: 1,
+				Profile: map[string]string{"profile.pronouns": "they/them"},
+			},
+		},
+	}
+	h := NewHandler(&mockCoreClient{}, WithCharacterAccessClient(cc))
+
+	req := connect.NewRequest(&webv1.WebCreateCharacterRequest{
+		Name:     "  ada   lovelace ",
+		Pronouns: "they/them",
+		Concept:  "a wandering archivist",
+		Species:  "human",
+		Age:      "early 30s",
+		Faction:  "the Cartographers",
+	})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	resp, err := h.WebCreateCharacter(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, cc.createReq)
+	assert.Equal(t, token, cc.createReq.GetPlayerSessionToken(),
+		"the token arrives from the header, never from the request body")
+	assert.Equal(t, "  ada   lovelace ", cc.createReq.GetName(),
+		"the name crosses UNNORMALIZED: the facade owns the one normalizer (D-88)")
+	assert.Equal(t, "they/them", cc.createReq.GetPronouns())
+	assert.Equal(t, "a wandering archivist", cc.createReq.GetConcept())
+	assert.Equal(t, "human", cc.createReq.GetSpecies())
+	assert.Equal(t, "early 30s", cc.createReq.GetAge())
+	assert.Equal(t, "the Cartographers", cc.createReq.GetFaction())
+
+	require.NotNil(t, resp.Msg.GetCharacter())
+	assert.Equal(t, "char-new", resp.Msg.GetCharacter().GetId())
+	assert.Equal(t, "Ada Lovelace", resp.Msg.GetCharacter().GetName(),
+		"the SERVER-stored display form reaches the client verbatim; the gateway computes nothing")
+	assert.Equal(t, map[string]string{"profile.pronouns": "they/them"}, resp.Msg.GetCharacter().GetProfile())
+}
+
+// TestWebCreateCharacterPassesAFacadeErrorThroughAsIs is the behavioural half of
+// the reshape. The shipped proxy answered a refusal with HTTP 200 and a
+// success=false body; the facade's status — AlreadyExists for a taken name,
+// InvalidArgument for a declined one — must reach the client unreclassified, or
+// the gateway becomes a second copy of the facade's mapping.
+func TestWebCreateCharacterPassesAFacadeErrorThroughAsIs(t *testing.T) {
+	facadeErr := oops.Code("RPC_FAILED").Errorf("character name is already taken")
+	cc := &recordingCharacterAccessClient{createErr: facadeErr}
+	h := NewHandler(&mockCoreClient{}, WithCharacterAccessClient(cc))
+
+	req := connect.NewRequest(&webv1.WebCreateCharacterRequest{Name: "Ada"})
+	req.Header().Set(headerInjectSessionToken, "tok")
+
+	resp, err := h.WebCreateCharacter(context.Background(), req)
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.ErrorIs(t, err, facadeErr)
+}
+
+// TestWebCreateCharacterReturnsUnimplementedWhenClientAbsent pins the nil-client
+// guard. Its CodeUnimplemented means an UNWIRED CLIENT in cmd/holomush, never an
+// unbuilt facade — CharacterAccessServer.CreateCharacter shipped in the same
+// plan as this proxy.
+func TestWebCreateCharacterReturnsUnimplementedWhenClientAbsent(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+
+	_, err := h.WebCreateCharacter(context.Background(),
+		connect.NewRequest(&webv1.WebCreateCharacterRequest{Name: "Ada"}))
 	require.Error(t, err)
 	var connectErr *connect.Error
 	require.ErrorAs(t, err, &connectErr)

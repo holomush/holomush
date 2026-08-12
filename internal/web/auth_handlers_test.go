@@ -269,54 +269,6 @@ func TestWebCreatePlayer_RPCError(t *testing.T) {
 	assert.Equal(t, "registration error", resp.Msg.GetErrorMessage())
 }
 
-// --- WebCreateCharacter ---
-
-func TestWebCreateCharacterReturnsCharacterIDAndNameOnSuccess(t *testing.T) {
-	client := &mockCoreClient{
-		createCharResp: &corev1.CreateCharacterResponse{
-			Success:       true,
-			CharacterId:   "char-new",
-			CharacterName: "NewChar",
-		},
-	}
-	h := NewHandler(client)
-
-	resp, err := h.WebCreateCharacter(context.Background(), requestWithToken(&webv1.WebCreateCharacterRequest{
-		CharacterName: "NewChar",
-	}, "tok-abc"))
-	require.NoError(t, err)
-	assert.True(t, resp.Msg.GetSuccess())
-	assert.Equal(t, "char-new", resp.Msg.GetCharacterId())
-	assert.Equal(t, "NewChar", resp.Msg.GetCharacterName())
-}
-
-func TestWebCreateCharacter_MissingToken(t *testing.T) {
-	client := &mockCoreClient{}
-	h := NewHandler(client)
-
-	_, err := h.WebCreateCharacter(context.Background(), connect.NewRequest(&webv1.WebCreateCharacterRequest{
-		CharacterName: "Char",
-	}))
-	require.Error(t, err)
-	var connectErr *connect.Error
-	require.ErrorAs(t, err, &connectErr)
-	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
-}
-
-func TestWebCreateCharacter_RPCError(t *testing.T) {
-	client := &mockCoreClient{
-		createCharErr: errors.New("timeout"),
-	}
-	h := NewHandler(client)
-
-	resp, err := h.WebCreateCharacter(context.Background(), requestWithToken(&webv1.WebCreateCharacterRequest{
-		CharacterName: "Char",
-	}, "tok-abc"))
-	require.NoError(t, err)
-	assert.False(t, resp.Msg.GetSuccess())
-	assert.Equal(t, "character creation error", resp.Msg.GetErrorMessage())
-}
-
 // --- WebListCharacters ---
 
 func TestWebListCharactersReturnsAllCharactersForValidToken(t *testing.T) {

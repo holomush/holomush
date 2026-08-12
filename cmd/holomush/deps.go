@@ -215,5 +215,33 @@ type GRPCClient interface {
 	UpdateCharacterDescription(ctx context.Context, req *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error)
 	SetDefaultCharacter(ctx context.Context, req *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error)
 	ListCharacterDirectory(ctx context.Context, req *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error)
+	// CreateOwnCharacter is the character-access facade's create. Its Go name
+	// differs from its proto name because CoreService.CreateCharacter above
+	// already occupies that identifier on this one interface with a different
+	// message pair — see (*grpcclient.Client).CreateOwnCharacter. Both RPCs are
+	// live: the core one still serves the telnet CREATE verb.
+	CreateOwnCharacter(ctx context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error)
 	Close() error
+}
+
+// characterAccessGateway adapts a GRPCClient to web.CharacterAccessClient.
+//
+// It exists solely to undo the Go-identifier collision described above: the web
+// interface is generated from the character-access service and therefore names
+// its method CreateCharacter, while GRPCClient must spell the same call
+// CreateOwnCharacter to leave the core RPC its name. Embedding promotes the six
+// facade methods whose names do not collide (and the core CreateCharacter,
+// which the explicit method below shadows), so the adapter carries exactly one
+// line of behaviour.
+//
+// The web layer must NOT be bent to the gateway's naming instead: the routing
+// census requires the proxy body to name CreateCharacter on the facade client,
+// which is what proves it reaches the character facade rather than the core RPC
+// it replaced.
+type characterAccessGateway struct {
+	GRPCClient
+}
+
+func (g characterAccessGateway) CreateCharacter(ctx context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error) {
+	return g.CreateOwnCharacter(ctx, req)
 }

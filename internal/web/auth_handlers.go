@@ -230,41 +230,6 @@ func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv
 	return resp, nil
 }
 
-// WebCreateCharacter creates a new character for the authenticated player.
-func (h *Handler) WebCreateCharacter(ctx context.Context, req *connect.Request[webv1.WebCreateCharacterRequest]) (*connect.Response[webv1.WebCreateCharacterResponse], error) {
-	slog.DebugContext(ctx, "web: WebCreateCharacter", "character_name", req.Msg.GetCharacterName())
-
-	token, err := playerTokenFromHeader(req.Header())
-	if err != nil {
-		return nil, err
-	}
-
-	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
-	defer cancel()
-
-	coreResp, err := h.client.CreateCharacter(rpcCtx, &corev1.CreateCharacterRequest{
-		PlayerSessionToken: token,
-		CharacterName:      req.Msg.GetCharacterName(),
-	})
-	if err != nil {
-		errutil.LogErrorContext(ctx, "web: create character RPC failed", err)
-		return connect.NewResponse(&webv1.WebCreateCharacterResponse{
-			Success: false, ErrorMessage: "character creation error",
-		}), nil
-	}
-	if !coreResp.GetSuccess() {
-		return connect.NewResponse(&webv1.WebCreateCharacterResponse{
-			Success: false, ErrorMessage: coreResp.GetErrorMessage(),
-		}), nil
-	}
-
-	return connect.NewResponse(&webv1.WebCreateCharacterResponse{
-		Success:       true,
-		CharacterId:   coreResp.GetCharacterId(),
-		CharacterName: coreResp.GetCharacterName(),
-	}), nil
-}
-
 // WebListCharacters returns the characters available for the authenticated player.
 func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[webv1.WebListCharactersRequest]) (*connect.Response[webv1.WebListCharactersResponse], error) {
 	slog.DebugContext(ctx, "web: WebListCharacters")

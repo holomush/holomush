@@ -289,6 +289,11 @@ func characterWebProxyRPCs() map[string]struct{} {
 		"WebUpdateCharacterProfile":     {},
 		"WebUpdateCharacterDescription": {},
 		"WebSetDefaultCharacter":        {},
+		// 05-03. Its body satisfies BOTH conjuncts: it reads the token as the bare
+		// headerInjectSessionToken identifier, and it names CreateCharacter on the
+		// character facade client — never CoreService.CreateCharacter, which the
+		// telnet CREATE verb still drives.
+		"WebCreateCharacter": {},
 	}
 }
 

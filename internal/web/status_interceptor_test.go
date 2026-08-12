@@ -79,6 +79,10 @@ func (s *stubCharacterAccessClient) ListCharacterDirectory(context.Context, *cha
 	return nil, s.err
 }
 
+func (s *stubCharacterAccessClient) CreateCharacter(context.Context, *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error) {
+	return nil, s.err
+}
+
 // newInterceptorTestServerFromHandler is the low-level helper used when the
 // caller needs to control handler construction (e.g. omit WithSceneAccessClient).
 func newInterceptorTestServerFromHandler(t *testing.T, h *Handler) (webv1connect.WebServiceClient, func()) {

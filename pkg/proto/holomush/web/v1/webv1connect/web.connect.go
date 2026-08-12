@@ -237,8 +237,14 @@ type WebServiceClient interface {
 	// cookie whose MaxAge matches the guest session's shorter TTL. Runs the
 	// cookie-collision gate first.
 	WebCreateGuest(context.Context, *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error)
-	// WebCreateCharacter adds a character to the authenticated player. Proxies
-	// to CoreService.CreateCharacter using the cookie-derived session token.
+	// WebCreateCharacter adds a character to the authenticated player from a
+	// structured identity card. Proxies to
+	// CharacterAccessService.CreateCharacter — NOT CoreService.CreateCharacter,
+	// which still serves the telnet CREATE verb and still answers with a bare
+	// character_name scalar. web.Handler.WebCreateCharacter forwards the six
+	// submitted values plus the cookie-derived session token and computes
+	// nothing; a refusal arrives as a gRPC status the client classifies, so
+	// there is no gateway-synthesised success boolean.
 	WebCreateCharacter(context.Context, *connect.Request[v1.WebCreateCharacterRequest]) (*connect.Response[v1.WebCreateCharacterResponse], error)
 	// WebListCharacters returns the authenticated player's character roster.
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
@@ -1130,8 +1136,14 @@ type WebServiceHandler interface {
 	// cookie whose MaxAge matches the guest session's shorter TTL. Runs the
 	// cookie-collision gate first.
 	WebCreateGuest(context.Context, *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error)
-	// WebCreateCharacter adds a character to the authenticated player. Proxies
-	// to CoreService.CreateCharacter using the cookie-derived session token.
+	// WebCreateCharacter adds a character to the authenticated player from a
+	// structured identity card. Proxies to
+	// CharacterAccessService.CreateCharacter — NOT CoreService.CreateCharacter,
+	// which still serves the telnet CREATE verb and still answers with a bare
+	// character_name scalar. web.Handler.WebCreateCharacter forwards the six
+	// submitted values plus the cookie-derived session token and computes
+	// nothing; a refusal arrives as a gRPC status the client classifies, so
+	// there is no gateway-synthesised success boolean.
 	WebCreateCharacter(context.Context, *connect.Request[v1.WebCreateCharacterRequest]) (*connect.Response[v1.WebCreateCharacterResponse], error)
 	// WebListCharacters returns the authenticated player's character roster.
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as

@@ -87,16 +87,13 @@ func TestWebAuthHandlersLogRPCErrorsWithStructuredOopsFields(t *testing.T) {
 					connect.NewRequest(&webv1.WebCreatePlayerRequest{Username: "u", Password: "p"}))
 			},
 		},
-		{
-			name:    "WebCreateCharacter",
-			wantMsg: "web: create character RPC failed",
-			setErr:  func(m *mockCoreClient, err error) { m.createCharErr = err },
-			invoke: func(h *Handler) {
-				req := connect.NewRequest(&webv1.WebCreateCharacterRequest{CharacterName: "n"})
-				req.Header().Set(HeaderInjectSessionToken, "tok")
-				_, _ = h.WebCreateCharacter(context.Background(), req)
-			},
-		},
+		// WebCreateCharacter is DELIBERATELY ABSENT from this table as of 05-03.
+		// This table drives failures through mockCoreClient, and that proxy no
+		// longer reaches the core client at all — it reaches the character facade
+		// (internal/web/character_handlers.go). Its log line is asserted beside
+		// the handler, in character_handlers_test.go, against the client it
+		// actually calls; a row here would set an error on a client the handler
+		// never consults and assert a message nothing emitted.
 		{
 			name:    "WebListCharacters",
 			wantMsg: "web: list characters RPC failed",

@@ -13,9 +13,7 @@
   import { goto } from '$app/navigation';
   import * as Card from '$lib/components/ui/card';
   import { Badge } from '$lib/components/ui/badge';
-  import { Input } from '$lib/components/ui/input';
   import { Button } from '$lib/components/ui/button';
-  import { Checkbox } from '$lib/components/ui/checkbox';
 
   const client = createClient(WebService, transport);
 
@@ -24,10 +22,6 @@
   let characters = $state<CharacterSummary[]>([]);
   let loading = $state(true);
   let error = $state('');
-  let creating = $state(false);
-  let newCharName = $state('');
-  let createError = $state('');
-  let autoDefault = $state(false);
 
   // The INITIAL default comes from the (authed) layout's webCheckSession call,
   // which already ran — OwnCharacter carries no is-default flag, so there is no
@@ -92,41 +86,6 @@
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to select character.';
-    }
-  }
-
-  async function createCharacter() {
-    if (!newCharName.trim()) {
-      createError = 'Character name is required.';
-      return;
-    }
-    createError = '';
-    try {
-      const resp = await client.webCreateCharacter({
-        characterName: newCharName.trim(),
-      });
-      if (resp.success) {
-        if (autoDefault) {
-          const selectResp = await client.webSelectCharacter({
-            characterId: resp.characterId,
-          });
-          if (selectResp.success) {
-            setCharacterSession(selectResp.sessionId, selectResp.characterName);
-            goto('/terminal');
-          } else {
-            createError = selectResp.errorMessage || 'Failed to enter game.';
-          }
-        } else {
-          const listResp = await client.webListCharacters({});
-          characters = [...listResp.characters];
-          creating = false;
-          newCharName = '';
-        }
-      } else {
-        createError = resp.errorMessage || 'Failed to create character.';
-      }
-    } catch (e) {
-      createError = e instanceof Error ? e.message : 'Failed to create character.';
     }
   }
 
@@ -216,58 +175,25 @@
           </Card.Root>
         {/each}
 
-        {#if !creating}
-          <Card.Root
-            class="cursor-pointer hover:border-primary transition-colors border-dashed"
-            onclick={() => (creating = true)}
-          >
+        <!-- The create card is a LINK, not an inline form (D-87). The identity
+             card IDENT-01 collects does not fit a roster tile, and the inline
+             form that used to live here read `resp.success` off a response
+             shape that no longer exists — /characters/new owns the whole
+             submission, including the D-88 echo of the name the server stored.
+             The destination page lands in plan 05-06. -->
+        <a href="/characters/new" class="contents" data-testid="create-character">
+          <Card.Root class="cursor-pointer hover:border-primary transition-colors border-dashed h-full">
             <Card.Content class="flex items-center gap-3 px-4 py-4">
               <div class="w-11 h-11 bg-border text-muted-foreground rounded-md flex items-center justify-center text-xl shrink-0">
                 +
               </div>
-              <span class="text-sm font-semibold">Create New Character</span>
-            </Card.Content>
-          </Card.Root>
-        {:else}
-          <Card.Root class="border-dashed">
-            <Card.Content class="flex flex-col gap-2 px-4 py-4">
-              <div class="flex items-center gap-3">
-                <div class="w-11 h-11 bg-border text-muted-foreground rounded-md flex items-center justify-center text-xl shrink-0">
-                  +
-                </div>
-                <span class="text-sm font-semibold">New Character</span>
-              </div>
-              {#if createError}
-                <p class="text-xs text-destructive">{createError}</p>
-              {/if}
-              <Input
-                type="text"
-                name="characterName"
-                bind:value={newCharName}
-                placeholder="Character name"
-                class="text-xs h-8"
-                onkeydown={(e) => e.key === 'Enter' && createCharacter()}
-              />
-              <label class="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                <Checkbox bind:checked={autoDefault} name="autoDefault" />
-                <span>Enter game immediately</span>
-              </label>
-              <div class="flex gap-1.5">
-                <Button size="sm" class="text-xs h-7 px-3" onclick={createCharacter}>Create</Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="text-xs h-7 px-3"
-                  onclick={() => {
-                    creating = false;
-                    newCharName = '';
-                    createError = '';
-                  }}>Cancel</Button
-                >
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="text-sm font-semibold">Create a character</span>
+                <span class="text-xs text-muted-foreground">Names are reserved once taken.</span>
               </div>
             </Card.Content>
           </Card.Root>
-        {/if}
+        </a>
       </div>
     {/if}
   </div>

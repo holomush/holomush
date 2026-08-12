@@ -11,8 +11,8 @@ package webv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v11 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
-	v1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
+	v1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
+	v11 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -1720,14 +1720,33 @@ func (x *WebCreateGuestResponse) GetCurrentPlayerName() string {
 	return ""
 }
 
-// WebCreateCharacterRequest names the new character to add to the authenticated
-// player. The player is identified by the cookie session token, not a body
-// field.
+// WebCreateCharacterRequest is the structured identity card a creation form
+// submits. The player is identified by the cookie session token, never a body
+// field — field 1 stays retired from the cookie cutover for exactly that
+// reason.
+//
+// The five prose values are OPTIONAL and their names match
+// CreateCharacterRequest's, because web.Handler.WebCreateCharacter forwards
+// them one-for-one. A value left empty is not written at all, so a name-only
+// submission seeds no profile rows.
 type WebCreateCharacterRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// character_name is the desired display name for the new character. Field
-	// number is 2 (field 1 retired with the cookie cutover).
-	CharacterName string `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	// name is the submitted character name, forwarded verbatim.
+	// CharacterAccessServer.CreateCharacter hands it to
+	// auth.CharacterService.CreateBound, which normalizes it server-side; the
+	// gateway neither normalizes nor pre-checks it, so there is one normalizer.
+	// Field number is 2 (field 1 retired with the cookie cutover).
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// pronouns seeds the `profile.pronouns` row.
+	Pronouns string `protobuf:"bytes,3,opt,name=pronouns,proto3" json:"pronouns,omitempty"`
+	// concept seeds the `profile.concept` row.
+	Concept string `protobuf:"bytes,4,opt,name=concept,proto3" json:"concept,omitempty"`
+	// species seeds the `profile.species` row.
+	Species string `protobuf:"bytes,5,opt,name=species,proto3" json:"species,omitempty"`
+	// age seeds the `profile.age` row.
+	Age string `protobuf:"bytes,6,opt,name=age,proto3" json:"age,omitempty"`
+	// faction seeds the `profile.faction` row.
+	Faction       string `protobuf:"bytes,7,opt,name=faction,proto3" json:"faction,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1762,24 +1781,64 @@ func (*WebCreateCharacterRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *WebCreateCharacterRequest) GetCharacterName() string {
+func (x *WebCreateCharacterRequest) GetName() string {
 	if x != nil {
-		return x.CharacterName
+		return x.Name
 	}
 	return ""
 }
 
-// WebCreateCharacterResponse reports the result of creating a character.
+func (x *WebCreateCharacterRequest) GetPronouns() string {
+	if x != nil {
+		return x.Pronouns
+	}
+	return ""
+}
+
+func (x *WebCreateCharacterRequest) GetConcept() string {
+	if x != nil {
+		return x.Concept
+	}
+	return ""
+}
+
+func (x *WebCreateCharacterRequest) GetSpecies() string {
+	if x != nil {
+		return x.Species
+	}
+	return ""
+}
+
+func (x *WebCreateCharacterRequest) GetAge() string {
+	if x != nil {
+		return x.Age
+	}
+	return ""
+}
+
+func (x *WebCreateCharacterRequest) GetFaction() string {
+	if x != nil {
+		return x.Faction
+	}
+	return ""
+}
+
+// WebCreateCharacterResponse carries the created character in the owner
+// audience's shape, forwarded verbatim from
+// CharacterAccessServer.CreateCharacter.
+//
+// IT CARRIES NO success/error_message PAIR, and the absence is the contract
+// change. The gateway no longer synthesises a boolean from a downstream
+// outcome: a refusal is the facade's own gRPC status — AlreadyExists for a
+// taken name, InvalidArgument for a name the admission gate declined,
+// FailedPrecondition for a reached character limit — which the client
+// classifies directly.
 type WebCreateCharacterResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// success is true when the character was created.
-	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	// character_id is the new character's ULID identity.
-	CharacterId string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	// character_name is the created character's display name.
-	CharacterName string `protobuf:"bytes,3,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	// error_message is a human-readable failure detail on the non-success path.
-	ErrorMessage  string `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// character is the newly seated character. Its `name` is the SERVER-stored
+	// display form, which is what the post-submit echo shows the player; its
+	// `profile` map holds whichever of the five supplied values were written.
+	Character     *v1.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1814,32 +1873,11 @@ func (*WebCreateCharacterResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{20}
 }
 
-func (x *WebCreateCharacterResponse) GetSuccess() bool {
+func (x *WebCreateCharacterResponse) GetCharacter() *v1.OwnCharacter {
 	if x != nil {
-		return x.Success
+		return x.Character
 	}
-	return false
-}
-
-func (x *WebCreateCharacterResponse) GetCharacterId() string {
-	if x != nil {
-		return x.CharacterId
-	}
-	return ""
-}
-
-func (x *WebCreateCharacterResponse) GetCharacterName() string {
-	if x != nil {
-		return x.CharacterName
-	}
-	return ""
-}
-
-func (x *WebCreateCharacterResponse) GetErrorMessage() string {
-	if x != nil {
-		return x.ErrorMessage
-	}
-	return ""
+	return nil
 }
 
 // WebListCharactersRequest is the empty request for the authenticated player's
@@ -3741,7 +3779,7 @@ func (x *WebListScenesRequest) GetExcludeContentWarnings() []string {
 type WebListScenesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scenes is the matching public scenes for this page.
-	Scenes        []*v1.SceneInfo `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
+	Scenes        []*v11.SceneInfo `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3776,7 +3814,7 @@ func (*WebListScenesResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{54}
 }
 
-func (x *WebListScenesResponse) GetScenes() []*v1.SceneInfo {
+func (x *WebListScenesResponse) GetScenes() []*v11.SceneInfo {
 	if x != nil {
 		return x.Scenes
 	}
@@ -3852,7 +3890,7 @@ func (x *WebGetSceneRequest) GetSceneId() string {
 type WebGetSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the loaded scene's full metadata projection.
-	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3887,7 +3925,7 @@ func (*WebGetSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{56}
 }
 
-func (x *WebGetSceneResponse) GetScene() *v1.SceneInfo {
+func (x *WebGetSceneResponse) GetScene() *v11.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -3956,7 +3994,7 @@ type WebListMyScenesResponse struct {
 	// scenes is the character's scene participations, most recently active first.
 	// Each CharacterSceneInfo carries the per-scene `muted` flag from the facade
 	// ListMyScenes read, so the workspace renders persisted mute state on reload.
-	Scenes []*v1.CharacterSceneInfo `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
+	Scenes []*v11.CharacterSceneInfo `protobuf:"bytes,1,rep,name=scenes,proto3" json:"scenes,omitempty"`
 	// global_notify_enabled is the character's persisted global notify preference,
 	// forwarded verbatim from SceneAccessService.ListMyScenes (default true;
 	// false when the character turned scene notifications off). Lets the web
@@ -3996,7 +4034,7 @@ func (*WebListMyScenesResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{58}
 }
 
-func (x *WebListMyScenesResponse) GetScenes() []*v1.CharacterSceneInfo {
+func (x *WebListMyScenesResponse) GetScenes() []*v11.CharacterSceneInfo {
 	if x != nil {
 		return x.Scenes
 	}
@@ -4080,7 +4118,7 @@ type WebWatchSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// participant is the resulting participant entry (role=observer), or the
 	// pre-existing row when the character was already a participant.
-	Participant   *v1.ParticipantInfo `protobuf:"bytes,1,opt,name=participant,proto3" json:"participant,omitempty"`
+	Participant   *v11.ParticipantInfo `protobuf:"bytes,1,opt,name=participant,proto3" json:"participant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4115,7 +4153,7 @@ func (*WebWatchSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{60}
 }
 
-func (x *WebWatchSceneResponse) GetParticipant() *v1.ParticipantInfo {
+func (x *WebWatchSceneResponse) GetParticipant() *v11.ParticipantInfo {
 	if x != nil {
 		return x.Participant
 	}
@@ -4201,7 +4239,7 @@ func (x *WebCreateSceneRequest) GetDescription() string {
 type WebCreateSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the newly created scene's full metadata projection.
-	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4236,7 +4274,7 @@ func (*WebCreateSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{62}
 }
 
-func (x *WebCreateSceneResponse) GetScene() *v1.SceneInfo {
+func (x *WebCreateSceneResponse) GetScene() *v11.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -4562,7 +4600,7 @@ func (x *WebListPublishedScenesRequest) GetTags() []string {
 type WebListPublishedScenesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// archives is the public-safe published-archive summaries, newest first.
-	Archives      []*v1.PublicSceneArchive `protobuf:"bytes,1,rep,name=archives,proto3" json:"archives,omitempty"`
+	Archives      []*v11.PublicSceneArchive `protobuf:"bytes,1,rep,name=archives,proto3" json:"archives,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4597,7 +4635,7 @@ func (*WebListPublishedScenesResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{68}
 }
 
-func (x *WebListPublishedScenesResponse) GetArchives() []*v1.PublicSceneArchive {
+func (x *WebListPublishedScenesResponse) GetArchives() []*v11.PublicSceneArchive {
 	if x != nil {
 		return x.Archives
 	}
@@ -4670,7 +4708,7 @@ type WebGetPublicSceneArchiveResponse struct {
 	// participants_snapshot is the participant character names snapshotted at publish time.
 	ParticipantsSnapshot []string `protobuf:"bytes,3,rep,name=participants_snapshot,json=participantsSnapshot,proto3" json:"participants_snapshot,omitempty"`
 	// content_entries is the frozen published content.
-	ContentEntries []*v1.PublishedSceneEntry `protobuf:"bytes,4,rep,name=content_entries,json=contentEntries,proto3" json:"content_entries,omitempty"`
+	ContentEntries []*v11.PublishedSceneEntry `protobuf:"bytes,4,rep,name=content_entries,json=contentEntries,proto3" json:"content_entries,omitempty"`
 	// published_at_unix_ns is the epoch-nanosecond publish time.
 	PublishedAtUnixNs int64 `protobuf:"varint,5,opt,name=published_at_unix_ns,json=publishedAtUnixNs,proto3" json:"published_at_unix_ns,omitempty"`
 	unknownFields     protoimpl.UnknownFields
@@ -4728,7 +4766,7 @@ func (x *WebGetPublicSceneArchiveResponse) GetParticipantsSnapshot() []string {
 	return nil
 }
 
-func (x *WebGetPublicSceneArchiveResponse) GetContentEntries() []*v1.PublishedSceneEntry {
+func (x *WebGetPublicSceneArchiveResponse) GetContentEntries() []*v11.PublishedSceneEntry {
 	if x != nil {
 		return x.ContentEntries
 	}
@@ -4933,7 +4971,7 @@ func (x *WebEndSceneRequest) GetSceneId() string {
 type WebEndSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the scene row after the ended transition.
-	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4968,7 +5006,7 @@ func (*WebEndSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{74}
 }
 
-func (x *WebEndSceneResponse) GetScene() *v1.SceneInfo {
+func (x *WebEndSceneResponse) GetScene() *v11.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -5392,7 +5430,7 @@ type WebGetPublishedSceneResponse struct {
 	// failure_reason is the cause when status is ATTEMPT_FAILED; empty otherwise.
 	FailureReason string `protobuf:"bytes,5,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
 	// vote_summary is the current yes/no/pending tally.
-	VoteSummary   *v1.PublishedSceneVoteSummary `protobuf:"bytes,6,opt,name=vote_summary,json=voteSummary,proto3" json:"vote_summary,omitempty"`
+	VoteSummary   *v11.PublishedSceneVoteSummary `protobuf:"bytes,6,opt,name=vote_summary,json=voteSummary,proto3" json:"vote_summary,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5462,7 +5500,7 @@ func (x *WebGetPublishedSceneResponse) GetFailureReason() string {
 	return ""
 }
 
-func (x *WebGetPublishedSceneResponse) GetVoteSummary() *v1.PublishedSceneVoteSummary {
+func (x *WebGetPublishedSceneResponse) GetVoteSummary() *v11.PublishedSceneVoteSummary {
 	if x != nil {
 		return x.VoteSummary
 	}
@@ -5537,7 +5575,7 @@ func (x *WebPauseSceneRequest) GetSceneId() string {
 type WebPauseSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the scene row after the paused transition.
-	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5572,7 +5610,7 @@ func (*WebPauseSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{84}
 }
 
-func (x *WebPauseSceneResponse) GetScene() *v1.SceneInfo {
+func (x *WebPauseSceneResponse) GetScene() *v11.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -5647,7 +5685,7 @@ func (x *WebResumeSceneRequest) GetSceneId() string {
 type WebResumeSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the scene row after the resumed transition.
-	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5682,7 +5720,7 @@ func (*WebResumeSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{86}
 }
 
-func (x *WebResumeSceneResponse) GetScene() *v1.SceneInfo {
+func (x *WebResumeSceneResponse) GetScene() *v11.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -6471,7 +6509,7 @@ func (x *WebUpdateSceneRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 type WebUpdateSceneResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// scene is the scene row after the partial update.
-	Scene         *v1.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
+	Scene         *v11.SceneInfo `protobuf:"bytes,1,opt,name=scene,proto3" json:"scene,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6506,7 +6544,7 @@ func (*WebUpdateSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{100}
 }
 
-func (x *WebUpdateSceneResponse) GetScene() *v1.SceneInfo {
+func (x *WebUpdateSceneResponse) GetScene() *v11.SceneInfo {
 	if x != nil {
 		return x.Scene
 	}
@@ -6567,7 +6605,7 @@ type WebGetCharacterProfileResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// character is the projection the facade built; the gateway forwards it
 	// unmodified and computes nothing.
-	Character     *v11.PublicCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	Character     *v1.PublicCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6602,7 +6640,7 @@ func (*WebGetCharacterProfileResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{102}
 }
 
-func (x *WebGetCharacterProfileResponse) GetCharacter() *v11.PublicCharacter {
+func (x *WebGetCharacterProfileResponse) GetCharacter() *v1.PublicCharacter {
 	if x != nil {
 		return x.Character
 	}
@@ -6654,7 +6692,7 @@ type WebListMyCharactersResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// characters is the owner-audience roster the facade projected, retired
 	// entries included; the gateway forwards it unmodified.
-	Characters    []*v11.OwnCharacter `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	Characters    []*v1.OwnCharacter `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6689,7 +6727,7 @@ func (*WebListMyCharactersResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{104}
 }
 
-func (x *WebListMyCharactersResponse) GetCharacters() []*v11.OwnCharacter {
+func (x *WebListMyCharactersResponse) GetCharacters() []*v1.OwnCharacter {
 	if x != nil {
 		return x.Characters
 	}
@@ -6748,7 +6786,7 @@ func (x *WebGetMyCharacterRequest) GetCharacterId() string {
 type WebGetMyCharacterResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// character is the projection the facade built for the owning player.
-	Character     *v11.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	Character     *v1.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6783,7 +6821,7 @@ func (*WebGetMyCharacterResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{106}
 }
 
-func (x *WebGetMyCharacterResponse) GetCharacter() *v11.OwnCharacter {
+func (x *WebGetMyCharacterResponse) GetCharacter() *v1.OwnCharacter {
 	if x != nil {
 		return x.Character
 	}
@@ -6973,7 +7011,7 @@ func (x *WebUpdateCharacterProfileRequest) GetUpdateMask() *fieldmaskpb.FieldMas
 type WebUpdateCharacterProfileResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// character is the character as it stands after the partial edit.
-	Character     *v11.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	Character     *v1.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7008,7 +7046,7 @@ func (*WebUpdateCharacterProfileResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{108}
 }
 
-func (x *WebUpdateCharacterProfileResponse) GetCharacter() *v11.OwnCharacter {
+func (x *WebUpdateCharacterProfileResponse) GetCharacter() *v1.OwnCharacter {
 	if x != nil {
 		return x.Character
 	}
@@ -7084,7 +7122,7 @@ func (x *WebUpdateCharacterDescriptionRequest) GetDescription() string {
 type WebUpdateCharacterDescriptionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// character is the character as it stands after the rewrite.
-	Character     *v11.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	Character     *v1.OwnCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7119,7 +7157,7 @@ func (*WebUpdateCharacterDescriptionResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{110}
 }
 
-func (x *WebUpdateCharacterDescriptionResponse) GetCharacter() *v11.OwnCharacter {
+func (x *WebUpdateCharacterDescriptionResponse) GetCharacter() *v1.OwnCharacter {
 	if x != nil {
 		return x.Character
 	}
@@ -7183,7 +7221,7 @@ type WebSetDefaultCharacterResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// characters is the owner-audience roster the facade projected after the
 	// column moved, retired entries included; the gateway forwards it unmodified.
-	Characters    []*v11.OwnCharacter `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	Characters    []*v1.OwnCharacter `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7218,7 +7256,7 @@ func (*WebSetDefaultCharacterResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{112}
 }
 
-func (x *WebSetDefaultCharacterResponse) GetCharacters() []*v11.OwnCharacter {
+func (x *WebSetDefaultCharacterResponse) GetCharacters() []*v1.OwnCharacter {
 	if x != nil {
 		return x.Characters
 	}
@@ -7272,7 +7310,7 @@ type WebListCharacterDirectoryResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// characters is the reachable identity rows the facade projected, in the order
 	// it produced them; the gateway forwards them unmodified.
-	Characters    []*v11.PublicCharacterSummary `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	Characters    []*v1.PublicCharacterSummary `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7307,7 +7345,7 @@ func (*WebListCharacterDirectoryResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{114}
 }
 
-func (x *WebListCharacterDirectoryResponse) GetCharacters() []*v11.PublicCharacterSummary {
+func (x *WebListCharacterDirectoryResponse) GetCharacters() []*v1.PublicCharacterSummary {
 	if x != nil {
 		return x.Characters
 	}
@@ -7421,14 +7459,16 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x14default_character_id\x18\x04 \x01(\tR\x12defaultCharacterId\x12\x1d\n" +
 	"\n" +
 	"error_code\x18\x05 \x01(\tR\terrorCode\x12.\n" +
-	"\x13current_player_name\x18\x06 \x01(\tR\x11currentPlayerName\"B\n" +
-	"\x19WebCreateCharacterRequest\x12%\n" +
-	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\"\xa5\x01\n" +
-	"\x1aWebCreateCharacterResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12!\n" +
-	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\x12%\n" +
-	"\x0echaracter_name\x18\x03 \x01(\tR\rcharacterName\x12#\n" +
-	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"\x1a\n" +
+	"\x13current_player_name\x18\x06 \x01(\tR\x11currentPlayerName\"\xab\x01\n" +
+	"\x19WebCreateCharacterRequest\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
+	"\bpronouns\x18\x03 \x01(\tR\bpronouns\x12\x18\n" +
+	"\aconcept\x18\x04 \x01(\tR\aconcept\x12\x18\n" +
+	"\aspecies\x18\x05 \x01(\tR\aspecies\x12\x10\n" +
+	"\x03age\x18\x06 \x01(\tR\x03age\x12\x18\n" +
+	"\afaction\x18\a \x01(\tR\afaction\"e\n" +
+	"\x1aWebCreateCharacterResponse\x12G\n" +
+	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacter\"\x1a\n" +
 	"\x18WebListCharactersRequest\"^\n" +
 	"\x19WebListCharactersResponse\x12A\n" +
 	"\n" +
@@ -8009,20 +8049,20 @@ var file_holomush_web_v1_web_proto_goTypes = []any{
 	(*WebSetDefaultCharacterResponse)(nil),        // 116: holomush.web.v1.WebSetDefaultCharacterResponse
 	(*WebListCharacterDirectoryRequest)(nil),      // 117: holomush.web.v1.WebListCharacterDirectoryRequest
 	(*WebListCharacterDirectoryResponse)(nil),     // 118: holomush.web.v1.WebListCharacterDirectoryResponse
-	nil,                                  // 119: holomush.web.v1.WebContentItem.MetadataEntry
-	nil,                                  // 120: holomush.web.v1.WebListCommandsResponse.AliasesEntry
-	(*structpb.Struct)(nil),              // 121: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),        // 122: google.protobuf.Timestamp
-	(*v1.SceneInfo)(nil),                 // 123: holomush.scene.v1.SceneInfo
-	(*v1.CharacterSceneInfo)(nil),        // 124: holomush.scene.v1.CharacterSceneInfo
-	(*v1.ParticipantInfo)(nil),           // 125: holomush.scene.v1.ParticipantInfo
-	(*v1.PublicSceneArchive)(nil),        // 126: holomush.scene.v1.PublicSceneArchive
-	(*v1.PublishedSceneEntry)(nil),       // 127: holomush.scene.v1.PublishedSceneEntry
-	(*v1.PublishedSceneVoteSummary)(nil), // 128: holomush.scene.v1.PublishedSceneVoteSummary
-	(*fieldmaskpb.FieldMask)(nil),        // 129: google.protobuf.FieldMask
-	(*v11.PublicCharacter)(nil),          // 130: holomush.characteraccess.v1.PublicCharacter
-	(*v11.OwnCharacter)(nil),             // 131: holomush.characteraccess.v1.OwnCharacter
-	(*v11.PublicCharacterSummary)(nil),   // 132: holomush.characteraccess.v1.PublicCharacterSummary
+	nil,                                   // 119: holomush.web.v1.WebContentItem.MetadataEntry
+	nil,                                   // 120: holomush.web.v1.WebListCommandsResponse.AliasesEntry
+	(*structpb.Struct)(nil),               // 121: google.protobuf.Struct
+	(*v1.OwnCharacter)(nil),               // 122: holomush.characteraccess.v1.OwnCharacter
+	(*timestamppb.Timestamp)(nil),         // 123: google.protobuf.Timestamp
+	(*v11.SceneInfo)(nil),                 // 124: holomush.scene.v1.SceneInfo
+	(*v11.CharacterSceneInfo)(nil),        // 125: holomush.scene.v1.CharacterSceneInfo
+	(*v11.ParticipantInfo)(nil),           // 126: holomush.scene.v1.ParticipantInfo
+	(*v11.PublicSceneArchive)(nil),        // 127: holomush.scene.v1.PublicSceneArchive
+	(*v11.PublishedSceneEntry)(nil),       // 128: holomush.scene.v1.PublishedSceneEntry
+	(*v11.PublishedSceneVoteSummary)(nil), // 129: holomush.scene.v1.PublishedSceneVoteSummary
+	(*fieldmaskpb.FieldMask)(nil),         // 130: google.protobuf.FieldMask
+	(*v1.PublicCharacter)(nil),            // 131: holomush.characteraccess.v1.PublicCharacter
+	(*v1.PublicCharacterSummary)(nil),     // 132: holomush.characteraccess.v1.PublicCharacterSummary
 }
 var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	1,   // 0: holomush.web.v1.ControlFrame.signal:type_name -> holomush.web.v1.ControlSignal
@@ -8033,154 +8073,155 @@ var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	14,  // 5: holomush.web.v1.WebAuthenticatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	14,  // 6: holomush.web.v1.WebCreatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	14,  // 7: holomush.web.v1.WebCreateGuestResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	14,  // 8: holomush.web.v1.WebListCharactersResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	14,  // 9: holomush.web.v1.WebCheckSessionResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	39,  // 10: holomush.web.v1.WebGetContentResponse.item:type_name -> holomush.web.v1.WebContentItem
-	39,  // 11: holomush.web.v1.WebListContentResponse.items:type_name -> holomush.web.v1.WebContentItem
-	119, // 12: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
-	8,   // 13: holomush.web.v1.WebQueryStreamHistoryResponse.events:type_name -> holomush.web.v1.GameEvent
-	122, // 14: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
-	122, // 15: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
-	45,  // 16: holomush.web.v1.WebListPlayerSessionsResponse.sessions:type_name -> holomush.web.v1.WebPlayerSessionInfo
-	3,   // 17: holomush.web.v1.WebPresenceEntry.state:type_name -> holomush.web.v1.WebPresenceState
-	2,   // 18: holomush.web.v1.WebListFocusPresenceResponse.context:type_name -> holomush.web.v1.WebPresenceContext
-	51,  // 19: holomush.web.v1.WebListFocusPresenceResponse.entries:type_name -> holomush.web.v1.WebPresenceEntry
-	54,  // 20: holomush.web.v1.WebListCommandsResponse.commands:type_name -> holomush.web.v1.WebAvailableCommand
-	120, // 21: holomush.web.v1.WebListCommandsResponse.aliases:type_name -> holomush.web.v1.WebListCommandsResponse.AliasesEntry
-	123, // 22: holomush.web.v1.WebListScenesResponse.scenes:type_name -> holomush.scene.v1.SceneInfo
-	123, // 23: holomush.web.v1.WebGetSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	124, // 24: holomush.web.v1.WebListMyScenesResponse.scenes:type_name -> holomush.scene.v1.CharacterSceneInfo
-	125, // 25: holomush.web.v1.WebWatchSceneResponse.participant:type_name -> holomush.scene.v1.ParticipantInfo
-	123, // 26: holomush.web.v1.WebCreateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	126, // 27: holomush.web.v1.WebListPublishedScenesResponse.archives:type_name -> holomush.scene.v1.PublicSceneArchive
-	127, // 28: holomush.web.v1.WebGetPublicSceneArchiveResponse.content_entries:type_name -> holomush.scene.v1.PublishedSceneEntry
-	123, // 29: holomush.web.v1.WebEndSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	128, // 30: holomush.web.v1.WebGetPublishedSceneResponse.vote_summary:type_name -> holomush.scene.v1.PublishedSceneVoteSummary
-	123, // 31: holomush.web.v1.WebPauseSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	123, // 32: holomush.web.v1.WebResumeSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	129, // 33: holomush.web.v1.WebUpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
-	123, // 34: holomush.web.v1.WebUpdateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	130, // 35: holomush.web.v1.WebGetCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.PublicCharacter
-	131, // 36: holomush.web.v1.WebListMyCharactersResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
-	131, // 37: holomush.web.v1.WebGetMyCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	129, // 38: holomush.web.v1.WebUpdateCharacterProfileRequest.update_mask:type_name -> google.protobuf.FieldMask
-	131, // 39: holomush.web.v1.WebUpdateCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	131, // 40: holomush.web.v1.WebUpdateCharacterDescriptionResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	131, // 41: holomush.web.v1.WebSetDefaultCharacterResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
-	132, // 42: holomush.web.v1.WebListCharacterDirectoryResponse.characters:type_name -> holomush.characteraccess.v1.PublicCharacterSummary
-	5,   // 43: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
-	7,   // 44: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
-	10,  // 45: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
-	12,  // 46: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
-	15,  // 47: holomush.web.v1.WebService.WebAuthenticatePlayer:input_type -> holomush.web.v1.WebAuthenticatePlayerRequest
-	17,  // 48: holomush.web.v1.WebService.WebSelectCharacter:input_type -> holomush.web.v1.WebSelectCharacterRequest
-	19,  // 49: holomush.web.v1.WebService.WebCreatePlayer:input_type -> holomush.web.v1.WebCreatePlayerRequest
-	21,  // 50: holomush.web.v1.WebService.WebCreateGuest:input_type -> holomush.web.v1.WebCreateGuestRequest
-	23,  // 51: holomush.web.v1.WebService.WebCreateCharacter:input_type -> holomush.web.v1.WebCreateCharacterRequest
-	25,  // 52: holomush.web.v1.WebService.WebListCharacters:input_type -> holomush.web.v1.WebListCharactersRequest
-	27,  // 53: holomush.web.v1.WebService.WebLogout:input_type -> holomush.web.v1.WebLogoutRequest
-	29,  // 54: holomush.web.v1.WebService.WebRequestPasswordReset:input_type -> holomush.web.v1.WebRequestPasswordResetRequest
-	31,  // 55: holomush.web.v1.WebService.WebConfirmPasswordReset:input_type -> holomush.web.v1.WebConfirmPasswordResetRequest
-	33,  // 56: holomush.web.v1.WebService.WebCheckSession:input_type -> holomush.web.v1.WebCheckSessionRequest
-	35,  // 57: holomush.web.v1.WebService.WebGetContent:input_type -> holomush.web.v1.WebGetContentRequest
-	37,  // 58: holomush.web.v1.WebService.WebListContent:input_type -> holomush.web.v1.WebListContentRequest
-	40,  // 59: holomush.web.v1.WebService.WebQueryStreamHistory:input_type -> holomush.web.v1.WebQueryStreamHistoryRequest
-	42,  // 60: holomush.web.v1.WebService.WebListSessionStreams:input_type -> holomush.web.v1.WebListSessionStreamsRequest
-	44,  // 61: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
-	47,  // 62: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
-	49,  // 63: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
-	52,  // 64: holomush.web.v1.WebService.WebListFocusPresence:input_type -> holomush.web.v1.WebListFocusPresenceRequest
-	55,  // 65: holomush.web.v1.WebService.WebListCommands:input_type -> holomush.web.v1.WebListCommandsRequest
-	57,  // 66: holomush.web.v1.WebService.WebListScenes:input_type -> holomush.web.v1.WebListScenesRequest
-	59,  // 67: holomush.web.v1.WebService.WebGetScene:input_type -> holomush.web.v1.WebGetSceneRequest
-	61,  // 68: holomush.web.v1.WebService.WebListMyScenes:input_type -> holomush.web.v1.WebListMyScenesRequest
-	63,  // 69: holomush.web.v1.WebService.WebWatchScene:input_type -> holomush.web.v1.WebWatchSceneRequest
-	65,  // 70: holomush.web.v1.WebService.WebCreateScene:input_type -> holomush.web.v1.WebCreateSceneRequest
-	77,  // 71: holomush.web.v1.WebService.WebEndScene:input_type -> holomush.web.v1.WebEndSceneRequest
-	87,  // 72: holomush.web.v1.WebService.WebPauseScene:input_type -> holomush.web.v1.WebPauseSceneRequest
-	89,  // 73: holomush.web.v1.WebService.WebResumeScene:input_type -> holomush.web.v1.WebResumeSceneRequest
-	91,  // 74: holomush.web.v1.WebService.WebMuteScene:input_type -> holomush.web.v1.WebMuteSceneRequest
-	93,  // 75: holomush.web.v1.WebService.WebSetSceneNotifyPref:input_type -> holomush.web.v1.WebSetSceneNotifyPrefRequest
-	103, // 76: holomush.web.v1.WebService.WebUpdateScene:input_type -> holomush.web.v1.WebUpdateSceneRequest
-	95,  // 77: holomush.web.v1.WebService.WebInviteToScene:input_type -> holomush.web.v1.WebInviteToSceneRequest
-	97,  // 78: holomush.web.v1.WebService.WebKickFromScene:input_type -> holomush.web.v1.WebKickFromSceneRequest
-	99,  // 79: holomush.web.v1.WebService.WebTransferOwnership:input_type -> holomush.web.v1.WebTransferOwnershipRequest
-	101, // 80: holomush.web.v1.WebService.WebLeaveScene:input_type -> holomush.web.v1.WebLeaveSceneRequest
-	67,  // 81: holomush.web.v1.WebService.WebExportScene:input_type -> holomush.web.v1.WebExportSceneRequest
-	69,  // 82: holomush.web.v1.WebService.WebSetSceneFocus:input_type -> holomush.web.v1.WebSetSceneFocusRequest
-	71,  // 83: holomush.web.v1.WebService.WebListPublishedScenes:input_type -> holomush.web.v1.WebListPublishedScenesRequest
-	73,  // 84: holomush.web.v1.WebService.WebGetPublicSceneArchive:input_type -> holomush.web.v1.WebGetPublicSceneArchiveRequest
-	75,  // 85: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:input_type -> holomush.web.v1.WebDownloadPublicSceneArchiveRequest
-	79,  // 86: holomush.web.v1.WebService.WebStartScenePublish:input_type -> holomush.web.v1.WebStartScenePublishRequest
-	81,  // 87: holomush.web.v1.WebService.WebCastPublishSceneVote:input_type -> holomush.web.v1.WebCastPublishSceneVoteRequest
-	83,  // 88: holomush.web.v1.WebService.WebWithdrawScenePublish:input_type -> holomush.web.v1.WebWithdrawScenePublishRequest
-	85,  // 89: holomush.web.v1.WebService.WebGetPublishedScene:input_type -> holomush.web.v1.WebGetPublishedSceneRequest
-	105, // 90: holomush.web.v1.WebService.WebGetCharacterProfile:input_type -> holomush.web.v1.WebGetCharacterProfileRequest
-	107, // 91: holomush.web.v1.WebService.WebListMyCharacters:input_type -> holomush.web.v1.WebListMyCharactersRequest
-	109, // 92: holomush.web.v1.WebService.WebGetMyCharacter:input_type -> holomush.web.v1.WebGetMyCharacterRequest
-	111, // 93: holomush.web.v1.WebService.WebUpdateCharacterProfile:input_type -> holomush.web.v1.WebUpdateCharacterProfileRequest
-	113, // 94: holomush.web.v1.WebService.WebUpdateCharacterDescription:input_type -> holomush.web.v1.WebUpdateCharacterDescriptionRequest
-	115, // 95: holomush.web.v1.WebService.WebSetDefaultCharacter:input_type -> holomush.web.v1.WebSetDefaultCharacterRequest
-	117, // 96: holomush.web.v1.WebService.WebListCharacterDirectory:input_type -> holomush.web.v1.WebListCharacterDirectoryRequest
-	6,   // 97: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
-	9,   // 98: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
-	11,  // 99: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
-	13,  // 100: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
-	16,  // 101: holomush.web.v1.WebService.WebAuthenticatePlayer:output_type -> holomush.web.v1.WebAuthenticatePlayerResponse
-	18,  // 102: holomush.web.v1.WebService.WebSelectCharacter:output_type -> holomush.web.v1.WebSelectCharacterResponse
-	20,  // 103: holomush.web.v1.WebService.WebCreatePlayer:output_type -> holomush.web.v1.WebCreatePlayerResponse
-	22,  // 104: holomush.web.v1.WebService.WebCreateGuest:output_type -> holomush.web.v1.WebCreateGuestResponse
-	24,  // 105: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
-	26,  // 106: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
-	28,  // 107: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
-	30,  // 108: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
-	32,  // 109: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
-	34,  // 110: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
-	36,  // 111: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
-	38,  // 112: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
-	41,  // 113: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
-	43,  // 114: holomush.web.v1.WebService.WebListSessionStreams:output_type -> holomush.web.v1.WebListSessionStreamsResponse
-	46,  // 115: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
-	48,  // 116: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
-	50,  // 117: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
-	53,  // 118: holomush.web.v1.WebService.WebListFocusPresence:output_type -> holomush.web.v1.WebListFocusPresenceResponse
-	56,  // 119: holomush.web.v1.WebService.WebListCommands:output_type -> holomush.web.v1.WebListCommandsResponse
-	58,  // 120: holomush.web.v1.WebService.WebListScenes:output_type -> holomush.web.v1.WebListScenesResponse
-	60,  // 121: holomush.web.v1.WebService.WebGetScene:output_type -> holomush.web.v1.WebGetSceneResponse
-	62,  // 122: holomush.web.v1.WebService.WebListMyScenes:output_type -> holomush.web.v1.WebListMyScenesResponse
-	64,  // 123: holomush.web.v1.WebService.WebWatchScene:output_type -> holomush.web.v1.WebWatchSceneResponse
-	66,  // 124: holomush.web.v1.WebService.WebCreateScene:output_type -> holomush.web.v1.WebCreateSceneResponse
-	78,  // 125: holomush.web.v1.WebService.WebEndScene:output_type -> holomush.web.v1.WebEndSceneResponse
-	88,  // 126: holomush.web.v1.WebService.WebPauseScene:output_type -> holomush.web.v1.WebPauseSceneResponse
-	90,  // 127: holomush.web.v1.WebService.WebResumeScene:output_type -> holomush.web.v1.WebResumeSceneResponse
-	92,  // 128: holomush.web.v1.WebService.WebMuteScene:output_type -> holomush.web.v1.WebMuteSceneResponse
-	94,  // 129: holomush.web.v1.WebService.WebSetSceneNotifyPref:output_type -> holomush.web.v1.WebSetSceneNotifyPrefResponse
-	104, // 130: holomush.web.v1.WebService.WebUpdateScene:output_type -> holomush.web.v1.WebUpdateSceneResponse
-	96,  // 131: holomush.web.v1.WebService.WebInviteToScene:output_type -> holomush.web.v1.WebInviteToSceneResponse
-	98,  // 132: holomush.web.v1.WebService.WebKickFromScene:output_type -> holomush.web.v1.WebKickFromSceneResponse
-	100, // 133: holomush.web.v1.WebService.WebTransferOwnership:output_type -> holomush.web.v1.WebTransferOwnershipResponse
-	102, // 134: holomush.web.v1.WebService.WebLeaveScene:output_type -> holomush.web.v1.WebLeaveSceneResponse
-	68,  // 135: holomush.web.v1.WebService.WebExportScene:output_type -> holomush.web.v1.WebExportSceneResponse
-	70,  // 136: holomush.web.v1.WebService.WebSetSceneFocus:output_type -> holomush.web.v1.WebSetSceneFocusResponse
-	72,  // 137: holomush.web.v1.WebService.WebListPublishedScenes:output_type -> holomush.web.v1.WebListPublishedScenesResponse
-	74,  // 138: holomush.web.v1.WebService.WebGetPublicSceneArchive:output_type -> holomush.web.v1.WebGetPublicSceneArchiveResponse
-	76,  // 139: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:output_type -> holomush.web.v1.WebDownloadPublicSceneArchiveResponse
-	80,  // 140: holomush.web.v1.WebService.WebStartScenePublish:output_type -> holomush.web.v1.WebStartScenePublishResponse
-	82,  // 141: holomush.web.v1.WebService.WebCastPublishSceneVote:output_type -> holomush.web.v1.WebCastPublishSceneVoteResponse
-	84,  // 142: holomush.web.v1.WebService.WebWithdrawScenePublish:output_type -> holomush.web.v1.WebWithdrawScenePublishResponse
-	86,  // 143: holomush.web.v1.WebService.WebGetPublishedScene:output_type -> holomush.web.v1.WebGetPublishedSceneResponse
-	106, // 144: holomush.web.v1.WebService.WebGetCharacterProfile:output_type -> holomush.web.v1.WebGetCharacterProfileResponse
-	108, // 145: holomush.web.v1.WebService.WebListMyCharacters:output_type -> holomush.web.v1.WebListMyCharactersResponse
-	110, // 146: holomush.web.v1.WebService.WebGetMyCharacter:output_type -> holomush.web.v1.WebGetMyCharacterResponse
-	112, // 147: holomush.web.v1.WebService.WebUpdateCharacterProfile:output_type -> holomush.web.v1.WebUpdateCharacterProfileResponse
-	114, // 148: holomush.web.v1.WebService.WebUpdateCharacterDescription:output_type -> holomush.web.v1.WebUpdateCharacterDescriptionResponse
-	116, // 149: holomush.web.v1.WebService.WebSetDefaultCharacter:output_type -> holomush.web.v1.WebSetDefaultCharacterResponse
-	118, // 150: holomush.web.v1.WebService.WebListCharacterDirectory:output_type -> holomush.web.v1.WebListCharacterDirectoryResponse
-	97,  // [97:151] is the sub-list for method output_type
-	43,  // [43:97] is the sub-list for method input_type
-	43,  // [43:43] is the sub-list for extension type_name
-	43,  // [43:43] is the sub-list for extension extendee
-	0,   // [0:43] is the sub-list for field type_name
+	122, // 8: holomush.web.v1.WebCreateCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	14,  // 9: holomush.web.v1.WebListCharactersResponse.characters:type_name -> holomush.web.v1.CharacterSummary
+	14,  // 10: holomush.web.v1.WebCheckSessionResponse.characters:type_name -> holomush.web.v1.CharacterSummary
+	39,  // 11: holomush.web.v1.WebGetContentResponse.item:type_name -> holomush.web.v1.WebContentItem
+	39,  // 12: holomush.web.v1.WebListContentResponse.items:type_name -> holomush.web.v1.WebContentItem
+	119, // 13: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
+	8,   // 14: holomush.web.v1.WebQueryStreamHistoryResponse.events:type_name -> holomush.web.v1.GameEvent
+	123, // 15: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
+	123, // 16: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
+	45,  // 17: holomush.web.v1.WebListPlayerSessionsResponse.sessions:type_name -> holomush.web.v1.WebPlayerSessionInfo
+	3,   // 18: holomush.web.v1.WebPresenceEntry.state:type_name -> holomush.web.v1.WebPresenceState
+	2,   // 19: holomush.web.v1.WebListFocusPresenceResponse.context:type_name -> holomush.web.v1.WebPresenceContext
+	51,  // 20: holomush.web.v1.WebListFocusPresenceResponse.entries:type_name -> holomush.web.v1.WebPresenceEntry
+	54,  // 21: holomush.web.v1.WebListCommandsResponse.commands:type_name -> holomush.web.v1.WebAvailableCommand
+	120, // 22: holomush.web.v1.WebListCommandsResponse.aliases:type_name -> holomush.web.v1.WebListCommandsResponse.AliasesEntry
+	124, // 23: holomush.web.v1.WebListScenesResponse.scenes:type_name -> holomush.scene.v1.SceneInfo
+	124, // 24: holomush.web.v1.WebGetSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	125, // 25: holomush.web.v1.WebListMyScenesResponse.scenes:type_name -> holomush.scene.v1.CharacterSceneInfo
+	126, // 26: holomush.web.v1.WebWatchSceneResponse.participant:type_name -> holomush.scene.v1.ParticipantInfo
+	124, // 27: holomush.web.v1.WebCreateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	127, // 28: holomush.web.v1.WebListPublishedScenesResponse.archives:type_name -> holomush.scene.v1.PublicSceneArchive
+	128, // 29: holomush.web.v1.WebGetPublicSceneArchiveResponse.content_entries:type_name -> holomush.scene.v1.PublishedSceneEntry
+	124, // 30: holomush.web.v1.WebEndSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	129, // 31: holomush.web.v1.WebGetPublishedSceneResponse.vote_summary:type_name -> holomush.scene.v1.PublishedSceneVoteSummary
+	124, // 32: holomush.web.v1.WebPauseSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	124, // 33: holomush.web.v1.WebResumeSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	130, // 34: holomush.web.v1.WebUpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
+	124, // 35: holomush.web.v1.WebUpdateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	131, // 36: holomush.web.v1.WebGetCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.PublicCharacter
+	122, // 37: holomush.web.v1.WebListMyCharactersResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
+	122, // 38: holomush.web.v1.WebGetMyCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	130, // 39: holomush.web.v1.WebUpdateCharacterProfileRequest.update_mask:type_name -> google.protobuf.FieldMask
+	122, // 40: holomush.web.v1.WebUpdateCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	122, // 41: holomush.web.v1.WebUpdateCharacterDescriptionResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	122, // 42: holomush.web.v1.WebSetDefaultCharacterResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
+	132, // 43: holomush.web.v1.WebListCharacterDirectoryResponse.characters:type_name -> holomush.characteraccess.v1.PublicCharacterSummary
+	5,   // 44: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
+	7,   // 45: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
+	10,  // 46: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
+	12,  // 47: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
+	15,  // 48: holomush.web.v1.WebService.WebAuthenticatePlayer:input_type -> holomush.web.v1.WebAuthenticatePlayerRequest
+	17,  // 49: holomush.web.v1.WebService.WebSelectCharacter:input_type -> holomush.web.v1.WebSelectCharacterRequest
+	19,  // 50: holomush.web.v1.WebService.WebCreatePlayer:input_type -> holomush.web.v1.WebCreatePlayerRequest
+	21,  // 51: holomush.web.v1.WebService.WebCreateGuest:input_type -> holomush.web.v1.WebCreateGuestRequest
+	23,  // 52: holomush.web.v1.WebService.WebCreateCharacter:input_type -> holomush.web.v1.WebCreateCharacterRequest
+	25,  // 53: holomush.web.v1.WebService.WebListCharacters:input_type -> holomush.web.v1.WebListCharactersRequest
+	27,  // 54: holomush.web.v1.WebService.WebLogout:input_type -> holomush.web.v1.WebLogoutRequest
+	29,  // 55: holomush.web.v1.WebService.WebRequestPasswordReset:input_type -> holomush.web.v1.WebRequestPasswordResetRequest
+	31,  // 56: holomush.web.v1.WebService.WebConfirmPasswordReset:input_type -> holomush.web.v1.WebConfirmPasswordResetRequest
+	33,  // 57: holomush.web.v1.WebService.WebCheckSession:input_type -> holomush.web.v1.WebCheckSessionRequest
+	35,  // 58: holomush.web.v1.WebService.WebGetContent:input_type -> holomush.web.v1.WebGetContentRequest
+	37,  // 59: holomush.web.v1.WebService.WebListContent:input_type -> holomush.web.v1.WebListContentRequest
+	40,  // 60: holomush.web.v1.WebService.WebQueryStreamHistory:input_type -> holomush.web.v1.WebQueryStreamHistoryRequest
+	42,  // 61: holomush.web.v1.WebService.WebListSessionStreams:input_type -> holomush.web.v1.WebListSessionStreamsRequest
+	44,  // 62: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
+	47,  // 63: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
+	49,  // 64: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
+	52,  // 65: holomush.web.v1.WebService.WebListFocusPresence:input_type -> holomush.web.v1.WebListFocusPresenceRequest
+	55,  // 66: holomush.web.v1.WebService.WebListCommands:input_type -> holomush.web.v1.WebListCommandsRequest
+	57,  // 67: holomush.web.v1.WebService.WebListScenes:input_type -> holomush.web.v1.WebListScenesRequest
+	59,  // 68: holomush.web.v1.WebService.WebGetScene:input_type -> holomush.web.v1.WebGetSceneRequest
+	61,  // 69: holomush.web.v1.WebService.WebListMyScenes:input_type -> holomush.web.v1.WebListMyScenesRequest
+	63,  // 70: holomush.web.v1.WebService.WebWatchScene:input_type -> holomush.web.v1.WebWatchSceneRequest
+	65,  // 71: holomush.web.v1.WebService.WebCreateScene:input_type -> holomush.web.v1.WebCreateSceneRequest
+	77,  // 72: holomush.web.v1.WebService.WebEndScene:input_type -> holomush.web.v1.WebEndSceneRequest
+	87,  // 73: holomush.web.v1.WebService.WebPauseScene:input_type -> holomush.web.v1.WebPauseSceneRequest
+	89,  // 74: holomush.web.v1.WebService.WebResumeScene:input_type -> holomush.web.v1.WebResumeSceneRequest
+	91,  // 75: holomush.web.v1.WebService.WebMuteScene:input_type -> holomush.web.v1.WebMuteSceneRequest
+	93,  // 76: holomush.web.v1.WebService.WebSetSceneNotifyPref:input_type -> holomush.web.v1.WebSetSceneNotifyPrefRequest
+	103, // 77: holomush.web.v1.WebService.WebUpdateScene:input_type -> holomush.web.v1.WebUpdateSceneRequest
+	95,  // 78: holomush.web.v1.WebService.WebInviteToScene:input_type -> holomush.web.v1.WebInviteToSceneRequest
+	97,  // 79: holomush.web.v1.WebService.WebKickFromScene:input_type -> holomush.web.v1.WebKickFromSceneRequest
+	99,  // 80: holomush.web.v1.WebService.WebTransferOwnership:input_type -> holomush.web.v1.WebTransferOwnershipRequest
+	101, // 81: holomush.web.v1.WebService.WebLeaveScene:input_type -> holomush.web.v1.WebLeaveSceneRequest
+	67,  // 82: holomush.web.v1.WebService.WebExportScene:input_type -> holomush.web.v1.WebExportSceneRequest
+	69,  // 83: holomush.web.v1.WebService.WebSetSceneFocus:input_type -> holomush.web.v1.WebSetSceneFocusRequest
+	71,  // 84: holomush.web.v1.WebService.WebListPublishedScenes:input_type -> holomush.web.v1.WebListPublishedScenesRequest
+	73,  // 85: holomush.web.v1.WebService.WebGetPublicSceneArchive:input_type -> holomush.web.v1.WebGetPublicSceneArchiveRequest
+	75,  // 86: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:input_type -> holomush.web.v1.WebDownloadPublicSceneArchiveRequest
+	79,  // 87: holomush.web.v1.WebService.WebStartScenePublish:input_type -> holomush.web.v1.WebStartScenePublishRequest
+	81,  // 88: holomush.web.v1.WebService.WebCastPublishSceneVote:input_type -> holomush.web.v1.WebCastPublishSceneVoteRequest
+	83,  // 89: holomush.web.v1.WebService.WebWithdrawScenePublish:input_type -> holomush.web.v1.WebWithdrawScenePublishRequest
+	85,  // 90: holomush.web.v1.WebService.WebGetPublishedScene:input_type -> holomush.web.v1.WebGetPublishedSceneRequest
+	105, // 91: holomush.web.v1.WebService.WebGetCharacterProfile:input_type -> holomush.web.v1.WebGetCharacterProfileRequest
+	107, // 92: holomush.web.v1.WebService.WebListMyCharacters:input_type -> holomush.web.v1.WebListMyCharactersRequest
+	109, // 93: holomush.web.v1.WebService.WebGetMyCharacter:input_type -> holomush.web.v1.WebGetMyCharacterRequest
+	111, // 94: holomush.web.v1.WebService.WebUpdateCharacterProfile:input_type -> holomush.web.v1.WebUpdateCharacterProfileRequest
+	113, // 95: holomush.web.v1.WebService.WebUpdateCharacterDescription:input_type -> holomush.web.v1.WebUpdateCharacterDescriptionRequest
+	115, // 96: holomush.web.v1.WebService.WebSetDefaultCharacter:input_type -> holomush.web.v1.WebSetDefaultCharacterRequest
+	117, // 97: holomush.web.v1.WebService.WebListCharacterDirectory:input_type -> holomush.web.v1.WebListCharacterDirectoryRequest
+	6,   // 98: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
+	9,   // 99: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
+	11,  // 100: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
+	13,  // 101: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
+	16,  // 102: holomush.web.v1.WebService.WebAuthenticatePlayer:output_type -> holomush.web.v1.WebAuthenticatePlayerResponse
+	18,  // 103: holomush.web.v1.WebService.WebSelectCharacter:output_type -> holomush.web.v1.WebSelectCharacterResponse
+	20,  // 104: holomush.web.v1.WebService.WebCreatePlayer:output_type -> holomush.web.v1.WebCreatePlayerResponse
+	22,  // 105: holomush.web.v1.WebService.WebCreateGuest:output_type -> holomush.web.v1.WebCreateGuestResponse
+	24,  // 106: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
+	26,  // 107: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
+	28,  // 108: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
+	30,  // 109: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
+	32,  // 110: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
+	34,  // 111: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
+	36,  // 112: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
+	38,  // 113: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
+	41,  // 114: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
+	43,  // 115: holomush.web.v1.WebService.WebListSessionStreams:output_type -> holomush.web.v1.WebListSessionStreamsResponse
+	46,  // 116: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
+	48,  // 117: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
+	50,  // 118: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
+	53,  // 119: holomush.web.v1.WebService.WebListFocusPresence:output_type -> holomush.web.v1.WebListFocusPresenceResponse
+	56,  // 120: holomush.web.v1.WebService.WebListCommands:output_type -> holomush.web.v1.WebListCommandsResponse
+	58,  // 121: holomush.web.v1.WebService.WebListScenes:output_type -> holomush.web.v1.WebListScenesResponse
+	60,  // 122: holomush.web.v1.WebService.WebGetScene:output_type -> holomush.web.v1.WebGetSceneResponse
+	62,  // 123: holomush.web.v1.WebService.WebListMyScenes:output_type -> holomush.web.v1.WebListMyScenesResponse
+	64,  // 124: holomush.web.v1.WebService.WebWatchScene:output_type -> holomush.web.v1.WebWatchSceneResponse
+	66,  // 125: holomush.web.v1.WebService.WebCreateScene:output_type -> holomush.web.v1.WebCreateSceneResponse
+	78,  // 126: holomush.web.v1.WebService.WebEndScene:output_type -> holomush.web.v1.WebEndSceneResponse
+	88,  // 127: holomush.web.v1.WebService.WebPauseScene:output_type -> holomush.web.v1.WebPauseSceneResponse
+	90,  // 128: holomush.web.v1.WebService.WebResumeScene:output_type -> holomush.web.v1.WebResumeSceneResponse
+	92,  // 129: holomush.web.v1.WebService.WebMuteScene:output_type -> holomush.web.v1.WebMuteSceneResponse
+	94,  // 130: holomush.web.v1.WebService.WebSetSceneNotifyPref:output_type -> holomush.web.v1.WebSetSceneNotifyPrefResponse
+	104, // 131: holomush.web.v1.WebService.WebUpdateScene:output_type -> holomush.web.v1.WebUpdateSceneResponse
+	96,  // 132: holomush.web.v1.WebService.WebInviteToScene:output_type -> holomush.web.v1.WebInviteToSceneResponse
+	98,  // 133: holomush.web.v1.WebService.WebKickFromScene:output_type -> holomush.web.v1.WebKickFromSceneResponse
+	100, // 134: holomush.web.v1.WebService.WebTransferOwnership:output_type -> holomush.web.v1.WebTransferOwnershipResponse
+	102, // 135: holomush.web.v1.WebService.WebLeaveScene:output_type -> holomush.web.v1.WebLeaveSceneResponse
+	68,  // 136: holomush.web.v1.WebService.WebExportScene:output_type -> holomush.web.v1.WebExportSceneResponse
+	70,  // 137: holomush.web.v1.WebService.WebSetSceneFocus:output_type -> holomush.web.v1.WebSetSceneFocusResponse
+	72,  // 138: holomush.web.v1.WebService.WebListPublishedScenes:output_type -> holomush.web.v1.WebListPublishedScenesResponse
+	74,  // 139: holomush.web.v1.WebService.WebGetPublicSceneArchive:output_type -> holomush.web.v1.WebGetPublicSceneArchiveResponse
+	76,  // 140: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:output_type -> holomush.web.v1.WebDownloadPublicSceneArchiveResponse
+	80,  // 141: holomush.web.v1.WebService.WebStartScenePublish:output_type -> holomush.web.v1.WebStartScenePublishResponse
+	82,  // 142: holomush.web.v1.WebService.WebCastPublishSceneVote:output_type -> holomush.web.v1.WebCastPublishSceneVoteResponse
+	84,  // 143: holomush.web.v1.WebService.WebWithdrawScenePublish:output_type -> holomush.web.v1.WebWithdrawScenePublishResponse
+	86,  // 144: holomush.web.v1.WebService.WebGetPublishedScene:output_type -> holomush.web.v1.WebGetPublishedSceneResponse
+	106, // 145: holomush.web.v1.WebService.WebGetCharacterProfile:output_type -> holomush.web.v1.WebGetCharacterProfileResponse
+	108, // 146: holomush.web.v1.WebService.WebListMyCharacters:output_type -> holomush.web.v1.WebListMyCharactersResponse
+	110, // 147: holomush.web.v1.WebService.WebGetMyCharacter:output_type -> holomush.web.v1.WebGetMyCharacterResponse
+	112, // 148: holomush.web.v1.WebService.WebUpdateCharacterProfile:output_type -> holomush.web.v1.WebUpdateCharacterProfileResponse
+	114, // 149: holomush.web.v1.WebService.WebUpdateCharacterDescription:output_type -> holomush.web.v1.WebUpdateCharacterDescriptionResponse
+	116, // 150: holomush.web.v1.WebService.WebSetDefaultCharacter:output_type -> holomush.web.v1.WebSetDefaultCharacterResponse
+	118, // 151: holomush.web.v1.WebService.WebListCharacterDirectory:output_type -> holomush.web.v1.WebListCharacterDirectoryResponse
+	98,  // [98:152] is the sub-list for method output_type
+	44,  // [44:98] is the sub-list for method input_type
+	44,  // [44:44] is the sub-list for extension type_name
+	44,  // [44:44] is the sub-list for extension extendee
+	0,   // [0:44] is the sub-list for field type_name
 }
 
 func init() { file_holomush_web_v1_web_proto_init() }
