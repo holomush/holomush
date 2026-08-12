@@ -978,6 +978,16 @@ message CheckPlayerSessionResponse {
 
   // characters is the player's roster (enriched with session status).
   repeated CharacterSummary characters = 4;
+
+  // default_character_id is players.default_character_id, forwarded by
+  // CoreServer.CheckPlayerSession from the player row it already loaded. It is
+  // EMPTY when the player has set no default, which is the state a fresh
+  // account is in — an empty value is "no preference", never "the first
+  // character". It matches the field of the same name on
+  // AuthenticatePlayerResponse; a session-restoring client needs it for the
+  // same reason a logging-in one does, and reading it here costs no extra
+  // round trip.
+  string default_character_id = 5;
 }
 
 // ListPlayerSessionsRequest asks for the caller's own active PlayerSessions.

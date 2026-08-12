@@ -775,11 +775,21 @@ func (s *CoreServer) CheckPlayerSession(ctx context.Context, req *corev1.CheckPl
 		return nil, oops.Code("CHARACTER_LOOKUP_FAILED").Wrap(err)
 	}
 
+	// The default is read off the player row already loaded above, so restoring
+	// a session learns which character is the default without a second query.
+	// A nil column renders as the empty string — "no preference", never a
+	// substituted first character.
+	defaultCharacterID := ""
+	if player.DefaultCharacterID != nil {
+		defaultCharacterID = player.DefaultCharacterID.String()
+	}
+
 	return &corev1.CheckPlayerSessionResponse{
-		PlayerName: player.Username,
-		PlayerId:   player.ID.String(),
-		IsGuest:    player.IsGuest,
-		Characters: characters,
+		PlayerName:         player.Username,
+		PlayerId:           player.ID.String(),
+		IsGuest:            player.IsGuest,
+		Characters:         characters,
+		DefaultCharacterId: defaultCharacterID,
 	}, nil
 }
 

@@ -2264,9 +2264,16 @@ type WebCheckSessionResponse struct {
 	IsGuest bool `protobuf:"varint,3,opt,name=is_guest,json=isGuest,proto3" json:"is_guest,omitempty"`
 	// characters is the player's character roster, returned so the client can
 	// restore character-selection state on reload.
-	Characters    []*CharacterSummary `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Characters []*CharacterSummary `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
+	// default_character_id is the core response's field of the same name,
+	// forwarded verbatim by Handler.WebCheckSession. The web client's authed
+	// layout reads it to mark which roster card is the default without a second
+	// round trip; OwnCharacter carries no is-default flag, so this is the only
+	// server-side source for that marker. Empty means the player has set no
+	// default.
+	DefaultCharacterId string `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *WebCheckSessionResponse) Reset() {
@@ -2325,6 +2332,13 @@ func (x *WebCheckSessionResponse) GetCharacters() []*CharacterSummary {
 		return x.Characters
 	}
 	return nil
+}
+
+func (x *WebCheckSessionResponse) GetDefaultCharacterId() string {
+	if x != nil {
+		return x.DefaultCharacterId
+	}
+	return ""
 }
 
 // WebGetContentRequest selects one content-store item by exact key. Served by
@@ -7432,7 +7446,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x1fWebConfirmPasswordResetResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x18\n" +
-	"\x16WebCheckSessionRequest\"\xb5\x01\n" +
+	"\x16WebCheckSessionRequest\"\xe7\x01\n" +
 	"\x17WebCheckSessionResponse\x12\x1f\n" +
 	"\vplayer_name\x18\x01 \x01(\tR\n" +
 	"playerName\x12\x1b\n" +
@@ -7440,7 +7454,8 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\bis_guest\x18\x03 \x01(\bR\aisGuest\x12A\n" +
 	"\n" +
 	"characters\x18\x04 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
-	"characters\"(\n" +
+	"characters\x120\n" +
+	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\"(\n" +
 	"\x14WebGetContentRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"L\n" +
 	"\x15WebGetContentResponse\x123\n" +

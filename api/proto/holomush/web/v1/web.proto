@@ -759,6 +759,13 @@ message WebCheckSessionResponse {
   // characters is the player's character roster, returned so the client can
   // restore character-selection state on reload.
   repeated CharacterSummary characters = 4;
+  // default_character_id is the core response's field of the same name,
+  // forwarded verbatim by Handler.WebCheckSession. The web client's authed
+  // layout reads it to mark which roster card is the default without a second
+  // round trip; OwnCharacter carries no is-default flag, so this is the only
+  // server-side source for that marker. Empty means the player has set no
+  // default.
+  string default_character_id = 5;
 }
 
 // --- Web content messages ---

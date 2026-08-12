@@ -3,12 +3,13 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { createClient } from '@connectrpc/connect';
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import type { CharacterSummary } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
   import { setCharacterSession } from '$lib/stores/authStore';
+  import { setDefaultCharacter } from '$lib/characters/client';
   import { goto } from '$app/navigation';
   import * as Card from '$lib/components/ui/card';
   import { Badge } from '$lib/components/ui/badge';
@@ -18,6 +19,8 @@
 
   const client = createClient(WebService, transport);
 
+  let { data } = $props();
+
   let characters = $state<CharacterSummary[]>([]);
   let loading = $state(true);
   let error = $state('');
@@ -25,6 +28,45 @@
   let newCharName = $state('');
   let createError = $state('');
   let autoDefault = $state(false);
+
+  // The INITIAL default comes from the (authed) layout's webCheckSession call,
+  // which already ran — OwnCharacter carries no is-default flag, so there is no
+  // per-character source for it and no reason to spend a third round trip.
+  // untrack: this is the INITIAL value, and the local state diverges from it the
+  // moment a write lands. Reading `data` reactively here would clobber the
+  // player's own change on the next layout-data invalidation.
+  let defaultCharacterId = $state(untrack(() => data?.defaultCharacterId ?? ''));
+  // The id whose request is in flight, or '' when none is.
+  let savingDefaultId = $state('');
+  let defaultStatus = $state('');
+  let defaultError = $state('');
+
+  async function makeDefault(char: CharacterSummary) {
+    savingDefaultId = char.characterId;
+    defaultError = '';
+    try {
+      // A GUI button is a machine-initiated structural write, so it takes the
+      // typed RPC. The human text-command path is for conversational verbs a
+      // player types, and must not be string-built into from here
+      // (.claude/rules/gateway-boundary.md).
+      const roster = await setDefaultCharacter(char.characterId);
+      // The success status makes the requested id the default; the returned
+      // roster is server truth for MEMBERSHIP and order. The cards keep their
+      // locally-read session overlay because OwnCharacter carries none — the
+      // sectioned rewrite that joins both reads is plan 05-08's.
+      defaultCharacterId = char.characterId;
+      const byId = new Map(characters.map((c) => [c.characterId, c]));
+      characters = roster
+        .map((own) => byId.get(own.id))
+        .filter((c): c is CharacterSummary => c !== undefined);
+      defaultStatus = `${char.characterName} is now your default character.`;
+    } catch {
+      defaultStatus = '';
+      defaultError = "Couldn't save. Try again.";
+    } finally {
+      savingDefaultId = '';
+    }
+  }
 
   onMount(async () => {
     try {
@@ -110,6 +152,15 @@
       <p class="rounded-md border border-destructive bg-destructive/10 p-3 text-xs text-destructive mb-4">{error}</p>
     {/if}
 
+    <!-- Persistent regions, always in the DOM so a screen reader announces the
+         change rather than the region's arrival. -->
+    <p role="status" class="text-xs text-muted-foreground mb-4" class:sr-only={!defaultStatus}>
+      {defaultStatus}
+    </p>
+    <p role="alert" class="text-xs text-destructive mb-4" class:sr-only={!defaultError}>
+      {defaultError}
+    </p>
+
     {#if loading}
       <p class="text-xs text-muted-foreground">Loading characters…</p>
     {:else}
@@ -133,6 +184,32 @@
                   <Badge class="text-[10px] w-fit mt-0.5">Active</Badge>
                 {:else}
                   <Badge variant="outline" class="text-[10px] w-fit mt-0.5">{char.sessionStatus || 'Offline'}</Badge>
+                {/if}
+                {#if char.characterId === defaultCharacterId}
+                  <Badge
+                    variant="outline"
+                    class="text-[10px] w-fit mt-0.5 border-primary text-primary"
+                    data-testid="default-badge">Default</Badge
+                  >
+                {:else}
+                  <!-- stopPropagation: the card itself selects a character, and
+                       setting a default must not also drop the player into the
+                       game. The label does NOT change while in flight (UI-SPEC
+                       Loading states); disabled + aria-busy carry that state. -->
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    name="makeDefault"
+                    class="text-[10px] h-6 px-2 w-fit mt-1"
+                    data-testid="make-default"
+                    disabled={savingDefaultId === char.characterId}
+                    aria-busy={savingDefaultId === char.characterId}
+                    onclick={(e: MouseEvent) => {
+                      e.stopPropagation();
+                      makeDefault(char);
+                    }}>Make default</Button
+                  >
                 {/if}
               </div>
             </Card.Content>

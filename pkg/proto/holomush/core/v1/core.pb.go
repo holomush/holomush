@@ -3403,9 +3403,18 @@ type CheckPlayerSessionResponse struct {
 	// is_guest is true when the session belongs to an ephemeral guest player.
 	IsGuest bool `protobuf:"varint,3,opt,name=is_guest,json=isGuest,proto3" json:"is_guest,omitempty"`
 	// characters is the player's roster (enriched with session status).
-	Characters    []*CharacterSummary `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Characters []*CharacterSummary `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
+	// default_character_id is players.default_character_id, forwarded by
+	// CoreServer.CheckPlayerSession from the player row it already loaded. It is
+	// EMPTY when the player has set no default, which is the state a fresh
+	// account is in — an empty value is "no preference", never "the first
+	// character". It matches the field of the same name on
+	// AuthenticatePlayerResponse; a session-restoring client needs it for the
+	// same reason a logging-in one does, and reading it here costs no extra
+	// round trip.
+	DefaultCharacterId string `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CheckPlayerSessionResponse) Reset() {
@@ -3464,6 +3473,13 @@ func (x *CheckPlayerSessionResponse) GetCharacters() []*CharacterSummary {
 		return x.Characters
 	}
 	return nil
+}
+
+func (x *CheckPlayerSessionResponse) GetDefaultCharacterId() string {
+	if x != nil {
+		return x.DefaultCharacterId
+	}
+	return ""
 }
 
 // ListPlayerSessionsRequest asks for the caller's own active PlayerSessions.
@@ -4406,7 +4422,7 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\x10\n" +
 	"\x0eLogoutResponse\"M\n" +
 	"\x19CheckPlayerSessionRequest\x120\n" +
-	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\xb9\x01\n" +
+	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\xeb\x01\n" +
 	"\x1aCheckPlayerSessionResponse\x12\x1f\n" +
 	"\vplayer_name\x18\x01 \x01(\tR\n" +
 	"playerName\x12\x1b\n" +
@@ -4414,7 +4430,8 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\bis_guest\x18\x03 \x01(\bR\aisGuest\x12B\n" +
 	"\n" +
 	"characters\x18\x04 \x03(\v2\".holomush.core.v1.CharacterSummaryR\n" +
-	"characters\"M\n" +
+	"characters\x120\n" +
+	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\"M\n" +
 	"\x19ListPlayerSessionsRequest\x120\n" +
 	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\xf8\x01\n" +
 	"\x11PlayerSessionInfo\x12\x0e\n" +
