@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/characteraccess/v1/characteraccess.proto.
  */
 export const file_holomush_characteraccess_v1_characteraccess: GenFile = /*@__PURE__*/
-  fileDesc("CjFob2xvbXVzaC9jaGFyYWN0ZXJhY2Nlc3MvdjEvY2hhcmFjdGVyYWNjZXNzLnByb3RvEhtob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEiSwoMUHJvZmlsZUltYWdlEhAKCG1lZGlhX2lkGAEgASgJEhAKCGFsdF90ZXh0GAIgASgJEhcKD2NvbnRlbnRfd2FybmluZxgDIAEoCSLEAgoPUHVibGljQ2hhcmFjdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSSgoHcHJvZmlsZRgEIAMoCzI5LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIuUHJvZmlsZUVudHJ5EkAKDXByaW1hcnlfaW1hZ2UYBSABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlEkQKB2dhbGxlcnkYBiADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlQgi6SAWSAQIQChouCgxQcm9maWxlRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJQChpHZXRDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkiXgobR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEj8KCWNoYXJhY3RlchgBIAEoCzIsLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIiMgoWUHVibGljQ2hhcmFjdGVyU3VtbWFyeRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJIj0KHUxpc3RDaGFyYWN0ZXJEaXJlY3RvcnlSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJImkKHkxpc3RDaGFyYWN0ZXJEaXJlY3RvcnlSZXNwb25zZRJHCgpjaGFyYWN0ZXJzGAEgAygLMjMuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlB1YmxpY0NoYXJhY3RlclN1bW1hcnki3wIKDE93bkNoYXJhY3RlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEkcKB3Byb2ZpbGUYBCADKAsyNi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyLlByb2ZpbGVFbnRyeRJACg1wcmltYXJ5X2ltYWdlGAUgASgLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZRJECgdnYWxsZXJ5GAYgAygLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZUIIukgFkgECEAoSDgoGc3RhdHVzGAcgASgJEg8KB3ZlcnNpb24YCCABKAUaLgoMUHJvZmlsZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoXTGlzdE15Q2hhcmFjdGVyc1JlcXVlc3QSJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAlCB7pIBHICEAEiWQoYTGlzdE15Q2hhcmFjdGVyc1Jlc3BvbnNlEj0KCmNoYXJhY3RlcnMYASADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIl0KFUdldE15Q2hhcmFjdGVyUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAEiVgoWR2V0TXlDaGFyYWN0ZXJSZXNwb25zZRI8CgljaGFyYWN0ZXIYASABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIosDCh1VcGRhdGVDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRIQCghwcm9ub3VucxgEIAEoCRIPCgdjb25jZXB0GAUgASgJEg8KB3NwZWNpZXMYBiABKAkSCwoDYWdlGAcgASgJEg8KB2ZhY3Rpb24YCCABKAkSEgoKYXBwZWFyYW5jZRgJIAEoCRITCgtwZXJzb25hbGl0eRgKIAEoCRIRCgliaW9ncmFwaHkYCyABKAkSDgoGcnVtb3JzGAwgASgJEhEKCWN1cnJlbnRseRgNIAEoCRIWCg5ycF9wcmVmZXJlbmNlcxgOIAEoCRIQCgh0aW1lem9uZRgPIAEoCRIvCgt1cGRhdGVfbWFzaxhjIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siXgoeVXBkYXRlQ2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIimAEKIVVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRITCgtkZXNjcmlwdGlvbhgEIAEoCSJiCiJVcGRhdGVDaGFyYWN0ZXJEZXNjcmlwdGlvblJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIiYgoaU2V0RGVmYXVsdENoYXJhY3RlclJlcXVlc3QSHQoMY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABEiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJQge6SARyAhABIlwKG1NldERlZmF1bHRDaGFyYWN0ZXJSZXNwb25zZRI9CgpjaGFyYWN0ZXJzGAEgAygLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLk93bkNoYXJhY3RlcjLyBwoWQ2hhcmFjdGVyQWNjZXNzU2VydmljZRKIAQoTR2V0Q2hhcmFjdGVyUHJvZmlsZRI3LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5HZXRDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBo4LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5HZXRDaGFyYWN0ZXJQcm9maWxlUmVzcG9uc2USfwoQTGlzdE15Q2hhcmFjdGVycxI0LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5MaXN0TXlDaGFyYWN0ZXJzUmVxdWVzdBo1LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5MaXN0TXlDaGFyYWN0ZXJzUmVzcG9uc2USeQoOR2V0TXlDaGFyYWN0ZXISMi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0TXlDaGFyYWN0ZXJSZXF1ZXN0GjMuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLkdldE15Q2hhcmFjdGVyUmVzcG9uc2USkQEKFlVwZGF0ZUNoYXJhY3RlclByb2ZpbGUSOi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuVXBkYXRlQ2hhcmFjdGVyUHJvZmlsZVJlcXVlc3QaOy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuVXBkYXRlQ2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEp0BChpVcGRhdGVDaGFyYWN0ZXJEZXNjcmlwdGlvbhI+LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5VcGRhdGVDaGFyYWN0ZXJEZXNjcmlwdGlvblJlcXVlc3QaPy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuVXBkYXRlQ2hhcmFjdGVyRGVzY3JpcHRpb25SZXNwb25zZRKIAQoTU2V0RGVmYXVsdENoYXJhY3RlchI3LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5TZXREZWZhdWx0Q2hhcmFjdGVyUmVxdWVzdBo4LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5TZXREZWZhdWx0Q2hhcmFjdGVyUmVzcG9uc2USkQEKFkxpc3RDaGFyYWN0ZXJEaXJlY3RvcnkSOi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdENoYXJhY3RlckRpcmVjdG9yeVJlcXVlc3QaOy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuTGlzdENoYXJhY3RlckRpcmVjdG9yeVJlc3BvbnNlQlZaVGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2NoYXJhY3RlcmFjY2Vzcy92MTtjaGFyYWN0ZXJhY2Nlc3N2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask]);
+  fileDesc("CjFob2xvbXVzaC9jaGFyYWN0ZXJhY2Nlc3MvdjEvY2hhcmFjdGVyYWNjZXNzLnByb3RvEhtob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEiSwoMUHJvZmlsZUltYWdlEhAKCG1lZGlhX2lkGAEgASgJEhAKCGFsdF90ZXh0GAIgASgJEhcKD2NvbnRlbnRfd2FybmluZxgDIAEoCSLEAgoPUHVibGljQ2hhcmFjdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSSgoHcHJvZmlsZRgEIAMoCzI5LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIuUHJvZmlsZUVudHJ5EkAKDXByaW1hcnlfaW1hZ2UYBSABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlEkQKB2dhbGxlcnkYBiADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuUHJvZmlsZUltYWdlQgi6SAWSAQIQChouCgxQcm9maWxlRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJQChpHZXRDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkiXgobR2V0Q2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEj8KCWNoYXJhY3RlchgBIAEoCzIsLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5QdWJsaWNDaGFyYWN0ZXIiMgoWUHVibGljQ2hhcmFjdGVyU3VtbWFyeRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJIj0KHUxpc3RDaGFyYWN0ZXJEaXJlY3RvcnlSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJImkKHkxpc3RDaGFyYWN0ZXJEaXJlY3RvcnlSZXNwb25zZRJHCgpjaGFyYWN0ZXJzGAEgAygLMjMuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlB1YmxpY0NoYXJhY3RlclN1bW1hcnki3wIKDE93bkNoYXJhY3RlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEkcKB3Byb2ZpbGUYBCADKAsyNi5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyLlByb2ZpbGVFbnRyeRJACg1wcmltYXJ5X2ltYWdlGAUgASgLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZRJECgdnYWxsZXJ5GAYgAygLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlByb2ZpbGVJbWFnZUIIukgFkgECEAoSDgoGc3RhdHVzGAcgASgJEg8KB3ZlcnNpb24YCCABKAUaLgoMUHJvZmlsZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoXTGlzdE15Q2hhcmFjdGVyc1JlcXVlc3QSJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAlCB7pIBHICEAEiWQoYTGlzdE15Q2hhcmFjdGVyc1Jlc3BvbnNlEj0KCmNoYXJhY3RlcnMYASADKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIl0KFUdldE15Q2hhcmFjdGVyUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAEiVgoWR2V0TXlDaGFyYWN0ZXJSZXNwb25zZRI8CgljaGFyYWN0ZXIYASABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyIosDCh1VcGRhdGVDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRIQCghwcm9ub3VucxgEIAEoCRIPCgdjb25jZXB0GAUgASgJEg8KB3NwZWNpZXMYBiABKAkSCwoDYWdlGAcgASgJEg8KB2ZhY3Rpb24YCCABKAkSEgoKYXBwZWFyYW5jZRgJIAEoCRITCgtwZXJzb25hbGl0eRgKIAEoCRIRCgliaW9ncmFwaHkYCyABKAkSDgoGcnVtb3JzGAwgASgJEhEKCWN1cnJlbnRseRgNIAEoCRIWCg5ycF9wcmVmZXJlbmNlcxgOIAEoCRIQCgh0aW1lem9uZRgPIAEoCRIvCgt1cGRhdGVfbWFzaxhjIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siXgoeVXBkYXRlQ2hhcmFjdGVyUHJvZmlsZVJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIimAEKIVVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uUmVxdWVzdBIdCgxjaGFyYWN0ZXJfaWQYASABKAlCB7pIBHICEAESJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAlCB7pIBHICEAESGAoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBRITCgtkZXNjcmlwdGlvbhgEIAEoCSJiCiJVcGRhdGVDaGFyYWN0ZXJEZXNjcmlwdGlvblJlc3BvbnNlEjwKCWNoYXJhY3RlchgBIAEoCzIpLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5Pd25DaGFyYWN0ZXIiYgoaU2V0RGVmYXVsdENoYXJhY3RlclJlcXVlc3QSHQoMY2hhcmFjdGVyX2lkGAEgASgJQge6SARyAhABEiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJQge6SARyAhABIlwKG1NldERlZmF1bHRDaGFyYWN0ZXJSZXNwb25zZRI9CgpjaGFyYWN0ZXJzGAEgAygLMikuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLk93bkNoYXJhY3RlciKoAQoWQ3JlYXRlQ2hhcmFjdGVyUmVxdWVzdBIlChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCUIHukgEcgIQARIVCgRuYW1lGAIgASgJQge6SARyAhABEhAKCHByb25vdW5zGAMgASgJEg8KB2NvbmNlcHQYBCABKAkSDwoHc3BlY2llcxgFIAEoCRILCgNhZ2UYBiABKAkSDwoHZmFjdGlvbhgHIAEoCSJXChdDcmVhdGVDaGFyYWN0ZXJSZXNwb25zZRI8CgljaGFyYWN0ZXIYASABKAsyKS5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuT3duQ2hhcmFjdGVyMvAIChZDaGFyYWN0ZXJBY2Nlc3NTZXJ2aWNlEogBChNHZXRDaGFyYWN0ZXJQcm9maWxlEjcuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLkdldENoYXJhY3RlclByb2ZpbGVSZXF1ZXN0GjguaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLkdldENoYXJhY3RlclByb2ZpbGVSZXNwb25zZRJ/ChBMaXN0TXlDaGFyYWN0ZXJzEjQuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLkxpc3RNeUNoYXJhY3RlcnNSZXF1ZXN0GjUuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLkxpc3RNeUNoYXJhY3RlcnNSZXNwb25zZRJ5Cg5HZXRNeUNoYXJhY3RlchIyLmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5HZXRNeUNoYXJhY3RlclJlcXVlc3QaMy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuR2V0TXlDaGFyYWN0ZXJSZXNwb25zZRJ8Cg9DcmVhdGVDaGFyYWN0ZXISMy5ob2xvbXVzaC5jaGFyYWN0ZXJhY2Nlc3MudjEuQ3JlYXRlQ2hhcmFjdGVyUmVxdWVzdBo0LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5DcmVhdGVDaGFyYWN0ZXJSZXNwb25zZRKRAQoWVXBkYXRlQ2hhcmFjdGVyUHJvZmlsZRI6LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5VcGRhdGVDaGFyYWN0ZXJQcm9maWxlUmVxdWVzdBo7LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5VcGRhdGVDaGFyYWN0ZXJQcm9maWxlUmVzcG9uc2USnQEKGlVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uEj4uaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlVwZGF0ZUNoYXJhY3RlckRlc2NyaXB0aW9uUmVxdWVzdBo/LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5VcGRhdGVDaGFyYWN0ZXJEZXNjcmlwdGlvblJlc3BvbnNlEogBChNTZXREZWZhdWx0Q2hhcmFjdGVyEjcuaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlNldERlZmF1bHRDaGFyYWN0ZXJSZXF1ZXN0GjguaG9sb211c2guY2hhcmFjdGVyYWNjZXNzLnYxLlNldERlZmF1bHRDaGFyYWN0ZXJSZXNwb25zZRKRAQoWTGlzdENoYXJhY3RlckRpcmVjdG9yeRI6LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5MaXN0Q2hhcmFjdGVyRGlyZWN0b3J5UmVxdWVzdBo7LmhvbG9tdXNoLmNoYXJhY3RlcmFjY2Vzcy52MS5MaXN0Q2hhcmFjdGVyRGlyZWN0b3J5UmVzcG9uc2VCVlpUZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvY2hhcmFjdGVyYWNjZXNzL3YxO2NoYXJhY3RlcmFjY2Vzc3YxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_field_mask]);
 
 /**
  * ProfileImage is one stored image reference on a profile. The shape ships in
@@ -800,6 +800,128 @@ export const SetDefaultCharacterResponseSchema: GenMessage<SetDefaultCharacterRe
   messageDesc(file_holomush_characteraccess_v1_characteraccess, 17);
 
 /**
+ * CreateCharacterRequest is the structured identity card a creation form
+ * submits: the name, plus the five short prose values the form collects
+ * alongside it.
+ *
+ * IT CARRIES NO expected_version FIELD, AND THE ABSENCE IS STRUCTURAL. A
+ * version guard predicates a write on a characters.version the caller last
+ * read; a create has no row to have read, so 01-SPEC §9.4.2 makes creation the
+ * one carve-out from the guard the two edit RPCs obey.
+ * CharacterAccessServer.CreateCharacter calls requireGuardedVersion nowhere,
+ * and a reviewer looking for the guard here should not add one.
+ *
+ * The five prose values are OPTIONAL: a field left empty is not written at all,
+ * so a name-only submission makes no profile write. Each is capped in BYTES by
+ * the same validateProfileValue and world.MaxNameLength pair the mask-driven
+ * edit surface uses (internal/grpc/characteraccess_write.go), so the create
+ * path and the edit path cannot disagree about where the boundary sits.
+ *
+ * @generated from message holomush.characteraccess.v1.CreateCharacterRequest
+ */
+export type CreateCharacterRequest = Message<"holomush.characteraccess.v1.CreateCharacterRequest"> & {
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * X-Session-Token header. Which player owns the new character follows from
+   * it, so there is deliberately no player-id field a caller could point at
+   * someone else.
+   *
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+
+  /**
+   * name is the submitted character name, forwarded to
+   * auth.CharacterService.CreateBound verbatim. The server, not the client,
+   * normalizes it: NFKC, format-rune strip, whitespace collapse and case fold
+   * produce the §6.1.1 uniqueness key, and what is STORED is the display form
+   * that pipeline yields — which is why the response echoes the name back
+   * rather than the client keeping its own copy. Admission is on RUNE count
+   * (internal/charname/syntax: 2 to 32), not bytes.
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * pronouns seeds the `profile.pronouns` row — half of §8.8's minimum public
+   * identity, and the one profile field seeded at the anonymous floor.
+   *
+   * @generated from field: string pronouns = 3;
+   */
+  pronouns: string;
+
+  /**
+   * concept seeds the `profile.concept` row: the one-line "what this character
+   * is" pitch.
+   *
+   * @generated from field: string concept = 4;
+   */
+  concept: string;
+
+  /**
+   * species seeds the `profile.species` row. Free text — the platform ships no
+   * species vocabulary, because the setting owns that word.
+   *
+   * @generated from field: string species = 5;
+   */
+  species: string;
+
+  /**
+   * age seeds the `profile.age` row. Free text rather than an integer: settings
+   * routinely want "ageless", "early 30s", or a century.
+   *
+   * @generated from field: string age = 6;
+   */
+  age: string;
+
+  /**
+   * faction seeds the `profile.faction` row: affiliation, house, crew or
+   * allegiance. Free text; there is no faction registry.
+   *
+   * @generated from field: string faction = 7;
+   */
+  faction: string;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.CreateCharacterRequest.
+ * Use `create(CreateCharacterRequestSchema)` to create a new message.
+ */
+export const CreateCharacterRequestSchema: GenMessage<CreateCharacterRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 18);
+
+/**
+ * CreateCharacterResponse carries the character that was created, in the owner
+ * audience's shape, read back through the same owned-character path
+ * GetMyCharacter uses and projected by projectOwner — never assembled from the
+ * request the caller sent.
+ *
+ * @generated from message holomush.characteraccess.v1.CreateCharacterResponse
+ */
+export type CreateCharacterResponse = Message<"holomush.characteraccess.v1.CreateCharacterResponse"> & {
+  /**
+   * character is the newly seated character. Its `name` is the SERVER-stored
+   * display form, which may differ from the submitted bytes wherever
+   * normalization changed them; a client that echoes the submission back to the
+   * player instead would show a name the grid does not use. Its `profile` map
+   * holds whichever of the five supplied values were written — a value the
+   * caller left empty is absent, and so is one whose second-transaction write
+   * failed.
+   *
+   * @generated from field: holomush.characteraccess.v1.OwnCharacter character = 1;
+   */
+  character?: OwnCharacter | undefined;
+};
+
+/**
+ * Describes the message holomush.characteraccess.v1.CreateCharacterResponse.
+ * Use `create(CreateCharacterResponseSchema)` to create a new message.
+ */
+export const CreateCharacterResponseSchema: GenMessage<CreateCharacterResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_characteraccess_v1_characteraccess, 19);
+
+/**
  * CharacterAccessService is the host-side facade for the web character surface.
  * It constructs the viewer principal itself — resolving the optional player
  * session token through auth.PlayerSessionRepository and auth.PlayerRepository —
@@ -855,6 +977,32 @@ export const CharacterAccessService: GenService<{
     methodKind: "unary";
     input: typeof GetMyCharacterRequestSchema;
     output: typeof GetMyCharacterResponseSchema;
+  },
+  /**
+   * CreateCharacter seats a new character on the authenticated player from a
+   * structured identity card — the name plus the five short profile values a
+   * creation form collects — and answers with the character it created.
+   * CharacterAccessServer.CreateCharacter
+   * (internal/grpc/characteraccess_create.go) resolves the session, refuses
+   * guests, and hands the name to auth.CharacterService.CreateBound, which runs
+   * the §6.1.1 normalization, the name-admission gate and the uniqueness checks
+   * before committing the character row, its player binding and its genesis
+   * envelope in ONE transaction. The supplied profile values are a SECOND write
+   * through world.Service.UpdateCharacterProfileAttributes: the character is
+   * authoritative, so a profile-write failure leaves those keys simply absent
+   * from the response rather than failing a create whose name is already
+   * reserved.
+   *
+   * It is NOT holomush.core.v1.CoreService.CreateCharacter, which still exists
+   * and still answers with a bare name scalar because the telnet CREATE verb
+   * drives it through internal/telnet/gateway_handler.go.
+   *
+   * @generated from rpc holomush.characteraccess.v1.CharacterAccessService.CreateCharacter
+   */
+  createCharacter: {
+    methodKind: "unary";
+    input: typeof CreateCharacterRequestSchema;
+    output: typeof CreateCharacterResponseSchema;
   },
   /**
    * UpdateCharacterProfile applies a partial edit to the character's stored

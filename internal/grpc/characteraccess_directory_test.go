@@ -227,6 +227,9 @@ func newDirectoryHarness(t *testing.T, f directoryFixture) *directoryHarness {
 			sessionRepo,
 			playerRepo,
 			authmocks.NewMockCharacterRepository(t),
+			// The directory listing seats nothing, so the create pipeline is
+			// wired to fail the test rather than to a stub that would answer.
+			&failOnCallCreator{t: t},
 		),
 		reader: reader,
 		token:  token,

@@ -195,6 +195,15 @@ func characterReadSurfaceInventory() map[string]struct{} {
 		// OwnCharacter, so both are members) ---
 		"holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterProfile":     {},
 		"holomush.characteraccess.v1.CharacterAccessService.UpdateCharacterDescription": {},
+		// §3.4 / §9.3: the structured create (05-03, D-86). Its response carries
+		// OwnCharacter — the SERVER-stored display name is the whole point of
+		// answering with a projection rather than a bare scalar — which makes it
+		// type-reachable and therefore a census member. Its core-side namesake
+		// holomush.core.v1.CoreService.CreateCharacter is NOT replaced by it and
+		// keeps its own name-reachable row: that RPC still returns a bare
+		// character_name and internal/telnet/gateway_handler.go still drives it
+		// from the CREATE verb.
+		"holomush.characteraccess.v1.CharacterAccessService.CreateCharacter": {},
 		// §3.4 / §9.3: the default-character write. Its response is
 		// ListMyCharactersResponse-shaped (D-90) so the browser re-renders from
 		// server truth, which makes it a character-returning RPC and therefore a

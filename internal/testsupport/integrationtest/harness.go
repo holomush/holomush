@@ -77,6 +77,7 @@ import (
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
+	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/charactivity"
 	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/command"
@@ -147,6 +148,14 @@ type Server struct {
 	// services
 	authService *auth.Service
 	guestSvc    *auth.GuestService
+	// characterSvc is the REAL create pipeline — the §6.1.1 uniqueness
+	// pre-check, charname.Gate.Admit, the character limit, the starting location
+	// and CharacterGenesisService.Create — built here rather than stubbed so an
+	// integration spec exercising CreateCharacter runs production's refusals
+	// against production's Postgres uniqueness index, not a fake's opinion of
+	// them. It shares the SAME genesis service and the SAME name gate the guest
+	// path uses, exactly as cmd/holomush shares one of each.
+	characterSvc *auth.CharacterService
 
 	// bus (embedded NATS JetStream)
 	bus *eventbustest.Embedded
@@ -515,6 +524,21 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	)
 	require.NoError(t, err, "integrationtest.Start: create guest service")
 
+	// The registered-player create pipeline, wired production-equivalently
+	// (mirrors cmd/holomush/sub_grpc.go's auth.NewCharacterService call). The
+	// location adapter reads through a POINTER to guestLocID because
+	// bootstrapsetup.LocRepoAdapter exists for a start location resolved after
+	// its construction; here the value is already known, so the pointer is just
+	// the shape the adapter takes.
+	harnessStartLocID := guestLocID
+	characterSvc, err := auth.NewCharacterService(
+		charRepo,
+		bootstrapsetup.NewLocRepoAdapter(&harnessStartLocID, locRepo),
+		guestGenesis,
+		harnessNameGate,
+	)
+	require.NoError(t, err, "integrationtest.Start: create character service")
+
 	// Embedded NATS bus (in-memory, cleaned up via t.Cleanup) — unless
 	// WithExternalNATS swapped in a production external-mode subsystem dialing a
 	// shared broker (two-replica resilience suite, D-03). The external subsystem
@@ -869,6 +893,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		locRepo:              locRepo,
 		authService:          authService,
 		guestSvc:             guestSvc,
+		characterSvc:         characterSvc,
 		bus:                  bus,
 		coreServer:           coreServer,
 		pluginSub:            pluginSub,
@@ -1217,6 +1242,10 @@ func (s *Server) NewCharacterAccessServer() *holoGRPC.CharacterAccessServer {
 		s.playerSessionStore,
 		s.playerRepo,
 		s.charRepo,
+		// The create pipeline: the harness's REAL auth.CharacterService, sharing
+		// the genesis service and the name gate with the guest path exactly as
+		// production shares one of each.
+		s.characterSvc,
 	)
 }
 

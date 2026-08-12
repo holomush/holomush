@@ -45,6 +45,9 @@ const (
 	// CharacterAccessServiceGetMyCharacterProcedure is the fully-qualified name of the
 	// CharacterAccessService's GetMyCharacter RPC.
 	CharacterAccessServiceGetMyCharacterProcedure = "/holomush.characteraccess.v1.CharacterAccessService/GetMyCharacter"
+	// CharacterAccessServiceCreateCharacterProcedure is the fully-qualified name of the
+	// CharacterAccessService's CreateCharacter RPC.
+	CharacterAccessServiceCreateCharacterProcedure = "/holomush.characteraccess.v1.CharacterAccessService/CreateCharacter"
 	// CharacterAccessServiceUpdateCharacterProfileProcedure is the fully-qualified name of the
 	// CharacterAccessService's UpdateCharacterProfile RPC.
 	CharacterAccessServiceUpdateCharacterProfileProcedure = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterProfile"
@@ -80,6 +83,24 @@ type CharacterAccessServiceClient interface {
 	// a public projection with a second read. Ownership is verified server-side
 	// against the session's player; handler in plan 04-05.
 	GetMyCharacter(context.Context, *connect.Request[v1.GetMyCharacterRequest]) (*connect.Response[v1.GetMyCharacterResponse], error)
+	// CreateCharacter seats a new character on the authenticated player from a
+	// structured identity card — the name plus the five short profile values a
+	// creation form collects — and answers with the character it created.
+	// CharacterAccessServer.CreateCharacter
+	// (internal/grpc/characteraccess_create.go) resolves the session, refuses
+	// guests, and hands the name to auth.CharacterService.CreateBound, which runs
+	// the §6.1.1 normalization, the name-admission gate and the uniqueness checks
+	// before committing the character row, its player binding and its genesis
+	// envelope in ONE transaction. The supplied profile values are a SECOND write
+	// through world.Service.UpdateCharacterProfileAttributes: the character is
+	// authoritative, so a profile-write failure leaves those keys simply absent
+	// from the response rather than failing a create whose name is already
+	// reserved.
+	//
+	// It is NOT holomush.core.v1.CoreService.CreateCharacter, which still exists
+	// and still answers with a bare name scalar because the telnet CREATE verb
+	// drives it through internal/telnet/gateway_handler.go.
+	CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error)
 	// UpdateCharacterProfile applies a partial edit to the character's stored
 	// profile.* rows, driven by an update mask evaluated against a closed
 	// allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
@@ -143,6 +164,12 @@ func NewCharacterAccessServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(characterAccessServiceMethods.ByName("GetMyCharacter")),
 			connect.WithClientOptions(opts...),
 		),
+		createCharacter: connect.NewClient[v1.CreateCharacterRequest, v1.CreateCharacterResponse](
+			httpClient,
+			baseURL+CharacterAccessServiceCreateCharacterProcedure,
+			connect.WithSchema(characterAccessServiceMethods.ByName("CreateCharacter")),
+			connect.WithClientOptions(opts...),
+		),
 		updateCharacterProfile: connect.NewClient[v1.UpdateCharacterProfileRequest, v1.UpdateCharacterProfileResponse](
 			httpClient,
 			baseURL+CharacterAccessServiceUpdateCharacterProfileProcedure,
@@ -175,6 +202,7 @@ type characterAccessServiceClient struct {
 	getCharacterProfile        *connect.Client[v1.GetCharacterProfileRequest, v1.GetCharacterProfileResponse]
 	listMyCharacters           *connect.Client[v1.ListMyCharactersRequest, v1.ListMyCharactersResponse]
 	getMyCharacter             *connect.Client[v1.GetMyCharacterRequest, v1.GetMyCharacterResponse]
+	createCharacter            *connect.Client[v1.CreateCharacterRequest, v1.CreateCharacterResponse]
 	updateCharacterProfile     *connect.Client[v1.UpdateCharacterProfileRequest, v1.UpdateCharacterProfileResponse]
 	updateCharacterDescription *connect.Client[v1.UpdateCharacterDescriptionRequest, v1.UpdateCharacterDescriptionResponse]
 	setDefaultCharacter        *connect.Client[v1.SetDefaultCharacterRequest, v1.SetDefaultCharacterResponse]
@@ -194,6 +222,11 @@ func (c *characterAccessServiceClient) ListMyCharacters(ctx context.Context, req
 // GetMyCharacter calls holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter.
 func (c *characterAccessServiceClient) GetMyCharacter(ctx context.Context, req *connect.Request[v1.GetMyCharacterRequest]) (*connect.Response[v1.GetMyCharacterResponse], error) {
 	return c.getMyCharacter.CallUnary(ctx, req)
+}
+
+// CreateCharacter calls holomush.characteraccess.v1.CharacterAccessService.CreateCharacter.
+func (c *characterAccessServiceClient) CreateCharacter(ctx context.Context, req *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error) {
+	return c.createCharacter.CallUnary(ctx, req)
 }
 
 // UpdateCharacterProfile calls
@@ -240,6 +273,24 @@ type CharacterAccessServiceHandler interface {
 	// a public projection with a second read. Ownership is verified server-side
 	// against the session's player; handler in plan 04-05.
 	GetMyCharacter(context.Context, *connect.Request[v1.GetMyCharacterRequest]) (*connect.Response[v1.GetMyCharacterResponse], error)
+	// CreateCharacter seats a new character on the authenticated player from a
+	// structured identity card — the name plus the five short profile values a
+	// creation form collects — and answers with the character it created.
+	// CharacterAccessServer.CreateCharacter
+	// (internal/grpc/characteraccess_create.go) resolves the session, refuses
+	// guests, and hands the name to auth.CharacterService.CreateBound, which runs
+	// the §6.1.1 normalization, the name-admission gate and the uniqueness checks
+	// before committing the character row, its player binding and its genesis
+	// envelope in ONE transaction. The supplied profile values are a SECOND write
+	// through world.Service.UpdateCharacterProfileAttributes: the character is
+	// authoritative, so a profile-write failure leaves those keys simply absent
+	// from the response rather than failing a create whose name is already
+	// reserved.
+	//
+	// It is NOT holomush.core.v1.CoreService.CreateCharacter, which still exists
+	// and still answers with a bare name scalar because the telnet CREATE verb
+	// drives it through internal/telnet/gateway_handler.go.
+	CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error)
 	// UpdateCharacterProfile applies a partial edit to the character's stored
 	// profile.* rows, driven by an update mask evaluated against a closed
 	// allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
@@ -298,6 +349,12 @@ func NewCharacterAccessServiceHandler(svc CharacterAccessServiceHandler, opts ..
 		connect.WithSchema(characterAccessServiceMethods.ByName("GetMyCharacter")),
 		connect.WithHandlerOptions(opts...),
 	)
+	characterAccessServiceCreateCharacterHandler := connect.NewUnaryHandler(
+		CharacterAccessServiceCreateCharacterProcedure,
+		svc.CreateCharacter,
+		connect.WithSchema(characterAccessServiceMethods.ByName("CreateCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
 	characterAccessServiceUpdateCharacterProfileHandler := connect.NewUnaryHandler(
 		CharacterAccessServiceUpdateCharacterProfileProcedure,
 		svc.UpdateCharacterProfile,
@@ -330,6 +387,8 @@ func NewCharacterAccessServiceHandler(svc CharacterAccessServiceHandler, opts ..
 			characterAccessServiceListMyCharactersHandler.ServeHTTP(w, r)
 		case CharacterAccessServiceGetMyCharacterProcedure:
 			characterAccessServiceGetMyCharacterHandler.ServeHTTP(w, r)
+		case CharacterAccessServiceCreateCharacterProcedure:
+			characterAccessServiceCreateCharacterHandler.ServeHTTP(w, r)
 		case CharacterAccessServiceUpdateCharacterProfileProcedure:
 			characterAccessServiceUpdateCharacterProfileHandler.ServeHTTP(w, r)
 		case CharacterAccessServiceUpdateCharacterDescriptionProcedure:
@@ -357,6 +416,10 @@ func (UnimplementedCharacterAccessServiceHandler) ListMyCharacters(context.Conte
 
 func (UnimplementedCharacterAccessServiceHandler) GetMyCharacter(context.Context, *connect.Request[v1.GetMyCharacterRequest]) (*connect.Response[v1.GetMyCharacterResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.GetMyCharacter is not implemented"))
+}
+
+func (UnimplementedCharacterAccessServiceHandler) CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.characteraccess.v1.CharacterAccessService.CreateCharacter is not implemented"))
 }
 
 func (UnimplementedCharacterAccessServiceHandler) UpdateCharacterProfile(context.Context, *connect.Request[v1.UpdateCharacterProfileRequest]) (*connect.Response[v1.UpdateCharacterProfileResponse], error) {

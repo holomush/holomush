@@ -213,7 +213,7 @@ func newProfileHarness(t *testing.T, tier string, seeds []profileSeed) *profileH
 
 	sessionRepo, playerRepo := profileAuthRepos(t, playerID, tier)
 	return &profileHarness{
-		srv:    NewCharacterAccessServer(reader, &recordingWorldMutator{t: t, failOnCall: true}, &profilevis.Evaluator{Engine: engine}, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, authmocks.NewMockCharacterRepository(t)),
+		srv:    NewCharacterAccessServer(reader, &recordingWorldMutator{t: t, failOnCall: true}, &profilevis.Evaluator{Engine: engine}, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, authmocks.NewMockCharacterRepository(t), &failOnCallCreator{t: t}),
 		reader: reader,
 		charID: charID,
 		token:  token,
@@ -294,7 +294,7 @@ func TestGetCharacterProfileReportsAVisibleRowMissingFromTheEnumerationAsInterna
 		"profile.pronouns": {ID: idgen.New().String(), Name: "profile.pronouns"},
 	}}
 	sessionRepo, playerRepo := profileAuthRepos(t, idgen.New(), access.ViewerTierAnonymous)
-	srv := NewCharacterAccessServer(reader, &recordingWorldMutator{t: t, failOnCall: true}, vis, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, authmocks.NewMockCharacterRepository(t))
+	srv := NewCharacterAccessServer(reader, &recordingWorldMutator{t: t, failOnCall: true}, vis, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, authmocks.NewMockCharacterRepository(t), &failOnCallCreator{t: t})
 
 	resp, err := srv.GetCharacterProfile(context.Background(), &characteraccessv1.GetCharacterProfileRequest{
 		CharacterId: charID.String(),

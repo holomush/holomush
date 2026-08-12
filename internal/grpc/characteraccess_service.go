@@ -104,6 +104,27 @@ type characterAccessDirectoryReader interface {
 	ListAll(ctx context.Context) ([]*world.Character, error)
 }
 
+// characterAccessCreator is the narrow interface CharacterAccessServer needs to
+// SEAT a new character — one method, and no second.
+//
+// Its signature is verbatim (*auth.CharacterService).CreateBound
+// (internal/auth/character_service.go:107), which is the ONE production entry
+// point that runs the whole create pipeline: the §6.1.1 uniqueness pre-check,
+// charname.Gate.Admit, the character limit, the starting location, and then
+// CharacterGenesisService.Create — which commits the character row, the
+// player↔character binding and the genesis envelope in one transaction
+// (INV-WORLD-4). It is satisfied WITHOUT NEW PRODUCTION CODE by the
+// *auth.CharacterService already built at the wiring site.
+//
+// THE ABSENCES ARE LOAD-BEARING HERE TOO (PROFILE-10, D-79). It names neither
+// auth.CharacterRepository.Create — which no longer exists, precisely so no
+// package can seat an envelope-less character — nor CharacterGenesis.Create
+// itself. Reaching the genesis primitive directly would skip the pipeline whose
+// refusals this facade's whole code→status mapping exists to render.
+type characterAccessCreator interface {
+	CreateBound(ctx context.Context, playerID ulid.ULID, name, bindReason string) (*world.Character, error)
+}
+
 // characterAccessPolicyEvaluator is the narrow slice of the ABAC engine this
 // facade needs to make ONE raw authorization decision of its own: 01-SPEC
 // §9.2's directory gate, on access.CharacterDirectoryResource().
@@ -206,6 +227,16 @@ type CharacterAccessServer struct {
 	// directory is the character enumeration the public directory reads, and the
 	// only bulk read this facade performs.
 	directory characterAccessDirectoryReader
+	// creator is the owner audience's ONLY route to seating a character.
+	//
+	// IT IS A REQUIRED CONSTRUCTOR ARGUMENT, NOT AN OPTIONAL SETTER, and the
+	// sibling facade's WithSceneDEKAdder shape was rejected deliberately.
+	// Creation is not an optional capability of this surface: a nil handle would
+	// make CreateCharacter answer Unimplemented on a running server, which is
+	// indistinguishable from the RPC not being wired at all. An exported setter
+	// would additionally be a census edit — characterNonHandlerMethods() in
+	// test/meta/characteraccess_routing_census_test.go ships deliberately EMPTY.
+	creator characterAccessCreator
 }
 
 // NewCharacterAccessServer constructs a CharacterAccessServer. Every dependency
@@ -224,6 +255,10 @@ type CharacterAccessServer struct {
 // *policy.Engine already in scope at the wiring site (the same engine the
 // profilevis.Evaluator a line away is built over), and directoryReader by the
 // character-repository adapter already built there for charRepo.
+//
+// creator is the one the owner CREATE surface adds (05-03), and it introduces
+// no production type either: the *auth.CharacterService the wiring site already
+// builds for the telnet create path satisfies it as-is.
 func NewCharacterAccessServer(
 	worldReader characterAccessWorldReader,
 	worldMutator characterAccessWorldMutator,
@@ -233,6 +268,7 @@ func NewCharacterAccessServer(
 	playerSessionRepo auth.PlayerSessionRepository,
 	playerRepo auth.PlayerRepository,
 	charRepo auth.CharacterRepository,
+	creator characterAccessCreator,
 ) *CharacterAccessServer {
 	return &CharacterAccessServer{
 		playerGate:   newPlayerGate(playerSessionRepo, playerRepo, charRepo, characterGuestDenialMessage, characterAccessLogPrefix),
@@ -241,6 +277,7 @@ func NewCharacterAccessServer(
 		profileVis:   profileVis,
 		policyEval:   policyEval,
 		directory:    directoryReader,
+		creator:      creator,
 	}
 }
 

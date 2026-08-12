@@ -84,6 +84,21 @@ func (f *failOnCallProfileVisibility) VisibleAttributes(context.Context, string,
 	return nil, nil
 }
 
+// failOnCallCreator fails the test if the create pipeline is reached. Every
+// facade fixture in this package EXCEPT the create suite's own wires it, so a
+// regression routing a read or an edit through character creation fails at the
+// call rather than passing as a spec that read an empty character.
+//
+// It deliberately does not return a usable zero value, for the same reason
+// failOnCallProfileVisibility above does not.
+type failOnCallCreator struct{ t *testing.T }
+
+func (f *failOnCallCreator) CreateBound(context.Context, ulid.ULID, string, string) (*world.Character, error) {
+	f.t.Helper()
+	f.t.Fatal("only CreateCharacter seats a character: CreateBound was called")
+	return nil, nil
+}
+
 // ownerHarness is one wired facade plus the fixture identifiers a spec drives
 // it with.
 type ownerHarness struct {
@@ -134,7 +149,7 @@ func newOwnerHarness(t *testing.T, f ownerFixture) *ownerHarness {
 	}
 
 	return &ownerHarness{
-		srv:      NewCharacterAccessServer(reader, &recordingWorldMutator{t: t, failOnCall: true}, &failOnCallProfileVisibility{t: t}, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, charRepo),
+		srv:      NewCharacterAccessServer(reader, &recordingWorldMutator{t: t, failOnCall: true}, &failOnCallProfileVisibility{t: t}, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, charRepo, &failOnCallCreator{t: t}),
 		reader:   reader,
 		owned:    f.owned,
 		playerID: playerID,

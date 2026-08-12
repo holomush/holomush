@@ -111,6 +111,8 @@ func newCAServerForToken(
 		// that routed a public read through the gate fails here loudly rather
 		// than nil-panicking.
 		authmocks.NewMockCharacterRepository(t),
+		// The public read path never seats a character either.
+		&failOnCallCreator{t: t},
 	)
 	return srv, vis
 }

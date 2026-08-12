@@ -42,6 +42,25 @@ service CharacterAccessService {
   // against the session's player; handler in plan 04-05.
   rpc GetMyCharacter(GetMyCharacterRequest) returns (GetMyCharacterResponse);
 
+  // CreateCharacter seats a new character on the authenticated player from a
+  // structured identity card — the name plus the five short profile values a
+  // creation form collects — and answers with the character it created.
+  // CharacterAccessServer.CreateCharacter
+  // (internal/grpc/characteraccess_create.go) resolves the session, refuses
+  // guests, and hands the name to auth.CharacterService.CreateBound, which runs
+  // the §6.1.1 normalization, the name-admission gate and the uniqueness checks
+  // before committing the character row, its player binding and its genesis
+  // envelope in ONE transaction. The supplied profile values are a SECOND write
+  // through world.Service.UpdateCharacterProfileAttributes: the character is
+  // authoritative, so a profile-write failure leaves those keys simply absent
+  // from the response rather than failing a create whose name is already
+  // reserved.
+  //
+  // It is NOT holomush.core.v1.CoreService.CreateCharacter, which still exists
+  // and still answers with a bare name scalar because the telnet CREATE verb
+  // drives it through internal/telnet/gateway_handler.go.
+  rpc CreateCharacter(CreateCharacterRequest) returns (CreateCharacterResponse);
+
   // UpdateCharacterProfile applies a partial edit to the character's stored
   // profile.* rows, driven by an update mask evaluated against a closed
   // allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
@@ -407,4 +426,66 @@ message SetDefaultCharacterResponse {
   // default is the character_id the caller just asked for, which a success
   // status makes true; OwnCharacter deliberately carries no is-default flag.
   repeated OwnCharacter characters = 1;
+}
+
+// CreateCharacterRequest is the structured identity card a creation form
+// submits: the name, plus the five short prose values the form collects
+// alongside it.
+//
+// IT CARRIES NO expected_version FIELD, AND THE ABSENCE IS STRUCTURAL. A
+// version guard predicates a write on a characters.version the caller last
+// read; a create has no row to have read, so 01-SPEC §9.4.2 makes creation the
+// one carve-out from the guard the two edit RPCs obey.
+// CharacterAccessServer.CreateCharacter calls requireGuardedVersion nowhere,
+// and a reviewer looking for the guard here should not add one.
+//
+// The five prose values are OPTIONAL: a field left empty is not written at all,
+// so a name-only submission makes no profile write. Each is capped in BYTES by
+// the same validateProfileValue and world.MaxNameLength pair the mask-driven
+// edit surface uses (internal/grpc/characteraccess_write.go), so the create
+// path and the edit path cannot disagree about where the boundary sits.
+message CreateCharacterRequest {
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // X-Session-Token header. Which player owns the new character follows from
+  // it, so there is deliberately no player-id field a caller could point at
+  // someone else.
+  string player_session_token = 1 [(buf.validate.field).string.min_len = 1];
+  // name is the submitted character name, forwarded to
+  // auth.CharacterService.CreateBound verbatim. The server, not the client,
+  // normalizes it: NFKC, format-rune strip, whitespace collapse and case fold
+  // produce the §6.1.1 uniqueness key, and what is STORED is the display form
+  // that pipeline yields — which is why the response echoes the name back
+  // rather than the client keeping its own copy. Admission is on RUNE count
+  // (internal/charname/syntax: 2 to 32), not bytes.
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+  // pronouns seeds the `profile.pronouns` row — half of §8.8's minimum public
+  // identity, and the one profile field seeded at the anonymous floor.
+  string pronouns = 3;
+  // concept seeds the `profile.concept` row: the one-line "what this character
+  // is" pitch.
+  string concept = 4;
+  // species seeds the `profile.species` row. Free text — the platform ships no
+  // species vocabulary, because the setting owns that word.
+  string species = 5;
+  // age seeds the `profile.age` row. Free text rather than an integer: settings
+  // routinely want "ageless", "early 30s", or a century.
+  string age = 6;
+  // faction seeds the `profile.faction` row: affiliation, house, crew or
+  // allegiance. Free text; there is no faction registry.
+  string faction = 7;
+}
+
+// CreateCharacterResponse carries the character that was created, in the owner
+// audience's shape, read back through the same owned-character path
+// GetMyCharacter uses and projected by projectOwner — never assembled from the
+// request the caller sent.
+message CreateCharacterResponse {
+  // character is the newly seated character. Its `name` is the SERVER-stored
+  // display form, which may differ from the submitted bytes wherever
+  // normalization changed them; a client that echoes the submission back to the
+  // player instead would show a name the grid does not use. Its `profile` map
+  // holds whichever of the five supplied values were written — a value the
+  // caller left empty is absent, and so is one whose second-transaction write
+  // failed.
+  OwnCharacter character = 1;
 }

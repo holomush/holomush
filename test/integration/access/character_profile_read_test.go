@@ -181,6 +181,9 @@ var _ = Describe("PROFILE-04/PROFILE-05/EXT-06: the anonymous public profile rea
 			// adapter is wired anyway rather than nil, so a spec added later
 			// exercises the same shape cmd/holomush does.
 			setup.NewCharRepoAdapter(env.pool, env.charRepo),
+			// Every spec here drives the PUBLIC read, which seats nothing, so
+			// the create pipeline fails the spec if it is ever reached.
+			failOnCallCreator{},
 		)
 	}
 

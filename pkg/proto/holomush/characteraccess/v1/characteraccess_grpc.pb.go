@@ -25,6 +25,7 @@ const (
 	CharacterAccessService_GetCharacterProfile_FullMethodName        = "/holomush.characteraccess.v1.CharacterAccessService/GetCharacterProfile"
 	CharacterAccessService_ListMyCharacters_FullMethodName           = "/holomush.characteraccess.v1.CharacterAccessService/ListMyCharacters"
 	CharacterAccessService_GetMyCharacter_FullMethodName             = "/holomush.characteraccess.v1.CharacterAccessService/GetMyCharacter"
+	CharacterAccessService_CreateCharacter_FullMethodName            = "/holomush.characteraccess.v1.CharacterAccessService/CreateCharacter"
 	CharacterAccessService_UpdateCharacterProfile_FullMethodName     = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterProfile"
 	CharacterAccessService_UpdateCharacterDescription_FullMethodName = "/holomush.characteraccess.v1.CharacterAccessService/UpdateCharacterDescription"
 	CharacterAccessService_SetDefaultCharacter_FullMethodName        = "/holomush.characteraccess.v1.CharacterAccessService/SetDefaultCharacter"
@@ -64,6 +65,24 @@ type CharacterAccessServiceClient interface {
 	// a public projection with a second read. Ownership is verified server-side
 	// against the session's player; handler in plan 04-05.
 	GetMyCharacter(ctx context.Context, in *GetMyCharacterRequest, opts ...grpc.CallOption) (*GetMyCharacterResponse, error)
+	// CreateCharacter seats a new character on the authenticated player from a
+	// structured identity card — the name plus the five short profile values a
+	// creation form collects — and answers with the character it created.
+	// CharacterAccessServer.CreateCharacter
+	// (internal/grpc/characteraccess_create.go) resolves the session, refuses
+	// guests, and hands the name to auth.CharacterService.CreateBound, which runs
+	// the §6.1.1 normalization, the name-admission gate and the uniqueness checks
+	// before committing the character row, its player binding and its genesis
+	// envelope in ONE transaction. The supplied profile values are a SECOND write
+	// through world.Service.UpdateCharacterProfileAttributes: the character is
+	// authoritative, so a profile-write failure leaves those keys simply absent
+	// from the response rather than failing a create whose name is already
+	// reserved.
+	//
+	// It is NOT holomush.core.v1.CoreService.CreateCharacter, which still exists
+	// and still answers with a bare name scalar because the telnet CREATE verb
+	// drives it through internal/telnet/gateway_handler.go.
+	CreateCharacter(ctx context.Context, in *CreateCharacterRequest, opts ...grpc.CallOption) (*CreateCharacterResponse, error)
 	// UpdateCharacterProfile applies a partial edit to the character's stored
 	// profile.* rows, driven by an update mask evaluated against a closed
 	// allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
@@ -129,6 +148,16 @@ func (c *characterAccessServiceClient) GetMyCharacter(ctx context.Context, in *G
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetMyCharacterResponse)
 	err := c.cc.Invoke(ctx, CharacterAccessService_GetMyCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *characterAccessServiceClient) CreateCharacter(ctx context.Context, in *CreateCharacterRequest, opts ...grpc.CallOption) (*CreateCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateCharacterResponse)
+	err := c.cc.Invoke(ctx, CharacterAccessService_CreateCharacter_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +237,24 @@ type CharacterAccessServiceServer interface {
 	// a public projection with a second read. Ownership is verified server-side
 	// against the session's player; handler in plan 04-05.
 	GetMyCharacter(context.Context, *GetMyCharacterRequest) (*GetMyCharacterResponse, error)
+	// CreateCharacter seats a new character on the authenticated player from a
+	// structured identity card — the name plus the five short profile values a
+	// creation form collects — and answers with the character it created.
+	// CharacterAccessServer.CreateCharacter
+	// (internal/grpc/characteraccess_create.go) resolves the session, refuses
+	// guests, and hands the name to auth.CharacterService.CreateBound, which runs
+	// the §6.1.1 normalization, the name-admission gate and the uniqueness checks
+	// before committing the character row, its player binding and its genesis
+	// envelope in ONE transaction. The supplied profile values are a SECOND write
+	// through world.Service.UpdateCharacterProfileAttributes: the character is
+	// authoritative, so a profile-write failure leaves those keys simply absent
+	// from the response rather than failing a create whose name is already
+	// reserved.
+	//
+	// It is NOT holomush.core.v1.CoreService.CreateCharacter, which still exists
+	// and still answers with a bare name scalar because the telnet CREATE verb
+	// drives it through internal/telnet/gateway_handler.go.
+	CreateCharacter(context.Context, *CreateCharacterRequest) (*CreateCharacterResponse, error)
 	// UpdateCharacterProfile applies a partial edit to the character's stored
 	// profile.* rows, driven by an update mask evaluated against a closed
 	// allowlist (01-SPEC §9.5) and guarded by the caller's expected_version.
@@ -257,6 +304,9 @@ func (UnimplementedCharacterAccessServiceServer) ListMyCharacters(context.Contex
 }
 func (UnimplementedCharacterAccessServiceServer) GetMyCharacter(context.Context, *GetMyCharacterRequest) (*GetMyCharacterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMyCharacter not implemented")
+}
+func (UnimplementedCharacterAccessServiceServer) CreateCharacter(context.Context, *CreateCharacterRequest) (*CreateCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateCharacter not implemented")
 }
 func (UnimplementedCharacterAccessServiceServer) UpdateCharacterProfile(context.Context, *UpdateCharacterProfileRequest) (*UpdateCharacterProfileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateCharacterProfile not implemented")
@@ -342,6 +392,24 @@ func _CharacterAccessService_GetMyCharacter_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CharacterAccessServiceServer).GetMyCharacter(ctx, req.(*GetMyCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CharacterAccessService_CreateCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharacterAccessServiceServer).CreateCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharacterAccessService_CreateCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharacterAccessServiceServer).CreateCharacter(ctx, req.(*CreateCharacterRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -436,6 +504,10 @@ var CharacterAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMyCharacter",
 			Handler:    _CharacterAccessService_GetMyCharacter_Handler,
+		},
+		{
+			MethodName: "CreateCharacter",
+			Handler:    _CharacterAccessService_CreateCharacter_Handler,
 		},
 		{
 			MethodName: "UpdateCharacterProfile",

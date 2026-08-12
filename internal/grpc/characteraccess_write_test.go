@@ -223,7 +223,7 @@ func newWriteHarness(t *testing.T, f writeFixture) *writeHarness {
 	}
 
 	return &writeHarness{
-		srv:           NewCharacterAccessServer(reader, mutator, &failOnCallProfileVisibility{t: t}, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, charRepo),
+		srv:           NewCharacterAccessServer(reader, mutator, &failOnCallProfileVisibility{t: t}, &failOnCallDirectoryGate{t: t}, &failOnCallDirectoryReader{t: t}, sessionRepo, playerRepo, charRepo, &failOnCallCreator{t: t}),
 		reader:        reader,
 		mutator:       mutator,
 		owned:         first,

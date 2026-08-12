@@ -874,6 +874,11 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		authPlayerSessionRepo,
 		authPlayerRepo,
 		authCharRepo,
+		// The create pipeline: the SAME *auth.CharacterService built above for
+		// the telnet CREATE path. One pipeline, one set of refusal codes, one
+		// name-admission gate — a second CharacterService here would be a second
+		// composition root and could drift onto a different block list.
+		characterService,
 	))
 	slog.InfoContext(ctx, "characterAccessService facade registered")
 

@@ -93,6 +93,9 @@ var _ = Describe("IDENT-02/IDENT-02a: the owner edits prose profile fields and t
 			store.NewPostgresPlayerSessionStore(env.pool),
 			authpg.NewPlayerRepository(env.pool),
 			setup.NewCharRepoAdapter(env.pool, env.charRepo),
+			// The two edit surfaces below seat nothing, so the create pipeline
+			// fails the spec if it is ever reached.
+			failOnCallCreator{},
 		)
 	}
 
@@ -451,6 +454,9 @@ var _ = Describe("IDENT-05: the player sets which of their characters is the def
 			store.NewPostgresPlayerSessionStore(env.pool),
 			authpg.NewPlayerRepository(env.pool),
 			setup.NewCharRepoAdapter(env.pool, env.charRepo),
+			// The two edit surfaces below seat nothing, so the create pipeline
+			// fails the spec if it is ever reached.
+			failOnCallCreator{},
 		)
 	}
 

@@ -70,6 +70,9 @@ var _ = Describe("PROFILE-03/PROFILE-04: the public character directory", func()
 			psRepo,
 			playerRep,
 			setup.NewCharRepoAdapter(env.pool, env.charRepo),
+			// No spec in this file creates a character, so the create pipeline is
+			// wired to fail the spec rather than to a stub that would answer.
+			failOnCallCreator{},
 		)
 	}
 
