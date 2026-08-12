@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { test, expect, db } from './helpers/fixtures';
+import { test, expect, db, createCharacter, enterGameAs } from './helpers/fixtures';
 import type { Page } from '@playwright/test';
 
 /**
@@ -35,14 +35,8 @@ async function registerAndEnterTerminal(
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
-  const createBtn = page.locator('text=Create New Character');
-  await expect(createBtn).toBeVisible({ timeout: 10000 });
-  await createBtn.click();
-  await page.fill('input[name="characterName"]', charName);
-  await page.locator('button[role="checkbox"]').click();
-  await page.locator('button:has-text("Create")').click();
-  await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
-  await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+  await createCharacter(page, charName);
+  await enterGameAs(page, charName);
 
   return { username, charName };
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { test, expect, db, getClientSessionId } from './helpers/fixtures';
+import { test, expect, db, getClientSessionId, createCharacter, enterGameAs } from './helpers/fixtures';
 
 test.describe('Auth Flows', () => {
   test('landing page shows login and register links', async ({ page }) => {
@@ -101,14 +101,8 @@ test.describe('Auth Flows — Registered User Login', () => {
     await page.locator('button[type="submit"]').click();
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
-    const createBtn = page.locator('text=Create New Character');
-    await expect(createBtn).toBeVisible({ timeout: 10000 });
-    await createBtn.click();
-    await page.fill('input[name="characterName"]', testChar);
-    await page.locator('button[role="checkbox"]').click();
-    await page.locator('button:has-text("Create")').click();
-    await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
-    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+    await createCharacter(page, testChar);
+    await enterGameAs(page, testChar);
 
     // ── Phase 2: Quit → character picker → logout ──
     // Quit returns to character picker (player stays authenticated)
@@ -171,14 +165,8 @@ test.describe('Auth Flows — Logout', () => {
     await page.locator('button[type="submit"]').click();
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
-    const createBtn = page.locator('text=Create New Character');
-    await expect(createBtn).toBeVisible({ timeout: 10000 });
-    await createBtn.click();
-    await page.fill('input[name="characterName"]', testChar);
-    await page.locator('button[role="checkbox"]').click();
-    await page.locator('button:has-text("Create")').click();
-    await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
-    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+    await createCharacter(page, testChar);
+    await enterGameAs(page, testChar);
 
     const sessionId = await getClientSessionId(page);
     expect(sessionId).toBeTruthy();
@@ -240,17 +228,11 @@ test.describe('Auth Flows — Full Registration Flow', () => {
     // Should redirect to character select (new player has no characters)
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
-    // Create a character with auto-enter
-    const createBtn = page.locator('text=Create New Character');
-    await expect(createBtn).toBeVisible({ timeout: 10000 });
-    await createBtn.click();
-    await page.fill('input[name="characterName"]', testChar);
-    await page.locator('button[role="checkbox"]').click();
-    await page.locator('button:has-text("Create")').click();
-
-    // Should auto-enter terminal
-    await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
-    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+    // Create a character. Creation lands on the roster (D-87, plan 05-06):
+    // there is no auto-enter checkbox, and entering the game is a second,
+    // explicit act.
+    await createCharacter(page, testChar);
+    await enterGameAs(page, testChar);
 
     // ── DB validations (all after UI flow completes) ──
 

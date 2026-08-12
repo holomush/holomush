@@ -84,11 +84,11 @@ export function uniqueSceneUser(prefix: string) {
 }
 
 /**
- * Register a new player, create a character, and land in the terminal.
- * Returns `{ username, password, charName }` for later re-login if needed.
- * Reuses the same form-fill pattern as auth.spec.ts and character-switcher.spec.ts.
+ * Register a new player and land on the roster with no characters yet.
+ * Split out of `registerAndEnterTerminal` so a spec that wants to drive the
+ * creation card itself does not have to re-type the registration form.
  */
-export async function registerAndEnterTerminal(
+export async function registerPlayer(
   page: Page,
   prefix: string,
 ): Promise<{ username: string; password: string; charName: string }> {
@@ -99,10 +99,40 @@ export async function registerAndEnterTerminal(
   await page.fill('input[name="confirmPassword"]', password);
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
-  await page.locator('text=Create New Character').click();
+  return { username, password, charName };
+}
+
+/**
+ * Create a character from the roster and return to the roster.
+ *
+ * THIS IS THE ONE PLACE THE CREATION JOURNEY IS SPELLED OUT. Six specs used to
+ * carry their own copy of it, which is why deleting the roster's inline form in
+ * plan 05-03 broke eight files at once. Callers that need the terminal chain
+ * `enterGameAs` onto this rather than re-deriving the sequence.
+ *
+ * The affordance is a LINK to /characters/new (D-87), not an inline input, and
+ * creation lands back on /characters rather than in the terminal (D-87, 05-06):
+ * entering the game is now a separate, explicit act.
+ */
+export async function createCharacter(page: Page, charName: string): Promise<void> {
+  await page.locator('[data-testid="create-character"]').click();
+  await expect(page).toHaveURL(/\/characters\/new/, { timeout: 10000 });
   await page.fill('input[name="characterName"]', charName);
-  await page.locator('button[role="checkbox"]').click();
-  await page.locator('button:has-text("Create")').click();
+  await page.locator('button[type="submit"]').click();
+  // The roster is the landing surface, and the new card appearing on it is the
+  // observable that creation succeeded.
+  await expect(page.locator('[data-testid="char-name"]', { hasText: charName })).toBeVisible({
+    timeout: 15000,
+  });
+}
+
+/**
+ * Select an existing character from the roster and wait for a live terminal.
+ * The whole playable card is the click target (008-B), so the card — not the
+ * name span — is what is clicked.
+ */
+export async function enterGameAs(page: Page, charName: string): Promise<void> {
+  await page.locator('[data-testid="roster-card"]', { hasText: charName }).click();
   await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
   await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
   // Wait for the stream to be fully open (STREAM_OPENED → connectionId set →
@@ -112,5 +142,18 @@ export async function registerAndEnterTerminal(
   await page
     .locator('[data-testid="conn-pill"][data-status="connected"]')
     .waitFor({ timeout: 15000 });
-  return { username, password, charName };
+}
+
+/**
+ * Register a new player, create a character, and land in the terminal.
+ * Returns `{ username, password, charName }` for later re-login if needed.
+ */
+export async function registerAndEnterTerminal(
+  page: Page,
+  prefix: string,
+): Promise<{ username: string; password: string; charName: string }> {
+  const creds = await registerPlayer(page, prefix);
+  await createCharacter(page, creds.charName);
+  await enterGameAs(page, creds.charName);
+  return creds;
 }
