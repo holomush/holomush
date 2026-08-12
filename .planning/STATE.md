@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 05
 current_phase_name: character-identity-ui-public-profiles
 status: executing
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-08-12T23:07:29.237Z"
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-08-12T23:25:29.744Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 54
+  completed_plans: 55
   percent: 78
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 05 (character-identity-ui-public-profiles) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 95%)
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 96%)
 Last activity: 2026-08-12 — Phase 05 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -271,6 +271,7 @@ no action needed.
 | Phase 05 P03 | 78min | 3 tasks | 41 files |
 | Phase 05 P04 | 15min | 3 tasks | 5 files |
 | Phase 05 P05 | 55m | 3 tasks | 6 files |
+| Phase 05 P06 | 17min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -611,6 +612,8 @@ the next milestone yet.
 - [Phase ?]: INV-ACCESS-10 bound clause-by-clause: all three summary clauses have a genuine asserting site; the clause-to-site table is recorded because the registry's genuinely-asserted guard cannot detect a partial binding
 - [Phase ?]: ROADMAP criterion 4's 'next load' latency wording overclaims (policy poller defaults to 10s) — filed as amendment #4963 rather than encoded as a test assertion
 - [Phase ?]: Web unit/component tests are ungated (no Taskfile target, no CI job runs vitest or svelte-check) — filed as #4964
+- [Phase ?]: 05-06: ConnectError.rawMessage, never .message, when rendering a server string verbatim — .message carries a [code] prefix that puts wire vocabulary in front of a player
+- [Phase ?]: 05-06: the create form's name input keeps name="characterName", the attribute the eight broken Playwright specs already fill, so 05-08's repair is a navigation change not a selector rewrite
 
 ### Pending Todos
 
@@ -674,12 +677,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-12T23:07:29.210Z
+Last session: 2026-08-12T23:25:29.728Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 05-05-PLAN.md
+Stopped at: Completed 05-06-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
