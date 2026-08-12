@@ -529,7 +529,7 @@ Plans:
 
 **Sketch findings** (design decided in sketches 007, 008, 009; read `.planning/sketches/MANIFEST.md` round-2 findings before planning): **profile = identity card, not a long-form page** (007-C) — a bounded card carrying portrait/name/pronouns/concept/description that is complete at any fill level, with long-form sections growing *below* it and simply absent when withheld. **The page MUST NOT explain its own sparseness** — §7.5 + §8.9 make a blank field and a withheld field indistinguishable, so no counts, no lock icons, no greyed sections; a sign-in invitation is legal only if **unconditional**, and 007-C ships none. **Under the seeded defaults `guest` and `player` render identically** (no §8.6 row seeds `player`), so any tier preview must derive distinct outcomes from the live floor set, not offer a hardcoded three-way toggle. **The gallery never renders in v0.13** — §7.3 ships the media model with zero upload behavior, so build the renderer but ship no empty "coming soon" slots. **Roster is sectioned** (008-B): `Playable` grid first with the create card, then `Not playable`; every card in the top grid is uniformly clickable. **A non-`active` lifecycle MUST suppress the session badge** — the shipped `Active`/`Offline` badge is *session* state and collides with `characters.status`. **Creation is submit-and-report** (009-A), no live availability check — it cannot be honest across check-and-insert. Source: `.planning/sketches/007-*/README.md`, `008-*/README.md`, `009-*/README.md`.
 
-**Plans**: 3/8 plans executed
+**Plans**: 4/8 plans executed
 **UI hint**: yes
 
 Plans:
@@ -544,7 +544,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 05-04-PLAN.md — The owner authoring surface `/characters/[id]`, per-section save, PROFILE-12 notice
+- [x] 05-04-PLAN.md — The owner authoring surface `/characters/[id]`, per-section save, PROFILE-12 notice
 - [ ] 05-05-PLAN.md — Criteria 4 and 5 integration specs, the INV-ACCESS-10 binding decision, the owed amendments
 
 **Wave 4** *(blocked on Wave 3 completion)*
@@ -595,7 +595,7 @@ Plans:
 | 2. Scenes Lineage Completion | v0.11 | 13/13 | In Progress|  |
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 6/6 | Complete    | 2026-08-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 9/9 | In Progress|  |
-| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 3/8 | In Progress|  |
+| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 4/8 | In Progress|  |
 | 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |

@@ -181,7 +181,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       only after an audit of existing rows where `parent_type='character' AND visibility='public'`, and
       of existing character descriptions, because the policy widens read access to all of them.
 
-- [ ] **PROFILE-12**: The retirement flow and the surface where a player authors profile fields
+- [x] **PROFILE-12**: The retirement flow and the surface where a player authors profile fields
       **state in the UI** that privacy is not retroactive over already-published history. (Amended —
       the visibility toggle this originally named does not exist; visibility is game configuration,
       not an owner control. See `01-SPEC.md` §14 row 3. The retirement half is unchanged.)

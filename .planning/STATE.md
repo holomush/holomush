@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 05
 current_phase_name: character-identity-ui-public-profiles
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-08-12T22:19:56.781Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-08-12T22:42:13.105Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 52
+  completed_plans: 53
   percent: 78
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 05 (character-identity-ui-public-profiles) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([█████████░] 91%)
+Progress: [█████████████████░░░] 34/40 plans ([█████████░] 93%)
 Last activity: 2026-08-12 — Phase 05 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -269,6 +269,7 @@ no action needed.
 | Phase 05 P01 | 29min | 3 tasks | 38 files |
 | Phase 05 P02 | 15min | 3 tasks | 8 files |
 | Phase 05 P03 | 78min | 3 tasks | 41 files |
+| Phase 05 P04 | 15min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -604,6 +605,8 @@ the next milestone yet.
 - [Phase ?]: 05-03: profile-value validation runs BEFORE the create, so a fixable refusal never lands on the far side of the seeding swallow (deviation from the plan's ordering)
 - [Phase ?]: 05-03: the CreateCharacter Go-identifier collision between CoreService and CharacterAccessService is resolved at the gateway client ((*grpcclient.Client).CreateOwnCharacter + a cmd/holomush adapter), never by renaming an RPC or bending internal/web
 - [Phase ?]: 05-03: the WebCreateCharacter census row MOVED from characterNameReachableRPCs to characterReadSurfaceInventory rather than being duplicated (Q6)
+- [Phase ?]: 05-04: per-section save on /characters/[id] — five sections over two RPCs sharing one characters.version cell; the four profile masks partition exactly the twelve shipped allowlist paths
+- [Phase ?]: 05-04: the concurrent-edit Reload performs a full page reload as the authored copy promises, at the known cost of discarding unsaved text in the other four sections
 
 ### Pending Todos
 
@@ -667,12 +670,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-12T22:19:48.788Z
+Last session: 2026-08-12T22:41:53.067Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 05-03-PLAN.md
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
