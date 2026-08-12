@@ -55,11 +55,26 @@ function mountMedia(props: {
 	};
 }
 
-function portraitHtml(name: string, size: number): string {
+/*
+ * Svelte 5 emits an `<!---->` anchor comment around every `{#if}` / `{#each}`
+ * block, so two renderings of the SAME element differ in raw innerHTML purely
+ * by that bookkeeping. Stripping the anchors and collapsing whitespace leaves
+ * the markup itself — every tag, attribute and text node — under exact
+ * comparison, which is the property worth pinning.
+ */
+function markup(target: HTMLElement): string {
+	return target.innerHTML.replace(/<!---->/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function text(target: HTMLElement): string {
+	return (target.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function portraitMarkup(name: string, size: number): string {
 	const target = document.createElement('div');
 	document.body.appendChild(target);
 	const component = mount(CharacterPortrait, { target, props: { name, size } });
-	const html = target.innerHTML;
+	const html = markup(target);
 	unmount(component);
 	target.remove();
 	return html;
@@ -70,7 +85,12 @@ afterEach(() => document.body.replaceChildren());
 describe('ProfileMedia', () => {
 	it('renders no element at all when there is neither a primary image nor a gallery row', () => {
 		const { target, dispose } = mountMedia({ primaryImage: undefined, gallery: [] });
-		expect(target.innerHTML).toBe('');
+		// No wrapper, no heading, no slot, no placeholder — not one element and
+		// not one character of text. A dashed "no images" slot is precisely the
+		// signal the absence contract forbids.
+		expect(target.querySelector('*')).toBeNull();
+		expect(markup(target)).toBe('');
+		expect(text(target)).toBe('');
 		dispose();
 	});
 
@@ -92,7 +112,7 @@ describe('ProfileMedia', () => {
 		const img = target.querySelector('img');
 		expect(img?.getAttribute('alt')).toBe('');
 		// Nothing anywhere in the markup stands in for the missing description.
-		expect(target.textContent ?? '').toBe('');
+		expect(text(target)).toBe('');
 		dispose();
 	});
 
@@ -128,10 +148,10 @@ describe('ProfileMedia', () => {
 		flushSync();
 
 		expect(target.querySelector('img')).toBeNull();
-		// Byte-identical to what a bare CharacterPortrait mount produces: a broken
+		// Identical to what a bare CharacterPortrait mount produces: a broken
 		// handle degrades to exactly the no-media rendering, not to a broken-image
 		// glyph and not to a second, subtly different placeholder.
-		expect(target.innerHTML).toBe(portraitHtml('bazian', 80));
+		expect(markup(target)).toBe(portraitMarkup('bazian', 80));
 		dispose();
 	});
 
