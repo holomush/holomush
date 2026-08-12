@@ -142,11 +142,11 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 
 ### Public profiles & per-field privacy (PROFILE)
 
-- [ ] **PROFILE-01**: A character has a **public profile page at a stable URL** that renders correctly
+- [x] **PROFILE-01**: A character has a **public profile page at a stable URL** that renders correctly
       for a logged-out visitor, with blank fields hiding themselves and an initial-letter avatar
       placeholder.
 
-- [ ] **PROFILE-02**: **Profile and sheet are separate surfaces.** The split ships; the sheet ships
+- [x] **PROFILE-02**: **Profile and sheet are separate surfaces.** The split ships; the sheet ships
       **empty** (mechanical stats require a system that does not exist).
 
 - [x] **PROFILE-03**: Each profile field carries **server-enforced visibility** of `public` or `private`,
@@ -156,19 +156,19 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       returns a not-found-equivalent, never "this profile is private" (which leaks existence).
 
 - [x] **PROFILE-05**: **Name and pronouns cannot be set private** — they are the minimum public identity.
-- [ ] **PROFILE-06**: The profile carries a **rumors / RP-hooks** field.
-- [ ] **PROFILE-07**: The profile carries a short, volatile **"Currently"** status line.
-- [ ] **PROFILE-08**: The profile carries an **OOC RP-preferences block** (style, availability, content
+- [x] **PROFILE-06**: The profile carries a **rumors / RP-hooks** field.
+- [x] **PROFILE-07**: The profile carries a short, volatile **"Currently"** status line.
+- [x] **PROFILE-08**: The profile carries an **OOC RP-preferences block** (style, availability, content
       limits, walk-up-friendly).
 
-- [ ] **PROFILE-09**: The profile carries a **time zone** field, supporting the availability half of
+- [x] **PROFILE-09**: The profile carries a **time zone** field, supporting the availability half of
       OOC preferences.
 
 - [x] **PROFILE-10**: The public profile page is built **exclusively** from the viewer-filtered property
       slice; the facade MUST NOT call `PropertyReader.ListByParent` / `PropertyRepository.ListByParent`
       directly (unfiltered by construction).
 
-- [ ] **PROFILE-10a**: The public profile **also renders the character's in-world description** (the
+- [x] **PROFILE-10a**: The public profile **also renders the character's in-world description** (the
       "look at" text, `characters.description`) alongside the `profile.*` property fields — so a web
       visitor sees what someone standing in the same location would see. Because this is an intrinsic
       column with no per-row `visibility`, its visibility handling is a **SPEC decision** (PORTAL-05):
@@ -246,7 +246,7 @@ cannot be dropped as "nice to have" during planning.
 - [x] **EXT-07**: `seed:admin-section-access` covers all seven sections **and every future section at
       zero additional policy cost**.
 
-- [ ] **EXT-08**: Deferred surfaces get a **named empty slot, not a dead affordance** — specifically, no
+- [x] **EXT-08**: Deferred surfaces get a **named empty slot, not a dead affordance** — specifically, no
       "message this character" button on the profile until web DMs (`qve.17`) exist.
 
 ### Authorization model (AUTHZ)

@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 05
 current_phase_name: character-identity-ui-public-profiles
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-08-12T20:40:47.605Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-08-12T21:04:44.725Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 50
+  completed_plans: 51
   percent: 78
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 05 (character-identity-ui-public-profiles) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([█████████░] 88%)
+Progress: [█████████████████░░░] 34/40 plans ([█████████░] 89%)
 Last activity: 2026-08-12 — Phase 05 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -267,6 +267,7 @@ no action needed.
 | Phase 04 P07 | 39min | 3 tasks | 38 files |
 | Phase 04 P08 | 37min | 3 tasks | 3 files |
 | Phase 05 P01 | 29min | 3 tasks | 38 files |
+| Phase 05 P02 | 15min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -595,6 +596,9 @@ the next milestone yet.
 - [Phase ?]: 05-01: a retired character is refused codes.FailedPrecondition with its own literal, not the uniform ownership message — ownership is already proven at that point, so a lookup-shaped refusal misreports a working rule and buys no opacity (Q4); the predicate is world.Selectable (INV-WORLD-5), never a != retired test.
 - [Phase ?]: 05-01: the plan's Q2-corollary grounding was wrong — default_character_id was NOT on WebCheckSessionResponse (web.proto:567 is WebAuthenticatePlayerResponse). Added as field 5 to CheckPlayerSessionResponse + WebCheckSessionResponse, populated from the player row CheckPlayerSession already loads; moves no census row and preserves the no-extra-round-trip property.
 - [Phase ?]: 05-01: ListMyCharacters' projection loop extracted into the shared unexported ownerRoster helper, so D-90's 'OwnCharacter is never a struct literal' holds by construction rather than by two loops agreeing.
+- [Phase ?]: The public profile shares NO presentational component with the owner authoring surface; CharacterPortrait is the one deliberate exception because UI-SPEC unifies the portrait treatment
+- [Phase ?]: /c/[id] adds no +page.ts — adapter-static's fallback:'index.html' plus the root layout's ssr=false make route-level indistinguishability structural
+- [Phase ?]: PublicProfile reads each profile key by name by hand; a list of expected names iterated in a loop is the client-side allowlist §8.9 forbids
 
 ### Pending Todos
 
@@ -658,12 +662,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-12T20:40:47.589Z
+Last session: 2026-08-12T21:04:38.287Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 05-01-PLAN.md
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
