@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 11
+open_count: 12
 waived_count: 0
 fixed_count: 7
-total_count: 18
-last_updated: 2026-08-12T22:42:17.508Z
+total_count: 19
+last_updated: 2026-08-12T23:25:41.592Z
 ---
 
 # Broken Windows Ledger
@@ -33,6 +33,7 @@ last_updated: 2026-08-12T22:42:17.508Z
 | 16 | 04 | deviation | internal/web/character_handlers.go |  | WebListCharacterDirectory has no internal/web proxy test: the package carries no CharacterAccessClient double at all, so all six character proxies are untested at the gateway tier | open |  | 2026-08-11T17:49:32.363Z |  |
 | 17 | 05 | deviation | web/e2e/helpers/fixtures.ts | 102 | Eight Playwright specs drive the create form 05-03 deleted from the roster; /characters/new lands in plan 05-06 | open |  | 2026-08-12T22:20:01.865Z |  |
 | 18 | 05 | deviation | web/src/lib/components/characters/ProfileSection.svelte |  | Concurrent-edit Reload does a full location.reload(), discarding unsaved text in the other four sections; matches the authored copy but sits in tension with D-93's one-section cost | open |  | 2026-08-12T22:42:17.508Z |  |
+| 19 | 05 | unrun-verify | web/src/routes/(authed)/characters/new/+page.svelte |  | 05-06 Task 3 human-check unrun: live create with a full-width name, confirming the echo shows the SERVER-folded form and a rejection preserves all six fields. Only fully answerable after 05-07 renders the roster confirmation. | open |  | 2026-08-12T23:25:41.592Z |  |
 
 ````json
 [
@@ -250,6 +251,18 @@ last_updated: 2026-08-12T22:42:17.508Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-12T22:42:17.508Z",
+    "resolved_at": null
+  },
+  {
+    "id": 19,
+    "kind": "unrun-verify",
+    "phase": "05",
+    "file": "web/src/routes/(authed)/characters/new/+page.svelte",
+    "line": null,
+    "description": "05-06 Task 3 human-check unrun: live create with a full-width name, confirming the echo shows the SERVER-folded form and a rejection preserves all six fields. Only fully answerable after 05-07 renders the roster confirmation.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-12T23:25:41.592Z",
     "resolved_at": null
   }
 ]
