@@ -533,14 +533,30 @@ Plans:
 **UI hint**: yes
 
 Plans:
+**Wave 1**
 
 - [ ] 05-01-PLAN.md — TRACER: `SetDefaultCharacter` end to end (proto → census → repo → facade → proxy → roster control)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 05-02-PLAN.md — The public profile route `/c/[id]` and the absence contract
 - [ ] 05-03-PLAN.md — `CreateCharacter` reshape: proto, census, constructor, facade handler, repointed proxy
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 05-04-PLAN.md — The owner authoring surface `/characters/[id]`, per-section save, PROFILE-12 notice
 - [ ] 05-05-PLAN.md — Criteria 4 and 5 integration specs, the INV-ACCESS-10 binding decision, the owed amendments
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 05-06-PLAN.md — The creation route `/characters/new` and the authoritative create flow
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 05-07-PLAN.md — The sectioned roster `/characters` with its badge matrix and default control
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 05-08-PLAN.md — E2E: the logged-out profile visit, the structured create, the roster journey
 
 ### Phase 6: Admin Portal Shell & Character Administration

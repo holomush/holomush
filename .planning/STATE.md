@@ -4,15 +4,15 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 5
 current_phase_name: Character Identity UI & Public Profiles
-status: planning
-stopped_at: Phase 5 context gathered
-last_updated: "2026-08-12T00:49:41.719Z"
+status: executing
+stopped_at: Phase 5 UI-SPEC approved
+last_updated: "2026-08-12T17:38:23.531Z"
 last_activity: 2026-08-11
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 49
+  total_plans: 57
   completed_plans: 49
   percent: 78
 ---
@@ -36,7 +36,7 @@ without rework.
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 5 — Character Identity UI & Public Profiles
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
 Last activity: 2026-08-11 — Phase 4 complete, transitioned to Phase 5
 
@@ -653,13 +653,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-12T00:49:41.703Z
+Last session: 2026-08-12T11:47:42.879Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-character-identity-ui-public-profiles/05-CONTEXT.md
+Stopped at: Phase 5 UI-SPEC approved
+Resume file: .planning/phases/05-character-identity-ui-public-profiles/05-UI-SPEC.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
