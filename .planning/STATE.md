@@ -5,8 +5,8 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 5
 current_phase_name: Character Identity UI & Public Profiles
 status: planning
-stopped_at: Completed 04-08-PLAN.md
-last_updated: "2026-08-12T00:07:22.575Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-08-12T00:49:41.719Z"
 last_activity: 2026-08-11
 last_activity_desc: Phase 04 execution started
 progress:
@@ -588,6 +588,8 @@ the next milestone yet.
 - [Phase ?]: 04-08: criterion 1 needed a fail-closed audience PARTITION, not three set comparisons. Membership is derived from what a body references, so an ungated handler joins no derived set and no expected set and passes silently; the partition plus a DERIVED public-audience counterpart closes both that case and its one-line 'fix'
 - [Phase ?]: 04-08: WorldQueryService.QueryCharacter is a name-reachable census member, not type-reachable — its response declares id/player_id/name/description inline as bare scalars, so no typed message exists for a descriptor predicate to find. The descriptor census found this on its first run
 - [Phase ?]: 04-08: 01-SPEC 2.6's substring example does not hold literally (ListCharacters is not a substring of ListAllCharacters), but the trap is live one level down — no fully-qualified name collapses, while 17 pairs of METHOD names do. That is why the key is the fully-qualified name and why a Go handler identifier is forbidden as one
+- [Phase ?]: Phase 5 criterion 4 AMENDMENT OWED (D-97): 'next load' overclaims. internal/access/policy/cache.go holds a compiled snapshot refreshed by a poller on a 10s default interval (poller.go:35), so a viewer-tier config change is visible on the next load AFTER the cache reloads, not the next load. Substance (read-time evaluation, never stamped onto a row, no backfill) is intact. Reword to 'next load after the policy cache reloads (poller interval, default 10s)'. No gsd-tools verb rewrites a phase's success criteria (phase verbs: uat-passed/next-decimal/add/add-batch/insert/remove/complete/list-plans; roadmap verbs: analyze/get-phase/update-plan-progress/annotate-dependencies/validate/upgrade), so this is recorded here rather than hand-edited per rule a32nfcekfc.
+- [Phase ?]: Phase 5 PROFILE-12 AMENDMENT OWED (D-91): criterion 4's 'both the retirement flow and the surface where a player authors profile fields' cannot hold — there is NO player-facing retirement flow in v0.13. IDENT-04 records player self-retire as 'deferred beyond v0.13'; the only retire path is AdminRetireCharacter in Phase 6. Strike 'both the retirement flow and' from Phase 5 criterion 4; the retirement half of PROFILE-12 moves to Phase 6 alongside AdminRetireCharacter. REQUIREMENTS' PROFILE-12 row needs the same note. Recorded not hand-edited per rule a32nfcekfc.
 
 ### Pending Todos
 
@@ -651,13 +653,13 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-11T18:30:11.346Z
+Last session: 2026-08-12T00:49:41.703Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 04-08-PLAN.md
-Resume file: None
+Stopped at: Phase 5 context gathered
+Resume file: .planning/phases/05-character-identity-ui-public-profiles/05-CONTEXT.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
