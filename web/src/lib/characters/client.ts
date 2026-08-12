@@ -121,3 +121,43 @@ export async function setDefaultCharacter(characterId: string) {
 	const res = await client.webSetDefaultCharacter({ characterId });
 	return res.characters;
 }
+
+/**
+ * Seats a new character from the structured identity card and returns it in the
+ * owner audience's shape.
+ *
+ * THE RETURNED `name` IS THE SERVER-STORED DISPLAY FORM, not the string that
+ * was submitted. Normalization — NFKC, format-rune strip, whitespace collapse —
+ * runs server-side and is the only place it runs (D-88 forbids a client-side
+ * mirror, a live availability check and a debounced name lookup), so the two can
+ * legitimately differ. Echoing the submission back to the player instead would
+ * show them a name the grid does not use; the post-submit echo reads this field.
+ *
+ * A field left undefined is sent as the empty string and is not written at all,
+ * so a name-only create seeds no profile rows.
+ *
+ * IT DOES NOT CATCH. A ConnectError propagating to the caller is what the
+ * creation form classifies into UI-SPEC's error table — AlreadyExists is a
+ * taken name, InvalidArgument is one the admission gate declined,
+ * FailedPrecondition is a reached character limit, Unavailable is the
+ * confusability corpus declining to adjudicate. Swallowing it here would
+ * collapse four distinct player-facing outcomes into one.
+ */
+export async function createCharacter(fields: {
+	name: string;
+	pronouns?: string;
+	concept?: string;
+	species?: string;
+	age?: string;
+	faction?: string;
+}) {
+	const res = await client.webCreateCharacter({
+		name: fields.name,
+		pronouns: fields.pronouns ?? '',
+		concept: fields.concept ?? '',
+		species: fields.species ?? '',
+		age: fields.age ?? '',
+		faction: fields.faction ?? '',
+	});
+	return res.character;
+}

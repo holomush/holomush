@@ -34,6 +34,12 @@ vi.mock('@connectrpc/connect', () => ({
 			calls.webSetDefaultCharacter = req;
 			return Promise.resolve({ characters: [{ id: 'char-02' }, { id: 'char-01' }] });
 		},
+		webCreateCharacter: (req: unknown) => {
+			calls.webCreateCharacter = req;
+			return Promise.resolve({
+				character: { id: 'char-new', name: 'Ada Lovelace', version: 1 },
+			});
+		},
 	}),
 }));
 
@@ -46,6 +52,7 @@ import {
 	updateCharacterProfile,
 	updateCharacterDescription,
 	setDefaultCharacter,
+	createCharacter,
 } from './client';
 
 describe('the character flow layer', () => {
@@ -118,6 +125,32 @@ describe('the character flow layer', () => {
 		expect(roster).toEqual([{ id: 'char-02' }, { id: 'char-01' }]);
 	});
 
+	it('sends createCharacter exactly the six field names the generated request declares', async () => {
+		const character = await createCharacter({
+			name: '  ada   lovelace ',
+			pronouns: 'they/them',
+			concept: 'a wandering archivist',
+		});
+		expect(calls.webCreateCharacter).toEqual({
+			name: '  ada   lovelace ',
+			pronouns: 'they/them',
+			concept: 'a wandering archivist',
+			species: '',
+			age: '',
+			faction: '',
+		});
+		expect(character).toEqual({ id: 'char-new', name: 'Ada Lovelace', version: 1 });
+	});
+
+	it('returns the SERVER-stored display name from createCharacter, not the submitted string', async () => {
+		const character = await createCharacter({ name: '  ada   lovelace ' });
+		// The double answers with the normalized form, which is what the facade
+		// stores. A wrapper echoing its own argument back would return the
+		// submitted string here and this assertion is what catches that.
+		expect(character?.name).toBe('Ada Lovelace');
+		expect(character?.name).not.toBe('  ada   lovelace ');
+	});
+
 	it('never sends a session token, because the gateway lifts it from the header', async () => {
 		await getCharacterProfile('char-01');
 		await listMyCharacters();
@@ -128,6 +161,7 @@ describe('the character flow layer', () => {
 			expectedVersion: 5,
 			description: '',
 		});
+		await createCharacter({ name: 'Ada' });
 
 		for (const [method, req] of Object.entries(calls)) {
 			const keys = Object.keys(req as Record<string, unknown>);
