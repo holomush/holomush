@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 9
+open_count: 10
 waived_count: 0
 fixed_count: 7
-total_count: 16
-last_updated: 2026-08-11T17:49:32.363Z
+total_count: 17
+last_updated: 2026-08-12T22:20:01.865Z
 ---
 
 # Broken Windows Ledger
@@ -31,6 +31,7 @@ last_updated: 2026-08-11T17:49:32.363Z
 | 14 | 03 | deviation | internal/access/policy/seed_profile_visibility_test.go |  | D-29 character-resource guard extended with an argued exemption to admit seed:job-retirement-instance-scoped's read action; abac-reviewer must confirm before push | open |  | 2026-08-09T21:53:11.900Z |  |
 | 15 | 04 | deviation | .planning/REQUIREMENTS.md |  | PROFILE-04/PROFILE-05 remain Pending after 04-01: the plan claims them but pronouns arrive with the property slice in 04-02/04-04 | open |  | 2026-08-11T14:38:07.345Z |  |
 | 16 | 04 | deviation | internal/web/character_handlers.go |  | WebListCharacterDirectory has no internal/web proxy test: the package carries no CharacterAccessClient double at all, so all six character proxies are untested at the gateway tier | open |  | 2026-08-11T17:49:32.363Z |  |
+| 17 | 05 | deviation | web/e2e/helpers/fixtures.ts | 102 | Eight Playwright specs drive the create form 05-03 deleted from the roster; /characters/new lands in plan 05-06 | open |  | 2026-08-12T22:20:01.865Z |  |
 
 ````json
 [
@@ -224,6 +225,18 @@ last_updated: 2026-08-11T17:49:32.363Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-11T17:49:32.363Z",
+    "resolved_at": null
+  },
+  {
+    "id": 17,
+    "kind": "deviation",
+    "phase": "05",
+    "file": "web/e2e/helpers/fixtures.ts",
+    "line": 102,
+    "description": "Eight Playwright specs drive the create form 05-03 deleted from the roster; /characters/new lands in plan 05-06",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-12T22:20:01.865Z",
     "resolved_at": null
   }
 ]

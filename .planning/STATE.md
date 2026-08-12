@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 05
 current_phase_name: character-identity-ui-public-profiles
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-08-12T21:04:44.725Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-08-12T22:19:56.781Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 51
+  completed_plans: 52
   percent: 78
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 05 (character-identity-ui-public-profiles) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([█████████░] 89%)
+Progress: [█████████████████░░░] 34/40 plans ([█████████░] 91%)
 Last activity: 2026-08-12 — Phase 05 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -268,6 +268,7 @@ no action needed.
 | Phase 04 P08 | 37min | 3 tasks | 3 files |
 | Phase 05 P01 | 29min | 3 tasks | 38 files |
 | Phase 05 P02 | 15min | 3 tasks | 8 files |
+| Phase 05 P03 | 78min | 3 tasks | 41 files |
 
 ## Accumulated Context
 
@@ -599,6 +600,10 @@ the next milestone yet.
 - [Phase ?]: The public profile shares NO presentational component with the owner authoring surface; CharacterPortrait is the one deliberate exception because UI-SPEC unifies the portrait treatment
 - [Phase ?]: /c/[id] adds no +page.ts — adapter-static's fallback:'index.html' plus the root layout's ssr=false make route-level indistinguishability structural
 - [Phase ?]: PublicProfile reads each profile key by name by hand; a list of expected names iterated in a loop is the client-side allowlist §8.9 forbids
+- [Phase ?]: 05-03 Q1 ratified option-a: CreateCharacter runs in TWO transactions, the create authoritative; a failed profile-seeding write is logged and swallowed and the RPC still returns success with the un-set keys absent
+- [Phase ?]: 05-03: profile-value validation runs BEFORE the create, so a fixable refusal never lands on the far side of the seeding swallow (deviation from the plan's ordering)
+- [Phase ?]: 05-03: the CreateCharacter Go-identifier collision between CoreService and CharacterAccessService is resolved at the gateway client ((*grpcclient.Client).CreateOwnCharacter + a cmd/holomush adapter), never by renaming an RPC or bending internal/web
+- [Phase ?]: 05-03: the WebCreateCharacter census row MOVED from characterNameReachableRPCs to characterReadSurfaceInventory rather than being duplicated (Q6)
 
 ### Pending Todos
 
@@ -662,12 +667,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-12T21:04:38.287Z
+Last session: 2026-08-12T22:19:48.788Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 05-02-PLAN.md
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z

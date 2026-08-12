@@ -93,7 +93,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 
 ### Character identity — creation & management (IDENT)
 
-- [ ] **IDENT-01**: A player can create a character through a **structured identity card** (name,
+- [x] **IDENT-01**: A player can create a character through a **structured identity card** (name,
       pronouns as its own field, concept, species, age, faction), replacing the current name-only stub.
 
 - [x] **IDENT-02**: A player can edit their character's prose fields — appearance, personality,
