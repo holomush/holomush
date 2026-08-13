@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
@@ -304,18 +305,34 @@ func TestCreateCharacterDeniesAGuestAndAdmitsTheSameFixturesNonGuest(t *testing.
 // §6.1.1 pre-check and the 23505 handler over characters_normalized_name_key are
 // two paths to one contract; a differential between them would report which one
 // won a race.
+//
+// THE TWO FIXTURES ARE DELIBERATELY DIFFERENT SHAPES, which is the only way this
+// test can fail for the property it names. The producers are byte-identical in
+// today's tree (both build with Errorf), so transcribing both verbatim drives one
+// expression twice and asserts nothing about two paths. The second fixture is
+// therefore the shape the 23505 arm could plausibly drift to — carrying the
+// driver error it was built from — because that is the edit a reviewer would
+// wave through and #4902 is the reason it is not obviously safe: oops resolves
+// the DEEPEST code in the chain, so what the wrapped error carries decides where
+// the switch lands. A *pgconn.PgError is not an oops error, so the chain walk
+// finds no deeper code and CHARACTER_NAME_TAKEN survives — and this row is what
+// keeps that true. (An inner error that IS oops-coded shadows instead; that
+// case is pinned separately in the classification table below.)
 func TestCreateCharacterRendersBothNameTakenProducersIdentically(t *testing.T) {
 	t.Parallel()
 
-	// Both error shapes are transcribed from internal/auth/character_service.go:
-	// the pre-check at :153 and the unique-violation handler at :222.
+	// The first shape is transcribed from internal/auth/character_service.go's
+	// pre-check at :153. The second wraps the driver error that
+	// isNormalizedNameUniqueViolation matches at :247 — the constraint name is
+	// spelled out because auth.characterNormalizedNameConstraint (:235) is
+	// unexported and this package cannot name it.
 	producers := map[string]error{
 		"the §6.1.1 uniqueness pre-check": oops.Code("CHARACTER_NAME_TAKEN").
 			With("name", "Ada Lovelace").
 			Errorf("character name %q is already taken", "Ada Lovelace"),
 		"the 23505 handler on characters_normalized_name_key": oops.Code("CHARACTER_NAME_TAKEN").
 			With("name", "Ada Lovelace").
-			Errorf("character name %q is already taken", "Ada Lovelace"),
+			Wrap(&pgconn.PgError{Code: "23505", ConstraintName: "characters_normalized_name_key"}),
 	}
 
 	for name, produced := range producers {
