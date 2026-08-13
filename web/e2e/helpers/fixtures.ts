@@ -128,11 +128,29 @@ export async function createCharacter(page: Page, charName: string): Promise<voi
 
 /**
  * Select an existing character from the roster and wait for a live terminal.
- * The whole playable card is the click target (008-B), so the card — not the
- * name span — is what is clicked.
+ *
+ * IT CLICKS THE NAME, NOT THE CARD ELEMENT. 008-B's property is that the whole
+ * card surface selects, and clicking the name is a genuine witness of it: the
+ * name span carries no handler of its own, so reaching /terminal proves the
+ * click bubbled to the card.
+ *
+ * Clicking the CARD locator instead resolves to the centre of its bounding box,
+ * which is not a stable point — Playwright dispatches at that coordinate, and
+ * whichever descendant sits under it receives the event. The card's controls
+ * (`Make default`, `Edit profile →`) each stopPropagation deliberately, so once
+ * the control row grew tall enough to reach the midline the centre click landed
+ * on a control and selected nothing. The card's geometry is not the contract;
+ * "a click on a non-control part of the card selects" is, and the name is the
+ * stable spelling of that.
+ *
+ * The card-element click path is covered where it is not geometry-dependent:
+ * RosterCard.svelte.test.ts dispatches on the card node directly.
  */
 export async function enterGameAs(page: Page, charName: string): Promise<void> {
-  await page.locator('[data-testid="roster-card"]', { hasText: charName }).click();
+  await page
+    .locator('[data-testid="roster-card"]', { hasText: charName })
+    .getByTestId('char-name')
+    .click();
   await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
   await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
   // Wait for the stream to be fully open (STREAM_OPENED → connectionId set →
