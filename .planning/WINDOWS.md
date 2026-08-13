@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 13
+open_count: 14
 waived_count: 0
-fixed_count: 7
-total_count: 20
-last_updated: 2026-08-12T23:40:42.116Z
+fixed_count: 8
+total_count: 22
+last_updated: 2026-08-13T00:02:39.627Z
 ---
 
 # Broken Windows Ledger
@@ -31,10 +31,12 @@ last_updated: 2026-08-12T23:40:42.116Z
 | 14 | 03 | deviation | internal/access/policy/seed_profile_visibility_test.go |  | D-29 character-resource guard extended with an argued exemption to admit seed:job-retirement-instance-scoped's read action; abac-reviewer must confirm before push | open |  | 2026-08-09T21:53:11.900Z |  |
 | 15 | 04 | deviation | .planning/REQUIREMENTS.md |  | PROFILE-04/PROFILE-05 remain Pending after 04-01: the plan claims them but pronouns arrive with the property slice in 04-02/04-04 | open |  | 2026-08-11T14:38:07.345Z |  |
 | 16 | 04 | deviation | internal/web/character_handlers.go |  | WebListCharacterDirectory has no internal/web proxy test: the package carries no CharacterAccessClient double at all, so all six character proxies are untested at the gateway tier | open |  | 2026-08-11T17:49:32.363Z |  |
-| 17 | 05 | deviation | web/e2e/helpers/fixtures.ts | 102 | Eight Playwright specs drive the create form 05-03 deleted from the roster; /characters/new lands in plan 05-06 | open |  | 2026-08-12T22:20:01.865Z |  |
+| 17 | 05 | deviation | web/e2e/helpers/fixtures.ts | 102 | Eight Playwright specs drive the create form 05-03 deleted from the roster; /characters/new lands in plan 05-06 | fixed |  | 2026-08-12T22:20:01.865Z | 2026-08-13T00:02:21.660Z |
 | 18 | 05 | deviation | web/src/lib/components/characters/ProfileSection.svelte |  | Concurrent-edit Reload does a full location.reload(), discarding unsaved text in the other four sections; matches the authored copy but sits in tension with D-93's one-section cost | open |  | 2026-08-12T22:42:17.508Z |  |
 | 19 | 05 | unrun-verify | web/src/routes/(authed)/characters/new/+page.svelte |  | 05-06 Task 3 human-check unrun: live create with a full-width name, confirming the echo shows the SERVER-folded form and a rejection preserves all six fields. Only fully answerable after 05-07 renders the roster confirmation. | open |  | 2026-08-12T23:25:41.592Z |  |
 | 20 | 05 | unrun-verify | web/src/routes/(authed)/characters/+page.svelte |  | 05-07 Task 3 human-check unrun: the sectioned roster, the collapse chip, the retired suppression and both echo sites need a live grid | open |  | 2026-08-12T23:40:42.116Z |  |
+| 21 | 05 | deviation | web/e2e/public-profile.spec.ts |  | 05-08 could not build the plan's [unreachable character] not-found parity case: seed:profile-reachable and seed:viewer-character-description-read (internal/access/policy/seed.go:710,951) both clear anonymous\|guest\|player, so v0.13 seeds no below-floor character. Shipped [nonexistent ULID] vs [malformed id] instead. The unreachable-vs-nonexistent parity has no E2E coverage until a game raises a floor. | open |  | 2026-08-13T00:02:39.552Z |  |
+| 22 | 05 | deviation | internal/store/character_repo.go |  | charRepo.ListByPlayer still has no ORDER BY, so roster ordering is not provably deterministic; 05-08 deliberately asserts no ordering rather than pinning an implementation accident. Fix is one ORDER BY server-side. | open |  | 2026-08-13T00:02:39.627Z |  |
 
 ````json
 [
@@ -237,10 +239,10 @@ last_updated: 2026-08-12T23:40:42.116Z
     "file": "web/e2e/helpers/fixtures.ts",
     "line": 102,
     "description": "Eight Playwright specs drive the create form 05-03 deleted from the roster; /characters/new lands in plan 05-06",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-12T22:20:01.865Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-13T00:02:21.660Z"
   },
   {
     "id": 18,
@@ -276,6 +278,30 @@ last_updated: 2026-08-12T23:40:42.116Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-12T23:40:42.116Z",
+    "resolved_at": null
+  },
+  {
+    "id": 21,
+    "kind": "deviation",
+    "phase": "05",
+    "file": "web/e2e/public-profile.spec.ts",
+    "line": null,
+    "description": "05-08 could not build the plan's [unreachable character] not-found parity case: seed:profile-reachable and seed:viewer-character-description-read (internal/access/policy/seed.go:710,951) both clear anonymous|guest|player, so v0.13 seeds no below-floor character. Shipped [nonexistent ULID] vs [malformed id] instead. The unreachable-vs-nonexistent parity has no E2E coverage until a game raises a floor.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-13T00:02:39.552Z",
+    "resolved_at": null
+  },
+  {
+    "id": 22,
+    "kind": "deviation",
+    "phase": "05",
+    "file": "internal/store/character_repo.go",
+    "line": null,
+    "description": "charRepo.ListByPlayer still has no ORDER BY, so roster ordering is not provably deterministic; 05-08 deliberately asserts no ordering rather than pinning an implementation accident. Fix is one ORDER BY server-side.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-13T00:02:39.627Z",
     "resolved_at": null
   }
 ]

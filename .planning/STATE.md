@@ -4,16 +4,16 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 05
 current_phase_name: character-identity-ui-public-profiles
-status: executing
-stopped_at: Completed 05-07-PLAN.md
-last_updated: "2026-08-12T23:40:37.251Z"
+status: verifying
+stopped_at: Completed 05-08-PLAN.md — phase 05 complete
+last_updated: "2026-08-13T00:02:21.588Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 57
-  completed_plans: 55
+  completed_plans: 56
   percent: 78
 ---
 
@@ -36,8 +36,8 @@ without rework.
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 05 (character-identity-ui-public-profiles) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 96%)
+Status: Phase complete — ready for verification
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 98%)
 Last activity: 2026-08-12 — Phase 05 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -273,6 +273,7 @@ no action needed.
 | Phase 05 P05 | 55m | 3 tasks | 6 files |
 | Phase 05 P06 | 17min | 3 tasks | 6 files |
 | Phase 05 P07 | 11min | 3 tasks | 5 files |
+| Phase 05 P08 | 58min | 4 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -618,6 +619,9 @@ the next milestone yet.
 - [Phase ?]: 05-07: the session-badge suppression lives in the RosterCard template, not in the route's join — a template rule holds for every caller, a join rule holds only while the join remembers
 - [Phase ?]: 05-07: the session badge renders two authored words (Active | Offline) rather than forwarding CharacterSummary.sessionStatus, so no wire token can reach a player-facing badge
 - [Phase ?]: 05-07: the roster h1 changed from 'Choose Your Character' to 'Your characters' — the page now creates, defaults and lists retired characters, so 'choose' names a fraction of it; character-switcher.spec.ts:65 must absorb it (05-08)
+- [Phase ?]: Plan 05-08 repointed the eight broken Playwright specs by extracting registerPlayer/createCharacter/enterGameAs into web/e2e/helpers/fixtures.ts — six private copies of the creation journey is what turned one deletion into an eight-file breakage
+- [Phase ?]: The plan's not-found parity pair [nonexistent ULID] vs [unreachable character] is unconstructible: seed:profile-reachable and seed:viewer-character-description-read both clear anonymous, so v0.13 has no below-floor character. Shipped [nonexistent ULID] vs [malformed id] instead, plus a positive control proving a populated profile differs
+- [Phase ?]: characters-roster.spec.ts asserts no roster ordering: charRepo.ListByPlayer has no ORDER BY, so a stable-order spec would pin an implementation accident
 
 ### Pending Todos
 
@@ -681,12 +685,12 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-12T23:40:30.836Z
+Last session: 2026-08-13T00:02:21.572Z
 Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
 `human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
 `threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
 Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 05-07-PLAN.md
+Stopped at: Completed 05-08-PLAN.md — phase 05 complete
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z

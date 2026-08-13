@@ -33,9 +33,24 @@ flakiness with an open GitHub issue and no reproducible cause. The cause here is
 known and deterministic, so quarantining it would hide a real, expected breakage
 behind a mechanism that exists for a different problem.
 
-**Closed by:** plan 05-06 (ships `/characters/new`) — the roster fixture and the
-seven specs downstream of it are repointed at that page there. `E2E Test` is a
-required check protecting `main`, so this MUST be closed before the phase ships;
-`task pr-prep` (fast lane) and `task test` are unaffected and green today.
+**Closed by:** plan **05-08**. 05-06 shipped the replacement surface
+(`/characters/new`) and 05-07 the sectioned roster; 05-08 repointed the specs at
+them, because rewriting them against a page that did not yet exist would have
+produced eight tests failing for a different reason.
 
-**Status:** open.
+**How it closed.** `registerAndEnterTerminal` was split into `registerPlayer`,
+`createCharacter` and `enterGameAs` in `web/e2e/helpers/fixtures.ts`, and the
+five spec-local copies of the creation journey now call those. Three behavioural
+changes were absorbed: creation lands on `/characters` rather than `/terminal`
+(so every caller gained an explicit `enterGameAs` step), the auto-enter checkbox
+is gone, and the roster `h1` is `Your characters`. `input[name="characterName"]`
+was deliberately preserved by 05-06, so no field selector changed. The
+name-collision assertion in `negative-journeys.spec.ts` moved from the server's
+`already taken` string to the authored `That name is taken. Try another.`, with a
+negative check that the server's own wording is absent — `/characters/new`
+classifies `AlreadyExists` by code and never renders the server's sentence.
+
+**Verified:** `task test:e2e` (whole suite, unscoped) exits **0** — 115 passed,
+0 failed, 1 skipped, 116 total. Nothing was quarantined.
+
+**Status:** closed.
