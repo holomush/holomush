@@ -83,7 +83,7 @@ home, with both designed to absorb the deferred portal surfaces without rework.
 - [ ] **Phase 2: ABAC & Schema Vocabulary** — admin-section + public-profile policy, name normalization + unique index, character lifecycle column
 - [x] **Phase 3: World Character Commands** — domain-layer soft `RetireCharacter`/`UnretireCharacter` + the retirement reactor, version-guarded and outbox-emitting (`RenameCharacter` moved to 999.20, 2026-08-06) (completed 2026-08-10)
 - [x] **Phase 4: Shared Facade Helpers & `CharacterAccessService`** — one guest/ownership gate; character read/write BFF with privacy enforced by absence (completed 2026-08-11)
-- [ ] **Phase 5: Character Identity UI & Public Profiles** — creation identity card, multi-alt management, public profile page, per-field visibility
+- [x] **Phase 5: Character Identity UI & Public Profiles** — creation identity card, multi-alt management, public profile page, per-field visibility (completed 2026-08-13)
 - [ ] **Phase 6: Admin Portal Shell & Character Administration** — ABAC-gated `/admin`, character administration, six deferred sections registered and denied-after-gate
 
 ## Phase Details
@@ -557,7 +557,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 05-08-PLAN.md — E2E: the logged-out profile visit, the structured create, the roster journey
+- [x] 05-08-PLAN.md — E2E: the logged-out profile visit, the structured create, the roster journey
 
 ### Phase 6: Admin Portal Shell & Character Administration
 
@@ -604,7 +604,7 @@ Plans:
 | 2. ABAC & Schema Vocabulary | v0.13 | 0/TBD | Not started | - |
 | 3. World Character Commands | v0.13 | 0/TBD | Not started | - |
 | 4. Shared Facade Helpers & CharacterAccessService | v0.13 | 9/9 | Complete    | 2026-08-11 |
-| 5. Character Identity UI & Public Profiles | v0.13 | 0/TBD | Not started | - |
+| 5. Character Identity UI & Public Profiles | v0.13 | 8/8 | Complete    | 2026-08-13 |
 | 6. Admin Portal Shell & Character Administration | v0.13 | 0/TBD | Not started | - |
 
 [^p9]: All 21 plans executed, but plan 09-21 produced no SUMMARY (it performed the phase's only
