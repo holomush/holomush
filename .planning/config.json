@@ -79,7 +79,8 @@
   },
   "review": {
     "models": {
-      "claude": "claude-fable-5"
+      "claude": "claude-fable-5",
+      "opencode": "openrouter/moonshotai/kimi-k3"
     }
   }
 }
