@@ -280,8 +280,8 @@ func characterFacadeEmbeddedFields() map[string]struct{} {
 }
 
 // characterWebProxyRPCs is the checked-in expected set for the WEB half: the
-// owner-audience proxies, keyed by proxy name. Five members, one per owner-audience
-// facade RPC (04-04, 04-06, 05-01).
+// owner-audience proxies, keyed by proxy name. Six members, one per owner-audience
+// facade RPC (04-04, 04-06, 05-01, 05-03).
 func characterWebProxyRPCs() map[string]struct{} {
 	return map[string]struct{}{
 		"WebListMyCharacters":           {},
