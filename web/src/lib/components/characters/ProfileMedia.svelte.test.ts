@@ -166,6 +166,39 @@ describe('ProfileMedia', () => {
 		dispose();
 	});
 
+	it('drops a gallery tile that fails to load rather than leaving a broken-image glyph', () => {
+		// The glyph reads as "this profile has an image you cannot see" — the
+		// same signal the primary's fallback exists to avoid, and no less legible
+		// on a tile. The surviving rows keep the server's order.
+		const gallery = [image({ mediaId: 'g-0' }), image({ mediaId: 'g-1' }), image({ mediaId: 'g-2' })];
+		const { target, dispose } = mountMedia({ gallery });
+		expect(target.querySelectorAll('img')).toHaveLength(3);
+
+		const middle = Array.from(target.querySelectorAll('img')).find((el) =>
+			(el.getAttribute('src') ?? '').endsWith('g-1'),
+		);
+		middle?.dispatchEvent(new Event('error'));
+		flushSync();
+
+		const srcs = Array.from(target.querySelectorAll('img')).map((el) => el.getAttribute('src') ?? '');
+		expect(srcs).toHaveLength(2);
+		expect(srcs.map((s) => s.slice(s.lastIndexOf('/') + 1))).toEqual(['g-0', 'g-2']);
+		dispose();
+	});
+
+	it('renders no list wrapper at all once every gallery tile has failed', () => {
+		// An empty <ul> left standing is a region announcing nothing, which is
+		// the wrapper the absence contract forbids.
+		const { target, dispose } = mountMedia({ gallery: [image({ mediaId: 'only' })] });
+		target.querySelector('img')?.dispatchEvent(new Event('error'));
+		flushSync();
+
+		expect(target.querySelector('ul')).toBeNull();
+		expect(target.querySelector('*')).toBeNull();
+		expect(markup(target)).toBe('');
+		dispose();
+	});
+
 	it('treats gallery media names as exact bytes — two ids differing only by a zero are two rows', () => {
 		const gallery = [image({ mediaId: 'g-0' }), image({ mediaId: 'g-00' })];
 		const { target, dispose } = mountMedia({ gallery });

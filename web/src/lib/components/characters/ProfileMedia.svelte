@@ -17,6 +17,14 @@
    * images from a profile whose images they may not see, and a placeholder slot
    * is exactly the signal that would tell them.
    *
+   * A BROKEN HANDLE IS ZERO ROWS. Both the portrait slot and every gallery
+   * tile degrade on `error`, because the browser's broken-image glyph carries
+   * the same signal a placeholder would. They degrade DIFFERENTLY on purpose:
+   * the portrait falls back to the initial-letter plate, which is the identical
+   * no-media rendering, while a tile is dropped, because there is no per-tile
+   * no-media rendering to fall back to and repeating the plate would fabricate
+   * content.
+   *
    * NOTHING IN v0.13 REACHES IT. 01-SPEC §7.3 ships the media model with zero
    * upload behaviour and nothing mints a media identifier, so projectPublic
    * emits no image row in this release. The behaviour is pinned by
@@ -52,11 +60,38 @@
   // Revealed content warnings, keyed by the row's media id. A warning is
   // advisory, so the reveal is per-image and never sticky across rows.
   let revealed = $state<Record<string, boolean>>({});
+  /*
+   * A GALLERY TILE DEGRADES TOO, AND FOR THE SAME REASON THE PRIMARY DOES.
+   * The broken-image glyph reads as "this profile has an image you cannot
+   * see", which is exactly the signal the absence contract forbids — and it is
+   * no less legible on a tile than on the portrait. `mediaSrc` points at
+   * `/media/<id>`, for which v0.13 ships no serving endpoint at all, so every
+   * tile would break the moment a row existed.
+   *
+   * The tile does NOT fall back to a portrait: there is one character and one
+   * plate, and repeating it per tile would fabricate content the profile never
+   * carried. The failed row is dropped instead, which is the absence rule's
+   * own answer — render nothing.
+   *
+   * Keyed by media id rather than by slot index, because the id IS the src:
+   * two rows carrying the same id issue the same fetch and cannot have
+   * different outcomes. That also matches how `revealed` is keyed.
+   */
+  let galleryFailed = $state<Record<string, boolean>>({});
 
   const showPrimary = $derived(primaryImage !== undefined && !primaryFailed);
 
+  // Filtered, not merely hidden: a display:none tile is still a list item in
+  // the accessibility tree, and an empty `<ul>` left behind after the last row
+  // failed is a wrapper announcing a region with nothing in it.
+  const shownGallery = $derived(gallery.filter((row) => !galleryFailed[row.mediaId]));
+
   function reveal(mediaId: string) {
     revealed = { ...revealed, [mediaId]: true };
+  }
+
+  function failGallery(mediaId: string) {
+    galleryFailed = { ...galleryFailed, [mediaId]: true };
   }
 </script>
 
@@ -100,19 +135,26 @@
   {/if}
 {/if}
 
-{#if gallery.length > 0}
+{#if shownGallery.length > 0}
   <ul class="gallery">
     <!--
       Keyed on the array INDEX, not on the media id: §7.3 compares media names
       as exact bytes, `…gallery.0` and `…gallery.00` are two different rows, and
       the projection already emitted them in slot order. Re-keying or sorting
       here would install a second ordering authority beside the one the server
-      owns.
+      owns. Dropping a failed row preserves the relative order of the rest, so
+      the server keeps that authority.
     -->
-    {#each gallery as row, i (i)}
+    {#each shownGallery as row, i (i)}
       {@const warned = row.contentWarning !== '' && !revealed[row.mediaId]}
       <li>
-        <img class="tile" class:warned src={mediaSrc(row.mediaId)} alt={row.altText} />
+        <img
+          class="tile"
+          class:warned
+          src={mediaSrc(row.mediaId)}
+          alt={row.altText}
+          onerror={() => failGallery(row.mediaId)}
+        />
         {#if row.contentWarning !== ''}
           <button
             type="button"
