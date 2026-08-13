@@ -626,6 +626,7 @@ menu item, disabled control or `aria-label` in this phase may contain the words 
 | Requirement | Rule |
 |-------------|------|
 | Form `name` attributes | Every input, textarea and select carries `name` (Playwright, `web/CLAUDE.md`). Submit buttons carry `type="submit"`. |
+| Icon-only controls | Every control whose visible content is an icon alone carries an accessible name — the 48px rail section buttons, the `Admin` rail button, and the `.mobilebar` hamburger. Use visually-hidden text inside the button (not `aria-label`) wherever the name should also be available to a translation pass, and `aria-expanded` on the hamburger. An unlabelled icon trigger is announced as "button" and is unusable by screen reader; the rail is the one place in this phase where an affordance has no adjacent text to borrow. |
 | Sortable headers | `<th>` contains a real `<button>` with `aria-sort` on the `<th>` (`ascending`/`descending`/`none`). The sort state is not conveyed by the caret colour alone. |
 | Row actions | Hover-revealed actions MUST also appear on **keyboard focus within the row** (`:focus-within`), or they are unreachable without a pointer. Below 768px they are not rendered and the row is a real `<button>`/link. |
 | Sheet | `bits-ui` Dialog semantics: focus trapped, focus returns to the invoking row action on close, `Escape` closes. `Sheet.Title` and `Sheet.Description` are always present (bits-ui warns otherwise). |
@@ -642,9 +643,18 @@ menu item, disabled control or `aria-label` in this phase may contain the words 
 
 ## UI Considerations
 
-Applicable state considerations resolved: **20 covered, 2 backstop, 3 dismissed, 1 unresolved**
-(26 rows). Re-derive this tally from the table on every edit rather than incrementing it —
+Applicable state considerations resolved: **27 covered, 2 backstop, 3 dismissed, 0 unresolved**
+(32 rows). Re-derive this tally from the table on every edit rather than incrementing it —
 Phase 5's count drifted from its own table and survived a checker pass.
+
+**Provenance.** The first 26 rows were authored from the surfaces below. The last 6 were added by
+the `ui-consideration-probe` kind-confirmation pass, which classified eight surfaces and proposed
+**48** applicable categories. Two surfaces — the planned-section state and the not-found page —
+tripped **zero** prose cues and returned `unclassified`, so the heuristic had dropped them from
+coverage entirely rather than mis-covering them. Confirming them as `static-content`, and the
+not-found page additionally as `nav` (it offers the viewer's own sections as destinations), raised
+the four rows that close this section's real gap: what the section list and the destination list do
+while in flight, and when they fail.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -673,7 +683,13 @@ Phase 5's count drifted from its own table and survived a checker pass.
 | nav | command palette (⌘K) on `/admin/*` (nav) | ⊘ dismissed → [#4962](https://github.com/holomush/holomush/issues/4962) | The palette flows through `visibleSections()`, which Phase 6 does not modify and to which `/admin` is deliberately never added. The palette therefore renders identically on `/admin/*` as anywhere else and discloses nothing. Widening `SectionVisibility` is out of scope for a UI phase (Phase 5's finding, already filed). |
 | long-text, overflow | toast copy (interactive-control) | ⊘ dismissed | Toast strings interpolate only an RPC name (authored constant), a mask count (integer), two version integers, and a character name bounded at 32 runes. Nothing can run long or overflow. |
 | error | the `Undo` action inside the toast (interactive-control) | ⊘ dismissed | A failed `Undo` is a failed `AdminUnretireCharacter`, already contracted in the `Couldn't change this character's lifecycle. Try again.` row. It does not need a second, toast-local failure state; the row simply does not change. |
-| populated | ordering of `Last active` `never` rows relative to each other (list-collection) | ⚠ unresolved | `never` sorts last in both directions (D-107), but the ordering *among* the `never` rows is unspecified — with `ORDER BY (last_active_at = 0), last_active_at ASC` they fall back to whatever secondary key the query carries, which is not fixed. Planner treats as an assumption; a stable tiebreak (`name`) is the low-cost resolution if it is wanted. |
+| populated | ordering of `Last active` `never` rows relative to each other (list-collection) | ✅ covered | `never` sorts last in both directions (D-107); the tiebreak *among* those rows is **`normalized_name` ascending** — `ORDER BY (last_active_at = 0), last_active_at {dir}, normalized_name ASC`. Without the third clause the `never` block falls back to whatever secondary key the query happens to carry, which is not fixed, and the order is untestable. One clause buys determinism. |
+| loading | admin nav — `AdminListSections` in flight (nav) | ✅ covered | **There is no partial nav state.** The `/admin` layout load **awaits** the section list before the shell renders; the nav never draws from an unresolved or partially-resolved registry. A nav that renders empty and then fills in shows a momentary zero-section state that is indistinguishable from *having no permitted sections* — the one frame that would leak. The route-level loading affordance is the existing app shell, not an admin-specific skeleton. |
+| error | admin nav — `AdminListSections` fails (nav) | ✅ covered | Two classes, and only two. **Denial-class** (`PermissionDenied` and every `DENY_*` beneath it) → the **ordinary not-found**, per Surfaces & Routes. **Infrastructure-class** (unavailable, deadline, transport) → the shared `Couldn't load the admin portal. Try again.` error state with a retry, **identical for every viewer**. This is safe precisely because it does not correlate with permission: a non-admin during an outage sees the same infrastructure error an admin does. The rule this must not break is the existing one — never branch on *which* `DENY_*` arrived. Branching denial-vs-outage is a different axis. The error copy names no section and no permission. |
+| loading | not-found page — destination list (nav, static-content) | ✅ covered | **The page never waits and never spins.** It renders from **already-resolved layout data**; if the viewer's section list is not resolved at render, the page draws the `Home` link alone. A not-found page that blocks on a request, or flickers its destinations in, makes render timing a per-viewer signal and forfeits the indistinguishability 010-B was chosen for. |
+| error | not-found page — destination list unavailable (nav, static-content) | ✅ covered | Same contract, same reason: **degrade to `Home` only**, silently. No error state, no retry, no "couldn't load your sections" text. The page's job is to render identically for four kinds of miss; an error branch inside it is a fifth kind of miss with distinct copy. |
+| overflow, long-text | planned-section state and not-found copy (static-content) | ✅ covered | Neither interpolates user-supplied text. The planned-section body is a fixed authored sentence; the only variable is the section **display name**, an authored registry constant (longest today: `Moderation`, 10 chars). Headings and destination links **wrap** rather than truncate — a truncated section name in a destination list is a worse failure than a two-line one. |
+| partial | edit Sheet with some fields set and others blank (form) | ✅ covered | Not a distinct state. Blank optional fields render as empty inputs with their counters at `0 of {cap}`; the field mask carries **only changed** fields, so the footer count is a count of *edits*, never of *filled fields*. Opening a half-populated character and changing nothing leaves `Save changes` `disabled` exactly as it is for a wholly-blank one (§9.5 rule 4). |
 
 ---
 
@@ -750,18 +766,26 @@ reflexive instinct. Reintroducing any is a bug, not a taste call.
 | The game's display name reaches no web surface ([#4905](https://github.com/holomush/holomush/issues/4905)) | Sidestepped: the not-found copy is `Home`, the drawer labels are `Workspace` / `Admin`. No player-facing game identity is invented. |
 | `SECTIONS` has no `status` concept (001's Phase-6 planning question) | Resolved **against** touching it: admin sections do not live in `nav/sections.ts` at all. `status` is a required field on the **core-side** registry (already shipped, `internal/admin/section/registry.go`) and reaches the client only as data on `AdminListSections`. |
 | Shipped rail is on `@media (max-width: 767px)`; the admin shell will be on `@container vp` | Named as a hazard in Layout → Responsive with two acceptable resolutions. The plan must pick one explicitly. |
-| Ordering among `Last active` = `never` rows | Recorded as the one unresolved UI-consideration row. |
+| ~~Ordering among `Last active` = `never` rows~~ | **Resolved** in the UI-considerations pass — tiebreak is `normalized_name ASC`. No longer open. |
 | ROADMAP's grab-handle line ("honor it or drop it") is stale — D-109 drops it | An eighth stale ROADMAP statement not in CONTEXT.md's seven-row amendments table (`06-RESEARCH.md` Open Question 4). Add it to the amendments issue. |
 
 ---
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS *(was FLAG — closed by the icon-only accessible-name rule in Accessibility & Interaction)*
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** VERIFIED (`gsd-ui-checker`, 2026-08-13). All five of the researcher's repo-fact claims
+were independently confirmed at `path:line`: the `sheet-content.svelte:31` portal, the
+`SectionRail.svelte:114` media query, the `sm:max-w-sm` 384px default at `sheet-content.svelte:38`,
+the `@tabler/icons-svelte` generation hazard against `web/package.json:16`, and the four Phase-5
+declines at `05-UI-SPEC.md:50-54` (each reversal restated Phase 5's own reason accurately).
+
+**Post-verification:** the `ui-consideration-probe` kind-confirmation pass ran on the approved
+contract — 48 applicable categories across 8 surfaces, 0 unclassified after confirmation, 6 rows
+added, the last unresolved row resolved.
