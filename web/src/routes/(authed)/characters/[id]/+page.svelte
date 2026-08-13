@@ -388,7 +388,11 @@
     border: 1px solid var(--color-border);
     border-radius: 8px;
     background: transparent;
-    color: var(--color-primary);
+    /* Not accent. UI-SPEC:134 closes the accent reserved-for list and a retry
+       control is not on it; the roster's equivalent retry is already
+       `--color-foreground`. Deliberately NOT the same as `.public-link` above,
+       which IS on the list (item 5). */
+    color: var(--color-foreground);
     font-size: 14px;
     font-weight: 600;
     line-height: 1.5;

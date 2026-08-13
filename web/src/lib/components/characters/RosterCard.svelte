@@ -217,6 +217,25 @@
   .card-playable {
     cursor: pointer;
   }
+  /* Accent reserved-for item 4 (UI-SPEC:145): the hover border on a clickable
+     roster card. Only `.card-playable` carries it — a not-playable card is not
+     clickable, so an affordance there would promise an interaction that does
+     not exist. */
+  .card-playable:hover {
+    border-color: var(--color-primary);
+  }
+  /* UI-SPEC:489 caps this at 150ms and requires it sit inside a
+     `prefers-reduced-motion: no-preference` guard. The spec says "the existing"
+     block, but none existed anywhere in `web/src` — the phase shipped no
+     transitions at all — so the guard is introduced here. Transitioning
+     `border-color` only, never `all`: `all` would sweep up the focus outline
+     and any future property, which is how a reduced-motion guard silently stops
+     covering everything it appears to. */
+  @media (prefers-reduced-motion: no-preference) {
+    .card-playable {
+      transition: border-color 150ms ease;
+    }
+  }
   .card-playable:focus-visible {
     outline: 2px solid var(--color-ring);
     outline-offset: 2px;

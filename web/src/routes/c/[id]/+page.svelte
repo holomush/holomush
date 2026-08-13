@@ -176,7 +176,10 @@
     border: 1px solid var(--color-border);
     border-radius: 8px;
     background: transparent;
-    color: var(--color-primary);
+    /* Not accent. UI-SPEC:149 names "the not-found page" in the explicit
+       not-accent list, and this rule covers both the not-found `Home` link and
+       the generic-error `Try again` button. */
+    color: var(--color-foreground);
     font-size: 14px;
     font-weight: 600;
     line-height: 1.5;
