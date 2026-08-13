@@ -1,41 +1,51 @@
+---
+last_mapped_commit: 0047100ed380c2135d541d1120dd3a950714d2f1
+last_mapped_at: 2026-08-13
+---
+<!-- refreshed: 2026-08-13 -->
 # Architecture
 
-**Analysis Date:** 2026-07-08
+**Analysis Date:** 2026-08-13
 
 ## System Overview
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│         Protocol / Gateway Layer (translation only)          │
+│                   Clients (out of process)                   │
 ├──────────────────┬──────────────────┬───────────────────────┤
-│  telnet server   │  web gateway     │   admin CLI/gRPC       │
-│ `internal/telnet`│ `internal/web`   │  `internal/admin`      │
-│                  │ `cmd/holomush/gateway.go`                 │
+│  Telnet client   │  SvelteKit PWA   │   holomush CLI /      │
+│                  │  `web/src`       │   admin UDS socket    │
 └────────┬─────────┴────────┬─────────┴──────────┬────────────┘
-         │ gRPC/ConnectRPC   │                    │
-         ▼                   ▼                    ▼
+         │                  │ ConnectRPC/HTTP    │ Unix socket
+         ▼                  ▼                    │
 ┌─────────────────────────────────────────────────────────────┐
-│              Core gRPC Services (`internal/grpc`)             │
-│   CoreService, WorldService, SceneService, PluginAuditService │
-└────────┬──────────────────────────────────────────────────────┘
-         │
-         ▼
+│         GATEWAY process (protocol translation ONLY)          │
+│  `cmd/holomush/gateway.go` · `internal/telnet` ·             │
+│  `internal/web` (ConnectRPC handlers, static SPA, relays)    │
+│  Holds gRPC CLIENTS only — no repos, no DB, no services      │
+└────────────────────────────┬────────────────────────────────┘
+                             │ gRPC (mTLS)
+                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│   Domain / Command Layer                                     │
-│   `internal/command` (Dispatcher) → `internal/world`         │
-│   `internal/access` (ABAC engine) → `internal/plugin` (host)  │
-└────────┬──────────────────────────────────────────────────────┘
-         │ Publish(event)
-         ▼
+│           CORE server  `cmd/holomush/core.go`                │
+│  gRPC facade `internal/grpc` → command dispatch              │
+│  `internal/command` → world `internal/world` → ABAC          │
+│  `internal/access` → plugin host `internal/plugin`           │
+│  Composed as ordered subsystems (`internal/lifecycle`)        │
+└──────┬───────────────────────────┬──────────────────────────┘
+       │ publish/subscribe         │ repositories
+       ▼                           ▼
+┌──────────────────────┐   ┌─────────────────────────────────┐
+│ NATS JetStream       │   │ PostgreSQL                      │
+│ `internal/eventbus`  │   │ `internal/store` (+ migrations) │
+│ hot history + audit  │   │ `internal/world/postgres`       │
+│ projection → cold    │──▶│ `events_audit`, plugin schemas  │
+└──────────────────────┘   └─────────────────────────────────┘
+       │ mTLS gRPC / in-process Lua
+       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  EventBus (`internal/eventbus`) — embedded NATS JetStream     │
-│  Publisher / Subscriber / HistoryReader                       │
-└────────┬──────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Stores: PostgreSQL (`internal/store`, host `events_audit`)   │
-│  + plugin-owned audit tables (e.g. `plugin_core_scenes.*`)    │
+│  Plugins `plugins/*` — lua | binary (subprocess) | setting   │
+│  SDK `pkg/plugin`, host bridge `internal/plugin/{lua,goplugin}` │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -43,204 +53,185 @@
 
 | Component | Responsibility | File |
 |-----------|----------------|------|
-| Gateway/web | Protocol translation (ConnectRPC ↔ gRPC), connection mgmt, static serving | `internal/web/server.go`, `cmd/holomush/gateway.go` |
-| Telnet server | Telnet protocol translation to core gRPC | `internal/telnet/` |
-| Core gRPC services | Expose world/scene/plugin-audit RPCs to gateways | `internal/grpc/`, `internal/world/grpc_server.go` |
-| Command dispatcher | Parses commands, runs two-layer authz, routes to handlers/plugins | `internal/command/dispatcher.go` |
-| ABAC engine | Default-deny policy evaluation (Cedar-aligned) | `internal/access/`, `internal/access/policy/types/types.go` |
-| World model | Locations, exits, characters, objects, scenes (host-owned entities) | `internal/world/` |
-| Plugin host | Loads/manages Lua + binary plugins, manifest validation, event emission gate | `internal/plugin/host.go`, `internal/plugin/event_emitter.go` |
-| EventBus | Publish/Subscribe/History over embedded NATS JetStream | `internal/eventbus/bus.go` |
-| Store / migrations | PostgreSQL schema (host + plugin tables) | `internal/store/migrations/` (78 files) |
-| Plugins | Domain-specific verbs/services (scenes, building, communication, aliases) | `plugins/core-scenes/`, `plugins/core-building/`, etc. |
+| Root CLI | cobra command tree (`core`, `gateway`, `migrate`, `admin`, `plugin`, `audit`, `crypto`, `status`) | `cmd/holomush/root.go` |
+| Core server | Composes and starts all server subsystems | `cmd/holomush/core.go` |
+| Gateway | Telnet accept loop + web/ConnectRPC serving; gRPC clients only | `cmd/holomush/gateway.go` |
+| Subsystem orchestrator | Topological start/stop, health tiers, readiness | `internal/lifecycle/orchestrator.go` |
+| gRPC facade | Core RPC surface (command, query, history, characteraccess, sceneaccess, content, focus) | `internal/grpc/server.go` |
+| Command dispatch | Parse → ABAC → builtin handler or plugin delivery, with focus redirects, rate limits, audit | `internal/command/dispatcher.go` |
+| World model | Locations, exits, characters, objects, properties, scenes; ABAC-checked service | `internal/world/service.go` |
+| World persistence | Repositories + transactional outbox | `internal/world/postgres/`, `internal/world/outbox/` |
+| Event bus | JetStream publish/subscribe/history, crypto codecs, audit projection | `internal/eventbus/bus.go` |
+| Access control | ABAC engine, DSL compiler, attribute providers, policy store | `internal/access/policy/engine.go` |
+| Plugin host | Manifest parse/validate, dependency DAG, per-runtime hosts, host capabilities | `internal/plugin/manager.go` |
+| Store | Postgres pool, goose migrations, session/role/plugin repos | `internal/store/postgres.go`, `internal/store/migrate.go` |
+| Invariant registry | Named system invariants + rendering/meta-tests | `docs/architecture/invariants.yaml`, `cmd/inv-render` |
 
 ## Pattern Overview
 
-**Overall:** Event-sourced core with an ABAC-gated plugin host, fronted by protocol-translation gateways.
+**Overall:** Two-process (core + gateway) event-oriented service with an
+ABAC-gated domain layer, a JetStream event log, and a three-runtime plugin host.
+Composition is subsystem-based rather than a DI container.
 
 **Key Characteristics:**
-
-- Actions produce immutable ordered events; downstream state (world/scene/session) derives from replaying or projecting these events.
-- ABAC (`internal/access`) is default-deny; every subject/action/resource triple is evaluated explicitly — there is no implicit allow.
-- Plugin runtime symmetry: Lua (gopher-lua) and binary (hashicorp/go-plugin) plugins are treated identically by every host-side trust/gate check (`.claude/rules/plugin-runtime-symmetry.md`), even though they use different wire transports.
-- Gateway processes (`internal/web`, `internal/telnet`) never touch the DB or domain services directly — they are pure protocol translators calling core gRPC (`.claude/rules/gateway-boundary.md`).
+- Strict gateway/core split enforced as an invariant (`.claude/rules/gateway-boundary.md`, meta-tests in `internal/gateway_invariants/meta_test.go` and `cmd/holomush/gateway_imports_test.go`).
+- World state is canonical in PostgreSQL; the event feed is an append-only audit/notification log, not the source of truth.
+- Default-deny ABAC at every command and world-service call.
+- Plugin runtime symmetry: host-side trust checks live on the common path shared by Lua and binary runtimes.
 
 ## Layers
 
-**Protocol/Gateway layer:**
+**Entry / CLI layer:**
+- Purpose: process bootstrap and flag/config handling
+- Location: `cmd/holomush/`
+- Depends on: `internal/config`, `internal/lifecycle`, every subsystem's `setup` package
+- Used by: operators, Docker images
 
-- Purpose: translate wire protocols (telnet, HTTP/ConnectRPC) into gRPC calls against the core server
+**Gateway layer (protocol translation):**
+- Purpose: telnet framing, HTTP/ConnectRPC serving, static SPA, cookie/CORS/security headers, Sentry + OTLP relays
 - Location: `internal/web/`, `internal/telnet/`, `cmd/holomush/gateway.go`
-- Contains: connection management, cookie/session/CORS handling (`internal/web/cookie.go`, `internal/web/cors.go`), static file serving (`internal/web/static.go`)
-- Depends on: gRPC clients to core server (never internal services directly)
-- Used by: SvelteKit web client (`web/`), telnet clients
+- Depends on: `internal/grpcclient` (gRPC clients to core), `internal/ulidgen`
+- Constraint: MUST NOT import `internal/core`, repositories, or the store
 
-**Core gRPC services:**
+**RPC facade layer:**
+- Purpose: request validation, session identity resolution, translation to domain calls, streaming history/subscribe
+- Location: `internal/grpc/`
+- Depends on: `internal/command`, `internal/world`, `internal/eventbus`, `internal/access`
 
-- Purpose: expose the domain surface (world queries/mutations, scenes, plugin audit) as gRPC/ConnectRPC services
-- Location: `internal/grpc/`, `internal/world/grpc_server.go`
-- Contains: RPC handlers that translate proto requests into domain calls and error codes back to `status.Status`
-- Depends on: `internal/world`, `internal/access`, `internal/eventbus`
-- Used by: gateway layer, admin CLI (`internal/admin`)
+**Domain layer:**
+- Purpose: world model, sessions, presence, scenes, character identity/naming/retirement
+- Location: `internal/world/`, `internal/session/`, `internal/presence/`, `internal/charname/`, `internal/retirement/`
+- Depends on: `internal/store`, `internal/access`
 
-**Command/domain layer:**
+**Event layer:**
+- Purpose: publish/subscribe/history, payload crypto, audit projection, DLQ, replay
+- Location: `internal/eventbus/` (+ `audit/`, `history/`, `crypto/`, `codec/`, `consumer/`, `authguard/`)
 
-- Purpose: parse human/CLI commands, enforce two-layer authorization, execute world mutations, route to plugins
-- Location: `internal/command/dispatcher.go`, `internal/world/`
-- Contains: `Dispatcher`, command registry, alias cache, focus-redirect table
-- Depends on: `internal/access` (ABAC), `internal/plugin` (`PluginCommandDeliverer`)
-- Used by: core gRPC handlers, telnet input loop
+**Persistence layer:**
+- Purpose: Postgres pool, embedded goose migrations, repositories
+- Location: `internal/store/`, `internal/world/postgres/`
 
-**ABAC access layer:**
-
-- Purpose: default-deny authorization for every subject/action/resource
-- Location: `internal/access/`, `internal/access/policy/`
-- Contains: `AccessPolicyEngine` interface (`Evaluate`, `CanPerformAction`), attribute providers (`internal/access/policy/attribute/`)
-- Depends on: world/session repositories (via interfaces to avoid import cycles)
-- Used by: command dispatcher, world services, plugin host capability interceptor
-
-**Plugin host layer:**
-
-- Purpose: load, sandbox, and mediate all Lua/binary plugin interaction with the host
-- Location: `internal/plugin/host.go`, `internal/plugin/event_emitter.go`, `internal/plugin/crypto_manifest.go`
-- Contains: manifest parsing/validation (`internal/plugin/config.go`), DAG dependency resolution (`internal/plugin/dependency.go`), emit-type validation (`internal/plugin/emit_type_validator.go`), service registry (`internal/plugin/registry.go`)
-- Depends on: `pkg/plugin` (SDK contracts consumed by binary plugins), `internal/eventbus`
-- Used by: `plugins/*` binary/Lua plugins, `internal/command` (as `PluginCommandDeliverer`)
-
-**EventBus layer:**
-
-- Purpose: durable, ordered event publish/subscribe/history over embedded NATS JetStream
-- Location: `internal/eventbus/bus.go` and siblings
-- Contains: `Publisher`/`Subscriber`/`HistoryReader` interfaces, `Delivery`/`SessionStream` abstractions
-- Depends on: embedded NATS JetStream, PostgreSQL (`events_audit` fallback)
-- Used by: `internal/plugin/event_emitter.go` (emit path), gRPC `Subscribe`/`QueryHistory` handlers
+**Plugin layer:**
+- Purpose: manifest-governed extension host across three runtimes
+- Location: `internal/plugin/` (host), `pkg/plugin/` (SDK), `plugins/` (in-tree plugins)
 
 ## Data Flow
 
-### Primary Request Path (player command → event)
+### Conversational command (human/CLI verb)
 
-1. Telnet/web client sends a command string; gateway forwards it via gRPC to core (`internal/telnet/`, `internal/web/server.go`)
-2. Core gRPC handler calls `command.Dispatcher` (`internal/command/dispatcher.go`)
-3. Dispatcher runs **layer 1**: `engine.CanPerformAction(subject, "execute", "command:<name>", scope)` — a coarse type-level pre-flight check (`internal/access/policy/types/types.go:474`)
-4. Dispatcher runs **layer 2** per required capability: `engine.Evaluate(ctx, AccessRequest)` against the specific resource instance
-5. On permit, the handler mutates world state (`internal/world/*.go`) and/or routes to a plugin via `PluginCommandDeliverer.DeliverCommand` (`internal/command/dispatcher.go:31-34`)
-6. Plugin or host code emits an event through `internal/plugin/event_emitter.go::Emit`, which enforces manifest gates (`actor_kinds_claimable`, `emits`, `crypto.emits`) identically for Lua and binary runtimes
-7. `Emit` calls `eventbus.Publisher.Publish` (`internal/eventbus/bus.go:16`), which writes to JetStream with `Nats-Msg-Id` set to the event's ULID for dedup
-8. Host-owned subjects are durably audited to PostgreSQL `events_audit`; plugin-owned subjects audit via `PluginAuditService.AuditEvent` to plugin-declared tables (e.g. `plugin_core_scenes.scene_log`)
+1. Telnet or web client sends input; gateway forwards over gRPC (`cmd/holomush/gateway.go`, `internal/web/handler.go`).
+2. Core RPC handler receives it (`internal/grpc/command_handler.go`).
+3. `Dispatcher.Dispatch` parses, resolves aliases, applies focus redirects and rate limits (`internal/command/dispatcher.go:144`).
+4. Two-layer authorization: `engine.Evaluate(subject,"execute","command:<name>")` then per-capability `CanPerformAction` (`internal/access/policy/engine.go`).
+5. Either a builtin handler (`internal/command/handlers/`) or plugin delivery (`internal/command/dispatcher.go:389` → `internal/plugin/subscriber.go`).
+6. Effects mutate the world through `internal/world/service.go`, writing via `internal/world/postgres/` inside a transaction that also writes the outbox.
 
-### Subscribe / History Read Path
+### World change → event → audit
 
-1. gRPC `Subscribe` handler calls `eventbus.Subscriber.OpenSession` with session identity and subject filters, returning a `SessionStream`
-2. Consumers call `SessionStream.Next` to receive typed `Delivery` handles; `Delivery.MetadataOnly()` signals when the AuthGuard withheld plaintext from an unauthorized recipient
-3. `HistoryReader.QueryHistory` transparently falls back from JetStream (recent) to PostgreSQL audit (older than JS retention) — callers never see the boundary
+1. World mutation writes a row to the transactional outbox (`internal/world/outbox/store.go`).
+2. The outbox relay subsystem reads and converts envelopes to events (`internal/world/outbox/relay.go`, `wire.go::EnvelopeToEvent`).
+3. `eventbus.NewEvent(...)` stamps a monotonic ULID (`internal/eventbus/types.go:215`); `Qualify` prepends `events.<game_id>.` (`internal/eventbus/qualify.go:23`).
+4. Publish to JetStream with `Nats-Msg-Id` dedup (`internal/eventbus/publisher.go`); sensitive payloads are encrypted per `crypto.emits` (`internal/eventbus/crypto/`).
+5. The audit projection consumes and writes durable rows (`internal/eventbus/audit/projection.go` → `events_audit`); plugin-owned subjects route to the plugin's own audit table via `PluginAuditService.AuditEvent` (`internal/eventbus/audit/plugin_router.go`).
+
+### History read
+
+`HistoryReader.QueryHistory` dispatches hot (JetStream) then cold (Postgres) transparently: `internal/eventbus/history/dispatcher.go`, `hot_jetstream.go`, `cold_postgres.go`.
 
 **State Management:**
-
-- World state (locations, characters, objects, scenes) is projected/derived from events, not held as the sole source of truth; `internal/world/mutator.go` and `internal/world/event_store_adapter.go` bridge domain mutations to the event log.
-- Plugin state for domain-specific concerns (e.g. scene rosters) is owned entirely by the plugin (`plugins/core-scenes/store.go`), never by `internal/world`.
+- Canonical world state: PostgreSQL.
+- Ordering: JetStream per-stream `uint64` sequence. ULIDs are identity/dedup keys only.
+- Sessions: `internal/session/` backed by `internal/store/session_store.go`; leases in `internal/sessionlease/`.
 
 ## Key Abstractions
 
 **EventBus (Publisher / Subscriber / HistoryReader):**
+- Purpose: three narrow roles over one concrete bus
+- Examples: `internal/eventbus/bus.go`, `publisher.go`, `subscriber.go`, `history/`
+- Pattern: role interfaces; `eventbus.NewEvent` is the only sanctioned constructor
 
-- Purpose: three narrow interfaces for the three consumer roles (emit, live subscribe, historical read)
-- Examples: `internal/eventbus/bus.go:16,29,35`
-- Pattern: interface segregation — callers depend on the narrowest interface they need; `EventBus` composes all three
+**Subsystem / Orchestrator:**
+- Purpose: declared `DependsOn` edges, topological start, health tiers
+- Examples: `internal/lifecycle/subsystem.go`, `orchestrator.go`, `cmd/holomush/core.go:1341`
+- Pattern: each domain ships a `setup/` package producing a `lifecycle.Subsystem`
 
-**ServiceRegistry (host-side):**
+**AccessPolicyEngine + AttributeProvider:**
+- Purpose: default-deny ABAC with pluggable attribute bags
+- Examples: `internal/access/policy/engine.go`, `internal/access/policy/attribute/`
+- Pattern: providers OMIT optional keys rather than emitting sentinels (`.claude/rules/abac-providers.md`)
 
-- Purpose: maps fully-qualified proto service names to registered implementations, enforcing single registration
-- Examples: `internal/plugin/registry.go:14`
-- Pattern: thread-safe map behind `sync.RWMutex`, `SERVICE_ALREADY_REGISTERED`/`SERVICE_NOT_FOUND` typed errors via `oops`
+**Plugin Manifest / Manager:**
+- Purpose: declarative capability, emit, crypto, audit, and command declarations resolved as a DAG
+- Examples: `internal/plugin/manifest.go`, `manager.go`, `plugins/*/plugin.yaml`
+- Pattern: three runtime types (`TypeLua`, `TypeBinary`, `TypeSetting`, `internal/plugin/manifest.go:26`); binary plugins are subprocesses over mTLS gRPC (`internal/plugin/goplugin/`)
 
-**ServiceProvider (plugin-side SDK):**
-
-- Purpose: implemented by binary plugins to register gRPC services and receive host `Init` configuration
-- Examples: `pkg/plugin/service.go:41`
-- Pattern: multiplexes plugin-provided services onto the same go-plugin gRPC transport as the core `PluginService`
-
-**AccessPolicyEngine (ABAC):**
-
-- Purpose: single interface for both fine-grained (`Evaluate`) and coarse pre-flight (`CanPerformAction`) authorization checks
-- Examples: `internal/access/policy/types/types.go:474`
-- Pattern: fail-closed — `CanPerformAction` returns `(false, err)` on infra failure, never a permissive decision; `ErrEngineDegraded` signals degraded mode to callers
-
-**Plugin manifest / loader:**
-
-- Purpose: declares a plugin's type, resource types, required/provided services, capabilities, and crypto/emit gates
-- Examples: `plugins/core-scenes/plugin.yaml`, validated by `internal/plugin/config.go`, `internal/plugin/dependency.go` (DAG resolution)
-- Pattern: `requires`/`provides` form a dependency DAG resolved at load; `capability:` entries support least-privilege `access:`/`scope:` narrowing (`.claude/rules/plugin-manifest.md`)
+**Invariant registry:**
+- Purpose: one canonical id space (`INV-<SCOPE>-N`) for durable system guarantees, bound to tests via `// Verifies:` annotations
+- Examples: `docs/architecture/invariants.yaml`, `internal/invregistry/`, `cmd/inv-render`, `test/meta/invariant_registry_test.go`
 
 ## Entry Points
 
-**`cmd/holomush` (main server binary):**
+**`holomush core`:**
+- Location: `cmd/holomush/core.go`
+- Triggers: operator / container start
+- Responsibilities: build and orchestrate all subsystems (database, TLS, ABAC, auth, world, plugins, sessions, bootstrap, eventbus, cluster, audit projection, crypto policy, gRPC, admin socket, outbox relay, retirement reactor, character activity, …)
 
-- Location: `cmd/holomush/main.go`, `cmd/holomush/root.go`, `cmd/holomush/core.go`
-- Triggers: `holomush` CLI invocation (serve, admin, migrate, plugin subcommands)
-- Responsibilities: wires the core server (gRPC services, EventBus, plugin host, ABAC engine), the gateway (`cmd/holomush/gateway.go`), and admin/crypto/migration subcommands (`cmd/holomush/cmd_admin.go`, `cmd/holomush/migrate.go`, `cmd/holomush/cmd_crypto_rekey.go`)
+**`holomush gateway`:**
+- Location: `cmd/holomush/gateway.go`
+- Triggers: operator / container start
+- Responsibilities: telnet accept loop with backoff, HTTP/ConnectRPC server, static SPA
 
-**`cmd/holomush-cutover`:**
+**Other CLI subcommands:** `migrate` (`cmd/holomush/migrate.go`), `admin` (`cmd_admin*.go`, UDS + SO_PEERCRED), `plugin` (`cmd_plugin*.go`), `audit`, `crypto rekey`, `status`, `character name`.
 
-- Location: `cmd/holomush-cutover/`
-- Triggers: one-shot cutover/migration operational tooling (separate from the long-running server)
-
-**`cmd/inv-render` / `cmd/inv-migrate`:**
-
-- Location: `cmd/inv-render/`, `cmd/inv-migrate/`
-- Triggers: invariant registry tooling — renders `docs/architecture/invariants.md` from the YAML source, migrates legacy invariant IDs
-
-**`cmd/lint-plugin-manifests`:**
-
-- Location: `cmd/lint-plugin-manifests/`
-- Triggers: CI lint step validating every `plugins/*/plugin.yaml` against `schemas/plugin.schema.json`
-
-**Plugin binaries (`plugins/*/main.go`):**
-
-- Location: e.g. `plugins/core-scenes/main.go`
-- Triggers: spawned as separate OS processes by the host via hashicorp/go-plugin when `type: binary`
+**Auxiliary binaries:** `cmd/inv-render`, `cmd/inv-migrate`, `cmd/lint-plugin-manifests`, `cmd/nats-floor-guard`, `cmd/holomush-cutover`, `cmd/internal`.
 
 ## Architectural Constraints
 
-- **Threading:** Go's standard goroutine-per-request model under gRPC; `internal/plugin/registry.go` and similar shared registries use `sync.RWMutex` for concurrent access; Lua plugins get a fresh VM state per event delivery (no shared mutable Lua state — see `.claude/rules/references/testing-detail.md`).
-- **Global state:** deliberately minimal; service registries and the plugin manager are constructed and owned by `cmd/holomush/core.go`'s dependency wiring (`cmd/holomush/deps.go`) rather than package-level singletons.
-- **Circular imports:** `AccessPolicyEngine` is defined in `internal/access/policy/types` (not `internal/access` or `internal/world`) specifically to let both `internal/world` and `internal/access/policy/attribute` depend on it without a cycle (comment at `internal/access/policy/types/types.go:466`). `eventbus.SessionIdentity` is defined in `internal/eventbus` itself (not `authguard`) to avoid `eventbus → authguard → plugin → eventbus`.
-- **Runtime symmetry:** any new host-side trust/gate/manifest check MUST apply identically to Lua and binary plugins; asymmetry is only permitted when it is purely a transport difference reaching the same policy chokepoint (`.claude/rules/plugin-runtime-symmetry.md`).
+- **Gateway boundary:** the gateway holds gRPC clients, never repositories/DB/services. Structural writes use typed facade RPCs; `HandleCommand` is reserved for human/CLI conversational verbs.
+- **Ordering ownership:** JetStream sequence, never ULID lex order.
+- **Event construction:** `eventbus.NewEvent(...)` only; no `eventbus.Event{}` literals, no hand-stamped IDs.
+- **Plugin runtime symmetry:** trust/policy gates sit at the common path (`internal/plugin/event_emitter.go::Emit`), not per-runtime. Permitted asymmetry is transport-only (Lua host capability vs binary service dial).
+- **Default-deny ABAC:** every command and world-service call passes `internal/access`.
+- **Threading:** Go goroutines; subsystem lifecycle is orchestrated rather than ad-hoc (`internal/lifecycle/`). Binary plugins are separate OS processes.
+- **Test-import fence:** production code must not import `eventbustest`, `coretest`, `natstest`, `quarantinetest` (depguard in `.golangci.yaml`).
+- **Timestamps:** epoch-nanosecond `BIGINT` columns, never `TIMESTAMPTZ` (`task lint:no-timestamptz`, `internal/pgnanos`).
 
 ## Anti-Patterns
 
-### Gateway querying data directly
+### GUI structural write through the command path
 
-**What happens:** a gateway endpoint (`internal/web/`) adds a DB query, repository lookup, or direct service struct field instead of calling a core gRPC RPC.
-**Why it's wrong:** couples the horizontally-scalable gateway process to internal data shapes and breaks the multi-process deployment model.
-**Do this instead:** add/extend an RPC on the core server (`internal/grpc/`) and have the gateway call it; the gateway only holds gRPC clients (`.claude/rules/gateway-boundary.md`).
+**What happens:** a web button string-builds a command and calls `sendCommand`/`HandleCommand`.
+**Why it's wrong:** routes a machine-initiated mutation through the human text parser and bypasses the typed facade contract.
+**Do this instead:** add a typed RPC on the BFF facade (`internal/grpc/sceneaccess_service.go`, `characteraccess_write.go` are the shape).
 
-### Structural GUI writes via the command path
+### Gateway reaching for data directly
 
-**What happens:** a button/form-driven mutation (create/set/end/invite/kick/transfer) is implemented by string-building a `sendCommand`/`HandleCommand` call instead of a typed RPC.
-**Why it's wrong:** routes a machine-initiated action through the human/CLI text-command parser, which is reserved for conversational verbs (`pose`, `say`, `ooc`, `join`).
-**Do this instead:** add a typed RPC on the BFF facade (e.g. `EndScene`, `InviteToScene`) per ADR `holomush-v4qmu` (`.claude/rules/gateway-boundary.md`).
+**What happens:** adding a repo field or DB query to `internal/web/` to "just fetch" state.
+**Why it's wrong:** couples the separately-deployed gateway to internal data shapes.
+**Do this instead:** add the core RPC first, then call it from the gateway (`internal/grpcclient/`).
 
-### Double-translating gRPC status errors
+### Sentinel values from attribute providers
 
-**What happens:** a helper converts `status.Error` ↔ `oops` at an inner layer, then an outer caller wraps and translates again.
-**Why it's wrong:** breaks `status.FromError` chain-walking; the inner translation strips the `GRPCStatus()` method so opacity/error-code invariants silently fail.
-**Do this instead:** translate exactly once, at the outermost gRPC boundary call site (`.claude/rules/grpc-errors.md`).
+**What happens:** `attrs["location"] = ""` alongside `has_location=false`.
+**Why it's wrong:** the DSL treats missing as false but `"" == ""` as true — fail-open.
+**Do this instead:** omit the key; keep the `has_X` witness (`internal/access/policy/attribute/stream.go`).
 
 ## Error Handling
 
-**Strategy:** structured errors via `oops` (`oops.With(k,v).Wrap(err)`, `oops.Code("CODE").Wrap(err)`), never leaking internal error text across a gRPC trust boundary.
+**Strategy:** structured errors via `samber/oops`, wrapped with codes at boundaries.
 
 **Patterns:**
-
-- gRPC handlers log internally with `errutil.LogErrorContext(ctx, msg, err, ...)` and return a static `status.Errorf(codes.Internal, "internal error")` — never `%v`-interpolating the inner error into the client-visible message (`.claude/rules/grpc-errors.md`)
-- ABAC engine failures return `(false, err)`/an infra-failure `Decision` (policy ID prefixed `infra:`), never a permissive result on error
+- `oops.With(k,v).Wrap(err)`, `oops.Code("CODE").Wrap(err)`; helpers in `pkg/errutil`.
+- gRPC handlers must not interpolate inner errors into `status.Errorf` — log with `errutil.LogErrorContext` and return a static message (`.claude/rules/grpc-errors.md`).
+- Status↔oops translation happens at exactly one layer (outermost call site).
 
 ## Cross-Cutting Concerns
 
-**Logging:** `log/slog` via context-carrying variants (`InfoContext`/`WarnContext`/`ErrorContext`) so `trace_id`/`span_id` propagate; built in `internal/logging/handler.go` (`.claude/rules/logging.md`).
-**Validation:** plugin manifests validated against `schemas/plugin.schema.json` at load (`internal/plugin/config.go`); event types validated against `verbs[].type` (`internal/plugin/emit_type_validator.go`).
-**Authentication:** ABAC subjects are prefixed strings (`character:01ABC`, `session:01XYZ`, `plugin:echo-bot`, `system`) parsed by `access.ParseSubject` (`internal/access/access.go`); auth flows live in `internal/auth/` and `internal/totp/`.
+**Logging:** `log/slog` with a trace-injecting handler (`internal/logging/handler.go`); `*Context` variants mandatory when a `ctx` exists, enforced by `sloglint`.
+**Telemetry:** OpenTelemetry in `internal/observability/`, `internal/telemetry/`, `internal/eventbus/telemetry/`; browser relays at `internal/web/otlp_relay.go` and `sentry_relay.go`.
+**Validation:** manifest schema (`schemas/plugin.schema.json`), proto lint (buf), policy schema validators (`internal/plugin/policy_schema_validator.go`).
+**Authentication:** player/session auth in `internal/auth/`, TOTP in `internal/totp/`, mTLS in `internal/tls/`, admin UDS peer credentials in `internal/admin/`.
 
 ---
 
-*Architecture analysis: 2026-07-08*
+*Architecture analysis: 2026-08-13*

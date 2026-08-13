@@ -1,124 +1,110 @@
+---
+last_mapped_commit: 0047100ed380c2135d541d1120dd3a950714d2f1
+last_mapped_at: 2026-08-13
+---
 # Technology Stack
 
-**Analysis Date:** 2026-07-08
+**Analysis Date:** 2026-08-13
 
 ## Languages
 
 **Primary:**
-
-- Go 1.26.5 - core server, plugins, CLIs (`go.mod`)
-- TypeScript/Svelte 5 - web PWA client (`web/package.json`, `web/tsconfig.json`)
+- Go 1.26.5 (`go.mod` line 3) — server core, gateway, plugin host, CLI (`cmd/`, `internal/`, `pkg/`, `plugins/`)
+- TypeScript 6.0.3 + Svelte 5.56.8 — web PWA client (`web/`)
 
 **Secondary:**
-
-- Lua - in-process scripted plugins, executed via gopher-lua (`plugins/*/`, e.g. `plugins/echo-bot`)
-- SQL - PostgreSQL migrations (`internal/store/migrations/*.sql`)
-- Astro/MDX - public documentation site (`site/`)
+- Lua (gopher-lua 1.1.2) — Lua plugin runtime (`plugins/echo-bot/main.lua`, `internal/plugin/lua/`)
+- Protocol Buffers — API schemas (`api/proto/holomush/{admin,channel,characteraccess,comm,content,control,core,eventbus,plugin,scene,sceneaccess,web,world}`)
+- SQL — goose migrations (`internal/store/migrations/`, 48 entries, latest `000056_character_normalized_name_unique.sql`)
+- Bash + bats — repo scripts and their tests (`scripts/`, `scripts/tests/`)
+- Astro/MDX — docs site (`site/`)
 
 ## Runtime
 
 **Environment:**
-
-- Go 1.26.5 minimum — `go.mod` line 3 (`go 1.26.5`) is the language floor, not an exact toolchain pin; the installed Go version is enforced in CI via `actions/setup-go` with `go-version-file: go.mod`
-- Node.js runtime for `web/` (SvelteKit) and `site/` (Astro) — no `.nvmrc`/`.node-version` committed; the authoritative pin is CI's `node-version: 24` (`.github/workflows/ci.yaml`, `release.yaml`, `site.yml`, `scripts-tests.yaml`)
+- Go 1.26 toolchain (module `github.com/holomush/holomush`)
+- Node/pnpm for the web + docs builds
+- Docker for integration tests (testcontainers) and the dev/prod stacks (`compose.yaml`, `compose.prod.yaml`, `compose.cluster.yaml`, `compose.e2e.yaml`, `compose.e2e.cover.yaml`)
 
 **Package Manager:**
-
-- Go modules (`go.mod`, `go.sum`) — no vendoring
-- pnpm for `web/` — pinned via `"packageManager": "pnpm@11.9.0"` in `web/package.json`
-- Isolated Go tool modules for build tooling: `go.tool.mod` / `go.tool-lint.mod`, invoked with `GOWORK=off go tool -modfile=...` (`Taskfile.yaml` vars `GO_TOOL`, `GO_TOOL_LINT`) — kept separate because linter dependency closures conflict with `task`'s
-- Lockfiles present: `go.sum`, `web/pnpm-lock.yaml` (implied by pnpm pin), `buf.lock`
+- Go modules — four modfiles: `go.mod` (app), `go.tool.mod` (`task`, `yq`, `gotestsum`, `gofumpt`), `go.tool-lint.mod` (`golangci-lint`, `yamlfmt`, `actionlint`), plus a `gorules/` analyzer module. Tool modules are invoked as `GOWORK=off go tool -modfile=<file> <name>` (see `Taskfile.yaml` `GO_TOOL` / `GO_TOOL_LINT`).
+- pnpm 11.13.1 for `web/` (`packageManager` field in `web/package.json`; lockfile `web/pnpm-lock.yaml`, workspace `web/pnpm-workspace.yaml`)
+- `site/package.json` has no pinned packageManager field and no committed lockfile alongside it (inference: it is built via `task docs:setup`/`docs:build`; check `Taskfile.yaml` docs targets for the exact runner)
+- Lockfiles: `go.sum`, `go.tool.sum`, `go.tool-lint.sum`, `web/pnpm-lock.yaml`, `buf.lock` — all present.
 
 ## Frameworks
 
 **Core:**
-
-- Standard library `net/http` + ConnectRPC (`connectrpc.com/connect` v1.20.0) - dual gRPC/HTTP protocol surface for core↔gateway and web BFF (`internal/grpc`, `internal/web`)
-- `google.golang.org/grpc` v1.82.0 - core server gRPC transport
-- `github.com/hashicorp/go-plugin` v1.8.0 - binary plugin runtime (`internal/plugin`, `pkg/plugin`)
-- `github.com/yuin/gopher-lua` v1.1.2 - Lua plugin VM, fresh state per event delivery
-- `github.com/nats-io/nats-server/v2` v2.14.2 + `github.com/nats-io/nats.go` v1.52.0 - embedded NATS JetStream EventBus (`internal/eventbus`)
-- SvelteKit 2.69.1 + Svelte 5.56.4 - web PWA (`web/package.json`)
-- Astro 6 + `@astrojs/starlight` - public docs site (`site/package.json`)
+- gRPC `google.golang.org/grpc v1.82.1` + ConnectRPC `connectrpc.com/connect v1.20.0` — dual RPC surface (`internal/grpc/`, `internal/web/`)
+- `google.golang.org/protobuf v1.36.11` — pinned deliberately for cross-binary `op_args_hash` determinism (INV-CRYPTO-85, comment in `go.mod`)
+- `buf.build/go/protovalidate v1.2.0` (+ CEL via `google/cel-go`) — proto-level request validation
+- `github.com/jackc/pgx/v5 v5.10.0` — PostgreSQL driver; `github.com/exaring/otelpgx` for tracing
+- `github.com/pressly/goose/v3 v3.27.3` — migration engine (`internal/store/migrate.go`)
+- `github.com/nats-io/nats.go v1.52.0` + `github.com/nats-io/nats-server/v2 v2.14.3` — JetStream event bus, embeddable in-process (`internal/eventbus/subsystem.go`)
+- `github.com/hashicorp/go-plugin v1.8.0` — binary plugin host (`internal/plugin/goplugin/host.go`)
+- `github.com/yuin/gopher-lua v1.1.2` — Lua plugin runtime
+- `github.com/spf13/cobra v1.10.2` + `pflag` — CLI; `github.com/knadh/koanf/v2 v2.3.5` (YAML + posflag providers) for config (`internal/config/config.go`)
+- `github.com/samber/oops v1.22.0` — structured errors (repo-mandated)
+- `github.com/alecthomas/participle/v2 v2.1.4` — ABAC policy DSL parser (`internal/access/`)
+- SvelteKit 2.69.3 + `@sveltejs/adapter-static` — static web client embedded into the Go binary (`task build`)
+- Tailwind CSS 4.3.3 (`@tailwindcss/vite`), `bits-ui`, `tailwind-variants`, `paneforge`, `@lucide/svelte` — web UI layer
+- Astro 6 + `@astrojs/starlight` — docs site (`site/`)
 
 **Testing:**
-
-- `github.com/stretchr/testify` v1.11.1 - unit test assertions (`require`/`assert`)
-- `github.com/onsi/ginkgo/v2` v2.32.0 + `github.com/onsi/gomega` v1.42.1 - BDD-style integration tests (`test/integration/**`, build tag `integration`)
-- `github.com/testcontainers/testcontainers-go` v0.43.0 + `.../modules/postgres` v0.43.0 - Postgres testcontainer for integration/session-store tests
-- `github.com/pashagolub/pgxmock/v5` v5.1.0 - pgx mock driver for store-layer unit tests
-- mockery (config `.mockery.yaml`, `.mockery-boilerplate.txt`) - generated interface mocks
-- `pgregory.net/rapid` v1.3.0 - property-based testing
-- `go.uber.org/goleak` v1.3.0 - goroutine leak detection
-- `@playwright/test` 1.61.1 (`web/package.json`) - browser E2E suite (`task test:e2e`)
-- `vitest` 4.1.9 + `@vitest/ui` - web unit tests (`web/package.json`)
+- `github.com/stretchr/testify v1.11.1` — unit assertions
+- `github.com/onsi/ginkgo/v2 v2.32.0` + `gomega v1.42.1` — integration BDD suites (`//go:build integration`)
+- `github.com/testcontainers/testcontainers-go v0.43.0` (+ `modules/postgres`) — DB containers
+- `github.com/pashagolub/pgxmock/v5`, mockery (`.mockery.yaml`), `pgregory.net/rapid` (property testing), `go.uber.org/goleak`
+- Playwright 1.61.1 + Vitest 4.1.10 + jsdom — web E2E and unit tests (`web/e2e/`, `web/`)
+- bats — shell tests (`scripts/tests/`, `task test:bats`)
 
 **Build/Dev:**
-
-- `task` (go-task, `Taskfile.yaml`) - single entry point for build/test/lint/fmt/dev; MUST be used over raw `go`/lint commands per `CLAUDE.md`
-- `buf` - protobuf lint/breaking/generate (`buf.yaml`, `buf.gen.yaml`, `buf.gen.internal.yaml`, `buf.gen.docs.yaml`, `buf.lock`, `web/buf.gen.yaml`)
-- `golangci-lint` v2 via `bin/custom-gcl` (custom-built linter binary, `.custom-gcl.yml`, `.golangci.yaml`) — includes `sloglint`, `wrapcheck`, `depguard`
-- `github.com/apache/skywalking-eyes/cmd/license-eye` pinned `v8.0.0`-style tag (`LICENSE_EYE_VERSION: v0.8.0` in `Taskfile.yaml`) - SPDX header enforcement (`.licenserc.yaml`)
-- `golang-migrate/migrate/v4` v4.19.1 - DB migration engine, migrations embedded at compile time (`internal/store/migrations/`)
-- goreleaser (`.goreleaser.yaml`) - release builds
-- Vite 8 - web bundler/dev server (`web/package.json`)
-- `@bufbuild/protoc-gen-es` 2.12.1 - proto-to-TS codegen for web client (`web/buf.gen.yaml`)
+- `task` (go-task) — the mandatory entrypoint; `Taskfile.yaml` is the authority (`task lint|fmt|test|build|dev|test:int|test:e2e|pr-prep`)
+- `buf` — proto lint/generate; three gen configs: `buf.gen.yaml` (public → `pkg/proto`), `buf.gen.internal.yaml` (internal eventbus cursor module), `buf.gen.docs.yaml`, plus `web/buf.gen.yaml` (TS stubs → `web/src/lib/connect`). BSR remote plugin versions are pinned in lockstep with the Go/npm runtimes.
+- `golangci-lint` v2 via a custom build (`.custom-gcl.yml`, `bin/custom-gcl`) with the in-repo `gorules/` analyzer module
+- `gofumpt`, `yamlfmt`, `dprint` (`dprint.json`), `rumdl` (`.rumdl.toml`), `license-eye` (`.licenserc.yaml`), `actionlint`
+- `goreleaser` (`.goreleaser.yaml`), `cog` (`cog.toml`) for conventional commits, `mockery`, Vite 8.1.5
 
 ## Key Dependencies
 
 **Critical:**
-
-- `github.com/samber/oops` v1.22.0 - structured error wrapping (`oops.With(...).Wrap(err)`, `oops.Code(...)`) per `CLAUDE.md` Error Handling convention
-- `github.com/oklog/ulid/v2` v2.1.1 - event ID generation (`core.NewULID()`)
-- `github.com/jackc/pgx/v5` v5.10.0 - PostgreSQL driver/toolkit (`internal/store`)
-- `github.com/exaring/otelpgx` v0.11.1 - OTel instrumentation for pgx
-- `github.com/knadh/koanf/v2` v2.3.5 (+ `parsers/yaml`, `providers/file`, `providers/posflag`) - configuration loading
-- `github.com/spf13/cobra` v1.10.2 + `github.com/spf13/pflag` v1.0.10 - CLI command framework (`cmd/holomush`)
-- `github.com/pquerna/otp` v1.5.0 - TOTP/2FA (`internal/totp/service.go`)
-- `github.com/alecthomas/participle/v2` v2.1.4 - parser combinator, used for the ABAC policy DSL (`internal/access/policy`)
-- `github.com/cyberphone/json-canonicalization` (pinned pseudo-version, see `go.mod` comment) - RFC 8785 JCS canonicalization for crypto policy-set chain hashing (INV-CRYPTO-80)
-- `buf.build/go/protovalidate` v1.2.0 + `buf.build/gen/go/bufbuild/protovalidate/...` - proto field validation
+- `github.com/oklog/ulid/v2 v2.1.2` — event and entity IDs (`internal/ulidgen`, `core.NewULID`, `idgen.New`)
+- `github.com/cyberphone/json-canonicalization` (pinned pseudo-version) — RFC 8785 JCS for `crypto.policy_set` chain hashing; changing it is a chain-breaking amendment (INV-CRYPTO-80)
+- `golang.org/x/crypto v0.54.0` — argon2id password hashing (`internal/auth/hasher.go`)
+- `github.com/pquerna/otp v1.5.0` — TOTP second factor (`internal/totp/`)
+- `github.com/santhosh-tekuri/jsonschema/v6` + `github.com/invopop/jsonschema` — plugin manifest schema (`schemas/plugin.schema.json`, `task generate:schema`)
+- `github.com/Masterminds/semver/v3`, `github.com/gobwas/glob` — plugin version/pattern matching
 
 **Infrastructure:**
-
-- `go.opentelemetry.io/otel` v1.44.0 stack (`sdk`, `sdk/metric`, `sdk/log`, `metric`, `trace`, `log`, `exporters/otlp/otlptrace{grpc,http}`, `exporters/otlp/otlplog/{otlploggrpc,otlploghttp}`, `contrib/bridges/otelslog`, `contrib/instrumentation/net/http/otelhttp`, `contrib/instrumentation/google.golang.org/grpc/otelgrpc`) - distributed tracing/metrics/logs
-- `github.com/getsentry/sentry-go` v0.47.0 + `sentry-go/otel/otlp` v0.47.0 - error tracking (`internal/telemetry/sentry.go`)
-- `github.com/prometheus/client_golang` v1.23.2, `client_model` v0.6.2, `github.com/nats-io/prometheus-nats-exporter` v0.20.1 - metrics export
-- `github.com/hashicorp/golang-lru/v2` v2.0.7 - in-memory caching
-- `google.golang.org/protobuf` v1.36.11 (pinned; see `go.mod` comment on cross-binary determinism, INV-CRYPTO-85)
+- OpenTelemetry Go SDK v1.44.0 — traces, metrics, logs; OTLP gRPC + HTTP exporters, `otelgrpc`/`otelhttp`/`otelpgx` instrumentation, `otelslog` bridge
+- `github.com/getsentry/sentry-go v0.47.0` (+ `otel/otlp`) — error/log sink (`internal/telemetry/sentry.go`)
+- `github.com/prometheus/client_golang v1.23.2` + `nats-io/prometheus-nats-exporter` — metrics
+- `github.com/hashicorp/golang-lru/v2` — in-process caches
+- `github.com/moby/moby/client` — Docker client used by tooling/tests
 
 ## Configuration
 
 **Environment:**
-
-- `github.com/knadh/koanf/v2`-based config loading merges YAML files + flags (`providers/file`, `providers/posflag`, `parsers/yaml`)
-- `.envrc` present at root (direnv) — content not read (forbidden-file policy: existence only)
-- `.env*` files: none observed at root during exploration
+- YAML config loaded by koanf with CLI flag overlay (`internal/config/config.go`); XDG-aware path resolution (`internal/xdg`)
+- `.envrc` present (direnv, `dotenv_if_exists`); no `.env` committed — contents never read here
+- Observed env vars in core code: `HOLOMUSH_DB_AUTO_MIGRATE`, `HOLOMUSH_GAME_ID`, `HOLOMUSH_KEK_FILE`, `HOLOMUSH_KEK_PASSPHRASE`, `HOLOMUSH_KEK_PASSPHRASE_FILE`. Test/CI toggles: `HOLOMUSH_RUN_QUARANTINED`, `HOLOMUSH_PR_PREP_FORCE_FULL`, `GOWORK=off`.
+- Config sections seen in `internal/config/config.go`: game (`guest_start_location`, `disabled_commands`, `plugin_trust_allowlist`), sessions (`max_player_sessions_per_player`), crypto operator policy (`operators`, `dual_control_required`, `rekey_checkpoint_ttl`, `operator_read_*`), logging sinks (`stderr`, `otel`, `sentry`).
 
 **Build:**
-
-- `Taskfile.yaml` - canonical build/test/lint/dev entry point
-- `.golangci.yaml` + `.custom-gcl.yml` - lint rule config and custom linter build
-- `buf.yaml` / `buf.gen*.yaml` - protobuf toolchain config
-- `.mockery.yaml` - mock generation config
-- `web/tsconfig.json`, `web/vite.config.*` (implied by Vite/SvelteKit) - web build config
-- `site/astro.config.mjs` - docs site build config
+- `Taskfile.yaml` (single entrypoint), `Dockerfile` + `docker/`, `compose*.yaml`, `.goreleaser.yaml`
+- `.golangci.yaml` + `.custom-gcl.yml`, `.mockery.yaml`, `buf.yaml`/`buf.lock`, `dprint.json`, `.yamlfmt`, `.editorconfig`, `.rumdl.toml`, `.licenserc.yaml`, `.codecov.yml`, `.coderabbit.yaml`, `.github/renovate.json`
 
 ## Platform Requirements
 
 **Development:**
-
-- Go 1.26.5 (pinned in `go.mod`)
-- Node.js + pnpm 11.9.0 (`web/package.json` `packageManager`)
-- Docker (for `task dev`, `task test:int`, testcontainers-based session-store tests)
-- `task` CLI (go-task) as the mandatory command runner
+- Go 1.26.x, Docker (integration + E2E), Node + pnpm, `task` (bootstrapped from the tool module)
+- macOS and Linux both supported; binary plugins cross-compile to `linux/amd64` + `linux/arm64` (`task plugin:build-all`)
 
 **Production:**
-
-- Container-based deployment via `Dockerfile` and `compose.prod.yaml` (root)
-- PostgreSQL 18 (Alpine image pinned by digest in `compose.yaml`: `postgres:18-alpine@sha256:...`)
-- Deploy tooling for a hosted sandbox: `deploy/doctl/` (DigitalOcean) and `deploy/cloudflared/` (Cloudflare Tunnel) — see `deploy/doctl/README.md`, `deploy/cloudflared/config.yml.tmpl`
+- Container image built from a locally-compiled Linux binary (`task docker:build`, `Dockerfile`), orchestrated by `compose.prod.yaml` / `compose.cluster.yaml`; deployment assets under `deploy/`
+- Exposed dev ports (`compose.yaml`): gateway `8080`, `4201`; OTel collector `4317`/`4318`; Jaeger `16686`; Grafana `3001`; Dozzle `8888`
+- Sandbox environment `game.holomush.dev` (see `site/src/content/docs/operating/how-to/sandbox/`)
 
 ---
 
-*Stack analysis: 2026-07-08*
+*Stack analysis: 2026-08-13*
