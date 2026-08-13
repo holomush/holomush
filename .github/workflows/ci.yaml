@@ -345,6 +345,13 @@ jobs:
       - name: Install Task
         uses: ./.github/actions/install-task
 
+      # Lives in Build rather than Test because Build already sets up Node,
+      # pnpm and the pnpm cache (Test is Go-only), and because Build is already
+      # a required check — a new job name would not gate anything until an
+      # operator added it to ruleset 11923801. Closes holomush#4964.
+      - name: Run web unit tests
+        run: task web:test
+
       - name: Build
         run: task build
 
