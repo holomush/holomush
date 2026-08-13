@@ -1,7 +1,7 @@
 # ABAC Reviewer Memory
 
-Durable patterns from prior reviews. Read at the start of each review; update after.
-Curated 2026-08-09; full per-review detail lives in `reports/`.
+Durable patterns from prior reviews; read at the start of each review, update after.
+Full per-review detail lives in `reports/` (curated 2026-08-13).
 
 ## Engine facts worth not re-deriving
 
@@ -24,13 +24,11 @@ Curated 2026-08-09; full per-review detail lives in `reports/`.
   callers are command dispatch (`command/access.go:72`, `commandquery/query.go:184`,
   `handlers/resetpassword.go:114,125`), where the subject is character/player — a
   `job:`/`plugin:` subject never reaches it. The STRICT per-instance gate is `Evaluate`.
-- `bags.Resource["id"]` is stamped by the RESOLVER from the request ref, before any
-  provider runs (`attribute/resolver.go:211-214`) — always present, provider-independent,
-  = substring after the first `:`. That is what makes `... == resource.id` fences work
-  even for a row that does not exist.
-- Caller-supplied `req.Attributes` overlay `bags.Action` (`engine.go:258-265`), readable
-  as `action.<key>`. Guarded only by a ONE-ENTRY denylist (`reservedActionKeys =
-  {"name"}`, `types/types.go:108`). Values are deep-cloned.
+- `bags.Resource["id"]` is stamped by the RESOLVER from the request ref before any
+  provider runs (`attribute/resolver.go:211-214`) — always present, = substring after the
+  first `:`, so `... == resource.id` fences work even for a nonexistent row.
+- Caller-supplied `req.Attributes` overlay `bags.Action` (`engine.go:258-265`), read as
+  `action.<key>`; guarded only by a ONE-ENTRY denylist (`reservedActionKeys={"name"}`).
 - `NewAccessRequest` rejects empty subject/action/resource (`types/types.go:144-152`) —
   the fail-closed backstop that lets some callers skip a panic-on-empty guard.
 - The admin wildcard seed (`seed.go:107`, no action list, NO resource clause) permits ANY
@@ -42,12 +40,10 @@ Curated 2026-08-09; full per-review detail lives in `reports/`.
 
 ## Recurring bypass shapes (check these every time)
 
-1. **Missing AttributeProvider ⇒ silent default-deny.** `BuildABACStack`
-   (`internal/access/setup/setup.go`) registers providers per namespace; a seed `when`
-   referencing an unregistered `resource.<ns>.<attr>` silently never matches.
-   `warnOnMissingSeedCoverage` regex-scans seeds and WARNs, but `productionRegistered`
-   in the unit test is a hardcoded mirror, and plugin-installed policies are NOT scanned.
-   Target-only seeds (no `when`) need no provider — don't flag those.
+1. **Missing AttributeProvider ⇒ silent default-deny.** A seed `when` referencing an
+   unregistered `<ns>.<attr>` never matches. `warnOnMissingSeedCoverage` only WARNs, its
+   test mirror is hardcoded, and plugin-installed policies are NOT scanned. Target-only
+   seeds (no `when`) need no provider — don't flag those.
 2. **Empty-string / empty-list sentinels are fail-OPEN.** Missing-attr short-circuits to
    false, but `"" == ""` is TRUE and `containsAll` against an empty list is TRUE.
    Providers MUST OMIT an unresolved optional key and keep the `has_X` witness on BOTH
@@ -79,34 +75,31 @@ Curated 2026-08-09; full per-review detail lives in `reports/`.
 
 ## Patterns that are CORRECT — do not flag
 
-- **Substrate-side authorization (ADR x0ph / D4).** Scenes use FocusMemberships checked
-  inside the same store-lock as the write, not `Evaluate`.
+- **Substrate-side authorization (ADR x0ph / D4).** Scenes check FocusMemberships inside
+  the same store-lock as the write, not `Evaluate`.
 - **Plugin handlers with no `Evaluate` call** where ABAC is HOST-enforced at command
-  dispatch (INV-P6-6, INV-SCENE-33). Confirm the dispatch wiring actually lands.
+  dispatch (INV-P6-6/SCENE-33) — confirm the dispatch wiring lands.
 - **In-handler owner/participant check alongside a structurally identical ABAC policy** —
   closes the direct-gRPC/facade gap.
 - **History-decrypt gate ≠ ABAC engine.** `authguard.checkCharacter` gates SENSITIVE
   decrypt by DEK-participant membership; an allow-all test engine does NOT make it pass.
 - **Target-only seeds** (no `when`) need no AttributeProvider.
-- **Wildcard resource IDs** (`type:*`) match via `target.ResourceType`; providers MUST
-  return `(nil, nil)` for non-ULID ids rather than erroring.
-- **Host-vouched subjects.** `s.pluginName` (manifest), dispatch-token actor, and
-  `ActorMetadataFrom(INCOMING ctx)` are forgery-proof anchors.
+- **Wildcard resource IDs** (`type:*`) match via `target.ResourceType`; providers return
+  `(nil, nil)` for non-ULID ids rather than erroring.
+- **Host-vouched subjects:** `s.pluginName` (manifest), dispatch-token actor,
+  `ActorMetadataFrom(INCOMING ctx)`.
 
 ## Invariant-binding hygiene
 
 - A `// Verifies: INV-X` on a test spanning FEWER clauses than the summary is a PARTIAL
-  binding; the registry meta-test cannot detect it
-  (`invariant_registry_test.go:215-220` only fails `pending` entries carrying
+  binding the registry meta-test cannot detect (it only fails `pending` entries carrying
   `asserted_by`). Cross-check the summary's clause count against the assertions.
 - Binding an invariant to the DENY test (deny engine + NO mock expectation) is the
   defensible choice: it pins the security-critical clause.
 - **When a registry entry names a future phase as its binding owner, CHECK at that phase
-  whether the precondition landed.** INV-ACCESS-14 (`invariants.yaml:2350-2361`) says
-  "Phase 3 owns binding it when the D-46 consumer wrapper lands"; the wrapper landed
+  whether the precondition landed.** INV-ACCESS-14: the D-46 wrapper landed
   (`internal/retirement/reactor.go:229-266`) and the entry stayed `pending` with no
-  `// Verifies:` anywhere. `pending` is tolerated, so this is Medium non-blocking — but
-  it is exactly how a deferral quietly becomes permanent.
+  `// Verifies:` — how a deferral quietly becomes permanent (Medium, non-blocking).
 - `omit-don't-sentinel` (ADR ti1b) still has NO `INV-ACCESS-*` entry — worth minting.
 
 ## Seed / policy change review ladder
@@ -121,14 +114,13 @@ Curated 2026-08-09; full per-review detail lives in `reports/`.
    that action. Scope to a distinct action if the widening was surface-specific.
 5. New audit-chain subject prefix ⇒ needs TWO forbid seeds (`principal is character` AND
    `principal is plugin`).
-6. "Policy-neutral refactor" is a CLAIM, not evidence. Trace what reaches
-   `NewAccessRequest`: subject string (byte identity — often ALSO an audit field),
-   evaluation CONTEXT (system marker), attribute map.
+6. **"Policy-neutral refactor" is a CLAIM.** Trace what reaches `NewAccessRequest`:
+   subject string (byte identity — often ALSO an audit field), evaluation CONTEXT
+   (system marker), attribute map.
 7. **Coarse actions grant more than the phase's use case.** `write` on a character covers
-   BOTH `MoveCharacter` (`world/service.go:1256`) and `UpdateCharacterDescription`
-   (`:849`); `read` covers `GetCharacter` (`:830`). `retire`/`unretire`/`delete` are
-   distinct actions (`:942`, `:1042`, `:801`). Map every command sharing the action
-   before accepting a seed comment's enumeration of "what it authorizes".
+   BOTH `MoveCharacter` and `UpdateCharacterDescription`; `read` covers `GetCharacter`;
+   `retire`/`unretire`/`delete`/`read_description` are distinct. Map every command sharing
+   the action before accepting a seed comment's enumeration of what it authorizes.
 
 ## world.Caller / job-principal model (02.1 READY, 02.2 NOT READY→fixed, 03-04 READY)
 
@@ -138,38 +130,33 @@ against `caller.evalContext(ctx)`. Settled:
 
 - **`SystemCaller()` narrows S1**: marker applied only to the ctx handed to `Evaluate`;
   takes NO parameters. `"system:bootstrap"` stays `HumanCaller`.
-- **Opacity holds**: unexported fields; NO exported constructor takes an attribute map
-  (`JobCaller` derives 3 hardcoded `job.`-prefixed keys from a typed `Provenance`).
-  Only 3 production non-nil-attr `NewAccessRequest` producers exist
+- **Opacity holds**: unexported `world.Caller` fields; no exported constructor takes an
+  attribute map. Only 3 production non-nil-attr `NewAccessRequest` producers exist
   (`authguard/guard.go:130`, `pluginauthz/capability.go:50`, `world/service.go:253`);
   `capability.go`'s Subject is host-derived `plugin:<name>`, so it can never satisfy
-  `principal is job`. `dispatch_location` CANNOT be denylisted — `capability.go:50`
-  supplies it for the host's own scope fence.
-- **`job:` principal.** `access.SubjectJob` disjoint from `SubjectSystem`;
-  `access.JobSubject` panics on empty. `attribute.JobProvider` returns `(nil,nil)` for
+  `principal is job`. `dispatch_location` CANNOT be denylisted (host scope fence).
+- **`job:` principal.** `SubjectJob` disjoint from `SubjectSystem`; `access.JobSubject`
+  panics on empty. `attribute.JobProvider` returns `(nil,nil)` for
   unknown/dead/nil-registry/foreign-prefix; `has_writes` witness on BOTH branches,
-  `writes` omitted (never empty list) and declared `AttrTypeStringList`
-  (`job_provider.go:118`) so `containsAll` is fail-closed. Deny code composes as a
-  PREFIX (`JOB_CHARACTER_ACCESS_DENIED`) so `grpc_server.go:169`'s `_ACCESS_DENIED`
-  suffix classification survives.
-- **`cmd/holomush/core.go:415,421,905`**: the ABAC subsystem and the retirement reactor
-  share ONE `jobs.Registry` instance. That is what makes a job grant LIVE; a second
-  registry would silently default-deny every write.
+  `writes` omitted (never empty list) and typed `AttrTypeStringList` so `containsAll` is
+  fail-closed. Deny code composes as a PREFIX (`JOB_CHARACTER_ACCESS_DENIED`) so
+  `grpc_server.go:169`'s `_ACCESS_DENIED` suffix classification survives.
+- **`cmd/holomush/core.go:415,421,905`**: ABAC subsystem and retirement reactor share ONE
+  `jobs.Registry`. That is what makes a job grant LIVE; a second registry denies all.
 - **Still open**: NO census pins the `world.JobCaller` / `SystemCaller()` call-site set.
   `test/meta/world_caller_census_test.go` censuses `world.Service` command SIGNATURES
   only. Since 03-04 the missing JobCaller census guards a LIVE grant — reusable AST
   machinery is already in that file; demand the census when a job grant widens again.
-- **The `action` schema gate IS LIVE in production.** `setup.go:184` allocates ONE
-  `SchemaRegistry`, hands it to the resolver, registers `action` into it at `:394`, and
-  builds the compiler on the live pointer at `:412`; `compiler.go:189-201` then
-  hard-errors `POLICY_UNREGISTERED_ACTION_ATTRIBUTE`. Reached in prod via
-  `setup/subsystem.go:115` ← `cmd/holomush/core.go:417`. A phase brief claimed the
-  opposite in 03-04 — VERIFY, don't accept. Validation is by DSL ROOT
-  (principal|resource|action|env), so `HasNamespace("resource"|"principal")` is false and
-  only `action.*` is fatal. `attribute.ActionNamespaceSchema()` (`action_schema.go:43`)
-  is the single source of truth. Un-gated hole: plugin-policy install runs only
-  `dsl.Parse` + resource-attr checks, so an undeclared `action.*` key installs then
-  bricks every reload → deny-all.
+- **The `action` schema gate IS LIVE in production.** `setup.go` registers `action` into
+  the ONE `SchemaRegistry` (`:405`), builds the compiler on the live pointer (`:421`),
+  THEN reloads (`:441`) — that order is the whole mechanism, pinned by
+  `TestBuildABACStackReloadsTheCacheAfterTheActionRegistration`. `compiler.go:195-201`
+  hard-errors `POLICY_UNREGISTERED_ACTION_ATTRIBUTE`. Validation is by DSL ROOT
+  (principal|resource|action|env), so only `action.*` is fatal. Action TOKENS in a
+  TARGET clause are NOT attribute refs (`validateAttributes` walks a `*ConditionBlock`
+  only) — a new action token like `read_description` needs no schema entry; do not flag
+  its absence. `attribute.ActionNamespaceSchema()` is the single source of truth.
+  Un-gated hole: plugin-policy install runs only `dsl.Parse` + resource-attr checks.
 
 ## Name-set fences on seed families (D-29 pattern)
 
@@ -180,20 +167,33 @@ such a fence with a written justification:
 1. A name-set fence does NOT gate the SHAPE of an entry it already admits — demand a
    per-name shape map (`:767-772`) AND an exact-DSL + `SeedVersion` pin (`:838-850`).
    03-04 shipped all three; that is the standard to hold future phases to.
-2. **Read the fence's collection predicate, not just its assertions.** `:780` collects
-   only `Target.ResourceType == "character"`. A bare-resource permit
-   (`permit(principal is job, action, resource)`) compiles to `ResourceType == nil`
-   (`compiler.go:122-131`) and evades the fence entirely — as does an
-   `ResourceExact`-only seed (harmless: exact-match never hits a real id).
+2. **Read the fence's collection predicate, not just its assertions.** It collects only
+   `Target.ResourceType == "character"`. A bare-resource permit compiles to
+   `ResourceType == nil` (`compiler.go:122-131`) and evades the fence entirely.
 3. **A fence over POLICY cannot bound who mints the principal.** An instance fence like
    `action.job.trigger_subject == resource.id` is only as strong as the census of code
-   that can supply the provenance. Ask for that census; its absence is the residual risk,
-   not the DSL.
+   that can supply the provenance; its absence is the residual risk, not the DSL.
 4. Verify the exemption argument's negative claims yourself: forged events need an
-   unqualified wire type (INV-PLUGIN-40 forbids it for plugins), and `HumanCaller("job:x")`
-   yields a `job:` subject with nil attrs → deny.
+   unqualified wire type (INV-PLUGIN-40 forbids it), and `HumanCaller("job:x")` yields a
+   `job:` subject with nil attrs → deny.
 
 ## Harness note
 
 This worktree's bash/Read harness intermittently returns STALE stdout — trust exit codes
 captured as the FIRST token over printed text; `base64 < file` detects replay.
+
+## Web-facade read path (phases 04-05, READY 2026-08-13)
+
+- **`evaluateGate`** (`grpc/characteraccess_directory.go:178`) is the ONE raw `Evaluate`
+  the facade owns, and it catches all THREE outcomes — error, `IsInfraFailure()` deny with
+  a NIL error, ordinary deny — returning `true` only on `IsAllowed()`. Copy this shape
+  when reviewing any hand-written gate; the infra-deny arm is the one reliably missed.
+- **Subject is never client-supplied.** `resolveViewerTier`
+  (`characteraccess_service.go:356`) is a CLOSED switch over a server-resolved identity;
+  unknown rung ⇒ deny. An unresolvable token degrades to `anonymous` — fail-CLOSED.
+- **Tier floors are set membership, never `>=`** (`seed.go:610,953`). A three-rung
+  clearing list is an intentional always-true config surface, not a dead clause.
+- `read_description` (`world/service.go:866`) is narrowed by RETURN TYPE
+  (`world.CharacterDescription` = Name+Description only). The character-flavored seed
+  (`seed.go:937`) is UNCONDITIONAL and consumer-less — re-derive the ceiling when a
+  character-side consumer lands.
