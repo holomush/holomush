@@ -127,6 +127,9 @@
     }
   }
 
+  /** The one authored refusal for a select, whichever leg produced it. */
+  const SELECT_FAILED = 'Failed to select character. Try again.';
+
   async function selectCharacter(id: string) {
     actionError = '';
     try {
@@ -135,10 +138,18 @@
         setCharacterSession(resp.sessionId, resp.characterName);
         goto('/terminal');
       } else {
-        actionError = resp.errorMessage || 'Failed to select character.';
+        // THE COPY IS AUTHORED HERE, NOT FORWARDED FROM THE WIRE. The
+        // producers of `error_message` (internal/grpc/auth_handlers.go)
+        // include "character does not belong to this player" — an ownership
+        // disclosure phrased in wire vocabulary, on a surface whose whole
+        // mutation path collapses ownership causes into one authored literal.
+        // Every sibling failure path in this file already authors its own
+        // copy; this one is the same rule, and it is one string so the two
+        // legs cannot drift apart.
+        actionError = SELECT_FAILED;
       }
     } catch {
-      actionError = 'Failed to select character.';
+      actionError = SELECT_FAILED;
     }
   }
 </script>
