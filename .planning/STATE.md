@@ -5,8 +5,8 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 6
 current_phase_name: Admin Portal Shell & Character Administration
 status: planning
-stopped_at: Completed 05-08-PLAN.md — phase 05 complete
-last_updated: "2026-08-13T13:34:49.072Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-08-13T16:18:05.511Z"
 last_activity: 2026-08-13
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
 progress:
@@ -685,7 +685,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-13T13:40:00.000Z
+Last session: 2026-08-13T16:18:05.483Z
 Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
 by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
 carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
@@ -696,8 +696,8 @@ short-circuit was declined a second consecutive phase — closing 59/59 threats,
 holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
 Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
 in the same commit. Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Phase 5 complete, ready to plan Phase 6
-Resume file: None
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/06-admin-portal-shell-character-administration/06-CONTEXT.md
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.
