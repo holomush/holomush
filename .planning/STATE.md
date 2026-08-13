@@ -21,12 +21,12 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-09)
+See: .planning/PROJECT.md (updated 2026-08-13)
 
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 05 — character-identity-ui-public-profiles
+**Current focus:** Phase 6 — Admin Portal Shell & Character Administration
 unchanged: complete the character identity surface (creation, management, public profiles with privacy) and
 stand up the `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces
 without rework.
@@ -685,12 +685,18 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-13T00:02:21.572Z
-Phase 02.2 closed. UAT 2/2 passed (test 2 vacuously — see AR-02.2-04), canonical verification advanced
-`human_needed` → `passed`, and the security gate ran: 26/26 threats closed with cited evidence,
-`threats_open: 0`, four accepted risks logged in `02.2-SECURITY.md`. ROADMAP and STATE advanced to Phase 03.
-Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 05-08-PLAN.md — phase 05 complete
+Last session: 2026-08-13T13:40:00.000Z
+Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
+by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
+carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
+sits in `web/e2e/characters-roster.spec.ts:11-17`). Canonical verification advanced `human_needed` →
+`passed`. Security gate ran at scaled ASVS depth (L3/L2/L1) across three independent auditors — the L1
+short-circuit was declined a second consecutive phase — closing 59/59 threats, `threats_open: 0`, with
+11 accepted risks and 1 transfer logged in `05-SECURITY.md`; five findings recorded where the property
+holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
+Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
+in the same commit. Branch `v013-phase-03` is still UNPUSHED.
+Stopped at: Phase 5 complete, ready to plan Phase 6
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
