@@ -273,19 +273,41 @@ describe('CreateCharacterForm', () => {
 	});
 
 	it('counts the name in code points, not UTF-16 code units', async () => {
-		// Six astral code points. Their UTF-16 length is twelve, so a counter
-		// reading the string's own length reports double for a player writing
-		// outside the Basic Multilingual Plane — and is right for every ASCII
-		// fixture anyone would check it against.
-		const astral = '𝔄𝔅𝔇𝔈𝔉𝔊';
-		expect([...astral].length).toBe(6);
-		expect(astral.length).toBe(12);
+		// Astral code points: each is ONE rune but TWO UTF-16 code units, so a
+		// counter reading the string's own length reports double for a player
+		// writing outside the Basic Multilingual Plane — and is right for every
+		// ASCII fixture anyone would check it against.
+		//
+		// The length is chosen to clear the 80%-of-cap display gate (26 >= 25.6);
+		// below it the counter is intentionally absent and there is nothing to
+		// read. The rune-vs-code-unit discrimination is unaffected — 26 and 52 are
+		// still different numbers, which is the whole point of the assertion.
+		const astral = '𝔄'.repeat(26);
+		expect([...astral].length).toBe(26);
+		expect(astral.length).toBe(52);
 
 		const { target, field, dispose } = render();
 		await type(field('characterName'), astral);
 
 		const counter = target.querySelector('[data-testid="name-counter"]');
-		expect(counter?.textContent?.trim()).toBe('6 / 32');
+		expect(counter?.textContent?.trim()).toBe('26 / 32');
+		dispose();
+	});
+
+	it('hides the name counter until the name is within 20% of the cap', async () => {
+		const { target, field, dispose } = render();
+
+		// Below the gate: no numeric chrome, matching the five sibling fields and
+		// UI-SPEC:423's "authoring form, all fields blank | no copy".
+		expect(target.querySelector('[data-testid="name-counter"]')).toBeNull();
+		await type(field('characterName'), 'a'.repeat(25));
+		expect(target.querySelector('[data-testid="name-counter"]')).toBeNull();
+
+		// Positive control — without this the assertions above would also pass if
+		// the counter had been deleted outright rather than gated.
+		await type(field('characterName'), 'a'.repeat(26));
+		const counter = target.querySelector('[data-testid="name-counter"]');
+		expect(counter?.textContent?.trim()).toBe('26 / 32');
 		dispose();
 	});
 

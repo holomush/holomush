@@ -221,7 +221,16 @@
     align-items: flex-start;
     justify-content: center;
     min-height: calc(100vh - 36px);
-    padding: 32px 24px;
+    padding: 32px 16px;
+  }
+  /* Matches the two sibling owner surfaces (`characters/[id]`, `c/[id]`), which
+     both go 16px → 48px at this band. Without it this route sat at a flat 24px,
+     off the 4px scale, and the gutter visibly jumped when navigating between
+     the three. */
+  @media (min-width: 768px) {
+    .page {
+      padding: 32px 48px;
+    }
   }
   .column {
     width: 100%;

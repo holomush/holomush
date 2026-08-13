@@ -58,7 +58,6 @@
     font-size: 20px;
     font-weight: 600;
     line-height: 1.2;
-    color: var(--color-primary);
   }
   @media (min-width: 768px) {
     .page {

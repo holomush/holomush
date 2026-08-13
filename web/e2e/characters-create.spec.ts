@@ -87,8 +87,17 @@ test.describe('Character creation — the structured card', () => {
     await expect(rule).toBeVisible();
     await expect(rule).toContainText(/are folded, so the name you get may differ/);
 
-    // The rune counter is part of that always-visible affordance.
-    await expect(page.getByTestId('name-counter')).toHaveText('0 / 32');
+    // The RULE is always visible; the rune COUNTER is not. It follows the same
+    // 80%-of-cap display gate as the five ByteCounter siblings (UI-SPEC:491), so
+    // an untouched form carries no numeric chrome on any of its six fields.
+    await expect(page.getByTestId('name-counter')).toHaveCount(0);
+
+    // Positive control: the absence above must be the gate working, not the
+    // counter having been removed. Cross the gate and it appears.
+    await page.getByLabel('Name').fill('a'.repeat(26));
+    await expect(page.getByTestId('name-counter')).toHaveText('26 / 32');
+    await page.getByLabel('Name').fill('');
+    await expect(page.getByTestId('name-counter')).toHaveCount(0);
   });
 
   test('a full-width name is created and the confirmation names the folded ASCII form the server stored', async ({

@@ -79,6 +79,14 @@
   // astral plane — a counter that is right in testing and wrong in use.
   const nameRunes = $derived([...name].length);
 
+  // Same DISPLAY rule ByteCounter applies to the five sibling fields
+  // (`shown = value >= max * 0.8`, UI-SPEC:491): numeric chrome appears only
+  // within 20% of the cap. Without this the name was the one field of six
+  // carrying a counter from first paint, which contradicts UI-SPEC:423
+  // ("Authoring form, all fields blank | No copy"). The unit is RUNES here and
+  // bytes there, so the gate is restated rather than shared.
+  const nameCounterShown = $derived(nameRunes >= MAX_NAME_RUNES * 0.8);
+
   /**
    * Turns a refusal into player-facing copy.
    *
@@ -139,7 +147,11 @@
          CLASS of rewrite; it never predicts the result for the entered string,
          because that would require the client-side transform D-88 forbids. -->
     <p class="rule">{NAME_RULE}</p>
-    <p class="counter" data-testid="name-counter">{nameRunes} / {MAX_NAME_RUNES}</p>
+    {#if nameCounterShown}
+      <p class="counter" data-testid="name-counter" aria-live="polite">
+        {nameRunes} / {MAX_NAME_RUNES}
+      </p>
+    {/if}
   </div>
 
   <div class="field">
