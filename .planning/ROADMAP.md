@@ -572,7 +572,7 @@ Plans:
 4. All six deferred sections (stats, players, moderation, audit, config, plugins) are registered, role-gated, and return `NOT_IMPLEMENTED` **after** the gate — a non-admin hitting one is *denied*, not told it is unimplemented — and a meta-test asserts **set equality** between the section registry and the authorization-descriptor set, so a section registered without a descriptor fails at compile time or at boot.
 5. Admin navigation is filtered from the **registry contract**, not template `{#if}` blocks; the roles exposed on `WebCheckSessionResponse` change only what is drawn, and drawing a link the viewer may not use still results in a denial at the RPC.
 
-**Plans**: TBD
+**Plans**: 8 plans
 **UI hint**: yes
 **Research flag**: `--research-phase` recommended — there is no in-repo precedent for the web gateway making an admin decision (`internal/web/` has zero `RoleAdmin` references); `AssertOperatorAdmin`'s shape must be transposed across a different auth model, and the reserved-section descriptor mechanism needs a concrete fail-at-boot design.
 
@@ -580,7 +580,14 @@ Plans:
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 6`)
+- [ ] 06-01-PLAN.md — Tracer: the fail-closed admin section gate, end-to-end from proto to screen
+- [ ] 06-02-PLAN.md — `AdminGetSection`, the six planned sections refusing after the gate, and the non-authoritative `roles` hint
+- [ ] 06-03-PLAN.md — Eleven shadcn components, the single root `+error.svelte` with its count meta-test, and the eight owed amendments
+- [ ] 06-04-PLAN.md — Admin character reads: `pg_trgm` migration 000057, the `players` join, both-direction ordering, three read RPCs
+- [ ] 06-05-PLAN.md — Admin character writes and same-transaction audit emission with before-status
+- [ ] 06-06-PLAN.md — The `@container vp` admin shell, the server-projected nav, and the planned-section state
+- [ ] 06-07-PLAN.md — The character table: click-header sort, one status filter, coarse `Last active`, four list states
+- [ ] 06-08-PLAN.md — The edit Sheet, the D-110 mutation loop, the retire confirm, and the phone-band + indistinguishability E2E proofs
 
 ## Progress
 
