@@ -579,14 +579,27 @@ Plans:
 **Sketch findings** (design decided in sketches 001–004; read `.planning/sketches/MANIFEST.md` locked-decisions table before planning): three-column frame with the admin nav **merging into the rail** at 768–1023px (001/C2); inline row actions, **no multi-select** (002/A); planned sections **navigable to a minimal empty state**, no gate trace, no scope preview (003/A); edit surface = Sheet with **managed-elsewhere first and collapsed**, `version` as header metadata, status as a **transition picker that never sends a status value** (004/C). **There is no delete in this portal** — §9.3 has no `AdminDeleteCharacter` and §4.4 forbids wiring purge to an admin button. **Open:** `+error.svelte` does not exist (#4903) and the not-found page must stay the *ordinary* one, or `/admin`'s indistinguishability is lost. Ten shadcn components need adding (`table`, `pagination`, `empty`, `alert`, `avatar`, `breadcrumb`, `skeleton`, `select`, `field`, `sonner`). **Round 2 (005, 006, 010):** the edit Sheet is a **380px right overlay** (005-A) at every band **except** `<768`, where one `@container vp (max-width:767px)` block turns it into a **bottom-sheet** (006-B) — `Sheet side="bottom"`, a prop at a breakpoint, not a second component. Its **grab handle promises drag-to-dismiss**: honor it or drop it. The Sheet stays an **overlay, never a route** — that deliberately keeps deep-linkable edit surfaces (and their not-found obligation) out of scope. The mutation loop ends in a **toast naming the RPC**, and the row updates **in place** rather than refetching. **Not-found** (010-B): one page for four kinds of miss, offering the viewer's *own* sections; copy is **`Home`** — never "Back to HoloMUSH" (branding INV-6; the game's name exists as `SettingConfig.DisplayName` but reaches no web surface). Indistinguishability is **per-viewer**, not global. Ship a meta-test asserting **exactly one** `+error.svelte` under `web/src/routes/` — a second boundary kills the property with nothing failing.
 
 Plans:
+**Wave 1**
 
 - [ ] 06-01-PLAN.md — Tracer: the fail-closed admin section gate, end-to-end from proto to screen
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-02-PLAN.md — `AdminGetSection`, the six planned sections refusing after the gate, and the non-authoritative `roles` hint
-- [ ] 06-03-PLAN.md — Eleven shadcn components, the single root `+error.svelte` with its count meta-test, and the eight owed amendments
+- [ ] 06-03-PLAN.md — Eleven shadcn components, the single root `+error.svelte` with its count meta-test, and the nine owed amendments
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 06-04-PLAN.md — Admin character reads: `pg_trgm` migration 000057, the `players` join, both-direction ordering, three read RPCs
-- [ ] 06-05-PLAN.md — Admin character writes and same-transaction audit emission with before-status
 - [ ] 06-06-PLAN.md — The `@container vp` admin shell, the server-projected nav, and the planned-section state
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 06-05-PLAN.md — Admin character writes and same-transaction audit emission with before-status
 - [ ] 06-07-PLAN.md — The character table: click-header sort, one status filter, coarse `Last active`, four list states
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 06-08-PLAN.md — The edit Sheet, the D-110 mutation loop, the retire confirm, and the phone-band + indistinguishability E2E proofs
 
 ## Progress
