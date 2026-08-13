@@ -37,7 +37,20 @@
 </script>
 
 {#if shown}
-  <p class="counter" class:over data-testid="byte-counter" data-over={over ? 'true' : 'false'}>
+  <!-- `aria-live` because the two moments that matter here are both silent
+       otherwise: the counter APPEARS at 80% of cap and flips to `over` at 100%,
+       and neither is a focus change, so a screen-reader user typing into the
+       field is never told. `polite` rather than `assertive` — it must not
+       interrupt the character being echoed. The numerals carry the state on
+       their own (`101 / 100` reads as over), so colour is not the sole
+       carrier and this is the announcement gap, not a 1.4.1 fix. -->
+  <p
+    class="counter"
+    class:over
+    data-testid="byte-counter"
+    data-over={over ? 'true' : 'false'}
+    aria-live="polite"
+  >
     {bytes} / {maxBytes}
   </p>
 {/if}

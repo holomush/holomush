@@ -281,6 +281,10 @@
     display: inline-flex;
     align-items: center;
     width: fit-content;
+    /* UI-SPEC:88 makes 44px an unqualified hit-area floor "at every band". The
+       4px/12px/1.4 box computes to ~27px on its own, so the floor is stated
+       explicitly rather than left to the padding to reach by accident. */
+    min-height: 44px;
     padding: 4px 8px;
     border: 1px solid var(--color-border);
     border-radius: 8px;
