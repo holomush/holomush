@@ -682,6 +682,15 @@ message WebCreateGuestResponse {
 // them one-for-one. A value left empty is not written at all, so a name-only
 // submission seeds no profile rows.
 message WebCreateCharacterRequest {
+  // Field 1 carried `player_token` before the cookie cutover moved player
+  // identity onto the cookie, and field 2's name changed from `character_name`
+  // to `name`. Declaring both reserved is what makes the prose above
+  // ENFORCEABLE rather than merely asserted: without it a later field is free
+  // to take number 1 with a new meaning, and the freed NAME is free to reappear
+  // on a different number — at which point a stale client mis-decodes instead
+  // of failing, and protoc says nothing.
+  reserved 1;
+  reserved "player_token", "character_name";
   // name is the submitted character name, forwarded verbatim.
   // CharacterAccessServer.CreateCharacter hands it to
   // auth.CharacterService.CreateBound, which normalizes it server-side; the
@@ -711,6 +720,20 @@ message WebCreateCharacterRequest {
 // FailedPrecondition for a reached character limit — which the client
 // classifies directly.
 message WebCreateCharacterResponse {
+  // The retired numbers and names from the pre-05-03 shape: `character_id` = 2,
+  // `character_name` = 3, `error_message` = 4. Reserving them stops a later
+  // field from silently inheriting a number or a name a stale client still
+  // recognises, which is the one failure mode that produces a wrong VALUE
+  // rather than a decode error.
+  //
+  // Field 1 is NOT reserved because it is reused: `success` (bool, varint) gave
+  // way to `character` (message, length-delimited). Reusing a number with a
+  // different wire type is a break protobuf cannot express as `reserved`, and
+  // it is deliberate — D-86 retires the old shape in the same change and this
+  // schema has never been deployed, so there is no stale client to protect. The
+  // note is here so the asymmetry with 2/3/4 reads as a decision.
+  reserved 2 to 4;
+  reserved "success", "character_id", "character_name", "error_message";
   // character is the newly seated character. Its `name` is the SERVER-stored
   // display form, which is what the post-submit echo shows the player; its
   // `profile` map holds whichever of the five supplied values were written.

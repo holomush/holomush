@@ -7459,16 +7459,16 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x14default_character_id\x18\x04 \x01(\tR\x12defaultCharacterId\x12\x1d\n" +
 	"\n" +
 	"error_code\x18\x05 \x01(\tR\terrorCode\x12.\n" +
-	"\x13current_player_name\x18\x06 \x01(\tR\x11currentPlayerName\"\xab\x01\n" +
+	"\x13current_player_name\x18\x06 \x01(\tR\x11currentPlayerName\"\xcf\x01\n" +
 	"\x19WebCreateCharacterRequest\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
 	"\bpronouns\x18\x03 \x01(\tR\bpronouns\x12\x18\n" +
 	"\aconcept\x18\x04 \x01(\tR\aconcept\x12\x18\n" +
 	"\aspecies\x18\x05 \x01(\tR\aspecies\x12\x10\n" +
 	"\x03age\x18\x06 \x01(\tR\x03age\x12\x18\n" +
-	"\afaction\x18\a \x01(\tR\afaction\"e\n" +
+	"\afaction\x18\a \x01(\tR\afactionJ\x04\b\x01\x10\x02R\fplayer_tokenR\x0echaracter_name\"\xa1\x01\n" +
 	"\x1aWebCreateCharacterResponse\x12G\n" +
-	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacter\"\x1a\n" +
+	"\tcharacter\x18\x01 \x01(\v2).holomush.characteraccess.v1.OwnCharacterR\tcharacterJ\x04\b\x02\x10\x05R\asuccessR\fcharacter_idR\x0echaracter_nameR\rerror_message\"\x1a\n" +
 	"\x18WebListCharactersRequest\"^\n" +
 	"\x19WebListCharactersResponse\x12A\n" +
 	"\n" +
