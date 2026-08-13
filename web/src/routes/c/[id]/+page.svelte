@@ -3,7 +3,6 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import PublicProfile from '$lib/components/characters/PublicProfile.svelte';
   import { getCharacterProfile } from '$lib/characters/client';
@@ -47,28 +46,48 @@
   let missing = $state(false);
   let failed = $state(false);
 
-  onMount(() => {
-    void load();
+  /*
+    THE FETCH FOLLOWS THE PARAM, NOT THE MOUNT. SvelteKit reuses one component
+    instance across a client-side navigation between two params of the SAME
+    route, so a fetch anchored to `onMount` runs once and never again: `/c/A` →
+    `/c/B` would leave A's profile on screen while the URL and `id` both say B.
+    Reading `id` inside the effect is what establishes the dependency, so the
+    load re-runs for every param the route is asked for — including the first.
+
+    `inFlight` is the LAST-REQUEST TOKEN. Two loads can overlap, and network
+    order is not param order: without it, a slow response for A landing after
+    B's fast one would overwrite B's state with A's profile — the exact
+    wrong-character render the effect exists to prevent. Every write after the
+    await is gated on the token still naming this request.
+  */
+  let inFlight = $state('');
+
+  $effect(() => {
+    void load(id);
   });
 
-  async function load() {
+  async function load(target: string) {
+    inFlight = target;
     loading = true;
     missing = false;
     failed = false;
     character = undefined;
     try {
-      character = await getCharacterProfile(id);
-      if (character === undefined) {
+      const loaded = await getCharacterProfile(target);
+      if (inFlight !== target) return;
+      character = loaded;
+      if (loaded === undefined) {
         missing = true;
       }
     } catch (e) {
+      if (inFlight !== target) return;
       if (isNotFoundError(e)) {
         missing = true;
       } else {
         failed = true;
       }
     } finally {
-      loading = false;
+      if (inFlight === target) loading = false;
     }
   }
 </script>
@@ -94,7 +113,7 @@
   {:else if failed}
     <section class="notice" role="alert">
       <p>Something went wrong. Try again.</p>
-      <button type="button" onclick={() => void load()}>Try again</button>
+      <button type="button" onclick={() => void load(id)}>Try again</button>
     </section>
   {:else if character !== undefined}
     <PublicProfile {character} />

@@ -3,7 +3,6 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import ProfileSection from '$lib/components/characters/ProfileSection.svelte';
   import {
@@ -139,16 +138,35 @@
     return out;
   }
 
-  onMount(() => {
-    void load();
+  /*
+    THE LOAD FOLLOWS THE PARAM, NOT THE MOUNT. SvelteKit reuses one component
+    instance across a client-side navigation between two params of the SAME
+    route, so a load anchored to `onMount` runs once and never again. On THIS
+    surface the consequence is worse than a stale render: `version` and every
+    section's loaded snapshot would still belong to the previous character
+    while each Save sends `characterId: id` for the new one — a write guarded
+    by a version cell that was never read from the row it targets. Reading `id`
+    inside the effect is what makes the load re-run for every param, first one
+    included.
+
+    `inFlight` is the LAST-REQUEST TOKEN, for the same reason: network order is
+    not param order, and a slow response for the previous character landing
+    after the new one's would seat that stale version.
+  */
+  let inFlight = $state('');
+
+  $effect(() => {
+    void load(id);
   });
 
-  async function load() {
+  async function load(target: string) {
+    inFlight = target;
     loading = true;
     failed = false;
     character = undefined;
     try {
-      const c = await getMyCharacter(id);
+      const c = await getMyCharacter(target);
+      if (inFlight !== target) return;
       if (c === undefined) {
         failed = true;
         return;
@@ -156,9 +174,10 @@
       character = c;
       version = c.version;
     } catch {
+      if (inFlight !== target) return;
       failed = true;
     } finally {
-      loading = false;
+      if (inFlight === target) loading = false;
     }
   }
 
@@ -227,7 +246,7 @@
   {:else if failed}
     <section class="notice" role="alert">
       <p>Couldn't load this character. Try again.</p>
-      <button type="button" onclick={() => void load()}>Try again</button>
+      <button type="button" onclick={() => void load(id)}>Try again</button>
     </section>
   {:else if character !== undefined}
     <header class="head">
