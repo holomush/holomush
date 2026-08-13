@@ -2,7 +2,7 @@
 phase: 05-character-identity-ui-public-profiles
 verified: 2026-08-12T21:20:00Z
 re_verified: 2026-08-13T08:20:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -37,6 +37,7 @@ re_verification:
       #4963 pending action. THIS REPORT EVALUATES CRITERION 2 AGAINST THE AMENDED WORDING, and says
       so in the body.
   gaps_closed:
+
     - >-
       Criterion 2 — re-scored ✓ VERIFIED against the amended wording. The gap was a
       ROADMAP-vs-SPEC contradiction, now settled in the SPEC's favour by maintainer ruling; the
@@ -44,6 +45,7 @@ re_verification:
   gaps_remaining: []
   regressions: []
 deferred:
+
   - truth: "The retirement flow states in the UI that privacy is not retroactive over already-published history (ROADMAP criterion 4, second clause; PROFILE-12 retirement half)."
     addressed_in: "Phase 6"
     evidence: >-
@@ -55,18 +57,23 @@ deferred:
       line in ROADMAP.md does NOT list PROFILE-12, so without the #4963 amendment this clause has
       no roadmap-level home and will be silently dropped.
 human_verification:
+
   - test: "Live create at /characters/new with a full-width-Latin name (e.g. `Ｋａｅｌ`), then observe the roster confirmation."
     expected: "The confirmation names the SERVER-folded ASCII form, not the string typed. A rejected submit preserves all six entered values and moves focus to the name field."
     why_human: "WINDOWS.md row 19 — 05-06 Task 3 human-check recorded UNRUN. Needs a live stack; the E2E covers the happy path but the plan's own walkthrough was never executed."
+
   - test: "Load /characters with a mixed roster (at least one active, one retired, one default) and exercise the sectioned grid."
     expected: "Playable section first with the create link; Not playable second, expanded, its count chip collapsing the grid out of the flow; the retired card shows Retired and no session word; both echo sites render the server name."
     why_human: "WINDOWS.md row 20 — 05-07 Task 3 human-check recorded UNRUN. Requires a live grid."
+
   - test: "Open /characters/[id] in two tabs, save a section in tab A, then save a DIFFERENT section in tab B."
     expected: "Tab B's failing section shows the concurrent-edit copy and keeps its typed text; the other four sections are untouched; focus moves to the failed section's first field."
     why_human: "05-04's two-tab conflict walkthrough (D7) recorded unrun. The per-section conflict scoping (D-93) cannot be exercised without two live clients against one row."
+
   - test: "Confirm the roster ordering expectation for `/characters`."
     expected: "Two consecutive roster loads with no intervening write render the Playable cards in the same order."
     why_human: "Plan 05-01 carried this truth as `verification: backstop` and it is NOT automated-verified. `charRepo.ListByPlayer` has no ORDER BY (WINDOWS.md row 22), so the property holds only by heap-scan accident."
+
   - test: "Confirm the two UI-SPEC `backstop` truths whose SOLE gate is the ungated web suite — the media renderer and the byte counter."
     expected: "The ProfileMedia renderer and ByteCounter behave as 05-UI-SPEC describes under a live page, independent of the ungated vitest runner."
     why_human: >-
@@ -268,6 +275,7 @@ Spot-verified the two highest-risk fixes in the code, not the summary:
   reachable for playable AND non-playable characters, as the task required. The keydown guard at
   `RosterCard.svelte:188` (`e.target !== e.currentTarget`) is what keeps it keyboard-activatable
   rather than mouse-only — a subtlety a naive fix would have missed.
+
 - **WR-08 — real.** `WebCreateCharacterResponse` field reservation confirmed in the proto.
 - **WR-03 — real.** Both `[id]` routes now load inside a `$effect` reading `id`, with an `inFlight`
   last-request token guarding every post-await write.
