@@ -120,8 +120,18 @@ Rules:
 
 ## Color
 
-The palette is fixed by `web/src/app.css` `@theme` and `.claude/rules/branding.md`. This
-phase introduces **no new token**.
+The palette is fixed by `web/src/app.css` `@theme` and `.claude/rules/branding.md`.
+
+> **Amended 2026-08-13 (post-implementation, maintainer ruling).** This section previously read
+> "This phase introduces **no new token**." That was falsified during execution: `RosterCard`
+> introduced `--color-status-online` in commit `fdcd459c3`, and the colour table below admitted no
+> green role at all, so the shipped session badge conformed to nothing. The `05-UI-REVIEW.md` audit
+> raised it as a contract-conformance finding — legibility was never in question, the live pass
+> measured it at **12.22:1** against the Default Dark ground and the badge also carries the word
+> `Active` / `Offline`, so colour is not the sole carrier. Resolved in favour of **amending the
+> contract rather than dropping the token**: a status colour is a genuine need this phase
+> discovered, and deleting a working affordance to satisfy a table that had simply not anticipated
+> it would be the wrong direction. The Status row below is the amendment.
 
 | Role | Token | Value | Usage |
 |------|-------|-------|-------|
@@ -130,6 +140,7 @@ phase introduces **no new token**.
 | Accent (10%) | `--color-primary` | `#3dd6f7` | See the reserved-for list below |
 | Muted text | `--color-status-text` | `#9aa7b2` | Section headings, fact labels, meta, the not-retroactive notice |
 | Destructive | `--color-destructive` | `#fc7f7f` | Error text and error-region border **only** |
+| Status | `--color-status-online` | `#7fd98f` | The session badge's `Active` state **only**. Never an accent, never a general-purpose green: it is not on the accent reserved-for list and the session badge remains in the not-accent list below. It MUST NOT be the sole carrier of the state — the badge always renders the word `Active` / `Offline` beside it, which is what keeps the meaning available when the colour is not perceived. |
 
 **Accent reserved for — the complete list. Anything not on it is not accent:**
 
@@ -486,7 +497,7 @@ The roster copy MUST NOT imply a player can retire, delete or rename a character
 | Collapse chip | `aria-expanded`, `aria-controls` pointing at the not-playable grid; label carries the count and the action, not the word "hidden". |
 | Focus | Visible ring on every interactive element (`--color-ring`); never `outline: none` without a replacement. Focus moves to the first field of a section that fails to save. |
 | Long-form fields | `<textarea>` with `white-space: pre-wrap` rendering on the public side; the profile never truncates prose — the prose is the content. |
-| Motion | Card hover is a `border-color` transition ≤150ms. No new keyframes. Any animation added MUST sit inside the existing `@media (prefers-reduced-motion: no-preference)` block. |
+| Motion | Card hover is a `border-color` transition ≤150ms. No new keyframes. Any animation added MUST sit inside a `@media (prefers-reduced-motion: no-preference)` guard. **Amended 2026-08-13:** this row previously said "the **existing**" block. No such block existed anywhere in `web/src` — the phase shipped no CSS transitions at all — so the guard was introduced with the card hover in `RosterCard.svelte`. New animations join that guard; they do not add their own. Transition named properties, never `all`, so the guard cannot silently stop covering a property added later. |
 | Color independence | No state is signalled by color alone (see Color). |
 | Byte counters | Shown on a field **only** within 20% of its cap, computed as `new TextEncoder().encode(v).length` so it matches the server exactly. Caps are **bytes**: 100 for short fields (`world.MaxNameLength`), 4000 for long fields and the description (`world.MaxDescriptionLength`) — see `internal/grpc/characteraccess_write.go:119-153`. |
 
