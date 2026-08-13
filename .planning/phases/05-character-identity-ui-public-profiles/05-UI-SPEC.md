@@ -377,6 +377,7 @@ Terminology is binding (`.claude/rules/terminology.md`): **character**, **player
 |---------|------|
 | `/characters` create card | `+ Create a character` |
 | `/characters` playable card, not default | `Make default` |
+| `/characters` roster card, any lifecycle | `Edit profile →` |
 | `/characters/new` submit | `Create character` |
 | `/characters/[id]` section 1 | `Save identity` |
 | `/characters/[id]` section 2 | `Save in-world description` |

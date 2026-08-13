@@ -158,6 +158,61 @@ describe('RosterCard', () => {
 		expect(button?.disabled).toBe(true);
 	});
 
+	it('gives EVERY owned card the owner-edit route into the authoring surface', () => {
+		// The reachability property, asserted at both lifecycle states because a
+		// retired character's twelve profile fields are every bit as editable as
+		// an active one's. Before this control the only link to /characters/[id]
+		// was the roster's one-shot repair notice, gated on a partial-write
+		// failure — so a clean create left the surface unreachable.
+		for (const p of [
+			props({ status: 'active', playable: true }),
+			props({ status: 'retired', playable: false }),
+		]) {
+			const { target, text, dispose } = render(p);
+			const link = target.querySelector<HTMLAnchorElement>('[data-testid="edit-character"]');
+			expect(link, `expected an edit link on a ${p.status} card`).not.toBeNull();
+			expect(link?.getAttribute('href')).toBe('/characters/01ARZ3NDEKTSV4RRFFQ69G5FAV');
+			// The accessible name IS the visible text — no aria-label override to
+			// drift out of sync — and it names a verb the card's other controls do
+			// not use.
+			expect(link?.textContent?.trim()).toBe('Edit profile →');
+			expect(text).toContain('Edit profile');
+			dispose();
+		}
+	});
+
+	it('does not also select the character when the edit link is followed on a playable card', () => {
+		const onselect = vi.fn();
+		const { target } = render(props({ playable: true, onselect }));
+		const link = target.querySelector<HTMLAnchorElement>('[data-testid="edit-character"]');
+		// jsdom does not navigate, so the click is observed purely for the
+		// side-effect that must NOT happen: the card's whole-surface select.
+		link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+		expect(onselect).not.toHaveBeenCalled();
+	});
+
+	it('leaves Enter on a control inside the card to that control, rather than selecting', () => {
+		// The card's own arm calls preventDefault(), so a keydown bubbling up from
+		// a focused child would suppress that child's activation and enter the
+		// game instead. Mouse-reachable-only would make the edit route no route
+		// at all for a keyboard player.
+		const onselect = vi.fn();
+		const { target } = render(props({ playable: true, isDefault: false, onselect }));
+		for (const testid of ['edit-character', 'make-default']) {
+			const control = target.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+			expect(control, `expected a ${testid} control`).not.toBeNull();
+			const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+			control?.dispatchEvent(event);
+			expect(onselect, `Enter on ${testid} must not select`).not.toHaveBeenCalled();
+			expect(event.defaultPrevented, `Enter on ${testid} must stay actionable`).toBe(false);
+		}
+
+		// The card itself still answers for its OWN focus.
+		const card = target.querySelector<HTMLElement>('[data-testid="roster-card"]');
+		card?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+		expect(onselect).toHaveBeenCalledWith('01ARZ3NDEKTSV4RRFFQ69G5FAV');
+	});
+
 	it('reports the character id when Make default is activated, without also selecting the character', () => {
 		const onselect = vi.fn();
 		const onmakedefault = vi.fn();

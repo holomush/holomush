@@ -16,6 +16,12 @@
    * Clearing the session overlay in the route's join would produce the same
    * pixels today and would hold only for as long as the join kept remembering
    * to do it; a template rule holds for every caller.
+   *
+   * IT CARRIES THE ONE ROUTE INTO /characters/[id]. The authoring surface owns
+   * twelve of the thirteen editable fields and had no ordinary entry point:
+   * the roster's repair notice is gated on a partial-write failure, and the
+   * public link goes to the read-only /c/[id]. The `Edit profile →` control
+   * below is unconditional for that reason — see its own comment.
    */
   let {
     id,
@@ -97,29 +103,59 @@
         <span class="badge" data-testid="lifecycle-badge">Retired</span>
       {/if}
     </div>
-    {#if playable && !isDefault}
+    <div class="controls">
+      {#if playable && !isDefault}
+        <!--
+          stopPropagation: the card itself selects a character, and setting a
+          default must not also drop the player into the game. The label does NOT
+          change in flight (UI-SPEC Loading states); disabled + aria-busy carry
+          that state.
+        -->
+        <button
+          type="button"
+          name="makeDefault"
+          class="make-default"
+          data-testid="make-default"
+          disabled={savingDefault}
+          aria-busy={savingDefault}
+          onclick={(e: MouseEvent) => {
+            e.stopPropagation();
+            onmakedefault?.(id);
+          }}>Make default</button
+        >
+      {/if}
       <!--
-        stopPropagation: the card itself selects a character, and setting a
-        default must not also drop the player into the game. The label does NOT
-        change in flight (UI-SPEC Loading states); disabled + aria-busy carry
-        that state.
+        THE OWNER'S ROUTE INTO THEIR OWN AUTHORING SURFACE, and the only one.
+        /characters/[id] owns twelve of the thirteen editable fields, and before
+        this control the sole link to it was the one-shot repair notice on the
+        roster route — gated on a partial-write FAILURE and cleared after one
+        render, so a player whose create succeeded cleanly could not reach it at
+        all.
+
+        UNCONDITIONAL, on every card the owner holds. A retired character's
+        twelve fields are every bit as editable as an active one's; gating this
+        on `playable` would leave that character with a link to the public view
+        of a profile its owner cannot edit.
+
+        The affordance is owner-only by construction — this component renders
+        only inside the owner roster — which is the case 05-UI-SPEC's absence
+        contract admits by name: it varies by viewer, but it tells the owner
+        they are the owner and leaks nothing.
+
+        stopPropagation for the same reason `Make default` does it: on a
+        playable card the whole surface selects, and following a link must not
+        also drop the player into the game.
       -->
-      <button
-        type="button"
-        name="makeDefault"
-        class="make-default"
-        data-testid="make-default"
-        disabled={savingDefault}
-        aria-busy={savingDefault}
-        onclick={(e: MouseEvent) => {
-          e.stopPropagation();
-          onmakedefault?.(id);
-        }}>Make default</button
+      <a
+        class="edit-character"
+        data-testid="edit-character"
+        href="/characters/{id}"
+        onclick={(e: MouseEvent) => e.stopPropagation()}>Edit profile →</a
       >
-    {/if}
-    {#if !playable}
-      <a class="view-profile" data-testid="view-profile" href="/c/{id}">View profile →</a>
-    {/if}
+      {#if !playable}
+        <a class="view-profile" data-testid="view-profile" href="/c/{id}">View profile →</a>
+      {/if}
+    </div>
   </div>
 {/snippet}
 
@@ -136,6 +172,20 @@
     data-testid="roster-card"
     onclick={select}
     onkeydown={(e: KeyboardEvent) => {
+      /*
+        THE CARD ANSWERS ONLY FOR ITS OWN FOCUS. Keyboard events reach this
+        handler by bubbling, and the card's arm calls preventDefault() — so
+        without this guard, pressing Enter on a control INSIDE the card
+        suppresses that control's own activation and selects the character
+        instead. The `Edit profile →` link would be mouse-only, and
+        `Make default` would enter the game.
+
+        The guard is on the TARGET rather than a stopPropagation on each
+        child, so it holds for every control this card ever grows. Only
+        focusable elements receive key events, so `target !== currentTarget`
+        means exactly "a child control has focus".
+      */
+      if (e.target !== e.currentTarget) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         select();
@@ -211,12 +261,26 @@
     border-color: var(--color-status-online);
     color: var(--color-status-online);
   }
+  /*
+   * One control ROW rather than a stack: the card carries up to three controls
+   * and stacking them would push the name and badges into a tall column for no
+   * gain. It wraps, so the narrow band keeps them all reachable.
+   */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .controls:empty {
+    display: none;
+  }
   .make-default,
+  .edit-character,
   .view-profile {
     display: inline-flex;
     align-items: center;
     width: fit-content;
-    margin-top: 4px;
     padding: 4px 8px;
     border: 1px solid var(--color-border);
     border-radius: 8px;
@@ -233,6 +297,7 @@
     opacity: 0.6;
   }
   .make-default:focus-visible,
+  .edit-character:focus-visible,
   .view-profile:focus-visible {
     outline: 2px solid var(--color-ring);
     outline-offset: 2px;
