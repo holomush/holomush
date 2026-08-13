@@ -27,7 +27,7 @@ type Props = {
 	id: string;
 	name: string;
 	status: string;
-	session?: { hasActiveSession: boolean; sessionStatus: string };
+	session?: { hasActiveSession: boolean };
 	isDefault?: boolean;
 	playable?: boolean;
 	savingDefault?: boolean;
@@ -66,7 +66,7 @@ afterEach(() => document.body.replaceChildren());
 describe('RosterCard', () => {
 	it('shows the Default badge alongside the active session badge for a default, connected character', () => {
 		const { text } = render(
-			props({ status: 'active', isDefault: true, session: { hasActiveSession: true, sessionStatus: 'active' } }),
+			props({ status: 'active', isDefault: true, session: { hasActiveSession: true } }),
 		);
 		expect(text).toContain('Default');
 		expect(text).toContain('Active');
@@ -74,7 +74,7 @@ describe('RosterCard', () => {
 
 	it('shows the Default badge alongside the offline session badge for a default, disconnected character', () => {
 		const { text } = render(
-			props({ status: 'active', isDefault: true, session: { hasActiveSession: false, sessionStatus: '' } }),
+			props({ status: 'active', isDefault: true, session: { hasActiveSession: false } }),
 		);
 		expect(text).toContain('Default');
 		expect(text).toContain('Offline');
@@ -82,7 +82,7 @@ describe('RosterCard', () => {
 
 	it('shows the session badge alone and the Make default control for a non-default active character', () => {
 		const { text, target } = render(
-			props({ status: 'active', isDefault: false, session: { hasActiveSession: true, sessionStatus: 'active' } }),
+			props({ status: 'active', isDefault: false, session: { hasActiveSession: true } }),
 		);
 		expect(text).toContain('Active');
 		expect(text).not.toContain('Default badge');
@@ -101,7 +101,7 @@ describe('RosterCard', () => {
 		// The suppression is in the template. If it ever moves into the join,
 		// this spec is what notices.
 		const { text } = render(
-			props({ status: 'retired', playable: false, session: { hasActiveSession: true, sessionStatus: 'active' } }),
+			props({ status: 'retired', playable: false, session: { hasActiveSession: true } }),
 		);
 		expect(text).toContain('Retired');
 		expect(text).not.toMatch(SESSION_WORDS);
@@ -111,7 +111,7 @@ describe('RosterCard', () => {
 		// `idle` has no transition into it in v0.13 (01-SPEC §4.2), so the branch
 		// exists and says nothing a player was ever promised.
 		const { text } = render(
-			props({ status: 'idle', playable: false, session: { hasActiveSession: true, sessionStatus: 'active' } }),
+			props({ status: 'idle', playable: false, session: { hasActiveSession: true } }),
 		);
 		expect(text).not.toMatch(SESSION_WORDS);
 		expect(text).not.toMatch(/idle/i);
@@ -119,7 +119,7 @@ describe('RosterCard', () => {
 
 	it('renders without throwing and without a session badge on an unrecognised lifecycle', () => {
 		const { text } = render(
-			props({ status: 'wat', playable: false, session: { hasActiveSession: true, sessionStatus: 'active' } }),
+			props({ status: 'wat', playable: false, session: { hasActiveSession: true } }),
 		);
 		expect(text).toContain('Bazian');
 		expect(text).not.toMatch(SESSION_WORDS);

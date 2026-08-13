@@ -22,7 +22,15 @@
    * two round trips rather than three because the default character arrives on
    * the (authed) layout's own session-check response, which already ran.
    */
-  type SessionOverlay = { hasActiveSession: boolean; sessionStatus: string };
+  /*
+   * THE OVERLAY IS NARROWED TO THE ONE FIELD THE BADGE RULES READ. The
+   * server's `sessionStatus` token deliberately does NOT travel: forwarding
+   * it onto a badge is one of the two bugs this phase fixed, and carrying it
+   * in scope on the components that draw the badge is the shortest path back
+   * to that bug. Leaving it out makes the regression a type error rather than
+   * a review finding.
+   */
+  type SessionOverlay = { hasActiveSession: boolean };
   type Row = { id: string; name: string; status: string; session?: SessionOverlay };
 
   let { data } = $props();
@@ -67,7 +75,7 @@
     const overlay = new Map<string, SessionOverlay>();
     if (summaries.status === 'fulfilled') {
       for (const s of summaries.value.characters) {
-        overlay.set(s.characterId, { hasActiveSession: s.hasActiveSession, sessionStatus: s.sessionStatus });
+        overlay.set(s.characterId, { hasActiveSession: s.hasActiveSession });
       }
     }
 

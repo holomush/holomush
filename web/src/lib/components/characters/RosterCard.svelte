@@ -37,7 +37,7 @@
      * in the owner roster and not in the session-bearing list, which is an
      * ordinary outcome the badge rules already handle as `Offline`.
      */
-    session?: { hasActiveSession: boolean; sessionStatus: string };
+    session?: { hasActiveSession: boolean };
     isDefault?: boolean;
     playable?: boolean;
     savingDefault?: boolean;
@@ -67,10 +67,12 @@
   });
 
   /*
-   * Two authored words, never the server's `sessionStatus` string: UI-SPEC's
-   * badge table fixes the session vocabulary at `Active` | `Offline`, and
+   * Two authored words, never the server's session token: UI-SPEC's badge
+   * table fixes the session vocabulary at `Active` | `Offline`, and
    * forwarding an arbitrary server token here would put wire vocabulary on a
-   * player-facing badge.
+   * player-facing badge. The overlay type above carries only the boolean, so
+   * that token is not merely unused here — it is not in scope to be reached
+   * for.
    */
   const sessionWord = $derived(session?.hasActiveSession ? 'Active' : 'Offline');
 

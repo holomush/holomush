@@ -25,7 +25,7 @@ type Row = {
 	id: string;
 	name: string;
 	status: string;
-	session?: { hasActiveSession: boolean; sessionStatus: string };
+	session?: { hasActiveSession: boolean };
 };
 
 function row(p: Partial<Row>): Row {

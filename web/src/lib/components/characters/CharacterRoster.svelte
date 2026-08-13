@@ -24,7 +24,12 @@
     name: string;
     /** characters.status — exactly `active`, `retired` or `idle` (01-SPEC §4.2). */
     status: string;
-    session?: { hasActiveSession: boolean; sessionStatus: string };
+    /*
+     * Narrowed to the one field the badge rules read. The server's
+     * `sessionStatus` token is deliberately not carried here — see the
+     * roster route's own note on why it may not travel this far.
+     */
+    session?: { hasActiveSession: boolean };
   };
 
   let {
