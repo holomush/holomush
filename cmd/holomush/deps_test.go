@@ -24,6 +24,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	holoGRPC "github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/observability"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
 	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -327,6 +328,10 @@ func (m *mockGRPCClient) ListCharacterDirectory(_ context.Context, _ *charactera
 }
 
 func (m *mockGRPCClient) CreateOwnCharacter(_ context.Context, _ *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminListSections(_ context.Context, _ *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error) {
 	return nil, nil
 }
 

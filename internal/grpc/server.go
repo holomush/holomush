@@ -11,7 +11,6 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -624,34 +623,74 @@ func responseMeta(requestID string) *corev1.ResponseMeta {
 	}
 }
 
-// NewGRPCServer creates a new gRPC server with mTLS credentials.
-// Applies explicit message size and concurrent-stream limits (see
-// MaxRecvMsgSize, MaxSendMsgSize, MaxConcurrentStreams).
-func NewGRPCServer(tlsConfig *tls.Config) *grpc.Server {
-	creds := credentials.NewTLS(tlsConfig)
-	return grpc.NewServer(
-		grpc.Creds(creds),
-		grpc.MaxRecvMsgSize(MaxRecvMsgSize),
-		grpc.MaxSendMsgSize(MaxSendMsgSize),
-		grpc.MaxConcurrentStreams(MaxConcurrentStreams),
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-	)
+// GRPCServerConfig is the whole input to [NewGRPCServer].
+//
+// exported spelling this factory keeps, and ServerConfig beside NewGRPCServer
+// would read as a config for some other server.
+//
+//nolint:revive // named for its constructor: NewGRPCServer is the pre-existing
+type GRPCServerConfig struct {
+	// TLS supplies the server credentials. Production ALWAYS sets it; nil is a
+	// test affordance for the in-process bufconn listener, which has no network
+	// to protect.
+	TLS *tls.Config
+	// AdminInterceptor is the admin-portal gate. It is REQUIRED — see
+	// [NewGRPCServer].
+	AdminInterceptor grpc.UnaryServerInterceptor
+	// Extra carries composition-specific options appended after the standard
+	// set — production passes the plugin UnknownServiceHandler here.
+	Extra []grpc.ServerOption
 }
 
-// NewGRPCServerInsecure creates a new gRPC server without TLS (for testing).
-// Includes a permissive keepalive enforcement policy to prevent "too_many_pings"
-// rejections during long-running integration tests. Applies the same message
-// size and concurrent-stream limits as the TLS-enabled server so tests exercise
-// the same resource bounds as production.
-func NewGRPCServerInsecure() *grpc.Server {
-	return grpc.NewServer(
+// NewGRPCServer is the ONE factory that builds a Core/Portal gRPC server, and
+// it CANNOT build one without the admin gate.
+//
+// # Why a factory that refuses, rather than a constructor that remembers
+//
+// Before this, production built its server inline in cmd/holomush/sub_grpc.go
+// while two exported constructors here had zero callers and had already drifted
+// from it. Mounting a gate on a constructor nothing calls is a green test about
+// a dead property. Collapsing the three into one factory that returns an error
+// on a nil AdminInterceptor makes the mount STRUCTURAL: there is no way to
+// obtain a server without the gate, so a future composition that forgets it
+// fails to construct instead of serving the admin surface ungated.
+//
+// # The option set reproduces the LIVE production composition exactly
+//
+// Creds (when TLS is set), the keepalive enforcement policy, the three
+// message/stream limits, the chained admin interceptor, then Extra.
+//
+// It deliberately installs NO otelgrpc StatsHandler. The two constructors this
+// replaces carried one; the live production call site did not. Installing it
+// here would add per-RPC server spans to production — a real change in span
+// volume and attribute surface — as an unevaluated side effect of a security
+// refactor. Turning on server-side OTel tracing is a decision that deserves its
+// own change; the omission here is deliberate, not a dropped option.
+func NewGRPCServer(cfg GRPCServerConfig) (*grpc.Server, error) {
+	if cfg.AdminInterceptor == nil {
+		return nil, oops.Code("GRPC_SERVER_ADMIN_GATE_MISSING").
+			Errorf("refusing to build a gRPC server with no admin section interceptor")
+	}
+
+	opts := make([]grpc.ServerOption, 0, 6+len(cfg.Extra))
+	if cfg.TLS != nil {
+		opts = append(opts, grpc.Creds(credentials.NewTLS(cfg.TLS)))
+	}
+	opts = append(
+		opts,
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
+		// Resource limits — see this package's constants for rationale. Bounds
+		// memory per request and caps concurrent streams per connection so a
+		// single client cannot open unlimited Subscribe streams.
 		grpc.MaxRecvMsgSize(MaxRecvMsgSize),
 		grpc.MaxSendMsgSize(MaxSendMsgSize),
 		grpc.MaxConcurrentStreams(MaxConcurrentStreams),
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.ChainUnaryInterceptor(cfg.AdminInterceptor),
 	)
+	opts = append(opts, cfg.Extra...)
+
+	return grpc.NewServer(opts...), nil
 }

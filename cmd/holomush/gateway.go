@@ -318,7 +318,8 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, logConfig confi
 	webHandler := web.NewHandler(grpcClient,
 		web.WithContentClient(grpcClient),
 		web.WithSceneAccessClient(grpcClient),
-		web.WithCharacterAccessClient(characterAccessGateway{grpcClient}))
+		web.WithCharacterAccessClient(characterAccessGateway{grpcClient}),
+		web.WithAdminPortalClient(grpcClient))
 	webServer, err := web.NewServer(web.Config{
 		Addr:        cfg.WebAddr,
 		Handler:     webHandler,

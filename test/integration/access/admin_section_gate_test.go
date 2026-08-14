@@ -38,7 +38,8 @@ import (
 func TestANonAdminCallingTheAdminPortalDirectlyOverGRPCIsDeniedAtTheWire(t *testing.T) {
 	ctx := context.Background()
 
-	srv := integrationtest.Start(t,
+	srv := integrationtest.Start(
+		t,
 		integrationtest.WithRealABAC(),
 		integrationtest.WithGatedGRPCListener(),
 	)
@@ -80,7 +81,8 @@ func TestANonAdminCallingTheAdminPortalDirectlyOverGRPCIsDeniedAtTheWire(t *test
 func TestAnAdminCallingTheAdminPortalDirectlyOverGRPCReceivesEverySection(t *testing.T) {
 	ctx := context.Background()
 
-	srv := integrationtest.Start(t,
+	srv := integrationtest.Start(
+		t,
 		integrationtest.WithRealABAC(),
 		integrationtest.WithGatedGRPCListener(),
 	)

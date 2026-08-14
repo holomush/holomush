@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/xdg"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
 	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -221,6 +222,9 @@ type GRPCClient interface {
 	// message pair — see (*grpcclient.Client).CreateOwnCharacter. Both RPCs are
 	// live: the core one still serves the telnet CREATE verb.
 	CreateOwnCharacter(ctx context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error)
+	// Admin-portal RPCs. A separate service behind its own core-side gate; the
+	// gateway forwards its answers and its refusals and decides neither.
+	AdminListSections(ctx context.Context, req *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error)
 	Close() error
 }
 

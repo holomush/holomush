@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
 	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -35,6 +36,7 @@ type Client struct {
 	contentClient         contentv1.ContentServiceClient
 	sceneAccessClient     sceneaccessv1.SceneAccessServiceClient
 	characterAccessClient characteraccessv1.CharacterAccessServiceClient
+	adminPortalClient     adminportalv1.AdminPortalServiceClient
 }
 
 // ClientConfig holds configuration for the gRPC client.
@@ -96,6 +98,7 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 		contentClient:         contentv1.NewContentServiceClient(conn),
 		sceneAccessClient:     sceneaccessv1.NewSceneAccessServiceClient(conn),
 		characterAccessClient: characteraccessv1.NewCharacterAccessServiceClient(conn),
+		adminPortalClient:     adminportalv1.NewAdminPortalServiceClient(conn),
 	}, nil
 }
 
@@ -485,6 +488,22 @@ func (c *Client) ListCharacterDirectory(ctx context.Context, req *characteracces
 	resp, err := c.characterAccessClient.ListCharacterDirectory(ctx, req)
 	if err != nil {
 		return nil, oops.Code("RPC_FAILED").With("method", "ListCharacterDirectory").Wrap(err)
+	}
+	return resp, nil
+}
+
+// AdminListSections forwards to AdminPortalService.AdminListSections.
+//
+// Unlike its character-facade peers it does NOT wrap the error in oops. The
+// admin refusal is a gRPC status carrying a deliberately static message, and
+// status.FromError replaces a WRAPPED status's message with the outer error's
+// full text — so wrapping here would substitute "RPC_FAILED: …" for the opaque
+// refusal the core built, at the one boundary whose whole job is to forward it
+// unchanged.
+func (c *Client) AdminListSections(ctx context.Context, req *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error) {
+	resp, err := c.adminPortalClient.AdminListSections(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
 	}
 	return resp, nil
 }

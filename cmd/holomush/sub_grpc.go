@@ -14,8 +14,6 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/keepalive"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
@@ -58,6 +56,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
 	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -423,21 +422,23 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	serviceRegistry := s.cfg.Plugins.ServiceRegistry()
 	grpcProxy := plugins.NewGRPCServiceProxy(serviceRegistry)
 
-	creds := credentials.NewTLS(s.cfg.TLSConfig)
-	s.grpcServer = grpc.NewServer(
-		grpc.Creds(creds),
-		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             10 * time.Second,
-			PermitWithoutStream: true,
-		}),
-		// Resource limits — see internal/grpc package constants for rationale.
-		// Bounds memory per request and caps concurrent streams per connection
-		// so a single client cannot open unlimited Subscribe streams.
-		grpc.MaxRecvMsgSize(holoGRPC.MaxRecvMsgSize),
-		grpc.MaxSendMsgSize(holoGRPC.MaxSendMsgSize),
-		grpc.MaxConcurrentStreams(holoGRPC.MaxConcurrentStreams),
-		grpcProxy.Handler(),
-	)
+	// The server comes from the ONE factory, which refuses to build without the
+	// admin gate — so the /admin trust boundary cannot be lost by an edit here.
+	// grpcProxy.Handler() rides through Extra: the plugin unknown-service proxy
+	// is load-bearing and its loss would be silent.
+	adminInterceptor := holoGRPC.NewAdminSectionInterceptor(holoGRPC.AdminInterceptorDeps{
+		Engine:      policyEngine,
+		SessionRepo: authPlayerSessionRepo,
+	})
+	grpcServer, grpcServerErr := holoGRPC.NewGRPCServer(holoGRPC.GRPCServerConfig{
+		TLS:              s.cfg.TLSConfig,
+		AdminInterceptor: adminInterceptor,
+		Extra:            []grpc.ServerOption{grpcProxy.Handler()},
+	})
+	if grpcServerErr != nil {
+		return oops.Code("GRPC_SERVER_BUILD_FAILED").Wrap(grpcServerErr)
+	}
+	s.grpcServer = grpcServer
 
 	// 3. Create guest authenticator (using start location from bootstrap).
 	guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocationID)
@@ -881,6 +882,15 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		characterService,
 	))
 	slog.InfoContext(ctx, "characterAccessService facade registered")
+
+	// 9c. Register the admin portal on the SAME server, whose factory already
+	// chained the section interceptor above. Every method of this service is
+	// gated there from section.AdminDescriptors before its handler runs, so the
+	// receiver below carries no gate of its own — it is handed policyEngine, the
+	// engine already in scope, purely for the per-section enumeration filter.
+	adminportalv1.RegisterAdminPortalServiceServer(s.grpcServer,
+		holoGRPC.NewAdminPortalServer(policyEngine))
+	slog.InfoContext(ctx, "adminPortalService registered")
 
 	// 10. Construct the session reaper (launch deferred to Activate — row 16).
 	reaperCtx, reaperCancel := context.WithCancel(context.Background())

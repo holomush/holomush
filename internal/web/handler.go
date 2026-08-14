@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/ulidgen"
 	"github.com/holomush/holomush/pkg/errutil"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
 	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -147,6 +148,15 @@ type CharacterAccessClient interface {
 	CreateCharacter(ctx context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error)
 }
 
+// AdminPortalClient is the narrow slice of AdminPortalServiceClient the gateway
+// forwards to. It is a SEPARATE client from CharacterAccessClient on purpose:
+// the admin portal is its own service behind its own gate, and folding its RPCs
+// into the character facade's client would put an admin surface behind the
+// character audience's proofs.
+type AdminPortalClient interface {
+	AdminListSections(ctx context.Context, req *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error)
+}
+
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
 // The gateway is a protocol translation layer only — it MUST NOT access
 // WorldService or other internal services directly. All game state flows
@@ -158,6 +168,7 @@ type Handler struct {
 	contentClient   ContentClient
 	sceneAccess     SceneAccessClient
 	characterAccess CharacterAccessClient
+	adminPortal     AdminPortalClient
 	// heartbeatInterval controls the StreamEvents heartbeat ticker period.
 	// Zero means 15 seconds (production default). Overridable in tests.
 	heartbeatInterval time.Duration
@@ -187,6 +198,11 @@ func WithSceneAccessClient(c SceneAccessClient) HandlerOption {
 // character Web* RPCs.
 func WithCharacterAccessClient(c CharacterAccessClient) HandlerOption {
 	return func(h *Handler) { h.characterAccess = c }
+}
+
+// WithAdminPortalClient sets the admin-portal client for the WebAdmin* RPCs.
+func WithAdminPortalClient(c AdminPortalClient) HandlerOption {
+	return func(h *Handler) { h.adminPortal = c }
 }
 
 // NewHandler creates a new Handler with the given core client and options.

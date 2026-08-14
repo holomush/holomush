@@ -61,6 +61,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
+	"net"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -71,6 +72,9 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/access/profilevis"
@@ -109,6 +113,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
 	channelv1 "github.com/holomush/holomush/pkg/proto/holomush/channel/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
@@ -247,6 +252,10 @@ type Server struct {
 	// hit the reactor's already-there skip gate and be unobservable.
 	retirementStartLoc ulid.ULID
 
+	// gatedGRPCConn is the dialed client end of the bufconn server
+	// WithGatedGRPCListener stood up; nil otherwise. Read via GatedGRPCConn().
+	gatedGRPCConn *grpc.ClientConn
+
 	// cmdRegistry is the registry the dispatcher was actually built against —
 	// the default empty one, the compiled-in set under WithBuiltinCommands, or
 	// the plugin subsystem's registry when WithInTreePlugins adopted it. Unlike
@@ -294,6 +303,9 @@ type startConfig struct {
 	// retirementReactor boots the real retirement reactor subsystem
 	// (WithRetirementReactor).
 	retirementReactor bool
+	// gatedGRPCListener stands up a bufconn *grpc.Server through the production
+	// server factory (WithGatedGRPCListener).
+	gatedGRPCListener bool
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -387,6 +399,30 @@ func WithFocusDelivery() StartOption {
 // suites keep the WithSubscriber-only wiring — zero blast radius (01-09 CHAN-05).
 func WithSessionStreamDelivery() StartOption {
 	return func(c *startConfig) { c.withSessionStreamDelivery = true }
+}
+
+// WithGatedGRPCListener stands up a bufconn *grpc.Server built by the SAME
+// production factory cmd/holomush uses (holoGRPC.NewGRPCServer), carrying the
+// real admin section interceptor over the harness's real ABAC engine and real
+// player-session repository, registers AdminPortalService on it, and exposes a
+// dialed client conn via [Server.GatedGRPCConn].
+//
+// # What it provides that no existing option does
+//
+// The harness's coreServer is IN-PROCESS with no network transport at all
+// (see the coreServer field). Before this option there was no way to assert a
+// WIRE-level property here — status codes, status messages, what a caller
+// bypassing the browser and the gateway actually receives — because nothing
+// ever crossed a transport.
+//
+// It goes through the factory rather than calling grpc.NewServer directly, and
+// that is the point: the denial a spec proves over this connection is a
+// property of the PRODUCTION composition, not of a constructor nothing calls.
+//
+// Pair with WithRealABAC. Against the default allow-all engine every caller is
+// an admin and the denial half of any gate spec passes vacuously.
+func WithGatedGRPCListener() StartOption {
+	return func(c *startConfig) { c.gatedGRPCListener = true }
 }
 
 // Start bootstraps a full in-process holomush stack and returns a Server.
@@ -963,6 +999,9 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	if cfg.retirementReactor {
 		srv.startRetirementReactor(ctx)
 	}
+	if cfg.gatedGRPCListener {
+		srv.startGatedGRPCListener()
+	}
 
 	return srv
 }
@@ -1099,6 +1138,64 @@ func (s *Server) startCharacterActivity(ctx context.Context, cfg *startConfig) {
 			s.t.Logf("integrationtest.Start: character activity subsystem Stop: %v", err)
 		}
 	})
+}
+
+// gatedListenerBufSize is the bufconn buffer for the gated listener. Admin
+// portal messages are small; this is the conventional bufconn size and bounds
+// nothing the specs care about.
+const gatedListenerBufSize = 1024 * 1024
+
+// startGatedGRPCListener builds the bufconn server WithGatedGRPCListener
+// promises. It mirrors cmd/holomush/sub_grpc.go's composition exactly except
+// for TLS: the factory's nil-TLS path is the documented test affordance, and a
+// bufconn has no network to protect.
+func (s *Server) startGatedGRPCListener() {
+	s.t.Helper()
+
+	lis := bufconn.Listen(gatedListenerBufSize)
+
+	srv, err := holoGRPC.NewGRPCServer(holoGRPC.GRPCServerConfig{
+		AdminInterceptor: holoGRPC.NewAdminSectionInterceptor(holoGRPC.AdminInterceptorDeps{
+			Engine:      s.accessEngine,
+			SessionRepo: s.playerSessionStore,
+		}),
+	})
+	require.NoError(s.t, err, "integrationtest: build gated gRPC server")
+
+	adminportalv1.RegisterAdminPortalServiceServer(srv, holoGRPC.NewAdminPortalServer(s.accessEngine))
+
+	go func() {
+		if serveErr := srv.Serve(lis); serveErr != nil {
+			s.t.Logf("integrationtest: gated gRPC server stopped: %v", serveErr)
+		}
+	}()
+
+	conn, dialErr := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
+	)
+	require.NoError(s.t, dialErr, "integrationtest: dial gated gRPC server")
+
+	s.gatedGRPCConn = conn
+	s.t.Cleanup(func() {
+		_ = conn.Close()
+		srv.Stop()
+		_ = lis.Close()
+	})
+}
+
+// GatedGRPCConn returns the client end of the bufconn server
+// WithGatedGRPCListener stood up. It FAILS the test when that option was not
+// passed, rather than returning nil: a nil conn produces an obscure dial
+// failure far from the missing option.
+func (s *Server) GatedGRPCConn() *grpc.ClientConn {
+	s.t.Helper()
+	require.NotNil(s.t, s.gatedGRPCConn,
+		"integrationtest: GatedGRPCConn requires WithGatedGRPCListener()")
+	return s.gatedGRPCConn
 }
 
 // jsHandle adapts the harness's already-live JetStream handle to the

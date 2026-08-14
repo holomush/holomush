@@ -62,7 +62,7 @@ func sessionRepoFor(t *testing.T, playerID ulid.ULID) *countingSessionRepo {
 	return &countingSessionRepo{
 		t: t,
 		session: &auth.PlayerSession{
-			ID:        ulid.Make(),
+			ID:        adminSessionULID(),
 			PlayerID:  playerID,
 			TokenHash: "hash",
 			ExpiresAt: time.Now().Add(time.Hour),
@@ -76,7 +76,7 @@ type recordingHandler struct {
 	calls int
 }
 
-func (h *recordingHandler) handle(ctx context.Context, _ any) (any, error) {
+func (h *recordingHandler) handle(_ context.Context, _ any) (any, error) {
 	h.calls++
 	return &adminportalv1.AdminListSectionsResponse{}, nil
 }
@@ -89,10 +89,14 @@ func listSectionsInfo() *grpc.UnaryServerInfo {
 	return &grpc.UnaryServerInfo{FullMethod: adminListSectionsFullMethod}
 }
 
-// adminPlayerID / nonAdminPlayerID are opaque to the abactest player double;
-// distinct values only so a failure message names which fixture spoke.
-func adminPlayerULID() ulid.ULID    { return ulid.MustParse("01JZZZZZZZZZZZZZZZZZZZADM1N") }
-func nonAdminPlayerULID() ulid.ULID { return ulid.MustParse("01JZZZZZZZZZZZZZZZZZZPLA1N") }
+// The two player ids are opaque to the abactest player double; distinct values
+// only so a failure message names which fixture spoke.
+func adminPlayerULID() ulid.ULID    { return ulid.MustParse("01ARZ3NDEKTSV4RRFFQ69G5FAV") }
+func nonAdminPlayerULID() ulid.ULID { return ulid.MustParse("01ARZ3NDEKTSV4RRFFQ69G5FBW") }
+
+// adminSessionULID is the PlayerSession primary key the double hands back. Its
+// value decides nothing; only PlayerID is read by the gate.
+func adminSessionULID() ulid.ULID { return ulid.MustParse("01ARZ3NDEKTSV4RRFFQ69G5FCX") }
 
 // seedEngineFor builds a REAL engine over the FULL seed corpus for a player
 // carrying the given roles. Deliberately not a canned-decision double: a fake
@@ -332,8 +336,10 @@ func TestEveryInterceptorRefusalIsMappedToPermissionDeniedWithTheStaticMessage(t
 		info        *grpc.UnaryServerInfo
 	}{
 		{"policy denial", deny, &adminportalv1.AdminListSectionsRequest{PlayerSessionToken: "t"}, listSectionsInfo()},
-		{"undeclared method", admit, &adminportalv1.AdminListSectionsRequest{PlayerSessionToken: "t"},
-			&grpc.UnaryServerInfo{FullMethod: "/holomush.adminportal.v1.AdminPortalService/AdminPurgeEverything"}},
+		{
+			"undeclared method", admit, &adminportalv1.AdminListSectionsRequest{PlayerSessionToken: "t"},
+			&grpc.UnaryServerInfo{FullMethod: "/holomush.adminportal.v1.AdminPortalService/AdminPurgeEverything"},
+		},
 		{"no subject", admit, &noTokenRequest{}, listSectionsInfo()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

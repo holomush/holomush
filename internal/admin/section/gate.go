@@ -74,56 +74,18 @@ func assertSectionAccess(
 	playerID, sectionID, action string,
 	lookup sectionLookup,
 ) (Section, error) {
-	if engine == nil {
-		return Section{}, malformed("engine", "a gate with no engine cannot make an authorization decision")
-	}
-	if playerID == "" {
-		return Section{}, malformed("playerID", "an empty subject would bypass access control")
-	}
-	if action == "" {
-		return Section{}, malformed("action", "an empty action would build a request no policy target matches")
-	}
-	// Guarded BEFORE the resource is constructed: access.AdminSectionResource
-	// panics on an empty id by design, and that guard exists to catch programmer
-	// error at construction sites, not to handle request input. A panic in a
-	// request path is a different failure mode from a denial.
-	if sectionID == "" {
-		return Section{}, malformed("sectionID", "an empty section id would build a bare admin_section: reference")
+	// --- Step 1: the gate ---
+	//
+	// Extracted verbatim into assertSectionAdmission because two callers in the
+	// portal need step 1 ALONE: the interceptor's portal-admission check and the
+	// handler's enumeration filter. Extraction, not duplication — a second copy
+	// of the ABAC evaluation is a second place the ordering could drift from
+	// D-06's.
+	if err := assertSectionAdmission(ctx, engine, playerID, sectionID, action); err != nil {
+		return Section{}, err
 	}
 
 	resource := access.AdminSectionResource(sectionID)
-
-	// NewAccessRequest's own emptiness checks are a second line of defence
-	// behind the guards above; its error is handled rather than discarded.
-	req, reqErr := types.NewAccessRequest(access.PlayerSubject(playerID), action, resource, nil)
-	if reqErr != nil {
-		return Section{}, oops.Code("ADMIN_SECTION_REQUEST_MALFORMED").Wrap(reqErr)
-	}
-
-	// --- Step 1: the gate ---
-	decision, evalErr := engine.Evaluate(ctx, req)
-	if evalErr != nil {
-		errutil.LogErrorContext(ctx, "admin section: access evaluation failed", evalErr,
-			"player_id", playerID, "section_id", sectionID, "action", action)
-		return Section{}, oops.Code("ADMIN_SECTION_EVALUATION_FAILED").
-			Errorf("admin section access could not be evaluated")
-	}
-	if decision.IsInfraFailure() {
-		errutil.LogErrorContext(ctx, "admin section: access check infrastructure failure", nil,
-			"player_id", playerID, "section_id", sectionID, "action", action,
-			"policy_id", decision.PolicyID(), "reason", decision.Reason())
-		return Section{}, oops.Code("ADMIN_SECTION_EVALUATION_FAILED").
-			Errorf("admin section access could not be evaluated")
-	}
-	if !decision.IsAllowed() {
-		// The section id is LOGGED, never returned. Per .claude/rules/grpc-errors.md
-		// an inner error or a distinguishing field substituted into the refusal
-		// reaches the client — and here that field IS the disclosure.
-		slog.WarnContext(ctx, "admin section access denied",
-			"player_id", playerID, "section_id", sectionID, "action", action,
-			"reason", decision.Reason())
-		return Section{}, denyAdminSection()
-	}
 
 	// --- Step 2: reached only by a permitted caller ---
 	entry, registered := lookup(sectionID)
@@ -167,6 +129,97 @@ func assertSectionAccess(
 	}
 
 	return entry, nil
+}
+
+// assertSectionAdmission is step 1 of the gate, alone: the ABAC answer to "may
+// this player touch the admin section surface at all".
+//
+// It is the ORIGINAL step-1 body of [assertSectionAccess], extracted rather than
+// copied, so the two surfaces cannot answer the same policy question two ways.
+// Its guards run BEFORE the resource is constructed: access.AdminSectionResource
+// panics on an empty id by design, and that guard exists to catch programmer
+// error at construction sites, not to handle request input — a panic in a
+// request path is a different failure mode from a denial.
+func assertSectionAdmission(
+	ctx context.Context,
+	engine PolicyEvaluator,
+	playerID, sectionID, action string,
+) error {
+	if engine == nil {
+		return malformed("engine", "a gate with no engine cannot make an authorization decision")
+	}
+	if playerID == "" {
+		return malformed("playerID", "an empty subject would bypass access control")
+	}
+	if action == "" {
+		return malformed("action", "an empty action would build a request no policy target matches")
+	}
+	if sectionID == "" {
+		return malformed("sectionID", "an empty section id would build a bare admin_section: reference")
+	}
+
+	resource := access.AdminSectionResource(sectionID)
+
+	// NewAccessRequest's own emptiness checks are a second line of defence
+	// behind the guards above; its error is handled rather than discarded.
+	req, reqErr := types.NewAccessRequest(access.PlayerSubject(playerID), action, resource, nil)
+	if reqErr != nil {
+		return oops.Code("ADMIN_SECTION_REQUEST_MALFORMED").Wrap(reqErr)
+	}
+
+	decision, evalErr := engine.Evaluate(ctx, req)
+	if evalErr != nil {
+		errutil.LogErrorContext(ctx, "admin section: access evaluation failed", evalErr,
+			"player_id", playerID, "section_id", sectionID, "action", action)
+		return oops.Code("ADMIN_SECTION_EVALUATION_FAILED").
+			Errorf("admin section access could not be evaluated")
+	}
+	if decision.IsInfraFailure() {
+		errutil.LogErrorContext(ctx, "admin section: access check infrastructure failure", nil,
+			"player_id", playerID, "section_id", sectionID, "action", action,
+			"policy_id", decision.PolicyID(), "reason", decision.Reason())
+		return oops.Code("ADMIN_SECTION_EVALUATION_FAILED").
+			Errorf("admin section access could not be evaluated")
+	}
+	if !decision.IsAllowed() {
+		// The section id is LOGGED, never returned. Per .claude/rules/grpc-errors.md
+		// an inner error or a distinguishing field substituted into the refusal
+		// reaches the client — and here that field IS the disclosure.
+		slog.WarnContext(ctx, "admin section access denied",
+			"player_id", playerID, "section_id", sectionID, "action", action,
+			"reason", decision.Reason())
+		return denyAdminSection()
+	}
+	return nil
+}
+
+// AssertSectionAdmission is the POLICY-GATE STEP ALONE, shared by the two portal
+// callers that need it without the rest of [AssertSectionAccess].
+//
+// # Admission is not access
+//
+// ADMISSION answers "may this player touch the admin section surface at all" —
+// one ABAC decision, nothing else. ACCESS is admission PLUS "and is this
+// specific section registered, descriptor-consistent, and available".
+//
+//   - The interceptor's PORTAL check and the AdminListSections ENUMERATION
+//     filter need admission. Access would be wrong for both: its availability
+//     step (§10.3) refuses a `planned` section with SECTION_NOT_IMPLEMENTED, so
+//     an enumeration written against it would silently drop all six planned
+//     sections out of the nav EXT-02 and D-101 require them to appear in.
+//   - A SECTION HANDLER needs access. Admission alone would let a caller act on
+//     an unregistered, drifted or unimplemented section.
+//
+// The refusal codes are exactly [AssertSectionAccess]'s first three:
+// ADMIN_SECTION_REQUEST_MALFORMED, ADMIN_SECTION_EVALUATION_FAILED and
+// DENY_ADMIN_SECTION. An evaluation failure MUST NOT be flattened into a denial
+// by a caller — §8.10 — and a denial carries no distinguishing field.
+func AssertSectionAdmission(
+	ctx context.Context,
+	engine PolicyEvaluator,
+	playerID, sectionID, action string,
+) error {
+	return assertSectionAdmission(ctx, engine, playerID, sectionID, action)
 }
 
 // denyAdminSection builds the ONE refusal every denied caller receives.
@@ -216,16 +269,24 @@ func malformed(field, why string) error {
 //     vocabulary. Denies; see [sectionAvailability].
 //   - SECTION_NOT_IMPLEMENTED — a planned section, refused AFTER the gate (§10.3).
 //
-// # Every admin RPC re-asserts its own gate through this helper
+// # The gate is asserted ONCE, structurally, by the interceptor (D-99)
 //
-// The redundancy is the point: keeping the call sites in lockstep is what
-// prevents one of them from silently losing a check. That is the same shape
-// adminauth.AssertOperatorAdmin already carries for the operator socket. Three
-// prohibitions come with it, each named in §10.4 — never a bare PlayerHasRole
-// lookup (a storage query is not an authorization decision), never a route-guard
-// or internal/web/ decision (UX, bypassable, and in the process
-// .claude/rules/gateway-boundary.md designates protocol-translation-only), and
-// never "the facade is the only caller".
+// This is NOT a helper each admin handler remembers to call. Every method served
+// under holomush.adminportal.v1 is gated by NewAdminSectionInterceptor
+// (internal/grpc/admin_interceptor.go) from the fail-closed
+// [AdminDescriptors] method→section table, before the handler runs — and this
+// function is what that interceptor calls for a descriptor naming a fixed
+// section. A method with no declaration is refused with
+// ADMIN_SECTION_NOT_DECLARED rather than defaulted, so what must not be
+// forgettable is the DECLARATION, and forgetting it denies.
+//
+// A per-handler call would be the model D-99 replaced: it makes the gate a thing
+// a future author must remember, and the one they forget is ungated with nothing
+// red. Three prohibitions come with the structural form, each named in §10.4 —
+// never a bare PlayerHasRole lookup (a storage query is not an authorization
+// decision), never a route-guard or internal/web/ decision (UX, bypassable, and
+// in the process .claude/rules/gateway-boundary.md designates
+// protocol-translation-only), and never "the facade is the only caller".
 //
 // The gate is evaluated PER PLAYER, not per acting character (§10.5): the
 // subject is access.PlayerSubject(playerID) and seed:admin-section-access reads
