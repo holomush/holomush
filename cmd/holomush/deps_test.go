@@ -339,6 +339,18 @@ func (m *mockGRPCClient) AdminGetSection(_ context.Context, _ *adminportalv1.Adm
 	return nil, nil
 }
 
+func (m *mockGRPCClient) AdminListCharacters(_ context.Context, _ *adminportalv1.AdminListCharactersRequest) (*adminportalv1.AdminListCharactersResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminSearchCharacters(_ context.Context, _ *adminportalv1.AdminSearchCharactersRequest) (*adminportalv1.AdminSearchCharactersResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminGetCharacter(_ context.Context, _ *adminportalv1.AdminGetCharacterRequest) (*adminportalv1.AdminGetCharacterResponse, error) {
+	return nil, nil
+}
+
 // mockListener implements net.Listener for testing.
 type mockListener struct {
 	acceptFunc func() (net.Conn, error)

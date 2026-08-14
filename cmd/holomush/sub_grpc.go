@@ -494,10 +494,15 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	// (MarkReaping + DeleteGuestPlayer, own pool). Both guest-deletion paths — the
 	// reaper and failed-guest cleanup — route through it.
 	reapPlayerRepo := authpostgres.NewPlayerRepository(pool)
+	// ONE property repository over this pool, shared by its two consumers: the
+	// reaping service below and the admin portal's detail read (step 9c). A
+	// second construction over the same pool would be two objects with one
+	// meaning.
+	propertyRepo := worldpostgres.NewPropertyRepository(pool)
 	reapingService, reapErr := auth.NewCharacterReapingService(
 		charRepo, // version-scanning ListByPlayer (R6-1)
 		charRepo, // guarded tombstone-delta Delete
-		worldpostgres.NewPropertyRepository(pool),
+		propertyRepo,
 		bindingRepo, // hard-deletes guest bindings in-tx (RESTRICT FK, guest teardown)
 		transactor,
 		worldpostgres.NewOutboxStore(pool),
@@ -894,8 +899,15 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	// gated there from section.AdminDescriptors before its handler runs, so the
 	// receiver below carries no gate of its own — it is handed policyEngine, the
 	// engine already in scope, purely for the per-section enumeration filter.
+	//
+	// The two readers it is handed are REPOSITORIES, not world.Service: the
+	// admin character reads run downstream of the interceptor's decision and
+	// evaluate no second policy. admin_characters_read.go's file doc block
+	// carries the authorization argument and names the rejected alternative.
 	adminportalv1.RegisterAdminPortalServiceServer(s.grpcServer,
-		holoGRPC.NewAdminPortalServer(policyEngine))
+		holoGRPC.NewAdminPortalServer(policyEngine,
+			holoGRPC.WithAdminCharacterReader(charRepo),
+			holoGRPC.WithAdminProfileReader(propertyRepo)))
 	slog.InfoContext(ctx, "adminPortalService registered")
 
 	// 10. Construct the session reaper (launch deferred to Activate — row 16).

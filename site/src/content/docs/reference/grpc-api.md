@@ -112,11 +112,23 @@ title: "gRPC API Reference"
     - [AdminService](#holomush-admin-v1-AdminService)
   
 - [holomush/adminportal/v1/adminportal.proto](#holomush_adminportal_v1_adminportal-proto)
+    - [AdminCharacter](#holomush-adminportal-v1-AdminCharacter)
+    - [AdminCharacterDetail](#holomush-adminportal-v1-AdminCharacterDetail)
+    - [AdminCharacterDetail.ProfileEntry](#holomush-adminportal-v1-AdminCharacterDetail-ProfileEntry)
+    - [AdminGetCharacterRequest](#holomush-adminportal-v1-AdminGetCharacterRequest)
+    - [AdminGetCharacterResponse](#holomush-adminportal-v1-AdminGetCharacterResponse)
     - [AdminGetSectionRequest](#holomush-adminportal-v1-AdminGetSectionRequest)
     - [AdminGetSectionResponse](#holomush-adminportal-v1-AdminGetSectionResponse)
+    - [AdminListCharactersRequest](#holomush-adminportal-v1-AdminListCharactersRequest)
+    - [AdminListCharactersResponse](#holomush-adminportal-v1-AdminListCharactersResponse)
     - [AdminListSectionsRequest](#holomush-adminportal-v1-AdminListSectionsRequest)
     - [AdminListSectionsResponse](#holomush-adminportal-v1-AdminListSectionsResponse)
+    - [AdminSearchCharactersRequest](#holomush-adminportal-v1-AdminSearchCharactersRequest)
+    - [AdminSearchCharactersResponse](#holomush-adminportal-v1-AdminSearchCharactersResponse)
     - [AdminSection](#holomush-adminportal-v1-AdminSection)
+  
+    - [AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField)
+    - [AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter)
   
     - [AdminPortalService](#holomush-adminportal-v1-AdminPortalService)
   
@@ -537,10 +549,16 @@ title: "gRPC API Reference"
     - [SendCommandResponse](#holomush-web-v1-SendCommandResponse)
     - [StreamEventsRequest](#holomush-web-v1-StreamEventsRequest)
     - [StreamEventsResponse](#holomush-web-v1-StreamEventsResponse)
+    - [WebAdminGetCharacterRequest](#holomush-web-v1-WebAdminGetCharacterRequest)
+    - [WebAdminGetCharacterResponse](#holomush-web-v1-WebAdminGetCharacterResponse)
     - [WebAdminGetSectionRequest](#holomush-web-v1-WebAdminGetSectionRequest)
     - [WebAdminGetSectionResponse](#holomush-web-v1-WebAdminGetSectionResponse)
+    - [WebAdminListCharactersRequest](#holomush-web-v1-WebAdminListCharactersRequest)
+    - [WebAdminListCharactersResponse](#holomush-web-v1-WebAdminListCharactersResponse)
     - [WebAdminListSectionsRequest](#holomush-web-v1-WebAdminListSectionsRequest)
     - [WebAdminListSectionsResponse](#holomush-web-v1-WebAdminListSectionsResponse)
+    - [WebAdminSearchCharactersRequest](#holomush-web-v1-WebAdminSearchCharactersRequest)
+    - [WebAdminSearchCharactersResponse](#holomush-web-v1-WebAdminSearchCharactersResponse)
     - [WebAuthenticatePlayerRequest](#holomush-web-v1-WebAuthenticatePlayerRequest)
     - [WebAuthenticatePlayerResponse](#holomush-web-v1-WebAuthenticatePlayerResponse)
     - [WebAvailableCommand](#holomush-web-v1-WebAvailableCommand)
@@ -2495,6 +2513,109 @@ allowing incremental feature deployment without breaking callers.
 
 
 
+<a name="holomush-adminportal-v1-AdminCharacter"></a>
+
+### AdminCharacter
+AdminCharacter is the LIST projection: 01-SPEC §11.3&#39;s field list and nothing
+else.
+
+It carries NO profile prose. The list is a bulk cross-player projection, and
+prose in it would be a bulk prose export of player-authored text — which is
+why the edit surface reads AdminCharacterDetail for ONE character instead.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the character&#39;s ULID. |
+| player_id | [string](#string) |  | player_id is the owning player&#39;s ULID. It is a §11.3 Filter=Yes field and is what the click-to-filter path sends back as AdminListCharactersRequest.player_id; it is never an ordering key. |
+| player_username | [string](#string) |  | player_username is players.username for player_id — the OOC identity column the admin audience already sees, joined onto the row so the table needs no second lookup. |
+| name | [string](#string) |  | name is characters.name, the stored display form. Ordering is on the normalized form; this is what the table draws. |
+| status | [string](#string) |  | status is world.Status as a string: exactly one of the §9.3 lifecycle values. |
+| last_active_at | [int64](#int64) |  | last_active_at is characters.last_active_at as BIGINT epoch NANOSECONDS, sent RAW. 0 means &#34;has never been active&#34;. The server sends no formatted string: the client renders the coarse relative text, so the wire carries a fact and the presentation stays where the locale is. |
+| created_at | [int64](#int64) |  | created_at is the row&#39;s creation time as epoch nanoseconds. |
+| version | [int32](#int32) |  | version is the optimistic-concurrency version (MODEL-03) the edit surface sends back on a write. It is NOT a sortable §11.3 field — no sort enum value can express an ordering on it. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminCharacterDetail"></a>
+
+### AdminCharacterDetail
+AdminCharacterDetail is the SINGLE-character read the admin edit surface
+fetches when its sheet opens.
+
+# Why it is a separate message from AdminCharacter
+
+It carries the thirteen values §10.6 lets an admin write: characters.description
+plus the twelve §7.2 profile names. Seeding an edit form from LIST rows
+instead would render those fields blank and OVERWRITE existing content on
+save, because a blank field and an unfetched field are indistinguishable once
+they are both empty strings in a form model. One character, requested
+deliberately, is the only shape that cannot do that.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the same §11.3 projection the list carries, so the two cannot drift. |
+| description | [string](#string) |  | description is characters.description, the in-world `look` text. It is a column on characters, not a property row — which is why the twelve below are twelve and the writable set is thirteen. |
+| profile | [AdminCharacterDetail.ProfileEntry](#holomush-adminportal-v1-AdminCharacterDetail-ProfileEntry) | repeated | profile carries the governed profile values, keyed by their §7.2 path (`profile.pronouns` and its eleven siblings).
+
+The key set is CLOSED by membership in the facade&#39;s updateCharacterProfileMaskablePaths — the same twelve names §10.6 lets an admin WRITE — so the read surface and the write surface are the same set by construction. A property row outside that set is dropped, and a row whose stored value is NULL is OMITTED rather than sent as present-and-empty, so a flag-style row does not round-trip through the edit surface as a blank the operator never authored. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminCharacterDetail-ProfileEntry"></a>
+
+### AdminCharacterDetail.ProfileEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminGetCharacterRequest"></a>
+
+### AdminGetCharacterRequest
+AdminGetCharacterRequest names one character to read in full.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side. |
+| character_id | [string](#string) |  | character_id is the ULID to read. A value that does not parse, and one that parses but names no row, both produce codes.NotFound with the SAME static message carrying no id — so this field is not an existence oracle. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminGetCharacterResponse"></a>
+
+### AdminGetCharacterResponse
+AdminGetCharacterResponse carries the one row the edit surface reads.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacterDetail](#holomush-adminportal-v1-AdminCharacterDetail) |  | character is the full detail projection. |
+
+
+
+
+
+
 <a name="holomush-adminportal-v1-AdminGetSectionRequest"></a>
 
 ### AdminGetSectionRequest
@@ -2526,6 +2647,48 @@ other outcome is a status error with no body.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | section | [AdminSection](#holomush-adminportal-v1-AdminSection) |  | section is the entry section.AssertSectionAccess resolved, projected by AdminPortalServer.AdminGetSection from the context the interceptor stashed it on. Its status is always &#34;available&#34; here, because the gate refuses a planned section with FailedPrecondition before this message is built. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminListCharactersRequest"></a>
+
+### AdminListCharactersRequest
+AdminListCharactersRequest is one page request against the cross-player
+character list. Every field that shapes SQL is a closed enum or a bound
+value; nothing here reaches an ORDER BY or a predicate as text.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header. NewAdminSectionInterceptor resolves it to a player through auth.PlayerSessionRepository; there is deliberately no player-id field a caller could point at someone else. |
+| sort_field | [AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField) |  | sort_field selects the ordering column. AdminPortalServer REFUSES the unspecified value with codes.InvalidArgument rather than picking an order. |
+| descending | [bool](#bool) |  | descending reverses the primary sort key only. The never-active sentinel stays last and the normalized-name tiebreak stays ascending in both directions, so the order is total either way. |
+| status_filter | [AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter) |  | status_filter restricts to one lifecycle state; unspecified means no filter. |
+| player_id | [string](#string) |  | player_id, when non-empty, restricts to one player&#39;s characters. This is §11.3&#39;s Filter=Yes half of player_id and the click-to-filter path; there is no ordering on it. A value that does not parse as a ULID is codes.InvalidArgument. |
+| page | [int32](#int32) |  | page is the 1-based page number. AdminPortalServer refuses a value below 1 with codes.InvalidArgument rather than computing a negative OFFSET. |
+| page_size | [int32](#int32) |  | page_size is the requested rows per page. It is SERVER-CLAMPED: 0 or absent means 50, and any value above 50 is clamped DOWN to 50 rather than honoured. That clamp is what discharges T-06-24 — without it a page_size of 2^31-1 would reach the repository as a LIMIT. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminListCharactersResponse"></a>
+
+### AdminListCharactersResponse
+AdminListCharactersResponse is one page plus the total over the same filtered
+set.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) | repeated | characters is the page, in the requested order. |
+| total_count | [int64](#int64) |  | total_count is the number of rows matching the filter, computed by its own scalar count in the same read transaction as the page — so it is correct for a page BEYOND the last one, where a window column would report 0.
+
+This list is NOT privacy-partitioned: it is the admin audience&#39;s view of every character. It MUST NOT be cited as precedent for a count on the public character directory, whose row set differs per viewer and where a total would disclose the size of the withheld remainder. |
 
 
 
@@ -2565,6 +2728,47 @@ section registry to drift from it.
 
 
 
+<a name="holomush-adminportal-v1-AdminSearchCharactersRequest"></a>
+
+### AdminSearchCharactersRequest
+AdminSearchCharactersRequest adds a substring term to the list request.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side exactly as on the list RPC. |
+| sort_field | [AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField) |  | sort_field selects the ordering column; the unspecified value is refused. |
+| descending | [bool](#bool) |  | descending reverses the primary sort key only. |
+| status_filter | [AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter) |  | status_filter restricts to one lifecycle state; unspecified means no filter. |
+| player_id | [string](#string) |  | player_id, when non-empty, restricts to one player&#39;s characters. |
+| page | [int32](#int32) |  | page is the 1-based page number; below 1 is refused. |
+| page_size | [int32](#int32) |  | page_size is server-clamped to at most 50, defaulting to 50 when 0. |
+| query | [string](#string) |  | query is the RAW STRING THE OPERATOR TYPED. It is normalized SERVER-SIDE through the same charname pipeline that produced the stored characters.normalized_name — there is exactly one normalizer and no client mirror of it, so a client that pre-folded this value would be applying a second, drifting definition of name equality.
+
+It has NO minimum length. Blank after trimming means &#34;no filter&#34; and returns the unfiltered page; a value that normalizes to nothing (a lone zero-width joiner, say) returns an empty page rather than an error. Literal %, _ and \ match literally. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminSearchCharactersResponse"></a>
+
+### AdminSearchCharactersResponse
+AdminSearchCharactersResponse has the same shape as its list peer, so the
+table renders one component against both.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) | repeated | characters is the matching page, in the requested order. |
+| total_count | [int64](#int64) |  | total_count is the number of rows matching the term AND the filters, computed by its own scalar count in the same read transaction as the page. The same non-precedent note as on the list response applies. |
+
+
+
+
+
+
 <a name="holomush-adminportal-v1-AdminSection"></a>
 
 ### AdminSection
@@ -2583,6 +2787,50 @@ AdminSection is one row of the admin section registry
 
 
  
+
+
+<a name="holomush-adminportal-v1-AdminCharacterSortField"></a>
+
+### AdminCharacterSortField
+AdminCharacterSortField is the CLOSED ordering vocabulary of the admin
+character list — 01-SPEC §11.3&#39;s five rows marked Sort=Yes.
+
+Encoding the permitted set as an enum rather than a string is what makes &#34;an
+unlisted key is rejected, not ignored&#34; STRUCTURAL: a client cannot express
+the request at all. AdminPortalServer maps each value through a closed switch
+with a denying default, so a value added here without a handler arm is
+refused rather than silently ordered by something else.
+
+| Name | Number | Description |
+| ---- | ------ | ----------- |
+| ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED | 0 | ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED is REJECTED with codes.InvalidArgument, not defaulted. A silently-defaulted ordering is indistinguishable from an honoured one at the call site, and §11.3&#39;s closed field list would then be advisory rather than enforced. |
+| ADMIN_CHARACTER_SORT_FIELD_NAME | 1 | ADMIN_CHARACTER_SORT_FIELD_NAME orders on characters.normalized_name, the stored normal form of §6.1.3 — NOT on characters.name. The two orderings differ observably under case and NFKC folding, and §11.3&#39;s name row names the stored form. |
+| ADMIN_CHARACTER_SORT_FIELD_CREATED_AT | 2 | ADMIN_CHARACTER_SORT_FIELD_CREATED_AT orders on characters.created_at. |
+| ADMIN_CHARACTER_SORT_FIELD_STATUS | 3 | ADMIN_CHARACTER_SORT_FIELD_STATUS orders on characters.status. |
+| ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT | 4 | ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT orders on characters.last_active_at, with the 0 &#34;never active&#34; sentinel forced LAST in BOTH directions by a leading (last_active_at = 0) clause — descending gets that for free as the column minimum, ascending does not. |
+| ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME | 5 | ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME orders on the joined players.username.
+
+There is deliberately NO value for characters.player_id. §11.3 marks it Sort=No / Filter=Yes and §14 row 12 re-asserts that an ordering on it would leak creation sequence; it stays reachable as AdminListCharactersRequest.player_id, the equality filter behind click-to-filter. Filterability and sortability are different §11.3 columns. |
+
+
+
+<a name="holomush-adminportal-v1-AdminCharacterStatusFilter"></a>
+
+### AdminCharacterStatusFilter
+AdminCharacterStatusFilter is the CLOSED lifecycle filter vocabulary.
+
+It is an enum rather than free text so an unrecognised value cannot be
+expressed on the wire at all: §9.3&#39;s lifecycle vocabulary does not re-enter
+the API as a string parameter, and a typo cannot be answered with a silent
+zero-row page.
+
+| Name | Number | Description |
+| ---- | ------ | ----------- |
+| ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED | 0 | ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED means NO FILTER — every lifecycle state is returned. It is the one enum zero value on this service that is not a rejection, because &#34;I did not choose a filter&#34; is a legitimate request and rejecting it would make the unfiltered list unrequestable. |
+| ADMIN_CHARACTER_STATUS_FILTER_ACTIVE | 1 | ADMIN_CHARACTER_STATUS_FILTER_ACTIVE selects world.StatusActive. |
+| ADMIN_CHARACTER_STATUS_FILTER_IDLE | 2 | ADMIN_CHARACTER_STATUS_FILTER_IDLE selects world.StatusIdle. |
+| ADMIN_CHARACTER_STATUS_FILTER_RETIRED | 3 | ADMIN_CHARACTER_STATUS_FILTER_RETIRED selects world.StatusRetired. |
+
 
  
 
@@ -2619,6 +2867,15 @@ AdminPortalServer.AdminListSections runs DOWNSTREAM of the interceptor&#39;s adm
 It is the only method on this service whose section is supplied by the request rather than fixed by its descriptor, so NewAdminSectionInterceptor extracts section_id, runs section.AssertSectionAccess against it, and stashes the resolved entry on the context; AdminPortalServer.AdminGetSection then projects that entry and evaluates nothing.
 
 Because the gate runs first, a caller with no `admin_section:` access receives the same PermissionDenied for a registered id and an unregistered one — the registry is not enumerable through this parameter. A caller the gate PERMITTED who names a section that is registered but not yet implemented receives FailedPrecondition instead, carrying a static message and no body. |
+| AdminListCharacters | [AdminListCharactersRequest](#holomush-adminportal-v1-AdminListCharactersRequest) | [AdminListCharactersResponse](#holomush-adminportal-v1-AdminListCharactersResponse) | AdminListCharacters returns one page of the cross-player character list the `characters` section&#39;s table renders.
+
+AdminPortalServer.AdminListCharacters runs DOWNSTREAM of the interceptor&#39;s fixed-section gate: its descriptor names `characters` / read, so a caller holding no such access is refused before the handler and never learns whether any character exists. The handler clamps the page, maps the closed sort and status enums through denying switches, and reads CharacterRepository.AdminListCharacters; it evaluates no policy of its own. |
+| AdminSearchCharacters | [AdminSearchCharactersRequest](#holomush-adminportal-v1-AdminSearchCharactersRequest) | [AdminSearchCharactersResponse](#holomush-adminportal-v1-AdminSearchCharactersResponse) | AdminSearchCharacters is AdminListCharacters with a substring filter over two columns and only two: the stored characters.normalized_name and the joined players.username.
+
+AdminPortalServer.AdminSearchCharacters normalizes the caller&#39;s raw query through the same charname pipeline that produced the stored normal form, then hands the result to CharacterRepository.AdminSearchCharacters. A query that is blank after trimming bypasses both normalization and the predicate and returns the unfiltered page; one that normalizes to nothing returns an empty page rather than an error. No profile prose column is reachable through it. |
+| AdminGetCharacter | [AdminGetCharacterRequest](#holomush-adminportal-v1-AdminGetCharacterRequest) | [AdminGetCharacterResponse](#holomush-adminportal-v1-AdminGetCharacterResponse) | AdminGetCharacter returns ONE character with the thirteen values the admin edit surface writes back.
+
+AdminPortalServer.AdminGetCharacter composes it from CharacterRepository.Get and a name-closed projection of PropertyRepository.ListByParent. An unknown id is codes.NotFound with a static message that names no id, so the RPC is not an existence oracle for a caller the gate already permitted. |
 
  
 
@@ -9069,6 +9326,37 @@ an in-band game event or an out-of-band control message, never both.
 
 
 
+<a name="holomush-web-v1-WebAdminGetCharacterRequest"></a>
+
+### WebAdminGetCharacterRequest
+WebAdminGetCharacterRequest names the character to read and NOTHING else, for
+the same reason its section peer does: the token comes from the header.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is forwarded verbatim to AdminPortalService.AdminGetCharacter. The gateway neither validates nor parses it; the core answers an unparseable and an absent id identically. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminGetCharacterResponse"></a>
+
+### WebAdminGetCharacterResponse
+WebAdminGetCharacterResponse re-exports the portal&#39;s detail row verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.adminportal.v1.AdminCharacterDetail](#holomush-adminportal-v1-AdminCharacterDetail) |  | character is the detail message AdminPortalService returned, forwarded unmodified — including its closed twelve-key profile map. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebAdminGetSectionRequest"></a>
 
 ### WebAdminGetSectionRequest
@@ -9103,6 +9391,45 @@ WebAdminGetSectionResponse re-exports the portal&#39;s single row verbatim.
 
 
 
+<a name="holomush-web-v1-WebAdminListCharactersRequest"></a>
+
+### WebAdminListCharactersRequest
+WebAdminListCharactersRequest carries the page and ordering fields and NO
+session token: Handler.WebAdminListCharacters reads the bearer token from the
+X-Session-Token header, so a browser cannot assert an identity the gateway
+did not authenticate.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| sort_field | [holomush.adminportal.v1.AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField) |  | sort_field is forwarded verbatim; the core refuses its unspecified value. |
+| descending | [bool](#bool) |  | descending is forwarded verbatim. |
+| status_filter | [holomush.adminportal.v1.AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter) |  | status_filter is forwarded verbatim; unspecified means no filter. |
+| player_id | [string](#string) |  | player_id is forwarded verbatim — the click-to-filter equality field. |
+| page | [int32](#int32) |  | page is the 1-based page number, forwarded verbatim; the core refuses a value below 1. |
+| page_size | [int32](#int32) |  | page_size is forwarded verbatim; the core clamps it to at most 50. The gateway does NOT clamp, because a clamp here would be bypassable by any caller speaking gRPC to core directly. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminListCharactersResponse"></a>
+
+### WebAdminListCharactersResponse
+WebAdminListCharactersResponse re-exports the portal&#39;s page verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) | repeated | characters is the page AdminPortalService returned, in its order; the gateway neither filters nor re-sorts it. Reusing the portal&#39;s own message type is what keeps a second, drifting web-side character shape from existing. |
+| total_count | [int64](#int64) |  | total_count is forwarded unmodified. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebAdminListSectionsRequest"></a>
 
 ### WebAdminListSectionsRequest
@@ -9125,6 +9452,45 @@ WebAdminListSectionsResponse re-exports the portal&#39;s projection verbatim.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | sections | [holomush.adminportal.v1.AdminSection](#holomush-adminportal-v1-AdminSection) | repeated | sections is the server-filtered section list AdminPortalService returned, in its order; the gateway neither filters nor re-sorts it. Reusing the portal&#39;s own message type is what keeps a second, drifting web-side section shape from existing. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminSearchCharactersRequest"></a>
+
+### WebAdminSearchCharactersRequest
+WebAdminSearchCharactersRequest adds the raw search term to the page fields.
+It carries no session token, for the same reason its list peer does not.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| sort_field | [holomush.adminportal.v1.AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField) |  | sort_field is forwarded verbatim. |
+| descending | [bool](#bool) |  | descending is forwarded verbatim. |
+| status_filter | [holomush.adminportal.v1.AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter) |  | status_filter is forwarded verbatim. |
+| player_id | [string](#string) |  | player_id is forwarded verbatim. |
+| page | [int32](#int32) |  | page is the 1-based page number, forwarded verbatim. |
+| page_size | [int32](#int32) |  | page_size is forwarded verbatim and clamped core-side. |
+| query | [string](#string) |  | query is the RAW STRING THE OPERATOR TYPED, forwarded byte-for-byte. The gateway does not trim, lower-case or NFKC-fold it; the core normalizes it through the single charname pipeline that produced the stored normal form. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminSearchCharactersResponse"></a>
+
+### WebAdminSearchCharactersResponse
+WebAdminSearchCharactersResponse re-exports the portal&#39;s matching page
+verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) | repeated | characters is the matching page AdminPortalService returned, in its order. |
+| total_count | [int64](#int64) |  | total_count is forwarded unmodified. |
 
 
 
@@ -11054,6 +11420,9 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebAdminGetSection | [WebAdminGetSectionRequest](#holomush-web-v1-WebAdminGetSectionRequest) | [WebAdminGetSectionResponse](#holomush-web-v1-WebAdminGetSectionResponse) | WebAdminGetSection proxies AdminPortalService.AdminGetSection. Handler.WebAdminGetSection lifts the session token from the X-Session-Token header and forwards only section_id. It makes NO authorization decision: the core interceptor gates the supplied id before the core handler runs, so both the PermissionDenied a refused caller gets and the FailedPrecondition a permitted caller gets for a planned section reach the browser unmodified.
 
 It has NO browser caller in v0.13, and that is deliberate rather than dead code: D-100 makes both registry RPCs published wire contract and census members, and the wire-level gate tests in test/integration/access are what exercise this path. |
+| WebAdminListCharacters | [WebAdminListCharactersRequest](#holomush-web-v1-WebAdminListCharactersRequest) | [WebAdminListCharactersResponse](#holomush-web-v1-WebAdminListCharactersResponse) | WebAdminListCharacters proxies AdminPortalService.AdminListCharacters. Handler.WebAdminListCharacters lifts the session token from the X-Session-Token header and forwards the page and ordering fields verbatim. It computes nothing: the clamp, the enum switches and the section gate all live core-side, where a caller speaking gRPC directly cannot skip them. |
+| WebAdminSearchCharacters | [WebAdminSearchCharactersRequest](#holomush-web-v1-WebAdminSearchCharactersRequest) | [WebAdminSearchCharactersResponse](#holomush-web-v1-WebAdminSearchCharactersResponse) | WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters. Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING — it does not trim, case-fold or normalize it, because normalization is core-side through the one charname pipeline and a gateway mirror of it would be a second definition of name equality. |
+| WebAdminGetCharacter | [WebAdminGetCharacterRequest](#holomush-web-v1-WebAdminGetCharacterRequest) | [WebAdminGetCharacterResponse](#holomush-web-v1-WebAdminGetCharacterResponse) | WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter. Handler.WebAdminGetCharacter forwards character_id and returns the detail message unmodified; the core&#39;s static NotFound reaches the browser as-is. |
 
  
 

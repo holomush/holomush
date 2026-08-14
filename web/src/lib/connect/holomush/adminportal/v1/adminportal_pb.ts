@@ -5,8 +5,8 @@
 // @generated from file holomush/adminportal/v1/adminportal.proto (package holomush.adminportal.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/adminportal/v1/adminportal.proto.
  */
 export const file_holomush_adminportal_v1_adminportal: GenFile = /*@__PURE__*/
-  fileDesc("Cilob2xvbXVzaC9hZG1pbnBvcnRhbC92MS9hZG1pbnBvcnRhbC5wcm90bxIXaG9sb211c2guYWRtaW5wb3J0YWwudjEiQQoYQWRtaW5MaXN0U2VjdGlvbnNSZXF1ZXN0EiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJQge6SARyAhABIlQKGUFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2USNwoIc2VjdGlvbnMYASADKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iXAoWQWRtaW5HZXRTZWN0aW9uUmVxdWVzdBIbCgpzZWN0aW9uX2lkGAEgASgJQge6SARyAhABEiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJQge6SARyAhABIlEKF0FkbWluR2V0U2VjdGlvblJlc3BvbnNlEjYKB3NlY3Rpb24YASABKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iQAoMQWRtaW5TZWN0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIOCgZzdGF0dXMYAyABKAkyhgIKEkFkbWluUG9ydGFsU2VydmljZRJ6ChFBZG1pbkxpc3RTZWN0aW9ucxIxLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdFNlY3Rpb25zUmVxdWVzdBoyLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2USdAoPQWRtaW5HZXRTZWN0aW9uEi8uaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5HZXRTZWN0aW9uUmVxdWVzdBowLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluR2V0U2VjdGlvblJlc3BvbnNlQk5aTGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2FkbWlucG9ydGFsL3YxO2FkbWlucG9ydGFsdjFiBnByb3RvMw", [file_buf_validate_validate]);
+  fileDesc("Cilob2xvbXVzaC9hZG1pbnBvcnRhbC92MS9hZG1pbnBvcnRhbC5wcm90bxIXaG9sb211c2guYWRtaW5wb3J0YWwudjEiQQoYQWRtaW5MaXN0U2VjdGlvbnNSZXF1ZXN0EiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJQge6SARyAhABIlQKGUFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2USNwoIc2VjdGlvbnMYASADKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iXAoWQWRtaW5HZXRTZWN0aW9uUmVxdWVzdBIbCgpzZWN0aW9uX2lkGAEgASgJQge6SARyAhABEiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJQge6SARyAhABIlEKF0FkbWluR2V0U2VjdGlvblJlc3BvbnNlEjYKB3NlY3Rpb24YASABKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iQAoMQWRtaW5TZWN0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIOCgZzdGF0dXMYAyABKAkinQIKGkFkbWluTGlzdENoYXJhY3RlcnNSZXF1ZXN0EiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJQge6SARyAhABEkQKCnNvcnRfZmllbGQYAiABKA4yMC5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlclNvcnRGaWVsZBISCgpkZXNjZW5kaW5nGAMgASgIEkoKDXN0YXR1c19maWx0ZXIYBCABKA4yMy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlclN0YXR1c0ZpbHRlchIRCglwbGF5ZXJfaWQYBSABKAkSDAoEcGFnZRgGIAEoBRIRCglwYWdlX3NpemUYByABKAUibwobQWRtaW5MaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEjsKCmNoYXJhY3RlcnMYASADKAsyJy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlchITCgt0b3RhbF9jb3VudBgCIAEoAyKuAgocQWRtaW5TZWFyY2hDaGFyYWN0ZXJzUmVxdWVzdBIlChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCUIHukgEcgIQARJECgpzb3J0X2ZpZWxkGAIgASgOMjAuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJTb3J0RmllbGQSEgoKZGVzY2VuZGluZxgDIAEoCBJKCg1zdGF0dXNfZmlsdGVyGAQgASgOMjMuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJTdGF0dXNGaWx0ZXISEQoJcGxheWVyX2lkGAUgASgJEgwKBHBhZ2UYBiABKAUSEQoJcGFnZV9zaXplGAcgASgFEg0KBXF1ZXJ5GAggASgJInEKHUFkbWluU2VhcmNoQ2hhcmFjdGVyc1Jlc3BvbnNlEjsKCmNoYXJhY3RlcnMYASADKAsyJy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlchITCgt0b3RhbF9jb3VudBgCIAEoAyJgChhBZG1pbkdldENoYXJhY3RlclJlcXVlc3QSJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAlCB7pIBHICEAESHQoMY2hhcmFjdGVyX2lkGAIgASgJQge6SARyAhABIl0KGUFkbWluR2V0Q2hhcmFjdGVyUmVzcG9uc2USQAoJY2hhcmFjdGVyGAEgASgLMi0uaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJEZXRhaWwiowEKDkFkbWluQ2hhcmFjdGVyEgoKAmlkGAEgASgJEhEKCXBsYXllcl9pZBgCIAEoCRIXCg9wbGF5ZXJfdXNlcm5hbWUYAyABKAkSDAoEbmFtZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkSFgoObGFzdF9hY3RpdmVfYXQYBiABKAMSEgoKY3JlYXRlZF9hdBgHIAEoAxIPCgd2ZXJzaW9uGAggASgFIuQBChRBZG1pbkNoYXJhY3RlckRldGFpbBI6CgljaGFyYWN0ZXIYASABKAsyJy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlchITCgtkZXNjcmlwdGlvbhgCIAEoCRJLCgdwcm9maWxlGAMgAygLMjouaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJEZXRhaWwuUHJvZmlsZUVudHJ5Gi4KDFByb2ZpbGVFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBKpsCChdBZG1pbkNoYXJhY3RlclNvcnRGaWVsZBIqCiZBRE1JTl9DSEFSQUNURVJfU09SVF9GSUVMRF9VTlNQRUNJRklFRBAAEiMKH0FETUlOX0NIQVJBQ1RFUl9TT1JUX0ZJRUxEX05BTUUQARIpCiVBRE1JTl9DSEFSQUNURVJfU09SVF9GSUVMRF9DUkVBVEVEX0FUEAISJQohQURNSU5fQ0hBUkFDVEVSX1NPUlRfRklFTERfU1RBVFVTEAMSLQopQURNSU5fQ0hBUkFDVEVSX1NPUlRfRklFTERfTEFTVF9BQ1RJVkVfQVQQBBIuCipBRE1JTl9DSEFSQUNURVJfU09SVF9GSUVMRF9QTEFZRVJfVVNFUk5BTUUQBSrIAQoaQWRtaW5DaGFyYWN0ZXJTdGF0dXNGaWx0ZXISLQopQURNSU5fQ0hBUkFDVEVSX1NUQVRVU19GSUxURVJfVU5TUEVDSUZJRUQQABIoCiRBRE1JTl9DSEFSQUNURVJfU1RBVFVTX0ZJTFRFUl9BQ1RJVkUQARImCiJBRE1JTl9DSEFSQUNURVJfU1RBVFVTX0ZJTFRFUl9JRExFEAISKQolQURNSU5fQ0hBUkFDVEVSX1NUQVRVU19GSUxURVJfUkVUSVJFRBADMo4FChJBZG1pblBvcnRhbFNlcnZpY2USegoRQWRtaW5MaXN0U2VjdGlvbnMSMS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkxpc3RTZWN0aW9uc1JlcXVlc3QaMi5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkxpc3RTZWN0aW9uc1Jlc3BvbnNlEnQKD0FkbWluR2V0U2VjdGlvbhIvLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluR2V0U2VjdGlvblJlcXVlc3QaMC5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkdldFNlY3Rpb25SZXNwb25zZRKAAQoTQWRtaW5MaXN0Q2hhcmFjdGVycxIzLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdENoYXJhY3RlcnNSZXF1ZXN0GjQuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5MaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEoYBChVBZG1pblNlYXJjaENoYXJhY3RlcnMSNS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlYXJjaENoYXJhY3RlcnNSZXF1ZXN0GjYuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5TZWFyY2hDaGFyYWN0ZXJzUmVzcG9uc2USegoRQWRtaW5HZXRDaGFyYWN0ZXISMS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkdldENoYXJhY3RlclJlcXVlc3QaMi5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkdldENoYXJhY3RlclJlc3BvbnNlQk5aTGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2FkbWlucG9ydGFsL3YxO2FkbWlucG9ydGFsdjFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * AdminListSectionsRequest carries only the caller's bearer token, because
@@ -180,6 +180,555 @@ export const AdminSectionSchema: GenMessage<AdminSection> = /*@__PURE__*/
   messageDesc(file_holomush_adminportal_v1_adminportal, 4);
 
 /**
+ * AdminListCharactersRequest is one page request against the cross-player
+ * character list. Every field that shapes SQL is a closed enum or a bound
+ * value; nothing here reaches an ORDER BY or a predicate as text.
+ *
+ * @generated from message holomush.adminportal.v1.AdminListCharactersRequest
+ */
+export type AdminListCharactersRequest = Message<"holomush.adminportal.v1.AdminListCharactersRequest"> & {
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * X-Session-Token header. NewAdminSectionInterceptor resolves it to a player
+   * through auth.PlayerSessionRepository; there is deliberately no player-id
+   * field a caller could point at someone else.
+   *
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+
+  /**
+   * sort_field selects the ordering column. AdminPortalServer REFUSES the
+   * unspecified value with codes.InvalidArgument rather than picking an order.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminCharacterSortField sort_field = 2;
+   */
+  sortField: AdminCharacterSortField;
+
+  /**
+   * descending reverses the primary sort key only. The never-active sentinel
+   * stays last and the normalized-name tiebreak stays ascending in both
+   * directions, so the order is total either way.
+   *
+   * @generated from field: bool descending = 3;
+   */
+  descending: boolean;
+
+  /**
+   * status_filter restricts to one lifecycle state; unspecified means no
+   * filter.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminCharacterStatusFilter status_filter = 4;
+   */
+  statusFilter: AdminCharacterStatusFilter;
+
+  /**
+   * player_id, when non-empty, restricts to one player's characters. This is
+   * §11.3's Filter=Yes half of player_id and the click-to-filter path; there is
+   * no ordering on it. A value that does not parse as a ULID is
+   * codes.InvalidArgument.
+   *
+   * @generated from field: string player_id = 5;
+   */
+  playerId: string;
+
+  /**
+   * page is the 1-based page number. AdminPortalServer refuses a value below 1
+   * with codes.InvalidArgument rather than computing a negative OFFSET.
+   *
+   * @generated from field: int32 page = 6;
+   */
+  page: number;
+
+  /**
+   * page_size is the requested rows per page. It is SERVER-CLAMPED: 0 or absent
+   * means 50, and any value above 50 is clamped DOWN to 50 rather than
+   * honoured. That clamp is what discharges T-06-24 — without it a page_size of
+   * 2^31-1 would reach the repository as a LIMIT.
+   *
+   * @generated from field: int32 page_size = 7;
+   */
+  pageSize: number;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminListCharactersRequest.
+ * Use `create(AdminListCharactersRequestSchema)` to create a new message.
+ */
+export const AdminListCharactersRequestSchema: GenMessage<AdminListCharactersRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 5);
+
+/**
+ * AdminListCharactersResponse is one page plus the total over the same filtered
+ * set.
+ *
+ * @generated from message holomush.adminportal.v1.AdminListCharactersResponse
+ */
+export type AdminListCharactersResponse = Message<"holomush.adminportal.v1.AdminListCharactersResponse"> & {
+  /**
+   * characters is the page, in the requested order.
+   *
+   * @generated from field: repeated holomush.adminportal.v1.AdminCharacter characters = 1;
+   */
+  characters: AdminCharacter[];
+
+  /**
+   * total_count is the number of rows matching the filter, computed by its own
+   * scalar count in the same read transaction as the page — so it is correct
+   * for a page BEYOND the last one, where a window column would report 0.
+   *
+   * This list is NOT privacy-partitioned: it is the admin audience's view of
+   * every character. It MUST NOT be cited as precedent for a count on the
+   * public character directory, whose row set differs per viewer and where a
+   * total would disclose the size of the withheld remainder.
+   *
+   * @generated from field: int64 total_count = 2;
+   */
+  totalCount: bigint;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminListCharactersResponse.
+ * Use `create(AdminListCharactersResponseSchema)` to create a new message.
+ */
+export const AdminListCharactersResponseSchema: GenMessage<AdminListCharactersResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 6);
+
+/**
+ * AdminSearchCharactersRequest adds a substring term to the list request.
+ *
+ * @generated from message holomush.adminportal.v1.AdminSearchCharactersRequest
+ */
+export type AdminSearchCharactersRequest = Message<"holomush.adminportal.v1.AdminSearchCharactersRequest"> & {
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * X-Session-Token header, resolved server-side exactly as on the list RPC.
+   *
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+
+  /**
+   * sort_field selects the ordering column; the unspecified value is refused.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminCharacterSortField sort_field = 2;
+   */
+  sortField: AdminCharacterSortField;
+
+  /**
+   * descending reverses the primary sort key only.
+   *
+   * @generated from field: bool descending = 3;
+   */
+  descending: boolean;
+
+  /**
+   * status_filter restricts to one lifecycle state; unspecified means no
+   * filter.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminCharacterStatusFilter status_filter = 4;
+   */
+  statusFilter: AdminCharacterStatusFilter;
+
+  /**
+   * player_id, when non-empty, restricts to one player's characters.
+   *
+   * @generated from field: string player_id = 5;
+   */
+  playerId: string;
+
+  /**
+   * page is the 1-based page number; below 1 is refused.
+   *
+   * @generated from field: int32 page = 6;
+   */
+  page: number;
+
+  /**
+   * page_size is server-clamped to at most 50, defaulting to 50 when 0.
+   *
+   * @generated from field: int32 page_size = 7;
+   */
+  pageSize: number;
+
+  /**
+   * query is the RAW STRING THE OPERATOR TYPED. It is normalized SERVER-SIDE
+   * through the same charname pipeline that produced the stored
+   * characters.normalized_name — there is exactly one normalizer and no client
+   * mirror of it, so a client that pre-folded this value would be applying a
+   * second, drifting definition of name equality.
+   *
+   * It has NO minimum length. Blank after trimming means "no filter" and
+   * returns the unfiltered page; a value that normalizes to nothing (a lone
+   * zero-width joiner, say) returns an empty page rather than an error.
+   * Literal %, _ and \ match literally.
+   *
+   * @generated from field: string query = 8;
+   */
+  query: string;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminSearchCharactersRequest.
+ * Use `create(AdminSearchCharactersRequestSchema)` to create a new message.
+ */
+export const AdminSearchCharactersRequestSchema: GenMessage<AdminSearchCharactersRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 7);
+
+/**
+ * AdminSearchCharactersResponse has the same shape as its list peer, so the
+ * table renders one component against both.
+ *
+ * @generated from message holomush.adminportal.v1.AdminSearchCharactersResponse
+ */
+export type AdminSearchCharactersResponse = Message<"holomush.adminportal.v1.AdminSearchCharactersResponse"> & {
+  /**
+   * characters is the matching page, in the requested order.
+   *
+   * @generated from field: repeated holomush.adminportal.v1.AdminCharacter characters = 1;
+   */
+  characters: AdminCharacter[];
+
+  /**
+   * total_count is the number of rows matching the term AND the filters,
+   * computed by its own scalar count in the same read transaction as the page.
+   * The same non-precedent note as on the list response applies.
+   *
+   * @generated from field: int64 total_count = 2;
+   */
+  totalCount: bigint;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminSearchCharactersResponse.
+ * Use `create(AdminSearchCharactersResponseSchema)` to create a new message.
+ */
+export const AdminSearchCharactersResponseSchema: GenMessage<AdminSearchCharactersResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 8);
+
+/**
+ * AdminGetCharacterRequest names one character to read in full.
+ *
+ * @generated from message holomush.adminportal.v1.AdminGetCharacterRequest
+ */
+export type AdminGetCharacterRequest = Message<"holomush.adminportal.v1.AdminGetCharacterRequest"> & {
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * X-Session-Token header, resolved server-side.
+   *
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+
+  /**
+   * character_id is the ULID to read. A value that does not parse, and one that
+   * parses but names no row, both produce codes.NotFound with the SAME static
+   * message carrying no id — so this field is not an existence oracle.
+   *
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminGetCharacterRequest.
+ * Use `create(AdminGetCharacterRequestSchema)` to create a new message.
+ */
+export const AdminGetCharacterRequestSchema: GenMessage<AdminGetCharacterRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 9);
+
+/**
+ * AdminGetCharacterResponse carries the one row the edit surface reads.
+ *
+ * @generated from message holomush.adminportal.v1.AdminGetCharacterResponse
+ */
+export type AdminGetCharacterResponse = Message<"holomush.adminportal.v1.AdminGetCharacterResponse"> & {
+  /**
+   * character is the full detail projection.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminCharacterDetail character = 1;
+   */
+  character?: AdminCharacterDetail | undefined;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminGetCharacterResponse.
+ * Use `create(AdminGetCharacterResponseSchema)` to create a new message.
+ */
+export const AdminGetCharacterResponseSchema: GenMessage<AdminGetCharacterResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 10);
+
+/**
+ * AdminCharacter is the LIST projection: 01-SPEC §11.3's field list and nothing
+ * else.
+ *
+ * It carries NO profile prose. The list is a bulk cross-player projection, and
+ * prose in it would be a bulk prose export of player-authored text — which is
+ * why the edit surface reads AdminCharacterDetail for ONE character instead.
+ *
+ * @generated from message holomush.adminportal.v1.AdminCharacter
+ */
+export type AdminCharacter = Message<"holomush.adminportal.v1.AdminCharacter"> & {
+  /**
+   * id is the character's ULID.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * player_id is the owning player's ULID. It is a §11.3 Filter=Yes field and
+   * is what the click-to-filter path sends back as
+   * AdminListCharactersRequest.player_id; it is never an ordering key.
+   *
+   * @generated from field: string player_id = 2;
+   */
+  playerId: string;
+
+  /**
+   * player_username is players.username for player_id — the OOC identity column
+   * the admin audience already sees, joined onto the row so the table needs no
+   * second lookup.
+   *
+   * @generated from field: string player_username = 3;
+   */
+  playerUsername: string;
+
+  /**
+   * name is characters.name, the stored display form. Ordering is on the
+   * normalized form; this is what the table draws.
+   *
+   * @generated from field: string name = 4;
+   */
+  name: string;
+
+  /**
+   * status is world.Status as a string: exactly one of the §9.3 lifecycle
+   * values.
+   *
+   * @generated from field: string status = 5;
+   */
+  status: string;
+
+  /**
+   * last_active_at is characters.last_active_at as BIGINT epoch NANOSECONDS,
+   * sent RAW. 0 means "has never been active". The server sends no formatted
+   * string: the client renders the coarse relative text, so the wire carries a
+   * fact and the presentation stays where the locale is.
+   *
+   * @generated from field: int64 last_active_at = 6;
+   */
+  lastActiveAt: bigint;
+
+  /**
+   * created_at is the row's creation time as epoch nanoseconds.
+   *
+   * @generated from field: int64 created_at = 7;
+   */
+  createdAt: bigint;
+
+  /**
+   * version is the optimistic-concurrency version (MODEL-03) the edit surface
+   * sends back on a write. It is NOT a sortable §11.3 field — no sort enum
+   * value can express an ordering on it.
+   *
+   * @generated from field: int32 version = 8;
+   */
+  version: number;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminCharacter.
+ * Use `create(AdminCharacterSchema)` to create a new message.
+ */
+export const AdminCharacterSchema: GenMessage<AdminCharacter> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 11);
+
+/**
+ * AdminCharacterDetail is the SINGLE-character read the admin edit surface
+ * fetches when its sheet opens.
+ *
+ * # Why it is a separate message from AdminCharacter
+ *
+ * It carries the thirteen values §10.6 lets an admin write: characters.description
+ * plus the twelve §7.2 profile names. Seeding an edit form from LIST rows
+ * instead would render those fields blank and OVERWRITE existing content on
+ * save, because a blank field and an unfetched field are indistinguishable once
+ * they are both empty strings in a form model. One character, requested
+ * deliberately, is the only shape that cannot do that.
+ *
+ * @generated from message holomush.adminportal.v1.AdminCharacterDetail
+ */
+export type AdminCharacterDetail = Message<"holomush.adminportal.v1.AdminCharacterDetail"> & {
+  /**
+   * character is the same §11.3 projection the list carries, so the two cannot
+   * drift.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminCharacter character = 1;
+   */
+  character?: AdminCharacter | undefined;
+
+  /**
+   * description is characters.description, the in-world `look` text. It is a
+   * column on characters, not a property row — which is why the twelve below
+   * are twelve and the writable set is thirteen.
+   *
+   * @generated from field: string description = 2;
+   */
+  description: string;
+
+  /**
+   * profile carries the governed profile values, keyed by their §7.2 path
+   * (`profile.pronouns` and its eleven siblings).
+   *
+   * The key set is CLOSED by membership in the facade's
+   * updateCharacterProfileMaskablePaths — the same twelve names §10.6 lets an
+   * admin WRITE — so the read surface and the write surface are the same set by
+   * construction. A property row outside that set is dropped, and a row whose
+   * stored value is NULL is OMITTED rather than sent as present-and-empty, so a
+   * flag-style row does not round-trip through the edit surface as a blank the
+   * operator never authored.
+   *
+   * @generated from field: map<string, string> profile = 3;
+   */
+  profile: { [key: string]: string };
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminCharacterDetail.
+ * Use `create(AdminCharacterDetailSchema)` to create a new message.
+ */
+export const AdminCharacterDetailSchema: GenMessage<AdminCharacterDetail> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 12);
+
+/**
+ * AdminCharacterSortField is the CLOSED ordering vocabulary of the admin
+ * character list — 01-SPEC §11.3's five rows marked Sort=Yes.
+ *
+ * Encoding the permitted set as an enum rather than a string is what makes "an
+ * unlisted key is rejected, not ignored" STRUCTURAL: a client cannot express
+ * the request at all. AdminPortalServer maps each value through a closed switch
+ * with a denying default, so a value added here without a handler arm is
+ * refused rather than silently ordered by something else.
+ *
+ * @generated from enum holomush.adminportal.v1.AdminCharacterSortField
+ */
+export enum AdminCharacterSortField {
+  /**
+   * ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED is REJECTED with
+   * codes.InvalidArgument, not defaulted. A silently-defaulted ordering is
+   * indistinguishable from an honoured one at the call site, and §11.3's closed
+   * field list would then be advisory rather than enforced.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * ADMIN_CHARACTER_SORT_FIELD_NAME orders on characters.normalized_name, the
+   * stored normal form of §6.1.3 — NOT on characters.name. The two orderings
+   * differ observably under case and NFKC folding, and §11.3's name row names
+   * the stored form.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_SORT_FIELD_NAME = 1;
+   */
+  NAME = 1,
+
+  /**
+   * ADMIN_CHARACTER_SORT_FIELD_CREATED_AT orders on characters.created_at.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_SORT_FIELD_CREATED_AT = 2;
+   */
+  CREATED_AT = 2,
+
+  /**
+   * ADMIN_CHARACTER_SORT_FIELD_STATUS orders on characters.status.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_SORT_FIELD_STATUS = 3;
+   */
+  STATUS = 3,
+
+  /**
+   * ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT orders on
+   * characters.last_active_at, with the 0 "never active" sentinel forced LAST
+   * in BOTH directions by a leading (last_active_at = 0) clause — descending
+   * gets that for free as the column minimum, ascending does not.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT = 4;
+   */
+  LAST_ACTIVE_AT = 4,
+
+  /**
+   * ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME orders on the joined
+   * players.username.
+   *
+   * There is deliberately NO value for characters.player_id. §11.3 marks it
+   * Sort=No / Filter=Yes and §14 row 12 re-asserts that an ordering on it would
+   * leak creation sequence; it stays reachable as
+   * AdminListCharactersRequest.player_id, the equality filter behind
+   * click-to-filter. Filterability and sortability are different §11.3 columns.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME = 5;
+   */
+  PLAYER_USERNAME = 5,
+}
+
+/**
+ * Describes the enum holomush.adminportal.v1.AdminCharacterSortField.
+ */
+export const AdminCharacterSortFieldSchema: GenEnum<AdminCharacterSortField> = /*@__PURE__*/
+  enumDesc(file_holomush_adminportal_v1_adminportal, 0);
+
+/**
+ * AdminCharacterStatusFilter is the CLOSED lifecycle filter vocabulary.
+ *
+ * It is an enum rather than free text so an unrecognised value cannot be
+ * expressed on the wire at all: §9.3's lifecycle vocabulary does not re-enter
+ * the API as a string parameter, and a typo cannot be answered with a silent
+ * zero-row page.
+ *
+ * @generated from enum holomush.adminportal.v1.AdminCharacterStatusFilter
+ */
+export enum AdminCharacterStatusFilter {
+  /**
+   * ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED means NO FILTER — every lifecycle
+   * state is returned. It is the one enum zero value on this service that is
+   * not a rejection, because "I did not choose a filter" is a legitimate
+   * request and rejecting it would make the unfiltered list unrequestable.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * ADMIN_CHARACTER_STATUS_FILTER_ACTIVE selects world.StatusActive.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_STATUS_FILTER_ACTIVE = 1;
+   */
+  ACTIVE = 1,
+
+  /**
+   * ADMIN_CHARACTER_STATUS_FILTER_IDLE selects world.StatusIdle.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_STATUS_FILTER_IDLE = 2;
+   */
+  IDLE = 2,
+
+  /**
+   * ADMIN_CHARACTER_STATUS_FILTER_RETIRED selects world.StatusRetired.
+   *
+   * @generated from enum value: ADMIN_CHARACTER_STATUS_FILTER_RETIRED = 3;
+   */
+  RETIRED = 3,
+}
+
+/**
+ * Describes the enum holomush.adminportal.v1.AdminCharacterStatusFilter.
+ */
+export const AdminCharacterStatusFilterSchema: GenEnum<AdminCharacterStatusFilter> = /*@__PURE__*/
+  enumDesc(file_holomush_adminportal_v1_adminportal, 1);
+
+/**
  * AdminPortalService is the PLAYER-SESSION admin portal surface: the RPCs the
  * browser's /admin routes reach, gated by `admin_section:` ABAC over the
  * network. Its identity is resolved server-side from the request's
@@ -241,6 +790,61 @@ export const AdminPortalService: GenService<{
     methodKind: "unary";
     input: typeof AdminGetSectionRequestSchema;
     output: typeof AdminGetSectionResponseSchema;
+  },
+  /**
+   * AdminListCharacters returns one page of the cross-player character list the
+   * `characters` section's table renders.
+   *
+   * AdminPortalServer.AdminListCharacters runs DOWNSTREAM of the interceptor's
+   * fixed-section gate: its descriptor names `characters` / read, so a caller
+   * holding no such access is refused before the handler and never learns
+   * whether any character exists. The handler clamps the page, maps the closed
+   * sort and status enums through denying switches, and reads
+   * CharacterRepository.AdminListCharacters; it evaluates no policy of its own.
+   *
+   * @generated from rpc holomush.adminportal.v1.AdminPortalService.AdminListCharacters
+   */
+  adminListCharacters: {
+    methodKind: "unary";
+    input: typeof AdminListCharactersRequestSchema;
+    output: typeof AdminListCharactersResponseSchema;
+  },
+  /**
+   * AdminSearchCharacters is AdminListCharacters with a substring filter over
+   * two columns and only two: the stored characters.normalized_name and the
+   * joined players.username.
+   *
+   * AdminPortalServer.AdminSearchCharacters normalizes the caller's raw query
+   * through the same charname pipeline that produced the stored normal form,
+   * then hands the result to CharacterRepository.AdminSearchCharacters. A query
+   * that is blank after trimming bypasses both normalization and the predicate
+   * and returns the unfiltered page; one that normalizes to nothing returns an
+   * empty page rather than an error. No profile prose column is reachable
+   * through it.
+   *
+   * @generated from rpc holomush.adminportal.v1.AdminPortalService.AdminSearchCharacters
+   */
+  adminSearchCharacters: {
+    methodKind: "unary";
+    input: typeof AdminSearchCharactersRequestSchema;
+    output: typeof AdminSearchCharactersResponseSchema;
+  },
+  /**
+   * AdminGetCharacter returns ONE character with the thirteen values the admin
+   * edit surface writes back.
+   *
+   * AdminPortalServer.AdminGetCharacter composes it from
+   * CharacterRepository.Get and a name-closed projection of
+   * PropertyRepository.ListByParent. An unknown id is codes.NotFound with a
+   * static message that names no id, so the RPC is not an existence oracle for
+   * a caller the gate already permitted.
+   *
+   * @generated from rpc holomush.adminportal.v1.AdminPortalService.AdminGetCharacter
+   */
+  adminGetCharacter: {
+    methodKind: "unary";
+    input: typeof AdminGetCharacterRequestSchema;
+    output: typeof AdminGetCharacterResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_adminportal_v1_adminportal, 0);

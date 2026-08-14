@@ -22,8 +22,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AdminPortalService_AdminListSections_FullMethodName = "/holomush.adminportal.v1.AdminPortalService/AdminListSections"
-	AdminPortalService_AdminGetSection_FullMethodName   = "/holomush.adminportal.v1.AdminPortalService/AdminGetSection"
+	AdminPortalService_AdminListSections_FullMethodName     = "/holomush.adminportal.v1.AdminPortalService/AdminListSections"
+	AdminPortalService_AdminGetSection_FullMethodName       = "/holomush.adminportal.v1.AdminPortalService/AdminGetSection"
+	AdminPortalService_AdminListCharacters_FullMethodName   = "/holomush.adminportal.v1.AdminPortalService/AdminListCharacters"
+	AdminPortalService_AdminSearchCharacters_FullMethodName = "/holomush.adminportal.v1.AdminPortalService/AdminSearchCharacters"
+	AdminPortalService_AdminGetCharacter_FullMethodName     = "/holomush.adminportal.v1.AdminPortalService/AdminGetCharacter"
 )
 
 // AdminPortalServiceClient is the client API for AdminPortalService service.
@@ -73,6 +76,37 @@ type AdminPortalServiceClient interface {
 	// implemented receives FailedPrecondition instead, carrying a static message
 	// and no body.
 	AdminGetSection(ctx context.Context, in *AdminGetSectionRequest, opts ...grpc.CallOption) (*AdminGetSectionResponse, error)
+	// AdminListCharacters returns one page of the cross-player character list the
+	// `characters` section's table renders.
+	//
+	// AdminPortalServer.AdminListCharacters runs DOWNSTREAM of the interceptor's
+	// fixed-section gate: its descriptor names `characters` / read, so a caller
+	// holding no such access is refused before the handler and never learns
+	// whether any character exists. The handler clamps the page, maps the closed
+	// sort and status enums through denying switches, and reads
+	// CharacterRepository.AdminListCharacters; it evaluates no policy of its own.
+	AdminListCharacters(ctx context.Context, in *AdminListCharactersRequest, opts ...grpc.CallOption) (*AdminListCharactersResponse, error)
+	// AdminSearchCharacters is AdminListCharacters with a substring filter over
+	// two columns and only two: the stored characters.normalized_name and the
+	// joined players.username.
+	//
+	// AdminPortalServer.AdminSearchCharacters normalizes the caller's raw query
+	// through the same charname pipeline that produced the stored normal form,
+	// then hands the result to CharacterRepository.AdminSearchCharacters. A query
+	// that is blank after trimming bypasses both normalization and the predicate
+	// and returns the unfiltered page; one that normalizes to nothing returns an
+	// empty page rather than an error. No profile prose column is reachable
+	// through it.
+	AdminSearchCharacters(ctx context.Context, in *AdminSearchCharactersRequest, opts ...grpc.CallOption) (*AdminSearchCharactersResponse, error)
+	// AdminGetCharacter returns ONE character with the thirteen values the admin
+	// edit surface writes back.
+	//
+	// AdminPortalServer.AdminGetCharacter composes it from
+	// CharacterRepository.Get and a name-closed projection of
+	// PropertyRepository.ListByParent. An unknown id is codes.NotFound with a
+	// static message that names no id, so the RPC is not an existence oracle for
+	// a caller the gate already permitted.
+	AdminGetCharacter(ctx context.Context, in *AdminGetCharacterRequest, opts ...grpc.CallOption) (*AdminGetCharacterResponse, error)
 }
 
 type adminPortalServiceClient struct {
@@ -97,6 +131,36 @@ func (c *adminPortalServiceClient) AdminGetSection(ctx context.Context, in *Admi
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AdminGetSectionResponse)
 	err := c.cc.Invoke(ctx, AdminPortalService_AdminGetSection_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminPortalServiceClient) AdminListCharacters(ctx context.Context, in *AdminListCharactersRequest, opts ...grpc.CallOption) (*AdminListCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminListCharactersResponse)
+	err := c.cc.Invoke(ctx, AdminPortalService_AdminListCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminPortalServiceClient) AdminSearchCharacters(ctx context.Context, in *AdminSearchCharactersRequest, opts ...grpc.CallOption) (*AdminSearchCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminSearchCharactersResponse)
+	err := c.cc.Invoke(ctx, AdminPortalService_AdminSearchCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminPortalServiceClient) AdminGetCharacter(ctx context.Context, in *AdminGetCharacterRequest, opts ...grpc.CallOption) (*AdminGetCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminGetCharacterResponse)
+	err := c.cc.Invoke(ctx, AdminPortalService_AdminGetCharacter_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +214,37 @@ type AdminPortalServiceServer interface {
 	// implemented receives FailedPrecondition instead, carrying a static message
 	// and no body.
 	AdminGetSection(context.Context, *AdminGetSectionRequest) (*AdminGetSectionResponse, error)
+	// AdminListCharacters returns one page of the cross-player character list the
+	// `characters` section's table renders.
+	//
+	// AdminPortalServer.AdminListCharacters runs DOWNSTREAM of the interceptor's
+	// fixed-section gate: its descriptor names `characters` / read, so a caller
+	// holding no such access is refused before the handler and never learns
+	// whether any character exists. The handler clamps the page, maps the closed
+	// sort and status enums through denying switches, and reads
+	// CharacterRepository.AdminListCharacters; it evaluates no policy of its own.
+	AdminListCharacters(context.Context, *AdminListCharactersRequest) (*AdminListCharactersResponse, error)
+	// AdminSearchCharacters is AdminListCharacters with a substring filter over
+	// two columns and only two: the stored characters.normalized_name and the
+	// joined players.username.
+	//
+	// AdminPortalServer.AdminSearchCharacters normalizes the caller's raw query
+	// through the same charname pipeline that produced the stored normal form,
+	// then hands the result to CharacterRepository.AdminSearchCharacters. A query
+	// that is blank after trimming bypasses both normalization and the predicate
+	// and returns the unfiltered page; one that normalizes to nothing returns an
+	// empty page rather than an error. No profile prose column is reachable
+	// through it.
+	AdminSearchCharacters(context.Context, *AdminSearchCharactersRequest) (*AdminSearchCharactersResponse, error)
+	// AdminGetCharacter returns ONE character with the thirteen values the admin
+	// edit surface writes back.
+	//
+	// AdminPortalServer.AdminGetCharacter composes it from
+	// CharacterRepository.Get and a name-closed projection of
+	// PropertyRepository.ListByParent. An unknown id is codes.NotFound with a
+	// static message that names no id, so the RPC is not an existence oracle for
+	// a caller the gate already permitted.
+	AdminGetCharacter(context.Context, *AdminGetCharacterRequest) (*AdminGetCharacterResponse, error)
 	mustEmbedUnimplementedAdminPortalServiceServer()
 }
 
@@ -165,6 +260,15 @@ func (UnimplementedAdminPortalServiceServer) AdminListSections(context.Context, 
 }
 func (UnimplementedAdminPortalServiceServer) AdminGetSection(context.Context, *AdminGetSectionRequest) (*AdminGetSectionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AdminGetSection not implemented")
+}
+func (UnimplementedAdminPortalServiceServer) AdminListCharacters(context.Context, *AdminListCharactersRequest) (*AdminListCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminListCharacters not implemented")
+}
+func (UnimplementedAdminPortalServiceServer) AdminSearchCharacters(context.Context, *AdminSearchCharactersRequest) (*AdminSearchCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminSearchCharacters not implemented")
+}
+func (UnimplementedAdminPortalServiceServer) AdminGetCharacter(context.Context, *AdminGetCharacterRequest) (*AdminGetCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminGetCharacter not implemented")
 }
 func (UnimplementedAdminPortalServiceServer) mustEmbedUnimplementedAdminPortalServiceServer() {}
 func (UnimplementedAdminPortalServiceServer) testEmbeddedByValue()                            {}
@@ -223,6 +327,60 @@ func _AdminPortalService_AdminGetSection_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminPortalService_AdminListCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminListCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminPortalServiceServer).AdminListCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminPortalService_AdminListCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminPortalServiceServer).AdminListCharacters(ctx, req.(*AdminListCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminPortalService_AdminSearchCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminSearchCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminPortalServiceServer).AdminSearchCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminPortalService_AdminSearchCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminPortalServiceServer).AdminSearchCharacters(ctx, req.(*AdminSearchCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminPortalService_AdminGetCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminGetCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminPortalServiceServer).AdminGetCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminPortalService_AdminGetCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminPortalServiceServer).AdminGetCharacter(ctx, req.(*AdminGetCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminPortalService_ServiceDesc is the grpc.ServiceDesc for AdminPortalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -237,6 +395,18 @@ var AdminPortalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AdminGetSection",
 			Handler:    _AdminPortalService_AdminGetSection_Handler,
+		},
+		{
+			MethodName: "AdminListCharacters",
+			Handler:    _AdminPortalService_AdminListCharacters_Handler,
+		},
+		{
+			MethodName: "AdminSearchCharacters",
+			Handler:    _AdminPortalService_AdminSearchCharacters_Handler,
+		},
+		{
+			MethodName: "AdminGetCharacter",
+			Handler:    _AdminPortalService_AdminGetCharacter_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -197,6 +197,15 @@ const (
 	// WebServiceWebAdminGetSectionProcedure is the fully-qualified name of the WebService's
 	// WebAdminGetSection RPC.
 	WebServiceWebAdminGetSectionProcedure = "/holomush.web.v1.WebService/WebAdminGetSection"
+	// WebServiceWebAdminListCharactersProcedure is the fully-qualified name of the WebService's
+	// WebAdminListCharacters RPC.
+	WebServiceWebAdminListCharactersProcedure = "/holomush.web.v1.WebService/WebAdminListCharacters"
+	// WebServiceWebAdminSearchCharactersProcedure is the fully-qualified name of the WebService's
+	// WebAdminSearchCharacters RPC.
+	WebServiceWebAdminSearchCharactersProcedure = "/holomush.web.v1.WebService/WebAdminSearchCharacters"
+	// WebServiceWebAdminGetCharacterProcedure is the fully-qualified name of the WebService's
+	// WebAdminGetCharacter RPC.
+	WebServiceWebAdminGetCharacterProcedure = "/holomush.web.v1.WebService/WebAdminGetCharacter"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -451,6 +460,22 @@ type WebServiceClient interface {
 	// members, and the wire-level gate tests in test/integration/access are what
 	// exercise this path.
 	WebAdminGetSection(context.Context, *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error)
+	// WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+	// Handler.WebAdminListCharacters lifts the session token from the
+	// X-Session-Token header and forwards the page and ordering fields verbatim.
+	// It computes nothing: the clamp, the enum switches and the section gate all
+	// live core-side, where a caller speaking gRPC directly cannot skip them.
+	WebAdminListCharacters(context.Context, *connect.Request[v1.WebAdminListCharactersRequest]) (*connect.Response[v1.WebAdminListCharactersResponse], error)
+	// WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+	// Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+	// it does not trim, case-fold or normalize it, because normalization is
+	// core-side through the one charname pipeline and a gateway mirror of it
+	// would be a second definition of name equality.
+	WebAdminSearchCharacters(context.Context, *connect.Request[v1.WebAdminSearchCharactersRequest]) (*connect.Response[v1.WebAdminSearchCharactersResponse], error)
+	// WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
+	// message unmodified; the core's static NotFound reaches the browser as-is.
+	WebAdminGetCharacter(context.Context, *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -800,6 +825,24 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebAdminGetSection")),
 			connect.WithClientOptions(opts...),
 		),
+		webAdminListCharacters: connect.NewClient[v1.WebAdminListCharactersRequest, v1.WebAdminListCharactersResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminListCharactersProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminListCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminSearchCharacters: connect.NewClient[v1.WebAdminSearchCharactersRequest, v1.WebAdminSearchCharactersResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminSearchCharactersProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminSearchCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminGetCharacter: connect.NewClient[v1.WebAdminGetCharacterRequest, v1.WebAdminGetCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminGetCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminGetCharacter")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -861,6 +904,9 @@ type webServiceClient struct {
 	webListCharacterDirectory     *connect.Client[v1.WebListCharacterDirectoryRequest, v1.WebListCharacterDirectoryResponse]
 	webAdminListSections          *connect.Client[v1.WebAdminListSectionsRequest, v1.WebAdminListSectionsResponse]
 	webAdminGetSection            *connect.Client[v1.WebAdminGetSectionRequest, v1.WebAdminGetSectionResponse]
+	webAdminListCharacters        *connect.Client[v1.WebAdminListCharactersRequest, v1.WebAdminListCharactersResponse]
+	webAdminSearchCharacters      *connect.Client[v1.WebAdminSearchCharactersRequest, v1.WebAdminSearchCharactersResponse]
+	webAdminGetCharacter          *connect.Client[v1.WebAdminGetCharacterRequest, v1.WebAdminGetCharacterResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -1143,6 +1189,21 @@ func (c *webServiceClient) WebAdminGetSection(ctx context.Context, req *connect.
 	return c.webAdminGetSection.CallUnary(ctx, req)
 }
 
+// WebAdminListCharacters calls holomush.web.v1.WebService.WebAdminListCharacters.
+func (c *webServiceClient) WebAdminListCharacters(ctx context.Context, req *connect.Request[v1.WebAdminListCharactersRequest]) (*connect.Response[v1.WebAdminListCharactersResponse], error) {
+	return c.webAdminListCharacters.CallUnary(ctx, req)
+}
+
+// WebAdminSearchCharacters calls holomush.web.v1.WebService.WebAdminSearchCharacters.
+func (c *webServiceClient) WebAdminSearchCharacters(ctx context.Context, req *connect.Request[v1.WebAdminSearchCharactersRequest]) (*connect.Response[v1.WebAdminSearchCharactersResponse], error) {
+	return c.webAdminSearchCharacters.CallUnary(ctx, req)
+}
+
+// WebAdminGetCharacter calls holomush.web.v1.WebService.WebAdminGetCharacter.
+func (c *webServiceClient) WebAdminGetCharacter(ctx context.Context, req *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error) {
+	return c.webAdminGetCharacter.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -1395,6 +1456,22 @@ type WebServiceHandler interface {
 	// members, and the wire-level gate tests in test/integration/access are what
 	// exercise this path.
 	WebAdminGetSection(context.Context, *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error)
+	// WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+	// Handler.WebAdminListCharacters lifts the session token from the
+	// X-Session-Token header and forwards the page and ordering fields verbatim.
+	// It computes nothing: the clamp, the enum switches and the section gate all
+	// live core-side, where a caller speaking gRPC directly cannot skip them.
+	WebAdminListCharacters(context.Context, *connect.Request[v1.WebAdminListCharactersRequest]) (*connect.Response[v1.WebAdminListCharactersResponse], error)
+	// WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+	// Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+	// it does not trim, case-fold or normalize it, because normalization is
+	// core-side through the one charname pipeline and a gateway mirror of it
+	// would be a second definition of name equality.
+	WebAdminSearchCharacters(context.Context, *connect.Request[v1.WebAdminSearchCharactersRequest]) (*connect.Response[v1.WebAdminSearchCharactersResponse], error)
+	// WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
+	// message unmodified; the core's static NotFound reaches the browser as-is.
+	WebAdminGetCharacter(context.Context, *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1740,6 +1817,24 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebAdminGetSection")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebAdminListCharactersHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminListCharactersProcedure,
+		svc.WebAdminListCharacters,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminListCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminSearchCharactersHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminSearchCharactersProcedure,
+		svc.WebAdminSearchCharacters,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminSearchCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminGetCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminGetCharacterProcedure,
+		svc.WebAdminGetCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminGetCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -1854,6 +1949,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebAdminListSectionsHandler.ServeHTTP(w, r)
 		case WebServiceWebAdminGetSectionProcedure:
 			webServiceWebAdminGetSectionHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminListCharactersProcedure:
+			webServiceWebAdminListCharactersHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminSearchCharactersProcedure:
+			webServiceWebAdminSearchCharactersHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminGetCharacterProcedure:
+			webServiceWebAdminGetCharacterHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2085,4 +2186,16 @@ func (UnimplementedWebServiceHandler) WebAdminListSections(context.Context, *con
 
 func (UnimplementedWebServiceHandler) WebAdminGetSection(context.Context, *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminGetSection is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminListCharacters(context.Context, *connect.Request[v1.WebAdminListCharactersRequest]) (*connect.Response[v1.WebAdminListCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminListCharacters is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminSearchCharacters(context.Context, *connect.Request[v1.WebAdminSearchCharactersRequest]) (*connect.Response[v1.WebAdminSearchCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminSearchCharacters is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminGetCharacter(context.Context, *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminGetCharacter is not implemented"))
 }

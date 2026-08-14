@@ -415,6 +415,22 @@ service WebService {
   // members, and the wire-level gate tests in test/integration/access are what
   // exercise this path.
   rpc WebAdminGetSection(WebAdminGetSectionRequest) returns (WebAdminGetSectionResponse);
+  // WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+  // Handler.WebAdminListCharacters lifts the session token from the
+  // X-Session-Token header and forwards the page and ordering fields verbatim.
+  // It computes nothing: the clamp, the enum switches and the section gate all
+  // live core-side, where a caller speaking gRPC directly cannot skip them.
+  rpc WebAdminListCharacters(WebAdminListCharactersRequest) returns (WebAdminListCharactersResponse);
+  // WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+  // Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+  // it does not trim, case-fold or normalize it, because normalization is
+  // core-side through the one charname pipeline and a gateway mirror of it
+  // would be a second definition of name equality.
+  rpc WebAdminSearchCharacters(WebAdminSearchCharactersRequest) returns (WebAdminSearchCharactersResponse);
+  // WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+  // Handler.WebAdminGetCharacter forwards character_id and returns the detail
+  // message unmodified; the core's static NotFound reaches the browser as-is.
+  rpc WebAdminGetCharacter(WebAdminGetCharacterRequest) returns (WebAdminGetCharacterResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -1776,4 +1792,83 @@ message WebAdminGetSectionResponse {
   // Reusing the portal's own message type is what keeps a second, drifting
   // web-side section shape from existing.
   holomush.adminportal.v1.AdminSection section = 1;
+}
+
+// WebAdminListCharactersRequest carries the page and ordering fields and NO
+// session token: Handler.WebAdminListCharacters reads the bearer token from the
+// X-Session-Token header, so a browser cannot assert an identity the gateway
+// did not authenticate.
+message WebAdminListCharactersRequest {
+  // sort_field is forwarded verbatim; the core refuses its unspecified value.
+  holomush.adminportal.v1.AdminCharacterSortField sort_field = 1;
+  // descending is forwarded verbatim.
+  bool descending = 2;
+  // status_filter is forwarded verbatim; unspecified means no filter.
+  holomush.adminportal.v1.AdminCharacterStatusFilter status_filter = 3;
+  // player_id is forwarded verbatim — the click-to-filter equality field.
+  string player_id = 4;
+  // page is the 1-based page number, forwarded verbatim; the core refuses a
+  // value below 1.
+  int32 page = 5;
+  // page_size is forwarded verbatim; the core clamps it to at most 50. The
+  // gateway does NOT clamp, because a clamp here would be bypassable by any
+  // caller speaking gRPC to core directly.
+  int32 page_size = 6;
+}
+
+// WebAdminListCharactersResponse re-exports the portal's page verbatim.
+message WebAdminListCharactersResponse {
+  // characters is the page AdminPortalService returned, in its order; the
+  // gateway neither filters nor re-sorts it. Reusing the portal's own message
+  // type is what keeps a second, drifting web-side character shape from
+  // existing.
+  repeated holomush.adminportal.v1.AdminCharacter characters = 1;
+  // total_count is forwarded unmodified.
+  int64 total_count = 2;
+}
+
+// WebAdminSearchCharactersRequest adds the raw search term to the page fields.
+// It carries no session token, for the same reason its list peer does not.
+message WebAdminSearchCharactersRequest {
+  // sort_field is forwarded verbatim.
+  holomush.adminportal.v1.AdminCharacterSortField sort_field = 1;
+  // descending is forwarded verbatim.
+  bool descending = 2;
+  // status_filter is forwarded verbatim.
+  holomush.adminportal.v1.AdminCharacterStatusFilter status_filter = 3;
+  // player_id is forwarded verbatim.
+  string player_id = 4;
+  // page is the 1-based page number, forwarded verbatim.
+  int32 page = 5;
+  // page_size is forwarded verbatim and clamped core-side.
+  int32 page_size = 6;
+  // query is the RAW STRING THE OPERATOR TYPED, forwarded byte-for-byte. The
+  // gateway does not trim, lower-case or NFKC-fold it; the core normalizes it
+  // through the single charname pipeline that produced the stored normal form.
+  string query = 7;
+}
+
+// WebAdminSearchCharactersResponse re-exports the portal's matching page
+// verbatim.
+message WebAdminSearchCharactersResponse {
+  // characters is the matching page AdminPortalService returned, in its order.
+  repeated holomush.adminportal.v1.AdminCharacter characters = 1;
+  // total_count is forwarded unmodified.
+  int64 total_count = 2;
+}
+
+// WebAdminGetCharacterRequest names the character to read and NOTHING else, for
+// the same reason its section peer does: the token comes from the header.
+message WebAdminGetCharacterRequest {
+  // character_id is forwarded verbatim to
+  // AdminPortalService.AdminGetCharacter. The gateway neither validates nor
+  // parses it; the core answers an unparseable and an absent id identically.
+  string character_id = 1;
+}
+
+// WebAdminGetCharacterResponse re-exports the portal's detail row verbatim.
+message WebAdminGetCharacterResponse {
+  // character is the detail message AdminPortalService returned, forwarded
+  // unmodified — including its closed twelve-key profile map.
+  holomush.adminportal.v1.AdminCharacterDetail character = 1;
 }

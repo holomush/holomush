@@ -78,6 +78,9 @@ const (
 	WebService_WebListCharacterDirectory_FullMethodName     = "/holomush.web.v1.WebService/WebListCharacterDirectory"
 	WebService_WebAdminListSections_FullMethodName          = "/holomush.web.v1.WebService/WebAdminListSections"
 	WebService_WebAdminGetSection_FullMethodName            = "/holomush.web.v1.WebService/WebAdminGetSection"
+	WebService_WebAdminListCharacters_FullMethodName        = "/holomush.web.v1.WebService/WebAdminListCharacters"
+	WebService_WebAdminSearchCharacters_FullMethodName      = "/holomush.web.v1.WebService/WebAdminSearchCharacters"
+	WebService_WebAdminGetCharacter_FullMethodName          = "/holomush.web.v1.WebService/WebAdminGetCharacter"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -344,6 +347,22 @@ type WebServiceClient interface {
 	// members, and the wire-level gate tests in test/integration/access are what
 	// exercise this path.
 	WebAdminGetSection(ctx context.Context, in *WebAdminGetSectionRequest, opts ...grpc.CallOption) (*WebAdminGetSectionResponse, error)
+	// WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+	// Handler.WebAdminListCharacters lifts the session token from the
+	// X-Session-Token header and forwards the page and ordering fields verbatim.
+	// It computes nothing: the clamp, the enum switches and the section gate all
+	// live core-side, where a caller speaking gRPC directly cannot skip them.
+	WebAdminListCharacters(ctx context.Context, in *WebAdminListCharactersRequest, opts ...grpc.CallOption) (*WebAdminListCharactersResponse, error)
+	// WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+	// Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+	// it does not trim, case-fold or normalize it, because normalization is
+	// core-side through the one charname pipeline and a gateway mirror of it
+	// would be a second definition of name equality.
+	WebAdminSearchCharacters(ctx context.Context, in *WebAdminSearchCharactersRequest, opts ...grpc.CallOption) (*WebAdminSearchCharactersResponse, error)
+	// WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
+	// message unmodified; the core's static NotFound reaches the browser as-is.
+	WebAdminGetCharacter(ctx context.Context, in *WebAdminGetCharacterRequest, opts ...grpc.CallOption) (*WebAdminGetCharacterResponse, error)
 }
 
 type webServiceClient struct {
@@ -923,6 +942,36 @@ func (c *webServiceClient) WebAdminGetSection(ctx context.Context, in *WebAdminG
 	return out, nil
 }
 
+func (c *webServiceClient) WebAdminListCharacters(ctx context.Context, in *WebAdminListCharactersRequest, opts ...grpc.CallOption) (*WebAdminListCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminListCharactersResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminListCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminSearchCharacters(ctx context.Context, in *WebAdminSearchCharactersRequest, opts ...grpc.CallOption) (*WebAdminSearchCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminSearchCharactersResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminSearchCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminGetCharacter(ctx context.Context, in *WebAdminGetCharacterRequest, opts ...grpc.CallOption) (*WebAdminGetCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminGetCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminGetCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -1187,6 +1236,22 @@ type WebServiceServer interface {
 	// members, and the wire-level gate tests in test/integration/access are what
 	// exercise this path.
 	WebAdminGetSection(context.Context, *WebAdminGetSectionRequest) (*WebAdminGetSectionResponse, error)
+	// WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+	// Handler.WebAdminListCharacters lifts the session token from the
+	// X-Session-Token header and forwards the page and ordering fields verbatim.
+	// It computes nothing: the clamp, the enum switches and the section gate all
+	// live core-side, where a caller speaking gRPC directly cannot skip them.
+	WebAdminListCharacters(context.Context, *WebAdminListCharactersRequest) (*WebAdminListCharactersResponse, error)
+	// WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+	// Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+	// it does not trim, case-fold or normalize it, because normalization is
+	// core-side through the one charname pipeline and a gateway mirror of it
+	// would be a second definition of name equality.
+	WebAdminSearchCharacters(context.Context, *WebAdminSearchCharactersRequest) (*WebAdminSearchCharactersResponse, error)
+	// WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
+	// message unmodified; the core's static NotFound reaches the browser as-is.
+	WebAdminGetCharacter(context.Context, *WebAdminGetCharacterRequest) (*WebAdminGetCharacterResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -1364,6 +1429,15 @@ func (UnimplementedWebServiceServer) WebAdminListSections(context.Context, *WebA
 }
 func (UnimplementedWebServiceServer) WebAdminGetSection(context.Context, *WebAdminGetSectionRequest) (*WebAdminGetSectionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebAdminGetSection not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminListCharacters(context.Context, *WebAdminListCharactersRequest) (*WebAdminListCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminListCharacters not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminSearchCharacters(context.Context, *WebAdminSearchCharactersRequest) (*WebAdminSearchCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminSearchCharacters not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminGetCharacter(context.Context, *WebAdminGetCharacterRequest) (*WebAdminGetCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminGetCharacter not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -2387,6 +2461,60 @@ func _WebService_WebAdminGetSection_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebAdminListCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminListCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminListCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminListCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminListCharacters(ctx, req.(*WebAdminListCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminSearchCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminSearchCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminSearchCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminSearchCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminSearchCharacters(ctx, req.(*WebAdminSearchCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminGetCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminGetCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminGetCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminGetCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminGetCharacter(ctx, req.(*WebAdminGetCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2613,6 +2741,18 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebAdminGetSection",
 			Handler:    _WebService_WebAdminGetSection_Handler,
+		},
+		{
+			MethodName: "WebAdminListCharacters",
+			Handler:    _WebService_WebAdminListCharacters_Handler,
+		},
+		{
+			MethodName: "WebAdminSearchCharacters",
+			Handler:    _WebService_WebAdminSearchCharacters_Handler,
+		},
+		{
+			MethodName: "WebAdminGetCharacter",
+			Handler:    _WebService_WebAdminGetCharacter_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

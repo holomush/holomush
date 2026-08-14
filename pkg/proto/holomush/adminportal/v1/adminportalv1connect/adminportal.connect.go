@@ -42,6 +42,15 @@ const (
 	// AdminPortalServiceAdminGetSectionProcedure is the fully-qualified name of the
 	// AdminPortalService's AdminGetSection RPC.
 	AdminPortalServiceAdminGetSectionProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminGetSection"
+	// AdminPortalServiceAdminListCharactersProcedure is the fully-qualified name of the
+	// AdminPortalService's AdminListCharacters RPC.
+	AdminPortalServiceAdminListCharactersProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminListCharacters"
+	// AdminPortalServiceAdminSearchCharactersProcedure is the fully-qualified name of the
+	// AdminPortalService's AdminSearchCharacters RPC.
+	AdminPortalServiceAdminSearchCharactersProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminSearchCharacters"
+	// AdminPortalServiceAdminGetCharacterProcedure is the fully-qualified name of the
+	// AdminPortalService's AdminGetCharacter RPC.
+	AdminPortalServiceAdminGetCharacterProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminGetCharacter"
 )
 
 // AdminPortalServiceClient is a client for the holomush.adminportal.v1.AdminPortalService service.
@@ -72,6 +81,37 @@ type AdminPortalServiceClient interface {
 	// implemented receives FailedPrecondition instead, carrying a static message
 	// and no body.
 	AdminGetSection(context.Context, *connect.Request[v1.AdminGetSectionRequest]) (*connect.Response[v1.AdminGetSectionResponse], error)
+	// AdminListCharacters returns one page of the cross-player character list the
+	// `characters` section's table renders.
+	//
+	// AdminPortalServer.AdminListCharacters runs DOWNSTREAM of the interceptor's
+	// fixed-section gate: its descriptor names `characters` / read, so a caller
+	// holding no such access is refused before the handler and never learns
+	// whether any character exists. The handler clamps the page, maps the closed
+	// sort and status enums through denying switches, and reads
+	// CharacterRepository.AdminListCharacters; it evaluates no policy of its own.
+	AdminListCharacters(context.Context, *connect.Request[v1.AdminListCharactersRequest]) (*connect.Response[v1.AdminListCharactersResponse], error)
+	// AdminSearchCharacters is AdminListCharacters with a substring filter over
+	// two columns and only two: the stored characters.normalized_name and the
+	// joined players.username.
+	//
+	// AdminPortalServer.AdminSearchCharacters normalizes the caller's raw query
+	// through the same charname pipeline that produced the stored normal form,
+	// then hands the result to CharacterRepository.AdminSearchCharacters. A query
+	// that is blank after trimming bypasses both normalization and the predicate
+	// and returns the unfiltered page; one that normalizes to nothing returns an
+	// empty page rather than an error. No profile prose column is reachable
+	// through it.
+	AdminSearchCharacters(context.Context, *connect.Request[v1.AdminSearchCharactersRequest]) (*connect.Response[v1.AdminSearchCharactersResponse], error)
+	// AdminGetCharacter returns ONE character with the thirteen values the admin
+	// edit surface writes back.
+	//
+	// AdminPortalServer.AdminGetCharacter composes it from
+	// CharacterRepository.Get and a name-closed projection of
+	// PropertyRepository.ListByParent. An unknown id is codes.NotFound with a
+	// static message that names no id, so the RPC is not an existence oracle for
+	// a caller the gate already permitted.
+	AdminGetCharacter(context.Context, *connect.Request[v1.AdminGetCharacterRequest]) (*connect.Response[v1.AdminGetCharacterResponse], error)
 }
 
 // NewAdminPortalServiceClient constructs a client for the
@@ -97,13 +137,34 @@ func NewAdminPortalServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(adminPortalServiceMethods.ByName("AdminGetSection")),
 			connect.WithClientOptions(opts...),
 		),
+		adminListCharacters: connect.NewClient[v1.AdminListCharactersRequest, v1.AdminListCharactersResponse](
+			httpClient,
+			baseURL+AdminPortalServiceAdminListCharactersProcedure,
+			connect.WithSchema(adminPortalServiceMethods.ByName("AdminListCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		adminSearchCharacters: connect.NewClient[v1.AdminSearchCharactersRequest, v1.AdminSearchCharactersResponse](
+			httpClient,
+			baseURL+AdminPortalServiceAdminSearchCharactersProcedure,
+			connect.WithSchema(adminPortalServiceMethods.ByName("AdminSearchCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		adminGetCharacter: connect.NewClient[v1.AdminGetCharacterRequest, v1.AdminGetCharacterResponse](
+			httpClient,
+			baseURL+AdminPortalServiceAdminGetCharacterProcedure,
+			connect.WithSchema(adminPortalServiceMethods.ByName("AdminGetCharacter")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // adminPortalServiceClient implements AdminPortalServiceClient.
 type adminPortalServiceClient struct {
-	adminListSections *connect.Client[v1.AdminListSectionsRequest, v1.AdminListSectionsResponse]
-	adminGetSection   *connect.Client[v1.AdminGetSectionRequest, v1.AdminGetSectionResponse]
+	adminListSections     *connect.Client[v1.AdminListSectionsRequest, v1.AdminListSectionsResponse]
+	adminGetSection       *connect.Client[v1.AdminGetSectionRequest, v1.AdminGetSectionResponse]
+	adminListCharacters   *connect.Client[v1.AdminListCharactersRequest, v1.AdminListCharactersResponse]
+	adminSearchCharacters *connect.Client[v1.AdminSearchCharactersRequest, v1.AdminSearchCharactersResponse]
+	adminGetCharacter     *connect.Client[v1.AdminGetCharacterRequest, v1.AdminGetCharacterResponse]
 }
 
 // AdminListSections calls holomush.adminportal.v1.AdminPortalService.AdminListSections.
@@ -114,6 +175,21 @@ func (c *adminPortalServiceClient) AdminListSections(ctx context.Context, req *c
 // AdminGetSection calls holomush.adminportal.v1.AdminPortalService.AdminGetSection.
 func (c *adminPortalServiceClient) AdminGetSection(ctx context.Context, req *connect.Request[v1.AdminGetSectionRequest]) (*connect.Response[v1.AdminGetSectionResponse], error) {
 	return c.adminGetSection.CallUnary(ctx, req)
+}
+
+// AdminListCharacters calls holomush.adminportal.v1.AdminPortalService.AdminListCharacters.
+func (c *adminPortalServiceClient) AdminListCharacters(ctx context.Context, req *connect.Request[v1.AdminListCharactersRequest]) (*connect.Response[v1.AdminListCharactersResponse], error) {
+	return c.adminListCharacters.CallUnary(ctx, req)
+}
+
+// AdminSearchCharacters calls holomush.adminportal.v1.AdminPortalService.AdminSearchCharacters.
+func (c *adminPortalServiceClient) AdminSearchCharacters(ctx context.Context, req *connect.Request[v1.AdminSearchCharactersRequest]) (*connect.Response[v1.AdminSearchCharactersResponse], error) {
+	return c.adminSearchCharacters.CallUnary(ctx, req)
+}
+
+// AdminGetCharacter calls holomush.adminportal.v1.AdminPortalService.AdminGetCharacter.
+func (c *adminPortalServiceClient) AdminGetCharacter(ctx context.Context, req *connect.Request[v1.AdminGetCharacterRequest]) (*connect.Response[v1.AdminGetCharacterResponse], error) {
+	return c.adminGetCharacter.CallUnary(ctx, req)
 }
 
 // AdminPortalServiceHandler is an implementation of the holomush.adminportal.v1.AdminPortalService
@@ -145,6 +221,37 @@ type AdminPortalServiceHandler interface {
 	// implemented receives FailedPrecondition instead, carrying a static message
 	// and no body.
 	AdminGetSection(context.Context, *connect.Request[v1.AdminGetSectionRequest]) (*connect.Response[v1.AdminGetSectionResponse], error)
+	// AdminListCharacters returns one page of the cross-player character list the
+	// `characters` section's table renders.
+	//
+	// AdminPortalServer.AdminListCharacters runs DOWNSTREAM of the interceptor's
+	// fixed-section gate: its descriptor names `characters` / read, so a caller
+	// holding no such access is refused before the handler and never learns
+	// whether any character exists. The handler clamps the page, maps the closed
+	// sort and status enums through denying switches, and reads
+	// CharacterRepository.AdminListCharacters; it evaluates no policy of its own.
+	AdminListCharacters(context.Context, *connect.Request[v1.AdminListCharactersRequest]) (*connect.Response[v1.AdminListCharactersResponse], error)
+	// AdminSearchCharacters is AdminListCharacters with a substring filter over
+	// two columns and only two: the stored characters.normalized_name and the
+	// joined players.username.
+	//
+	// AdminPortalServer.AdminSearchCharacters normalizes the caller's raw query
+	// through the same charname pipeline that produced the stored normal form,
+	// then hands the result to CharacterRepository.AdminSearchCharacters. A query
+	// that is blank after trimming bypasses both normalization and the predicate
+	// and returns the unfiltered page; one that normalizes to nothing returns an
+	// empty page rather than an error. No profile prose column is reachable
+	// through it.
+	AdminSearchCharacters(context.Context, *connect.Request[v1.AdminSearchCharactersRequest]) (*connect.Response[v1.AdminSearchCharactersResponse], error)
+	// AdminGetCharacter returns ONE character with the thirteen values the admin
+	// edit surface writes back.
+	//
+	// AdminPortalServer.AdminGetCharacter composes it from
+	// CharacterRepository.Get and a name-closed projection of
+	// PropertyRepository.ListByParent. An unknown id is codes.NotFound with a
+	// static message that names no id, so the RPC is not an existence oracle for
+	// a caller the gate already permitted.
+	AdminGetCharacter(context.Context, *connect.Request[v1.AdminGetCharacterRequest]) (*connect.Response[v1.AdminGetCharacterResponse], error)
 }
 
 // NewAdminPortalServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -166,12 +273,36 @@ func NewAdminPortalServiceHandler(svc AdminPortalServiceHandler, opts ...connect
 		connect.WithSchema(adminPortalServiceMethods.ByName("AdminGetSection")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminPortalServiceAdminListCharactersHandler := connect.NewUnaryHandler(
+		AdminPortalServiceAdminListCharactersProcedure,
+		svc.AdminListCharacters,
+		connect.WithSchema(adminPortalServiceMethods.ByName("AdminListCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminPortalServiceAdminSearchCharactersHandler := connect.NewUnaryHandler(
+		AdminPortalServiceAdminSearchCharactersProcedure,
+		svc.AdminSearchCharacters,
+		connect.WithSchema(adminPortalServiceMethods.ByName("AdminSearchCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminPortalServiceAdminGetCharacterHandler := connect.NewUnaryHandler(
+		AdminPortalServiceAdminGetCharacterProcedure,
+		svc.AdminGetCharacter,
+		connect.WithSchema(adminPortalServiceMethods.ByName("AdminGetCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.adminportal.v1.AdminPortalService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminPortalServiceAdminListSectionsProcedure:
 			adminPortalServiceAdminListSectionsHandler.ServeHTTP(w, r)
 		case AdminPortalServiceAdminGetSectionProcedure:
 			adminPortalServiceAdminGetSectionHandler.ServeHTTP(w, r)
+		case AdminPortalServiceAdminListCharactersProcedure:
+			adminPortalServiceAdminListCharactersHandler.ServeHTTP(w, r)
+		case AdminPortalServiceAdminSearchCharactersProcedure:
+			adminPortalServiceAdminSearchCharactersHandler.ServeHTTP(w, r)
+		case AdminPortalServiceAdminGetCharacterProcedure:
+			adminPortalServiceAdminGetCharacterHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -187,4 +318,16 @@ func (UnimplementedAdminPortalServiceHandler) AdminListSections(context.Context,
 
 func (UnimplementedAdminPortalServiceHandler) AdminGetSection(context.Context, *connect.Request[v1.AdminGetSectionRequest]) (*connect.Response[v1.AdminGetSectionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminGetSection is not implemented"))
+}
+
+func (UnimplementedAdminPortalServiceHandler) AdminListCharacters(context.Context, *connect.Request[v1.AdminListCharactersRequest]) (*connect.Response[v1.AdminListCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminListCharacters is not implemented"))
+}
+
+func (UnimplementedAdminPortalServiceHandler) AdminSearchCharacters(context.Context, *connect.Request[v1.AdminSearchCharactersRequest]) (*connect.Response[v1.AdminSearchCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminSearchCharacters is not implemented"))
+}
+
+func (UnimplementedAdminPortalServiceHandler) AdminGetCharacter(context.Context, *connect.Request[v1.AdminGetCharacterRequest]) (*connect.Response[v1.AdminGetCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminGetCharacter is not implemented"))
 }

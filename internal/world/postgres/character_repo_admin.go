@@ -5,13 +5,16 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // adminCharacterProjection is the SELECT list of [CharacterRepository.Get]
@@ -119,17 +122,25 @@ func (r *CharacterRepository) adminCharacterPage(
 	if err != nil {
 		return world.AdminCharacterPage{}, oops.Code("CHARACTER_ADMIN_LIST_FAILED").Wrap(err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	// A read-only transaction has nothing to commit; the rollback is the release.
+	// Its error is deliberately dropped: it fires only when the transaction is
+	// already finished, and surfacing it would replace a successful read's result
+	// with a cleanup artefact.
+	defer func() {
+		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			errutil.LogErrorContext(ctx, "admin characters: read transaction rollback failed", rbErr)
+		}
+	}()
 
 	// The total comes from its OWN scalar count over the same filtered set, NOT
 	// from a COUNT(*) OVER () window column: once OFFSET has removed every row
 	// there is no row left to carry a window value, so a page beyond the end
 	// would report 0 instead of the true total.
-	if err := tx.QueryRow(
+	if countErr := tx.QueryRow(
 		ctx,
 		`SELECT count(*)`+adminCharacterFrom+where, args...,
-	).Scan(&page.TotalCount); err != nil {
-		return world.AdminCharacterPage{}, oops.Code("CHARACTER_ADMIN_COUNT_FAILED").Wrap(err)
+	).Scan(&page.TotalCount); countErr != nil {
+		return world.AdminCharacterPage{}, oops.Code("CHARACTER_ADMIN_COUNT_FAILED").Wrap(countErr)
 	}
 
 	pageArgs := append(append([]any{}, args...), opts.Limit, opts.Offset)
@@ -171,9 +182,9 @@ func (r *CharacterRepository) adminCharacterPage(
 // EVERY value is a bound $n parameter. Nothing a caller supplies is
 // concatenated into SQL text; the only text this function chooses is the
 // column names, which are literals here.
-func adminWhereClause(normalizedTerm string, opts world.AdminCharacterListOptions) (string, []any) {
+func adminWhereClause(normalizedTerm string, opts world.AdminCharacterListOptions) (where string, args []any) {
 	clauses := make([]string, 0, 3)
-	args := make([]any, 0, 3)
+	args = make([]any, 0, 3)
 
 	if normalizedTerm != "" {
 		args = append(args, "%"+escapeLikeWildcards(normalizedTerm)+"%")
@@ -274,3 +285,42 @@ func adminOrderByClause(opts world.AdminCharacterListOptions) (string, error) {
 // as one token at every use site rather than as a strconv call embedded in a
 // SQL concatenation.
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// AdminGetCharacterRow reads ONE character through the SAME joined projection
+// the two page reads use.
+//
+// It exists rather than reusing Get because the admin detail message embeds the
+// §11.3 list projection, and players.username is one of its fields — Get does
+// not join players, so a detail composed from it would carry a silently-empty
+// username on the one read the admin edit sheet renders from.
+//
+// An absent row wraps world.ErrNotFound under the same CHARACTER_NOT_FOUND code
+// Get uses, so callers already matching on either keep working.
+func (r *CharacterRepository) AdminGetCharacterRow(
+	ctx context.Context,
+	id ulid.ULID,
+) (world.AdminCharacterRow, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT`+adminCharacterProjection+adminCharacterFrom+` WHERE c.id = $1`, id.String())
+
+	var char world.Character
+	var f characterScanFields
+	var username string
+	err := row.Scan(
+		&f.idStr, &f.playerIDStr, &char.Name, &char.Description,
+		&f.locationIDStr, &f.createdAt, &char.Version,
+		&f.statusStr, &char.LastActiveAt, &username,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return world.AdminCharacterRow{},
+			oops.Code("CHARACTER_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
+	}
+	if err != nil {
+		return world.AdminCharacterRow{},
+			oops.Code("CHARACTER_ADMIN_GET_FAILED").With("id", id.String()).Wrap(err)
+	}
+	if err := parseCharacterFromFields(&f, &char); err != nil {
+		return world.AdminCharacterRow{}, err
+	}
+	return world.AdminCharacterRow{Character: &char, PlayerUsername: username}, nil
+}

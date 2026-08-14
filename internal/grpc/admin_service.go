@@ -6,11 +6,13 @@ package grpc
 import (
 	"context"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/admin/section"
+	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
 )
@@ -26,7 +28,63 @@ import (
 type AdminPortalServer struct {
 	adminportalv1.UnimplementedAdminPortalServiceServer
 
-	engine section.PolicyEvaluator
+	engine        section.PolicyEvaluator
+	characters    AdminCharacterReader
+	profileReader AdminProfileReader
+}
+
+// AdminCharacterReader is the narrow slice of the character repository the
+// admin character reads need.
+//
+// It is an interface at THIS layer rather than a concrete repository so
+// internal/grpc does not learn to import internal/world/postgres — a dependency
+// no other file in this package has, and one that would put the gRPC layer
+// downstream of a storage driver.
+type AdminCharacterReader interface {
+	AdminListCharacters(ctx context.Context, opts world.AdminCharacterListOptions) (world.AdminCharacterPage, error)
+	AdminSearchCharacters(ctx context.Context, normalizedTerm string, opts world.AdminCharacterListOptions) (world.AdminCharacterPage, error)
+	// AdminGetCharacterRow is the SINGLE-row form of the same joined projection
+	// the two page reads use, rather than the bare Get.
+	//
+	// Get does not join players, so a detail message composed from it would
+	// carry an empty player_username — a silently-blank field on the one read
+	// the admin edit sheet renders from, which is the failure class this whole
+	// detail read exists to prevent.
+	AdminGetCharacterRow(ctx context.Context, id ulid.ULID) (world.AdminCharacterRow, error)
+}
+
+// AdminProfileReader is the ONE method the admin detail read needs from the
+// property repository, declared with world.PropertyReader's exact signature
+// (internal/world/property.go:40-41).
+//
+// It is deliberately the RAW repository read and not
+// world.Service.ListPropertiesByParent. See the file doc block on
+// admin_characters_read.go for why that choice is load-bearing rather than
+// incidental.
+type AdminProfileReader interface {
+	ListByParent(ctx context.Context, parentType string, parentID ulid.ULID) ([]*world.EntityProperty, error)
+}
+
+// WithAdminCharacterReader supplies the character repository the three
+// character read RPCs project from.
+//
+// A server built WITHOUT it answers those RPCs with codes.Internal, never with
+// an empty page: an empty page would render as "no characters exist", which is
+// a factual claim this server is in no position to make.
+func WithAdminCharacterReader(r AdminCharacterReader) AdminPortalServerOption {
+	return func(s *AdminPortalServer) { s.characters = r }
+}
+
+// WithAdminProfileReader supplies the property repository the detail read's
+// profile half comes from.
+//
+// A server built WITHOUT it answers AdminGetCharacter with codes.Internal,
+// never with a detail response carrying twelve empty prose fields. That
+// distinction is not cosmetic: twelve empty fields is precisely the input that
+// makes the admin edit sheet overwrite existing content on save, because a
+// blank field and an unfetched field are the same empty string in a form model.
+func WithAdminProfileReader(p AdminProfileReader) AdminPortalServerOption {
+	return func(s *AdminPortalServer) { s.profileReader = p }
 }
 
 // AdminPortalServerOption is the construction seam for dependencies later

@@ -82,6 +82,13 @@ type MethodDescriptor struct {
 var AdminDescriptors = map[string]MethodDescriptor{
 	"AdminListSections": {Action: ActionRead, EnumeratesAllSections: true},
 	"AdminGetSection":   {Action: ActionRead, SectionFromRequest: true},
+	// The three character READS. Each names its section as a FIXED id, which is
+	// the shape D-99 wants by default: the section is a property of the method,
+	// not of the request, so there is no attacker-controlled parameter for the
+	// interceptor to adjudicate and no per-handler check to forget.
+	"AdminListCharacters":   {SectionID: "characters", Action: ActionRead},
+	"AdminSearchCharacters": {SectionID: "characters", Action: ActionRead},
+	"AdminGetCharacter":     {SectionID: "characters", Action: ActionRead},
 }
 
 // LookupMethodDescriptor resolves a BARE method name to its declaration.

@@ -147,8 +147,12 @@ type Server struct {
 	// retained so tests can build a SceneAccessServer with a real
 	// RepoCharacterNameResolver (mirrors production sub_grpc.go:597).
 	worldCharRepo *worldpg.CharacterRepository
-	sessionStore  session.Store
-	locRepo       *worldpg.LocationRepository
+	// propertyRepo is the SAME repository the reaping service holds, hoisted so
+	// the gated listener's admin portal reads through one object rather than a
+	// second one over the same pool.
+	propertyRepo *worldpg.PropertyRepository
+	sessionStore session.Store
+	locRepo      *worldpg.LocationRepository
 
 	// services
 	authService *auth.Service
@@ -536,9 +540,13 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		worldpg.NewReapingGuard(pool),
 	)
 	require.NoError(t, err, "integrationtest.Start: create character genesis service")
+	// ONE property repository over this pool, shared by its two consumers: the
+	// guest reaping service and the admin portal's detail read, mirroring
+	// cmd/holomush/sub_grpc.go.
+	propertyRepo := worldpg.NewPropertyRepository(pool)
 	guestReaping, err := auth.NewCharacterReapingService(
 		worldCharRepo, worldCharRepo,
-		worldpg.NewPropertyRepository(pool),
+		propertyRepo,
 		guestBindingRepo,
 		guestTransactor,
 		worldpg.NewOutboxStore(pool),
@@ -932,6 +940,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		playerRepo:           playerRepo,
 		charRepo:             charRepo,
 		worldCharRepo:        worldCharRepo,
+		propertyRepo:         propertyRepo,
 		sessionStore:         sessionStoreInst,
 		locRepo:              locRepo,
 		authService:          authService,
@@ -1169,7 +1178,15 @@ func (s *Server) startGatedGRPCListener() {
 	})
 	require.NoError(s.t, err, "integrationtest: build gated gRPC server")
 
-	adminportalv1.RegisterAdminPortalServiceServer(srv, holoGRPC.NewAdminPortalServer(s.accessEngine))
+	// The SAME two options production wires at cmd/holomush/sub_grpc.go. Wiring
+	// only one root would leave the other silently answering with an empty page
+	// or twelve empty prose fields — which is exactly the failure the readers
+	// exist to prevent, made invisible by passing tests.
+	adminportalv1.RegisterAdminPortalServiceServer(srv, holoGRPC.NewAdminPortalServer(
+		s.accessEngine,
+		holoGRPC.WithAdminCharacterReader(s.worldCharRepo),
+		holoGRPC.WithAdminProfileReader(s.propertyRepo),
+	))
 
 	go func() {
 		if serveErr := srv.Serve(lis); serveErr != nil {

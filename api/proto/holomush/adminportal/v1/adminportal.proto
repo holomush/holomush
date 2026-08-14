@@ -52,6 +52,96 @@ service AdminPortalService {
   // implemented receives FailedPrecondition instead, carrying a static message
   // and no body.
   rpc AdminGetSection(AdminGetSectionRequest) returns (AdminGetSectionResponse);
+  // AdminListCharacters returns one page of the cross-player character list the
+  // `characters` section's table renders.
+  //
+  // AdminPortalServer.AdminListCharacters runs DOWNSTREAM of the interceptor's
+  // fixed-section gate: its descriptor names `characters` / read, so a caller
+  // holding no such access is refused before the handler and never learns
+  // whether any character exists. The handler clamps the page, maps the closed
+  // sort and status enums through denying switches, and reads
+  // CharacterRepository.AdminListCharacters; it evaluates no policy of its own.
+  rpc AdminListCharacters(AdminListCharactersRequest) returns (AdminListCharactersResponse);
+  // AdminSearchCharacters is AdminListCharacters with a substring filter over
+  // two columns and only two: the stored characters.normalized_name and the
+  // joined players.username.
+  //
+  // AdminPortalServer.AdminSearchCharacters normalizes the caller's raw query
+  // through the same charname pipeline that produced the stored normal form,
+  // then hands the result to CharacterRepository.AdminSearchCharacters. A query
+  // that is blank after trimming bypasses both normalization and the predicate
+  // and returns the unfiltered page; one that normalizes to nothing returns an
+  // empty page rather than an error. No profile prose column is reachable
+  // through it.
+  rpc AdminSearchCharacters(AdminSearchCharactersRequest) returns (AdminSearchCharactersResponse);
+  // AdminGetCharacter returns ONE character with the thirteen values the admin
+  // edit surface writes back.
+  //
+  // AdminPortalServer.AdminGetCharacter composes it from
+  // CharacterRepository.Get and a name-closed projection of
+  // PropertyRepository.ListByParent. An unknown id is codes.NotFound with a
+  // static message that names no id, so the RPC is not an existence oracle for
+  // a caller the gate already permitted.
+  rpc AdminGetCharacter(AdminGetCharacterRequest) returns (AdminGetCharacterResponse);
+}
+
+// AdminCharacterSortField is the CLOSED ordering vocabulary of the admin
+// character list — 01-SPEC §11.3's five rows marked Sort=Yes.
+//
+// Encoding the permitted set as an enum rather than a string is what makes "an
+// unlisted key is rejected, not ignored" STRUCTURAL: a client cannot express
+// the request at all. AdminPortalServer maps each value through a closed switch
+// with a denying default, so a value added here without a handler arm is
+// refused rather than silently ordered by something else.
+enum AdminCharacterSortField {
+  // ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED is REJECTED with
+  // codes.InvalidArgument, not defaulted. A silently-defaulted ordering is
+  // indistinguishable from an honoured one at the call site, and §11.3's closed
+  // field list would then be advisory rather than enforced.
+  ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED = 0;
+  // ADMIN_CHARACTER_SORT_FIELD_NAME orders on characters.normalized_name, the
+  // stored normal form of §6.1.3 — NOT on characters.name. The two orderings
+  // differ observably under case and NFKC folding, and §11.3's name row names
+  // the stored form.
+  ADMIN_CHARACTER_SORT_FIELD_NAME = 1;
+  // ADMIN_CHARACTER_SORT_FIELD_CREATED_AT orders on characters.created_at.
+  ADMIN_CHARACTER_SORT_FIELD_CREATED_AT = 2;
+  // ADMIN_CHARACTER_SORT_FIELD_STATUS orders on characters.status.
+  ADMIN_CHARACTER_SORT_FIELD_STATUS = 3;
+  // ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT orders on
+  // characters.last_active_at, with the 0 "never active" sentinel forced LAST
+  // in BOTH directions by a leading (last_active_at = 0) clause — descending
+  // gets that for free as the column minimum, ascending does not.
+  ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT = 4;
+  // ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME orders on the joined
+  // players.username.
+  //
+  // There is deliberately NO value for characters.player_id. §11.3 marks it
+  // Sort=No / Filter=Yes and §14 row 12 re-asserts that an ordering on it would
+  // leak creation sequence; it stays reachable as
+  // AdminListCharactersRequest.player_id, the equality filter behind
+  // click-to-filter. Filterability and sortability are different §11.3 columns.
+  ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME = 5;
+}
+
+// AdminCharacterStatusFilter is the CLOSED lifecycle filter vocabulary.
+//
+// It is an enum rather than free text so an unrecognised value cannot be
+// expressed on the wire at all: §9.3's lifecycle vocabulary does not re-enter
+// the API as a string parameter, and a typo cannot be answered with a silent
+// zero-row page.
+enum AdminCharacterStatusFilter {
+  // ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED means NO FILTER — every lifecycle
+  // state is returned. It is the one enum zero value on this service that is
+  // not a rejection, because "I did not choose a filter" is a legitimate
+  // request and rejecting it would make the unfiltered list unrequestable.
+  ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED = 0;
+  // ADMIN_CHARACTER_STATUS_FILTER_ACTIVE selects world.StatusActive.
+  ADMIN_CHARACTER_STATUS_FILTER_ACTIVE = 1;
+  // ADMIN_CHARACTER_STATUS_FILTER_IDLE selects world.StatusIdle.
+  ADMIN_CHARACTER_STATUS_FILTER_IDLE = 2;
+  // ADMIN_CHARACTER_STATUS_FILTER_RETIRED selects world.StatusRetired.
+  ADMIN_CHARACTER_STATUS_FILTER_RETIRED = 3;
 }
 
 // AdminListSectionsRequest carries only the caller's bearer token, because
@@ -125,4 +215,181 @@ message AdminSection {
   // section in its own treatment; it is not an authorization signal, and the
   // handler does not filter on it.
   string status = 3;
+}
+
+// AdminListCharactersRequest is one page request against the cross-player
+// character list. Every field that shapes SQL is a closed enum or a bound
+// value; nothing here reaches an ORDER BY or a predicate as text.
+message AdminListCharactersRequest {
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // X-Session-Token header. NewAdminSectionInterceptor resolves it to a player
+  // through auth.PlayerSessionRepository; there is deliberately no player-id
+  // field a caller could point at someone else.
+  string player_session_token = 1 [(buf.validate.field).string.min_len = 1];
+  // sort_field selects the ordering column. AdminPortalServer REFUSES the
+  // unspecified value with codes.InvalidArgument rather than picking an order.
+  AdminCharacterSortField sort_field = 2;
+  // descending reverses the primary sort key only. The never-active sentinel
+  // stays last and the normalized-name tiebreak stays ascending in both
+  // directions, so the order is total either way.
+  bool descending = 3;
+  // status_filter restricts to one lifecycle state; unspecified means no
+  // filter.
+  AdminCharacterStatusFilter status_filter = 4;
+  // player_id, when non-empty, restricts to one player's characters. This is
+  // §11.3's Filter=Yes half of player_id and the click-to-filter path; there is
+  // no ordering on it. A value that does not parse as a ULID is
+  // codes.InvalidArgument.
+  string player_id = 5;
+  // page is the 1-based page number. AdminPortalServer refuses a value below 1
+  // with codes.InvalidArgument rather than computing a negative OFFSET.
+  int32 page = 6;
+  // page_size is the requested rows per page. It is SERVER-CLAMPED: 0 or absent
+  // means 50, and any value above 50 is clamped DOWN to 50 rather than
+  // honoured. That clamp is what discharges T-06-24 — without it a page_size of
+  // 2^31-1 would reach the repository as a LIMIT.
+  int32 page_size = 7;
+}
+
+// AdminListCharactersResponse is one page plus the total over the same filtered
+// set.
+message AdminListCharactersResponse {
+  // characters is the page, in the requested order.
+  repeated AdminCharacter characters = 1;
+  // total_count is the number of rows matching the filter, computed by its own
+  // scalar count in the same read transaction as the page — so it is correct
+  // for a page BEYOND the last one, where a window column would report 0.
+  //
+  // This list is NOT privacy-partitioned: it is the admin audience's view of
+  // every character. It MUST NOT be cited as precedent for a count on the
+  // public character directory, whose row set differs per viewer and where a
+  // total would disclose the size of the withheld remainder.
+  int64 total_count = 2;
+}
+
+// AdminSearchCharactersRequest adds a substring term to the list request.
+message AdminSearchCharactersRequest {
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // X-Session-Token header, resolved server-side exactly as on the list RPC.
+  string player_session_token = 1 [(buf.validate.field).string.min_len = 1];
+  // sort_field selects the ordering column; the unspecified value is refused.
+  AdminCharacterSortField sort_field = 2;
+  // descending reverses the primary sort key only.
+  bool descending = 3;
+  // status_filter restricts to one lifecycle state; unspecified means no
+  // filter.
+  AdminCharacterStatusFilter status_filter = 4;
+  // player_id, when non-empty, restricts to one player's characters.
+  string player_id = 5;
+  // page is the 1-based page number; below 1 is refused.
+  int32 page = 6;
+  // page_size is server-clamped to at most 50, defaulting to 50 when 0.
+  int32 page_size = 7;
+  // query is the RAW STRING THE OPERATOR TYPED. It is normalized SERVER-SIDE
+  // through the same charname pipeline that produced the stored
+  // characters.normalized_name — there is exactly one normalizer and no client
+  // mirror of it, so a client that pre-folded this value would be applying a
+  // second, drifting definition of name equality.
+  //
+  // It has NO minimum length. Blank after trimming means "no filter" and
+  // returns the unfiltered page; a value that normalizes to nothing (a lone
+  // zero-width joiner, say) returns an empty page rather than an error.
+  // Literal %, _ and \ match literally.
+  string query = 8;
+}
+
+// AdminSearchCharactersResponse has the same shape as its list peer, so the
+// table renders one component against both.
+message AdminSearchCharactersResponse {
+  // characters is the matching page, in the requested order.
+  repeated AdminCharacter characters = 1;
+  // total_count is the number of rows matching the term AND the filters,
+  // computed by its own scalar count in the same read transaction as the page.
+  // The same non-precedent note as on the list response applies.
+  int64 total_count = 2;
+}
+
+// AdminGetCharacterRequest names one character to read in full.
+message AdminGetCharacterRequest {
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // X-Session-Token header, resolved server-side.
+  string player_session_token = 1 [(buf.validate.field).string.min_len = 1];
+  // character_id is the ULID to read. A value that does not parse, and one that
+  // parses but names no row, both produce codes.NotFound with the SAME static
+  // message carrying no id — so this field is not an existence oracle.
+  string character_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// AdminGetCharacterResponse carries the one row the edit surface reads.
+message AdminGetCharacterResponse {
+  // character is the full detail projection.
+  AdminCharacterDetail character = 1;
+}
+
+// AdminCharacter is the LIST projection: 01-SPEC §11.3's field list and nothing
+// else.
+//
+// It carries NO profile prose. The list is a bulk cross-player projection, and
+// prose in it would be a bulk prose export of player-authored text — which is
+// why the edit surface reads AdminCharacterDetail for ONE character instead.
+message AdminCharacter {
+  // id is the character's ULID.
+  string id = 1;
+  // player_id is the owning player's ULID. It is a §11.3 Filter=Yes field and
+  // is what the click-to-filter path sends back as
+  // AdminListCharactersRequest.player_id; it is never an ordering key.
+  string player_id = 2;
+  // player_username is players.username for player_id — the OOC identity column
+  // the admin audience already sees, joined onto the row so the table needs no
+  // second lookup.
+  string player_username = 3;
+  // name is characters.name, the stored display form. Ordering is on the
+  // normalized form; this is what the table draws.
+  string name = 4;
+  // status is world.Status as a string: exactly one of the §9.3 lifecycle
+  // values.
+  string status = 5;
+  // last_active_at is characters.last_active_at as BIGINT epoch NANOSECONDS,
+  // sent RAW. 0 means "has never been active". The server sends no formatted
+  // string: the client renders the coarse relative text, so the wire carries a
+  // fact and the presentation stays where the locale is.
+  int64 last_active_at = 6;
+  // created_at is the row's creation time as epoch nanoseconds.
+  int64 created_at = 7;
+  // version is the optimistic-concurrency version (MODEL-03) the edit surface
+  // sends back on a write. It is NOT a sortable §11.3 field — no sort enum
+  // value can express an ordering on it.
+  int32 version = 8;
+}
+
+// AdminCharacterDetail is the SINGLE-character read the admin edit surface
+// fetches when its sheet opens.
+//
+// # Why it is a separate message from AdminCharacter
+//
+// It carries the thirteen values §10.6 lets an admin write: characters.description
+// plus the twelve §7.2 profile names. Seeding an edit form from LIST rows
+// instead would render those fields blank and OVERWRITE existing content on
+// save, because a blank field and an unfetched field are indistinguishable once
+// they are both empty strings in a form model. One character, requested
+// deliberately, is the only shape that cannot do that.
+message AdminCharacterDetail {
+  // character is the same §11.3 projection the list carries, so the two cannot
+  // drift.
+  AdminCharacter character = 1;
+  // description is characters.description, the in-world `look` text. It is a
+  // column on characters, not a property row — which is why the twelve below
+  // are twelve and the writable set is thirteen.
+  string description = 2;
+  // profile carries the governed profile values, keyed by their §7.2 path
+  // (`profile.pronouns` and its eleven siblings).
+  //
+  // The key set is CLOSED by membership in the facade's
+  // updateCharacterProfileMaskablePaths — the same twelve names §10.6 lets an
+  // admin WRITE — so the read surface and the write surface are the same set by
+  // construction. A property row outside that set is dropped, and a row whose
+  // stored value is NULL is OMITTED rather than sent as present-and-empty, so a
+  // flag-style row does not round-trip through the edit surface as a blank the
+  // operator never authored.
+  map<string, string> profile = 3;
 }

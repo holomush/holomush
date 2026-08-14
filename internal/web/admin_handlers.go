@@ -104,3 +104,120 @@ func (h *Handler) WebAdminGetSection(
 		Section: resp.GetSection(),
 	}), nil
 }
+
+// WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+//
+// Same five-part shape as its section peers: nil-client guard, token from the
+// HEADER, bounded context, field-by-field forward, log-then-pass-through. It
+// computes NOTHING — in particular it does not clamp page_size and does not
+// validate the sort field, because both live core-side where a caller speaking
+// gRPC to core directly cannot skip them. A clamp here would be decoration.
+func (h *Handler) WebAdminListCharacters(
+	ctx context.Context,
+	req *connect.Request[webv1.WebAdminListCharactersRequest],
+) (*connect.Response[webv1.WebAdminListCharactersResponse], error) {
+	slog.DebugContext(ctx, "web: WebAdminListCharacters")
+	if h.adminPortal == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("admin portal client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.adminPortal.AdminListCharacters(rpcCtx, &adminportalv1.AdminListCharactersRequest{
+		PlayerSessionToken: token,
+		SortField:          req.Msg.GetSortField(),
+		Descending:         req.Msg.GetDescending(),
+		StatusFilter:       req.Msg.GetStatusFilter(),
+		PlayerId:           req.Msg.GetPlayerId(),
+		Page:               req.Msg.GetPage(),
+		PageSize:           req.Msg.GetPageSize(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: admin list characters RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebAdminListCharactersResponse{
+		Characters: resp.GetCharacters(),
+		TotalCount: resp.GetTotalCount(),
+	}), nil
+}
+
+// WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+//
+// `query` is forwarded BYTE-FOR-BYTE. The gateway does not trim it, lower-case
+// it or NFKC-fold it: normalization is core-side through the single charname
+// pipeline that produced the stored normal form, and a mirror of it here would
+// be a second definition of name equality that could drift from the column it
+// is matched against.
+func (h *Handler) WebAdminSearchCharacters(
+	ctx context.Context,
+	req *connect.Request[webv1.WebAdminSearchCharactersRequest],
+) (*connect.Response[webv1.WebAdminSearchCharactersResponse], error) {
+	slog.DebugContext(ctx, "web: WebAdminSearchCharacters")
+	if h.adminPortal == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("admin portal client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.adminPortal.AdminSearchCharacters(rpcCtx, &adminportalv1.AdminSearchCharactersRequest{
+		PlayerSessionToken: token,
+		SortField:          req.Msg.GetSortField(),
+		Descending:         req.Msg.GetDescending(),
+		StatusFilter:       req.Msg.GetStatusFilter(),
+		PlayerId:           req.Msg.GetPlayerId(),
+		Page:               req.Msg.GetPage(),
+		PageSize:           req.Msg.GetPageSize(),
+		Query:              req.Msg.GetQuery(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: admin search characters RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebAdminSearchCharactersResponse{
+		Characters: resp.GetCharacters(),
+		TotalCount: resp.GetTotalCount(),
+	}), nil
+}
+
+// WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+//
+// It forwards character_id verbatim and returns the detail message unmodified,
+// including its closed twelve-key profile map. It does not parse or validate
+// the id: the core answers an unparseable and an absent id identically, and a
+// gateway-side parse would split those two answers apart again.
+func (h *Handler) WebAdminGetCharacter(
+	ctx context.Context,
+	req *connect.Request[webv1.WebAdminGetCharacterRequest],
+) (*connect.Response[webv1.WebAdminGetCharacterResponse], error) {
+	slog.DebugContext(ctx, "web: WebAdminGetCharacter")
+	if h.adminPortal == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("admin portal client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.adminPortal.AdminGetCharacter(rpcCtx, &adminportalv1.AdminGetCharacterRequest{
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: admin get character RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebAdminGetCharacterResponse{
+		Character: resp.GetCharacter(),
+	}), nil
+}

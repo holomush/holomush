@@ -25,6 +25,159 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// AdminCharacterSortField is the CLOSED ordering vocabulary of the admin
+// character list — 01-SPEC §11.3's five rows marked Sort=Yes.
+//
+// Encoding the permitted set as an enum rather than a string is what makes "an
+// unlisted key is rejected, not ignored" STRUCTURAL: a client cannot express
+// the request at all. AdminPortalServer maps each value through a closed switch
+// with a denying default, so a value added here without a handler arm is
+// refused rather than silently ordered by something else.
+type AdminCharacterSortField int32
+
+const (
+	// ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED is REJECTED with
+	// codes.InvalidArgument, not defaulted. A silently-defaulted ordering is
+	// indistinguishable from an honoured one at the call site, and §11.3's closed
+	// field list would then be advisory rather than enforced.
+	AdminCharacterSortField_ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED AdminCharacterSortField = 0
+	// ADMIN_CHARACTER_SORT_FIELD_NAME orders on characters.normalized_name, the
+	// stored normal form of §6.1.3 — NOT on characters.name. The two orderings
+	// differ observably under case and NFKC folding, and §11.3's name row names
+	// the stored form.
+	AdminCharacterSortField_ADMIN_CHARACTER_SORT_FIELD_NAME AdminCharacterSortField = 1
+	// ADMIN_CHARACTER_SORT_FIELD_CREATED_AT orders on characters.created_at.
+	AdminCharacterSortField_ADMIN_CHARACTER_SORT_FIELD_CREATED_AT AdminCharacterSortField = 2
+	// ADMIN_CHARACTER_SORT_FIELD_STATUS orders on characters.status.
+	AdminCharacterSortField_ADMIN_CHARACTER_SORT_FIELD_STATUS AdminCharacterSortField = 3
+	// ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT orders on
+	// characters.last_active_at, with the 0 "never active" sentinel forced LAST
+	// in BOTH directions by a leading (last_active_at = 0) clause — descending
+	// gets that for free as the column minimum, ascending does not.
+	AdminCharacterSortField_ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT AdminCharacterSortField = 4
+	// ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME orders on the joined
+	// players.username.
+	//
+	// There is deliberately NO value for characters.player_id. §11.3 marks it
+	// Sort=No / Filter=Yes and §14 row 12 re-asserts that an ordering on it would
+	// leak creation sequence; it stays reachable as
+	// AdminListCharactersRequest.player_id, the equality filter behind
+	// click-to-filter. Filterability and sortability are different §11.3 columns.
+	AdminCharacterSortField_ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME AdminCharacterSortField = 5
+)
+
+// Enum value maps for AdminCharacterSortField.
+var (
+	AdminCharacterSortField_name = map[int32]string{
+		0: "ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED",
+		1: "ADMIN_CHARACTER_SORT_FIELD_NAME",
+		2: "ADMIN_CHARACTER_SORT_FIELD_CREATED_AT",
+		3: "ADMIN_CHARACTER_SORT_FIELD_STATUS",
+		4: "ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT",
+		5: "ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME",
+	}
+	AdminCharacterSortField_value = map[string]int32{
+		"ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED":     0,
+		"ADMIN_CHARACTER_SORT_FIELD_NAME":            1,
+		"ADMIN_CHARACTER_SORT_FIELD_CREATED_AT":      2,
+		"ADMIN_CHARACTER_SORT_FIELD_STATUS":          3,
+		"ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT":  4,
+		"ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME": 5,
+	}
+)
+
+func (x AdminCharacterSortField) Enum() *AdminCharacterSortField {
+	p := new(AdminCharacterSortField)
+	*p = x
+	return p
+}
+
+func (x AdminCharacterSortField) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AdminCharacterSortField) Descriptor() protoreflect.EnumDescriptor {
+	return file_holomush_adminportal_v1_adminportal_proto_enumTypes[0].Descriptor()
+}
+
+func (AdminCharacterSortField) Type() protoreflect.EnumType {
+	return &file_holomush_adminportal_v1_adminportal_proto_enumTypes[0]
+}
+
+func (x AdminCharacterSortField) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AdminCharacterSortField.Descriptor instead.
+func (AdminCharacterSortField) EnumDescriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{0}
+}
+
+// AdminCharacterStatusFilter is the CLOSED lifecycle filter vocabulary.
+//
+// It is an enum rather than free text so an unrecognised value cannot be
+// expressed on the wire at all: §9.3's lifecycle vocabulary does not re-enter
+// the API as a string parameter, and a typo cannot be answered with a silent
+// zero-row page.
+type AdminCharacterStatusFilter int32
+
+const (
+	// ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED means NO FILTER — every lifecycle
+	// state is returned. It is the one enum zero value on this service that is
+	// not a rejection, because "I did not choose a filter" is a legitimate
+	// request and rejecting it would make the unfiltered list unrequestable.
+	AdminCharacterStatusFilter_ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED AdminCharacterStatusFilter = 0
+	// ADMIN_CHARACTER_STATUS_FILTER_ACTIVE selects world.StatusActive.
+	AdminCharacterStatusFilter_ADMIN_CHARACTER_STATUS_FILTER_ACTIVE AdminCharacterStatusFilter = 1
+	// ADMIN_CHARACTER_STATUS_FILTER_IDLE selects world.StatusIdle.
+	AdminCharacterStatusFilter_ADMIN_CHARACTER_STATUS_FILTER_IDLE AdminCharacterStatusFilter = 2
+	// ADMIN_CHARACTER_STATUS_FILTER_RETIRED selects world.StatusRetired.
+	AdminCharacterStatusFilter_ADMIN_CHARACTER_STATUS_FILTER_RETIRED AdminCharacterStatusFilter = 3
+)
+
+// Enum value maps for AdminCharacterStatusFilter.
+var (
+	AdminCharacterStatusFilter_name = map[int32]string{
+		0: "ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED",
+		1: "ADMIN_CHARACTER_STATUS_FILTER_ACTIVE",
+		2: "ADMIN_CHARACTER_STATUS_FILTER_IDLE",
+		3: "ADMIN_CHARACTER_STATUS_FILTER_RETIRED",
+	}
+	AdminCharacterStatusFilter_value = map[string]int32{
+		"ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED": 0,
+		"ADMIN_CHARACTER_STATUS_FILTER_ACTIVE":      1,
+		"ADMIN_CHARACTER_STATUS_FILTER_IDLE":        2,
+		"ADMIN_CHARACTER_STATUS_FILTER_RETIRED":     3,
+	}
+)
+
+func (x AdminCharacterStatusFilter) Enum() *AdminCharacterStatusFilter {
+	p := new(AdminCharacterStatusFilter)
+	*p = x
+	return p
+}
+
+func (x AdminCharacterStatusFilter) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AdminCharacterStatusFilter) Descriptor() protoreflect.EnumDescriptor {
+	return file_holomush_adminportal_v1_adminportal_proto_enumTypes[1].Descriptor()
+}
+
+func (AdminCharacterStatusFilter) Type() protoreflect.EnumType {
+	return &file_holomush_adminportal_v1_adminportal_proto_enumTypes[1]
+}
+
+func (x AdminCharacterStatusFilter) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AdminCharacterStatusFilter.Descriptor instead.
+func (AdminCharacterStatusFilter) EnumDescriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{1}
+}
+
 // AdminListSectionsRequest carries only the caller's bearer token, because
 // which sections are listed follows entirely from who is asking.
 type AdminListSectionsRequest struct {
@@ -319,6 +472,678 @@ func (x *AdminSection) GetStatus() string {
 	return ""
 }
 
+// AdminListCharactersRequest is one page request against the cross-player
+// character list. Every field that shapes SQL is a closed enum or a bound
+// value; nothing here reaches an ORDER BY or a predicate as text.
+type AdminListCharactersRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// X-Session-Token header. NewAdminSectionInterceptor resolves it to a player
+	// through auth.PlayerSessionRepository; there is deliberately no player-id
+	// field a caller could point at someone else.
+	PlayerSessionToken string `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	// sort_field selects the ordering column. AdminPortalServer REFUSES the
+	// unspecified value with codes.InvalidArgument rather than picking an order.
+	SortField AdminCharacterSortField `protobuf:"varint,2,opt,name=sort_field,json=sortField,proto3,enum=holomush.adminportal.v1.AdminCharacterSortField" json:"sort_field,omitempty"`
+	// descending reverses the primary sort key only. The never-active sentinel
+	// stays last and the normalized-name tiebreak stays ascending in both
+	// directions, so the order is total either way.
+	Descending bool `protobuf:"varint,3,opt,name=descending,proto3" json:"descending,omitempty"`
+	// status_filter restricts to one lifecycle state; unspecified means no
+	// filter.
+	StatusFilter AdminCharacterStatusFilter `protobuf:"varint,4,opt,name=status_filter,json=statusFilter,proto3,enum=holomush.adminportal.v1.AdminCharacterStatusFilter" json:"status_filter,omitempty"`
+	// player_id, when non-empty, restricts to one player's characters. This is
+	// §11.3's Filter=Yes half of player_id and the click-to-filter path; there is
+	// no ordering on it. A value that does not parse as a ULID is
+	// codes.InvalidArgument.
+	PlayerId string `protobuf:"bytes,5,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	// page is the 1-based page number. AdminPortalServer refuses a value below 1
+	// with codes.InvalidArgument rather than computing a negative OFFSET.
+	Page int32 `protobuf:"varint,6,opt,name=page,proto3" json:"page,omitempty"`
+	// page_size is the requested rows per page. It is SERVER-CLAMPED: 0 or absent
+	// means 50, and any value above 50 is clamped DOWN to 50 rather than
+	// honoured. That clamp is what discharges T-06-24 — without it a page_size of
+	// 2^31-1 would reach the repository as a LIMIT.
+	PageSize      int32 `protobuf:"varint,7,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminListCharactersRequest) Reset() {
+	*x = AdminListCharactersRequest{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminListCharactersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminListCharactersRequest) ProtoMessage() {}
+
+func (x *AdminListCharactersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminListCharactersRequest.ProtoReflect.Descriptor instead.
+func (*AdminListCharactersRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *AdminListCharactersRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *AdminListCharactersRequest) GetSortField() AdminCharacterSortField {
+	if x != nil {
+		return x.SortField
+	}
+	return AdminCharacterSortField_ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED
+}
+
+func (x *AdminListCharactersRequest) GetDescending() bool {
+	if x != nil {
+		return x.Descending
+	}
+	return false
+}
+
+func (x *AdminListCharactersRequest) GetStatusFilter() AdminCharacterStatusFilter {
+	if x != nil {
+		return x.StatusFilter
+	}
+	return AdminCharacterStatusFilter_ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED
+}
+
+func (x *AdminListCharactersRequest) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *AdminListCharactersRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *AdminListCharactersRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+// AdminListCharactersResponse is one page plus the total over the same filtered
+// set.
+type AdminListCharactersResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// characters is the page, in the requested order.
+	Characters []*AdminCharacter `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	// total_count is the number of rows matching the filter, computed by its own
+	// scalar count in the same read transaction as the page — so it is correct
+	// for a page BEYOND the last one, where a window column would report 0.
+	//
+	// This list is NOT privacy-partitioned: it is the admin audience's view of
+	// every character. It MUST NOT be cited as precedent for a count on the
+	// public character directory, whose row set differs per viewer and where a
+	// total would disclose the size of the withheld remainder.
+	TotalCount    int64 `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminListCharactersResponse) Reset() {
+	*x = AdminListCharactersResponse{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminListCharactersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminListCharactersResponse) ProtoMessage() {}
+
+func (x *AdminListCharactersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminListCharactersResponse.ProtoReflect.Descriptor instead.
+func (*AdminListCharactersResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *AdminListCharactersResponse) GetCharacters() []*AdminCharacter {
+	if x != nil {
+		return x.Characters
+	}
+	return nil
+}
+
+func (x *AdminListCharactersResponse) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+// AdminSearchCharactersRequest adds a substring term to the list request.
+type AdminSearchCharactersRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// X-Session-Token header, resolved server-side exactly as on the list RPC.
+	PlayerSessionToken string `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	// sort_field selects the ordering column; the unspecified value is refused.
+	SortField AdminCharacterSortField `protobuf:"varint,2,opt,name=sort_field,json=sortField,proto3,enum=holomush.adminportal.v1.AdminCharacterSortField" json:"sort_field,omitempty"`
+	// descending reverses the primary sort key only.
+	Descending bool `protobuf:"varint,3,opt,name=descending,proto3" json:"descending,omitempty"`
+	// status_filter restricts to one lifecycle state; unspecified means no
+	// filter.
+	StatusFilter AdminCharacterStatusFilter `protobuf:"varint,4,opt,name=status_filter,json=statusFilter,proto3,enum=holomush.adminportal.v1.AdminCharacterStatusFilter" json:"status_filter,omitempty"`
+	// player_id, when non-empty, restricts to one player's characters.
+	PlayerId string `protobuf:"bytes,5,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	// page is the 1-based page number; below 1 is refused.
+	Page int32 `protobuf:"varint,6,opt,name=page,proto3" json:"page,omitempty"`
+	// page_size is server-clamped to at most 50, defaulting to 50 when 0.
+	PageSize int32 `protobuf:"varint,7,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// query is the RAW STRING THE OPERATOR TYPED. It is normalized SERVER-SIDE
+	// through the same charname pipeline that produced the stored
+	// characters.normalized_name — there is exactly one normalizer and no client
+	// mirror of it, so a client that pre-folded this value would be applying a
+	// second, drifting definition of name equality.
+	//
+	// It has NO minimum length. Blank after trimming means "no filter" and
+	// returns the unfiltered page; a value that normalizes to nothing (a lone
+	// zero-width joiner, say) returns an empty page rather than an error.
+	// Literal %, _ and \ match literally.
+	Query         string `protobuf:"bytes,8,opt,name=query,proto3" json:"query,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminSearchCharactersRequest) Reset() {
+	*x = AdminSearchCharactersRequest{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminSearchCharactersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminSearchCharactersRequest) ProtoMessage() {}
+
+func (x *AdminSearchCharactersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminSearchCharactersRequest.ProtoReflect.Descriptor instead.
+func (*AdminSearchCharactersRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *AdminSearchCharactersRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *AdminSearchCharactersRequest) GetSortField() AdminCharacterSortField {
+	if x != nil {
+		return x.SortField
+	}
+	return AdminCharacterSortField_ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED
+}
+
+func (x *AdminSearchCharactersRequest) GetDescending() bool {
+	if x != nil {
+		return x.Descending
+	}
+	return false
+}
+
+func (x *AdminSearchCharactersRequest) GetStatusFilter() AdminCharacterStatusFilter {
+	if x != nil {
+		return x.StatusFilter
+	}
+	return AdminCharacterStatusFilter_ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED
+}
+
+func (x *AdminSearchCharactersRequest) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *AdminSearchCharactersRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *AdminSearchCharactersRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *AdminSearchCharactersRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+// AdminSearchCharactersResponse has the same shape as its list peer, so the
+// table renders one component against both.
+type AdminSearchCharactersResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// characters is the matching page, in the requested order.
+	Characters []*AdminCharacter `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	// total_count is the number of rows matching the term AND the filters,
+	// computed by its own scalar count in the same read transaction as the page.
+	// The same non-precedent note as on the list response applies.
+	TotalCount    int64 `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminSearchCharactersResponse) Reset() {
+	*x = AdminSearchCharactersResponse{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminSearchCharactersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminSearchCharactersResponse) ProtoMessage() {}
+
+func (x *AdminSearchCharactersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminSearchCharactersResponse.ProtoReflect.Descriptor instead.
+func (*AdminSearchCharactersResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *AdminSearchCharactersResponse) GetCharacters() []*AdminCharacter {
+	if x != nil {
+		return x.Characters
+	}
+	return nil
+}
+
+func (x *AdminSearchCharactersResponse) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+// AdminGetCharacterRequest names one character to read in full.
+type AdminGetCharacterRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// X-Session-Token header, resolved server-side.
+	PlayerSessionToken string `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	// character_id is the ULID to read. A value that does not parse, and one that
+	// parses but names no row, both produce codes.NotFound with the SAME static
+	// message carrying no id — so this field is not an existence oracle.
+	CharacterId   string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminGetCharacterRequest) Reset() {
+	*x = AdminGetCharacterRequest{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminGetCharacterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminGetCharacterRequest) ProtoMessage() {}
+
+func (x *AdminGetCharacterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminGetCharacterRequest.ProtoReflect.Descriptor instead.
+func (*AdminGetCharacterRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *AdminGetCharacterRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *AdminGetCharacterRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+// AdminGetCharacterResponse carries the one row the edit surface reads.
+type AdminGetCharacterResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the full detail projection.
+	Character     *AdminCharacterDetail `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminGetCharacterResponse) Reset() {
+	*x = AdminGetCharacterResponse{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminGetCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminGetCharacterResponse) ProtoMessage() {}
+
+func (x *AdminGetCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminGetCharacterResponse.ProtoReflect.Descriptor instead.
+func (*AdminGetCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AdminGetCharacterResponse) GetCharacter() *AdminCharacterDetail {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
+// AdminCharacter is the LIST projection: 01-SPEC §11.3's field list and nothing
+// else.
+//
+// It carries NO profile prose. The list is a bulk cross-player projection, and
+// prose in it would be a bulk prose export of player-authored text — which is
+// why the edit surface reads AdminCharacterDetail for ONE character instead.
+type AdminCharacter struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the character's ULID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// player_id is the owning player's ULID. It is a §11.3 Filter=Yes field and
+	// is what the click-to-filter path sends back as
+	// AdminListCharactersRequest.player_id; it is never an ordering key.
+	PlayerId string `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	// player_username is players.username for player_id — the OOC identity column
+	// the admin audience already sees, joined onto the row so the table needs no
+	// second lookup.
+	PlayerUsername string `protobuf:"bytes,3,opt,name=player_username,json=playerUsername,proto3" json:"player_username,omitempty"`
+	// name is characters.name, the stored display form. Ordering is on the
+	// normalized form; this is what the table draws.
+	Name string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	// status is world.Status as a string: exactly one of the §9.3 lifecycle
+	// values.
+	Status string `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	// last_active_at is characters.last_active_at as BIGINT epoch NANOSECONDS,
+	// sent RAW. 0 means "has never been active". The server sends no formatted
+	// string: the client renders the coarse relative text, so the wire carries a
+	// fact and the presentation stays where the locale is.
+	LastActiveAt int64 `protobuf:"varint,6,opt,name=last_active_at,json=lastActiveAt,proto3" json:"last_active_at,omitempty"`
+	// created_at is the row's creation time as epoch nanoseconds.
+	CreatedAt int64 `protobuf:"varint,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// version is the optimistic-concurrency version (MODEL-03) the edit surface
+	// sends back on a write. It is NOT a sortable §11.3 field — no sort enum
+	// value can express an ordering on it.
+	Version       int32 `protobuf:"varint,8,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminCharacter) Reset() {
+	*x = AdminCharacter{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminCharacter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminCharacter) ProtoMessage() {}
+
+func (x *AdminCharacter) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminCharacter.ProtoReflect.Descriptor instead.
+func (*AdminCharacter) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *AdminCharacter) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AdminCharacter) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *AdminCharacter) GetPlayerUsername() string {
+	if x != nil {
+		return x.PlayerUsername
+	}
+	return ""
+}
+
+func (x *AdminCharacter) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AdminCharacter) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *AdminCharacter) GetLastActiveAt() int64 {
+	if x != nil {
+		return x.LastActiveAt
+	}
+	return 0
+}
+
+func (x *AdminCharacter) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *AdminCharacter) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+// AdminCharacterDetail is the SINGLE-character read the admin edit surface
+// fetches when its sheet opens.
+//
+// # Why it is a separate message from AdminCharacter
+//
+// It carries the thirteen values §10.6 lets an admin write: characters.description
+// plus the twelve §7.2 profile names. Seeding an edit form from LIST rows
+// instead would render those fields blank and OVERWRITE existing content on
+// save, because a blank field and an unfetched field are indistinguishable once
+// they are both empty strings in a form model. One character, requested
+// deliberately, is the only shape that cannot do that.
+type AdminCharacterDetail struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the same §11.3 projection the list carries, so the two cannot
+	// drift.
+	Character *AdminCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	// description is characters.description, the in-world `look` text. It is a
+	// column on characters, not a property row — which is why the twelve below
+	// are twelve and the writable set is thirteen.
+	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// profile carries the governed profile values, keyed by their §7.2 path
+	// (`profile.pronouns` and its eleven siblings).
+	//
+	// The key set is CLOSED by membership in the facade's
+	// updateCharacterProfileMaskablePaths — the same twelve names §10.6 lets an
+	// admin WRITE — so the read surface and the write surface are the same set by
+	// construction. A property row outside that set is dropped, and a row whose
+	// stored value is NULL is OMITTED rather than sent as present-and-empty, so a
+	// flag-style row does not round-trip through the edit surface as a blank the
+	// operator never authored.
+	Profile       map[string]string `protobuf:"bytes,3,rep,name=profile,proto3" json:"profile,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminCharacterDetail) Reset() {
+	*x = AdminCharacterDetail{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminCharacterDetail) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminCharacterDetail) ProtoMessage() {}
+
+func (x *AdminCharacterDetail) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminCharacterDetail.ProtoReflect.Descriptor instead.
+func (*AdminCharacterDetail) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *AdminCharacterDetail) GetCharacter() *AdminCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
+func (x *AdminCharacterDetail) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *AdminCharacterDetail) GetProfile() map[string]string {
+	if x != nil {
+		return x.Profile
+	}
+	return nil
+}
+
 var File_holomush_adminportal_v1_adminportal_proto protoreflect.FileDescriptor
 
 const file_holomush_adminportal_v1_adminportal_proto_rawDesc = "" +
@@ -337,10 +1162,82 @@ const file_holomush_adminportal_v1_adminportal_proto_rawDesc = "" +
 	"\fAdminSection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x16\n" +
-	"\x06status\x18\x03 \x01(\tR\x06status2\x86\x02\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\"\xf0\x02\n" +
+	"\x1aAdminListCharactersRequest\x129\n" +
+	"\x14player_session_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\x12O\n" +
+	"\n" +
+	"sort_field\x18\x02 \x01(\x0e20.holomush.adminportal.v1.AdminCharacterSortFieldR\tsortField\x12\x1e\n" +
+	"\n" +
+	"descending\x18\x03 \x01(\bR\n" +
+	"descending\x12X\n" +
+	"\rstatus_filter\x18\x04 \x01(\x0e23.holomush.adminportal.v1.AdminCharacterStatusFilterR\fstatusFilter\x12\x1b\n" +
+	"\tplayer_id\x18\x05 \x01(\tR\bplayerId\x12\x12\n" +
+	"\x04page\x18\x06 \x01(\x05R\x04page\x12\x1b\n" +
+	"\tpage_size\x18\a \x01(\x05R\bpageSize\"\x87\x01\n" +
+	"\x1bAdminListCharactersResponse\x12G\n" +
+	"\n" +
+	"characters\x18\x01 \x03(\v2'.holomush.adminportal.v1.AdminCharacterR\n" +
+	"characters\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x03R\n" +
+	"totalCount\"\x88\x03\n" +
+	"\x1cAdminSearchCharactersRequest\x129\n" +
+	"\x14player_session_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\x12O\n" +
+	"\n" +
+	"sort_field\x18\x02 \x01(\x0e20.holomush.adminportal.v1.AdminCharacterSortFieldR\tsortField\x12\x1e\n" +
+	"\n" +
+	"descending\x18\x03 \x01(\bR\n" +
+	"descending\x12X\n" +
+	"\rstatus_filter\x18\x04 \x01(\x0e23.holomush.adminportal.v1.AdminCharacterStatusFilterR\fstatusFilter\x12\x1b\n" +
+	"\tplayer_id\x18\x05 \x01(\tR\bplayerId\x12\x12\n" +
+	"\x04page\x18\x06 \x01(\x05R\x04page\x12\x1b\n" +
+	"\tpage_size\x18\a \x01(\x05R\bpageSize\x12\x14\n" +
+	"\x05query\x18\b \x01(\tR\x05query\"\x89\x01\n" +
+	"\x1dAdminSearchCharactersResponse\x12G\n" +
+	"\n" +
+	"characters\x18\x01 \x03(\v2'.holomush.adminportal.v1.AdminCharacterR\n" +
+	"characters\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x03R\n" +
+	"totalCount\"\x81\x01\n" +
+	"\x18AdminGetCharacterRequest\x129\n" +
+	"\x14player_session_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\x12*\n" +
+	"\fcharacter_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\"h\n" +
+	"\x19AdminGetCharacterResponse\x12K\n" +
+	"\tcharacter\x18\x01 \x01(\v2-.holomush.adminportal.v1.AdminCharacterDetailR\tcharacter\"\xf1\x01\n" +
+	"\x0eAdminCharacter\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\x12'\n" +
+	"\x0fplayer_username\x18\x03 \x01(\tR\x0eplayerUsername\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12$\n" +
+	"\x0elast_active_at\x18\x06 \x01(\x03R\flastActiveAt\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\a \x01(\x03R\tcreatedAt\x12\x18\n" +
+	"\aversion\x18\b \x01(\x05R\aversion\"\x91\x02\n" +
+	"\x14AdminCharacterDetail\x12E\n" +
+	"\tcharacter\x18\x01 \x01(\v2'.holomush.adminportal.v1.AdminCharacterR\tcharacter\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12T\n" +
+	"\aprofile\x18\x03 \x03(\v2:.holomush.adminportal.v1.AdminCharacterDetail.ProfileEntryR\aprofile\x1a:\n" +
+	"\fProfileEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x9b\x02\n" +
+	"\x17AdminCharacterSortField\x12*\n" +
+	"&ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fADMIN_CHARACTER_SORT_FIELD_NAME\x10\x01\x12)\n" +
+	"%ADMIN_CHARACTER_SORT_FIELD_CREATED_AT\x10\x02\x12%\n" +
+	"!ADMIN_CHARACTER_SORT_FIELD_STATUS\x10\x03\x12-\n" +
+	")ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT\x10\x04\x12.\n" +
+	"*ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME\x10\x05*\xc8\x01\n" +
+	"\x1aAdminCharacterStatusFilter\x12-\n" +
+	")ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED\x10\x00\x12(\n" +
+	"$ADMIN_CHARACTER_STATUS_FILTER_ACTIVE\x10\x01\x12&\n" +
+	"\"ADMIN_CHARACTER_STATUS_FILTER_IDLE\x10\x02\x12)\n" +
+	"%ADMIN_CHARACTER_STATUS_FILTER_RETIRED\x10\x032\x8e\x05\n" +
 	"\x12AdminPortalService\x12z\n" +
 	"\x11AdminListSections\x121.holomush.adminportal.v1.AdminListSectionsRequest\x1a2.holomush.adminportal.v1.AdminListSectionsResponse\x12t\n" +
-	"\x0fAdminGetSection\x12/.holomush.adminportal.v1.AdminGetSectionRequest\x1a0.holomush.adminportal.v1.AdminGetSectionResponseB\xfb\x01\n" +
+	"\x0fAdminGetSection\x12/.holomush.adminportal.v1.AdminGetSectionRequest\x1a0.holomush.adminportal.v1.AdminGetSectionResponse\x12\x80\x01\n" +
+	"\x13AdminListCharacters\x123.holomush.adminportal.v1.AdminListCharactersRequest\x1a4.holomush.adminportal.v1.AdminListCharactersResponse\x12\x86\x01\n" +
+	"\x15AdminSearchCharacters\x125.holomush.adminportal.v1.AdminSearchCharactersRequest\x1a6.holomush.adminportal.v1.AdminSearchCharactersResponse\x12z\n" +
+	"\x11AdminGetCharacter\x121.holomush.adminportal.v1.AdminGetCharacterRequest\x1a2.holomush.adminportal.v1.AdminGetCharacterResponseB\xfb\x01\n" +
 	"\x1bcom.holomush.adminportal.v1B\x10AdminportalProtoP\x01ZLgithub.com/holomush/holomush/pkg/proto/holomush/adminportal/v1;adminportalv1\xa2\x02\x03HAX\xaa\x02\x17Holomush.Adminportal.V1\xca\x02\x17Holomush\\Adminportal\\V1\xe2\x02#Holomush\\Adminportal\\V1\\GPBMetadata\xea\x02\x19Holomush::Adminportal::V1b\x06proto3"
 
 var (
@@ -355,26 +1252,53 @@ func file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP() []byte {
 	return file_holomush_adminportal_v1_adminportal_proto_rawDescData
 }
 
-var file_holomush_adminportal_v1_adminportal_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_holomush_adminportal_v1_adminportal_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_holomush_adminportal_v1_adminportal_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_holomush_adminportal_v1_adminportal_proto_goTypes = []any{
-	(*AdminListSectionsRequest)(nil),  // 0: holomush.adminportal.v1.AdminListSectionsRequest
-	(*AdminListSectionsResponse)(nil), // 1: holomush.adminportal.v1.AdminListSectionsResponse
-	(*AdminGetSectionRequest)(nil),    // 2: holomush.adminportal.v1.AdminGetSectionRequest
-	(*AdminGetSectionResponse)(nil),   // 3: holomush.adminportal.v1.AdminGetSectionResponse
-	(*AdminSection)(nil),              // 4: holomush.adminportal.v1.AdminSection
+	(AdminCharacterSortField)(0),          // 0: holomush.adminportal.v1.AdminCharacterSortField
+	(AdminCharacterStatusFilter)(0),       // 1: holomush.adminportal.v1.AdminCharacterStatusFilter
+	(*AdminListSectionsRequest)(nil),      // 2: holomush.adminportal.v1.AdminListSectionsRequest
+	(*AdminListSectionsResponse)(nil),     // 3: holomush.adminportal.v1.AdminListSectionsResponse
+	(*AdminGetSectionRequest)(nil),        // 4: holomush.adminportal.v1.AdminGetSectionRequest
+	(*AdminGetSectionResponse)(nil),       // 5: holomush.adminportal.v1.AdminGetSectionResponse
+	(*AdminSection)(nil),                  // 6: holomush.adminportal.v1.AdminSection
+	(*AdminListCharactersRequest)(nil),    // 7: holomush.adminportal.v1.AdminListCharactersRequest
+	(*AdminListCharactersResponse)(nil),   // 8: holomush.adminportal.v1.AdminListCharactersResponse
+	(*AdminSearchCharactersRequest)(nil),  // 9: holomush.adminportal.v1.AdminSearchCharactersRequest
+	(*AdminSearchCharactersResponse)(nil), // 10: holomush.adminportal.v1.AdminSearchCharactersResponse
+	(*AdminGetCharacterRequest)(nil),      // 11: holomush.adminportal.v1.AdminGetCharacterRequest
+	(*AdminGetCharacterResponse)(nil),     // 12: holomush.adminportal.v1.AdminGetCharacterResponse
+	(*AdminCharacter)(nil),                // 13: holomush.adminportal.v1.AdminCharacter
+	(*AdminCharacterDetail)(nil),          // 14: holomush.adminportal.v1.AdminCharacterDetail
+	nil,                                   // 15: holomush.adminportal.v1.AdminCharacterDetail.ProfileEntry
 }
 var file_holomush_adminportal_v1_adminportal_proto_depIdxs = []int32{
-	4, // 0: holomush.adminportal.v1.AdminListSectionsResponse.sections:type_name -> holomush.adminportal.v1.AdminSection
-	4, // 1: holomush.adminportal.v1.AdminGetSectionResponse.section:type_name -> holomush.adminportal.v1.AdminSection
-	0, // 2: holomush.adminportal.v1.AdminPortalService.AdminListSections:input_type -> holomush.adminportal.v1.AdminListSectionsRequest
-	2, // 3: holomush.adminportal.v1.AdminPortalService.AdminGetSection:input_type -> holomush.adminportal.v1.AdminGetSectionRequest
-	1, // 4: holomush.adminportal.v1.AdminPortalService.AdminListSections:output_type -> holomush.adminportal.v1.AdminListSectionsResponse
-	3, // 5: holomush.adminportal.v1.AdminPortalService.AdminGetSection:output_type -> holomush.adminportal.v1.AdminGetSectionResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	6,  // 0: holomush.adminportal.v1.AdminListSectionsResponse.sections:type_name -> holomush.adminportal.v1.AdminSection
+	6,  // 1: holomush.adminportal.v1.AdminGetSectionResponse.section:type_name -> holomush.adminportal.v1.AdminSection
+	0,  // 2: holomush.adminportal.v1.AdminListCharactersRequest.sort_field:type_name -> holomush.adminportal.v1.AdminCharacterSortField
+	1,  // 3: holomush.adminportal.v1.AdminListCharactersRequest.status_filter:type_name -> holomush.adminportal.v1.AdminCharacterStatusFilter
+	13, // 4: holomush.adminportal.v1.AdminListCharactersResponse.characters:type_name -> holomush.adminportal.v1.AdminCharacter
+	0,  // 5: holomush.adminportal.v1.AdminSearchCharactersRequest.sort_field:type_name -> holomush.adminportal.v1.AdminCharacterSortField
+	1,  // 6: holomush.adminportal.v1.AdminSearchCharactersRequest.status_filter:type_name -> holomush.adminportal.v1.AdminCharacterStatusFilter
+	13, // 7: holomush.adminportal.v1.AdminSearchCharactersResponse.characters:type_name -> holomush.adminportal.v1.AdminCharacter
+	14, // 8: holomush.adminportal.v1.AdminGetCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacterDetail
+	13, // 9: holomush.adminportal.v1.AdminCharacterDetail.character:type_name -> holomush.adminportal.v1.AdminCharacter
+	15, // 10: holomush.adminportal.v1.AdminCharacterDetail.profile:type_name -> holomush.adminportal.v1.AdminCharacterDetail.ProfileEntry
+	2,  // 11: holomush.adminportal.v1.AdminPortalService.AdminListSections:input_type -> holomush.adminportal.v1.AdminListSectionsRequest
+	4,  // 12: holomush.adminportal.v1.AdminPortalService.AdminGetSection:input_type -> holomush.adminportal.v1.AdminGetSectionRequest
+	7,  // 13: holomush.adminportal.v1.AdminPortalService.AdminListCharacters:input_type -> holomush.adminportal.v1.AdminListCharactersRequest
+	9,  // 14: holomush.adminportal.v1.AdminPortalService.AdminSearchCharacters:input_type -> holomush.adminportal.v1.AdminSearchCharactersRequest
+	11, // 15: holomush.adminportal.v1.AdminPortalService.AdminGetCharacter:input_type -> holomush.adminportal.v1.AdminGetCharacterRequest
+	3,  // 16: holomush.adminportal.v1.AdminPortalService.AdminListSections:output_type -> holomush.adminportal.v1.AdminListSectionsResponse
+	5,  // 17: holomush.adminportal.v1.AdminPortalService.AdminGetSection:output_type -> holomush.adminportal.v1.AdminGetSectionResponse
+	8,  // 18: holomush.adminportal.v1.AdminPortalService.AdminListCharacters:output_type -> holomush.adminportal.v1.AdminListCharactersResponse
+	10, // 19: holomush.adminportal.v1.AdminPortalService.AdminSearchCharacters:output_type -> holomush.adminportal.v1.AdminSearchCharactersResponse
+	12, // 20: holomush.adminportal.v1.AdminPortalService.AdminGetCharacter:output_type -> holomush.adminportal.v1.AdminGetCharacterResponse
+	16, // [16:21] is the sub-list for method output_type
+	11, // [11:16] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_holomush_adminportal_v1_adminportal_proto_init() }
@@ -387,13 +1311,14 @@ func file_holomush_adminportal_v1_adminportal_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_adminportal_v1_adminportal_proto_rawDesc), len(file_holomush_adminportal_v1_adminportal_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   5,
+			NumEnums:      2,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_holomush_adminportal_v1_adminportal_proto_goTypes,
 		DependencyIndexes: file_holomush_adminportal_v1_adminportal_proto_depIdxs,
+		EnumInfos:         file_holomush_adminportal_v1_adminportal_proto_enumTypes,
 		MessageInfos:      file_holomush_adminportal_v1_adminportal_proto_msgTypes,
 	}.Build()
 	File_holomush_adminportal_v1_adminportal_proto = out.File

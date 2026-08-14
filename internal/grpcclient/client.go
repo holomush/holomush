@@ -524,6 +524,42 @@ func (c *Client) AdminGetSection(ctx context.Context, req *adminportalv1.AdminGe
 	return resp, nil
 }
 
+// AdminListCharacters forwards to AdminPortalService.AdminListCharacters.
+//
+// Like its section-registry peers it does NOT wrap the error in oops: the admin
+// refusals carry deliberately static messages, and status.FromError replaces a
+// WRAPPED status's message with the outer error's full text.
+func (c *Client) AdminListCharacters(ctx context.Context, req *adminportalv1.AdminListCharactersRequest) (*adminportalv1.AdminListCharactersResponse, error) {
+	resp, err := c.adminPortalClient.AdminListCharacters(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminSearchCharacters forwards to AdminPortalService.AdminSearchCharacters.
+// It does NOT wrap the error, for the same reason its list peer does not.
+func (c *Client) AdminSearchCharacters(ctx context.Context, req *adminportalv1.AdminSearchCharactersRequest) (*adminportalv1.AdminSearchCharactersResponse, error) {
+	resp, err := c.adminPortalClient.AdminSearchCharacters(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminGetCharacter forwards to AdminPortalService.AdminGetCharacter.
+//
+// The unwrapped pass-through matters here for a second reason beyond the
+// refusal: the NotFound this RPC returns carries a static message naming no id,
+// and wrapping would substitute the outer error's text for it.
+func (c *Client) AdminGetCharacter(ctx context.Context, req *adminportalv1.AdminGetCharacterRequest) (*adminportalv1.AdminGetCharacterResponse, error) {
+	resp, err := c.adminPortalClient.AdminGetCharacter(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
 // ListScenesForViewer returns the public scene board filtered by the player's preferences.
 func (c *Client) ListScenesForViewer(ctx context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
 	resp, err := c.sceneAccessClient.ListScenesForViewer(ctx, req)
