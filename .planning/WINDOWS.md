@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 19
+open_count: 21
 waived_count: 0
 fixed_count: 8
-total_count: 27
-last_updated: 2026-08-14T15:13:03.920Z
+total_count: 29
+last_updated: 2026-08-14T20:26:06.012Z
 ---
 
 # Broken Windows Ledger
@@ -42,6 +42,8 @@ last_updated: 2026-08-14T15:13:03.920Z
 | 25 | 06 | deviation | .planning/REQUIREMENTS.md |  | 06-01: requirements.mark-complete could not match the traceability-table rows for ADMIN-01/02, EXT-01/03/04 (table_unmatched, write_set_complete=false). Checkboxes were already [x] at HEAD; the 'Pending' traceability rows were left untouched rather than hand-edited. | open |  | 2026-08-14T13:52:58.101Z |  |
 | 26 | 06 | deviation | .planning/REQUIREMENTS.md |  | 06-01 CORRECTION to the prior ledger row: the CHECKBOXES for ADMIN-01/02, EXT-01/03/04 WERE written by requirements.mark-complete (they were [ ] at HEAD, not [x]). Only the traceability-table rows are unmatched and still read 'Pending'. Those rows were left untouched rather than hand-edited (planning-artifacts rule: tool-owned file). | open |  | 2026-08-14T13:53:24.587Z |  |
 | 27 | 06 | unrun-verify | .planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md |  | 06-04 Task 3: /holomush-dev:review-abac (T-06-29's mitigation of record) could NOT be run — the Task tool is disabled in the executor session, so abac-reviewer cannot be dispatched. Its substantive claims were verified manually at source; the adversarial gate itself is outstanding. | open |  | 2026-08-14T15:13:03.920Z |  |
+| 28 | 06 | unrun-verify | .planning/phases/06-admin-portal-shell-character-administration/06-05-PLAN.md |  | 06-05 Task 3: /holomush-dev:review-abac was not run by the executor (Task tool disabled in this session); the orchestrator holds the Agent tool and will run it over the phase diff | open |  | 2026-08-14T20:26:05.931Z |  |
+| 29 | 06 | unrun-verify | test/integration/charname/name_uniqueness_test.go |  | 8 of 24 charname integration specs RED at HEAD from migration 000057 (plan 06-04); see phase deferred-items.md | open |  | 2026-08-14T20:26:06.012Z |  |
 
 ````json
 [
@@ -367,6 +369,30 @@ last_updated: 2026-08-14T15:13:03.920Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-14T15:13:03.920Z",
+    "resolved_at": null
+  },
+  {
+    "id": 28,
+    "kind": "unrun-verify",
+    "phase": "06",
+    "file": ".planning/phases/06-admin-portal-shell-character-administration/06-05-PLAN.md",
+    "line": null,
+    "description": "06-05 Task 3: /holomush-dev:review-abac was not run by the executor (Task tool disabled in this session); the orchestrator holds the Agent tool and will run it over the phase diff",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-14T20:26:05.931Z",
+    "resolved_at": null
+  },
+  {
+    "id": 29,
+    "kind": "unrun-verify",
+    "phase": "06",
+    "file": "test/integration/charname/name_uniqueness_test.go",
+    "line": null,
+    "description": "8 of 24 charname integration specs RED at HEAD from migration 000057 (plan 06-04); see phase deferred-items.md",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-14T20:26:06.012Z",
     "resolved_at": null
   }
 ]

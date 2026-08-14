@@ -4,17 +4,17 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 06
 current_phase_name: admin-portal-shell-character-administration
-status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-08-14T15:14:54.805Z"
+status: verifying
+stopped_at: Completed 06-05-PLAN.md (final plan of phase 06)
+last_updated: "2026-08-14T20:29:37.915Z"
 last_activity: 2026-08-14
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 10
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 65
-  completed_plans: 60
-  percent: 80
+  completed_plans: 61
+  percent: 90
 ---
 
 # Project State
@@ -36,8 +36,8 @@ without rework.
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 06 (admin-portal-shell-character-administration) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([█████████░] 92%)
+Status: Phase complete — ready for verification
+Progress: [█████████████████░░░] 34/40 plans ([█████████░] 94%)
 Last activity: 2026-08-14 — Phase 06 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -277,6 +277,7 @@ no action needed.
 | Phase 06 P01 | 33min | 2 tasks tasks | 36 files files |
 | Phase 06 P02 | 30min | 3 tasks | 35 files |
 | Phase 06 P04 | 33 min | 3 tasks | 19 files |
+| Phase 06 P05 | 3h | 3 tasks | 44 files |
 
 ## Accumulated Context
 
@@ -636,6 +637,9 @@ the next milestone yet.
 - [Phase ?]: 06-04: the detail read is a bounded trusted projection — PropertyRepository.ListByParent filtered by updateCharacterProfileMaskablePaths membership (12 names), NOT world.Service.ListPropertiesByParent, which returns an EMPTY slice for a player-flavoured caller (verified: zero player-principal property permits in the seed corpus)
 - [Phase ?]: 06-04: player_id is unsortable STRUCTURALLY — no enum value exists to express it — while remaining an equality filter; the illegal request is inexpressible rather than rejected at runtime
 - [Phase ?]: 06-04: admin list/page types live in internal/world, not internal/world/postgres, so internal/grpc can name them on its narrow reader interfaces without importing a storage driver
+- [Phase ?]: 06-05: the section REGISTRY entry, not only the method descriptor, must declare ActionWrite — assertSectionAccess refuses a request exceeding the section's declared maximum regardless of policy
+- [Phase ?]: 06-05: INV-WORLD-9 claims the transactional and single-writer properties only; world outbox envelopes are NOT projected into events_audit today (the relay stamps no App-Rendering header)
+- [Phase ?]: 06-05: seed:admin-character-administration grants read/write/retire/unretire on resource is character to admin PLAYERS; delete deliberately absent so DeleteCharacter is denied at the policy layer
 
 ### Pending Todos
 
@@ -700,7 +704,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-14T15:14:54.790Z
+Last session: 2026-08-14T20:29:37.897Z
 Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
 by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
 carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
@@ -711,7 +715,7 @@ short-circuit was declined a second consecutive phase — closing 59/59 threats,
 holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
 Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
 in the same commit. Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 06-04-PLAN.md
+Stopped at: Completed 06-05-PLAN.md (final plan of phase 06)
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z

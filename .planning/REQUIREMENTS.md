@@ -197,14 +197,14 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [x] **ADMIN-03**: An admin can **list and search characters**, view character detail, and edit
       character fields.
 
-- [ ] **ADMIN-04**: The admin character-edit surface uses an explicit **field-mask allowlist that
+- [x] **ADMIN-04**: The admin character-edit surface uses an explicit **field-mask allowlist that
       excludes roles**. Role mutation is out of scope for this milestone (PORTAL-08).
 
-- [ ] **ADMIN-05**: Admin disable/delete reuses the **same lifecycle states** as player-initiated retire;
+- [x] **ADMIN-05**: Admin disable/delete reuses the **same lifecycle states** as player-initiated retire;
       the irreversible `DeleteCharacter` path (which cascades `entity_properties` and emits a tombstone
       in one transaction) is **never wired to a player-facing button**.
 
-- [ ] **ADMIN-06**: **Every admin mutation emits an audit envelope** in the same transaction as its
+- [x] **ADMIN-06**: **Every admin mutation emits an audit envelope** in the same transaction as its
       state change, recording **before-values** and the acting **player** id (not only the
       character). The `events_audit` row is **projected** from that envelope by the asynchronous
       audit projection, which is the only writer to that table — an admin mutation MUST NOT insert
