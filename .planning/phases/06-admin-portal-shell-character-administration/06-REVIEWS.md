@@ -1247,3 +1247,787 @@ The revision is substantially better than cycle 1: nearly every cycle-1 finding 
 ## 6. Risk Assessment
 
 **MEDIUM.** Every cycle-1 HIGH that touched these plans is genuinely resolved at the mechanism level, and the new verification engineering (matched RED pair, `+layout.test.ts` on `load`, total classifier) is well aimed. The residual risk concentrates in one place: the rail-merge composition after the R-35 fix, which is a phase-goal surface (ADMIN-07's nav story and the phase's reachability of `/admin`) currently owned by no task — that is a HIGH-severity hole in an otherwise sound set. The remaining findings are broken-but-easily-scoped acceptance criteria and stale plan metadata, all plan-level fixes. Address Concern 1 and the three unsatisfiable criteria (2–4) and this drops to LOW.
+
+---
+
+# Cycle 3 — Cross-AI Review (final)
+
+Plans reviewed at commit `a686c8086`. Same lanes and method as cycles 1–2: codex-cli 0.147.0 and
+opencode 1.18.15 driving `openrouter/moonshotai/kimi-k3`, both source-grounded in the worktree,
+identical preamble per pass, large reference docs referenced by path.
+
+Plans nearly doubled between cycles (297 KB → 544 KB) because each now carries a
+`**Convergence cycle 2**` dispositions table (`C2-01`…`C2-42`). Clustering was rebalanced
+accordingly: codex to 3 passes, opencode to 8.
+
+| Pass | Plans | Result |
+| --- | --- | --- |
+| codex-A | 06-01, 06-02, 06-04 | 13,504 B · 54 citations |
+| codex-B | 06-05 | 9,530 B · 33 citations |
+| codex-C | 06-03, 06-06, 06-07, 06-08 | 11,456 B · 24 citations |
+| opencode-1 | 06-01 | 11,597 B · 27 citations |
+| opencode-2a | 06-02 | 9,234 B · 12 citations |
+| opencode-2b | 06-04 | 9,125 B · 10 citations |
+| opencode-3 | 06-05 | 10,544 B · 24 citations |
+| opencode-4a | 06-03, 06-06 | 16,907 B · 28 citations |
+| opencode-4b1 | 06-07 | 9,651 B · 11 citations |
+| opencode-4b2 | 06-08 | 7,930 B · 21 citations |
+
+Three opencode passes were killed at the 660 s lane floor and re-run as smaller clusters
+(`oc-2` → `2a`/`2b`; `oc-4b` → `4b1`/`4b2`). `oc-4b1` (06-07 alone, the **smallest** prompt at
+109 KB) timed out twice and then completed in under 4 minutes on a third attempt — confirming the
+limit is exploration depth and run-to-run variance, not prompt size. All killed passes were
+detected by byte-count and citation-count, never by the lane's own `ok` flag, which reported
+`ok: true` for a truncated narration in cycle 1.
+
+## CYCLE_SUMMARY: current_high=7 current_actionable=30
+
+## Convergence trend across three cycles
+
+| Cycle | HIGH | Of which `[REGRESSION-FROM-FIX]` |
+| --- | --- | --- |
+| 1 | 13 | — |
+| 2 | 9 | 7 |
+| 3 | 7 | 5 |
+
+**Each revision closes essentially all of the prior cycle's findings and introduces a new set at
+roughly 70–80 % of the rate.** The closure work is real — codex-C's audit confirms most `C2-nn`
+items genuinely closed, and the container-query removal closed three at once by deleting the
+mechanism rather than compensating for it. But the count declines linearly rather than converging;
+on this trajectory four to six further cycles would be required.
+
+This is a **scope signal, not a planning-quality signal**. The phase is 8 plans / 544 KB spanning
+Go, proto, SQL and Svelte with a trust boundary running through it, and the plans that keep
+regressing are precisely those whose contracts cross plan boundaries (06-04's read model, 06-06's
+shell). The two narrowest plans — 06-02 and 06-08 — came back clean at LOW this cycle.
+
+## Current HIGH Concerns
+
+1. **[REGRESSION] The detail-read path cannot return the promised twelve profile fields** (codex-A).
+2. **[REGRESSION] The detail-read dependency is scheduled by no plan** (codex-A; independently
+   opencode-2b, which traces Task 1's action and Test 9 to a handler dependency nothing provides).
+   Together, 1 and 2 mean cycle 2's "the edit Sheet has no data source" is **not** closed.
+3. **[REGRESSION] `status_filter`'s action contradicts its own acceptance criterion** (opencode-2b).
+4. **[REGRESSION] The variadic interface repair still breaks the test suite** (codex-B).
+5. **C2-25's admin no-empty-envelope guarantee is not actually enforced** (codex-B).
+6. **[REGRESSION] Five Svelte component tests are assigned filenames that run in the wrong Vitest
+   project** (codex-C): `SectionRail.test.ts`, `AdminNav.test.ts`, `CharacterTable.test.ts`,
+   `EditCharacterSheet.test.ts`, `LifecycleConfirmDialog.test.ts`.
+7. **C2-34's `<768px` drawer half remains structurally unsatisfied** (codex-C HIGH; opencode-4a
+   independently marks it "only apparently closed" — the parent drawer is a sibling of `.shell`
+   and contains only its own entries, so the admin sections have no composition path into it).
+
+**Adjudicated down from HIGH:** codex-C rated the required-`roles` migration HIGH for omitting live
+`setPlayerProfile` callers, while opencode-4a rated the same mechanism sound. Both are correct about
+different questions. Verified at source: there are **5** production call sites and 06-06 lists **4**
+— `web/src/routes/+page.ts` is missing. But `setPlayerProfile` takes a typed object parameter, so a
+required field makes the omission a `svelte-check` failure rather than a silent bug. Recorded as
+MEDIUM: loud at execution, still wrong in `files_modified`, which is what the wave-collision
+detector reads.
+
+## Current Actionable Non-HIGH Concerns
+
+~30 unresolved after dedup across passes (raw: 22 MEDIUM + 19 LOW). Recurring families:
+
+- **Rename orphans.** A stale `*AdminServer` receiver name (opencode-2b, line 422; codex-A rates
+  the same MEDIUM); Amendment 11 still naming the old proto package and carrying a now-invalid
+  placement premise (codex-C); the "superseded name" acceptance command not executable as claimed
+  (codex-A).
+- **Criteria still not executable as written.** `rg -n 'toLowerCase|normalize' web/src/lib/admin/`
+  targets a directory that does not exist at HEAD (opencode-2b); C2-32's rewritten exclusion glob
+  does not exclude (opencode-4a, marked NOT closed / regression); a proposed CSS geometry unit test
+  is unsupported by the configured test environment (codex-C).
+- **Dispositions that drifted from their implementation.** C2-22's disposition contradicts its
+  implementation action (codex-A); 06-02's artifact contract contradicts its interceptor
+  architecture (codex-A); the R-21 row still describes a superseded design (opencode-2b);
+  06-03 requires component tests without owning or naming a test file (codex-C).
+- **Seed/audit bookkeeping.** Seed census bookkeeping remains incomplete (codex-B); empty-mask
+  "no divergence" language is false (codex-B); Task 3's rollback and replay mechanisms remain
+  underspecified (codex-B).
+
+## Loop disposition
+
+Three cycles complete; the configured maximum. Convergence was **not** achieved. The decision
+carried forward is not "replan again" but whether the phase's scope should be reduced — see the
+trend section above.
+
+---
+
+## Codex Review — Cycle 3
+
+### Pass A — 06-01, 06-02, 06-04
+
+## Summary
+
+The cycle-3 revision substantially improves the fail-closed gate and registry RPC plans, and most cycle-2 findings in this pass are genuinely closed. However, execution should still pause. Plan 06-04 contains two regressions from its repairs: the detail-read path cannot obtain the promised profile fields under the specified player subject and lacks the required `world.Service` dependency, while the `status_filter` action still declares the free-text field that C2-22 supposedly replaced. There are also stale rename and interceptor artifacts plus one vacuous rename grep. Risk remains HIGH.
+
+## Cycle-2 closure audit
+
+| Finding | Verdict | Evidence |
+|---|---|---|
+| C2-01 — proto package collision | **Regressed** | The new path/package/prefix are consistently `holomush.adminportal.v1` throughout most of 06-01/02/04, correctly leaving the existing operator service at [admin.proto:6](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/api/proto/holomush/admin/v1/admin.proto:6), [admin.proto:19](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/api/proto/holomush/admin/v1/admin.proto:19), and `AdminReadStream` at [admin.proto:105](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/api/proto/holomush/admin/v1/admin.proto:105). But 06-04 still tells the executor to implement the handlers on `*AdminServer` at [06-04-PLAN.md:422](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:422), contradicting the renamed `AdminPortalServer`. |
+| C2-04 — impossible server census | **Closed** | The revised scope matches the actual three production Core/Portal construction sites: [sub_grpc.go:427](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/cmd/holomush/sub_grpc.go:427), [server.go:632](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/internal/grpc/server.go:632), and [server.go:647](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/internal/grpc/server.go:647). It deliberately excludes unrelated control/plugin/test servers. |
+| C2-11 — accidental OTel behavior change | **Closed** | 06-01 now explicitly preserves the live production option set and prohibits importing the dead constructors’ `otelgrpc` behavior. |
+| C2-13 — wave-order not-found overclaim | **Closed** | 06-01’s completion statement now explicitly limits the wave-1 result and assigns the ordinary root error boundary to 06-03. |
+| C2-12 — nonexistent protovalidate enforcement | **Closed** | 06-02 explicitly assigns blank-ID enforcement to the interceptor’s `TrimSpace` check at [06-02-PLAN.md:50](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-02-PLAN.md:50). |
+| C2-14 — vacuous roles wiring RED | **Closed** | The boundary test now requires `WebCheckSessionResponse.roles` to contain `admin` before testing ABAC denial, making harness wiring load-bearing. |
+| C2-17 — detail-read layer ambiguity | **Regressed** | The plan correctly rejects a cross-repository SQL read and specifies `world.Service.ListPropertiesByParent` at [06-04-PLAN.md:217](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:217). But it wires only `WithAdminCharacterReader` at [06-04-PLAN.md:434](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:434), with no `world.Service` dependency. Worse, the selected player caller cannot read those property rows under the shipped policy corpus; see Concern 1. |
+| C2-18 — impossible `normalized_name` projection | **Closed** | The revised plan defines the returned projection by reference to `Get`, while reserving `normalized_name` for SQL predicates/order expressions at [06-04-PLAN.md:210](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:210). |
+| C2-19 — missing pagination bounds | **Closed** | The wire cases now specify default 50, clamp above 50, and reject `page < 1` at [06-04-PLAN.md:481](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:481). |
+| C2-20 — unfalsifiable prose grep | **Closed** | The old grep is removed and replaced with a predicate-specific SQL fence, including a planted `description ILIKE` RED proof. |
+| C2-21 — incorrect RED failure description | **Closed** | The criterion now names the failed unfiltered-page assertion rather than prescribing an incidental error branch at [06-04-PLAN.md:480](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:480). |
+| C2-22 — free-text status filter | **Only apparently closed** | Truths and acceptance criteria require `AdminCharacterStatusFilter`, but the implementation action still declares `string status_filter = 4` at [06-04-PLAN.md:387](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:387). |
+| C2-23 — incorrect 13-field wording | **Closed** | The fence now explicitly enumerates `description` plus twelve `profile.*` names. |
+| C2-30 — read-only transaction snapshot | **Closed, with implementation risk** | The plan now explicitly requires `pgx.RepeatableRead` and an interleaved concurrent-write test. The test-hook mechanism remains discretionary, but the expected observation is concrete. |
+
+## Strengths
+
+- The package split is architecturally sound. The plan correctly distinguishes the new networked player-session portal from the existing UDS operator service.
+- The `SectionFromRequest` repair is strong: extraction, blank-ID refusal, `AssertSectionAccess`, context stashing, and a denying default all live in the interceptor. The handler is deliberately only a projection.
+- The handler-stubbing controls are excellent anti-vacuity checks: denial and planned-section refusal must survive an empty handler.
+- The server-construction census now measures the actual Core/Portal composition instead of unrelated gRPC servers.
+- The roles injection path is complete on paper: shared `attribute.PlayerRoleLookup`, production wiring, harness wiring, and a precondition that makes the test genuinely RED if the harness line is removed.
+- The read-query plan now correctly handles both-direction `never` ordering, LIKE escaping, beyond-end totals, stable tie-breaking, page bounds, and repeatable-read snapshot consistency.
+- The repo-wide `^Admin` fence explicitly accounts for the legitimate operator `AdminReadStream` instead of adopting the known-failing one-package rule.
+
+## Concerns
+
+### HIGH — [REGRESSION-FROM-FIX] The detail-read path cannot return the promised twelve profile fields
+
+06-04 specifies the admin’s player subject for `world.Service.ListPropertiesByParent` at [06-04-PLAN.md:240](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:240). That method performs a `property:<id>/read` ABAC decision for every row and silently drops denied properties at [service.go:1774](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/internal/world/service.go:1774) and [service.go:1797](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/internal/world/service.go:1797).
+
+The shipped property-read policies cover character and viewer principals, not player principals. The only player policy relevant here is `seed:admin-section-access`, scoped to `admin_section`, not `property`. Consequently, the chosen caller passes the portal interceptor but receives an empty property slice. The acceptance test demanding all twelve governed values is unsatisfiable against the tree.
+
+This also directly contradicts the claim that admin reads perform “no second ABAC check” at [06-04-PLAN.md:427](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:427).
+
+### HIGH — [REGRESSION-FROM-FIX] The detail-read dependency is not wired
+
+The detail assembly requires `world.Service.ListPropertiesByParent`, but `AdminPortalServer` gains only `WithAdminCharacterReader`, whose interface carries the two list/search methods plus `Get` at [06-04-PLAN.md:237](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:237) and [06-04-PLAN.md:434](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:434).
+
+No option or narrow interface supplies `ListPropertiesByParent`. The executor must invent a second dependency or violate the decided layering.
+
+### MEDIUM — C2-22’s disposition contradicts the implementation action
+
+The disposition says the string filter became a closed enum, and acceptance rejects any `string status_filter`. The action still instructs:
+
+```proto
+string status_filter = 4
+```
+
+at [06-04-PLAN.md:387](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:387). This is an explicit contradictory instruction, not merely stale explanatory prose.
+
+### MEDIUM — 06-02’s artifact contract contradicts its interceptor architecture
+
+The plan correctly says `AdminGetSection` calls no gate helper at [06-02-PLAN.md:55](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-02-PLAN.md:55). But its artifact and key-link metadata require `AssertSectionAccess` inside `internal/grpc/admin_sections.go` at [06-02-PLAN.md:61](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-02-PLAN.md:61) and [06-02-PLAN.md:70](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-02-PLAN.md:70).
+
+An executor satisfying the artifact checker would reintroduce the exact per-handler exception R-08/C2 fixed.
+
+### MEDIUM — [REGRESSION-FROM-FIX] One old receiver name survives the proto rename
+
+06-04 names the handlers as methods on `*AdminServer` at [06-04-PLAN.md:422](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md:422). Every other revised location uses `*AdminPortalServer`. The C2-01 disposition’s claim that the receiver rename propagated everywhere is therefore false.
+
+### MEDIUM — The “superseded name” acceptance command is not executable as claimed
+
+At [06-01-PLAN.md:628](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-01-PLAN.md:628), the raw `rg` intentionally searches directories containing allowed operator references and then says it “returns zero matches outside” an exception list. The command performs no exclusion or post-filtering, so its exit code is already zero at HEAD and remains zero if a forbidden reference is added elsewhere.
+
+`git diff --exit-code api/proto/holomush/admin/` protects only the operator proto directory. It does not make the repository-wide rename grep non-vacuous.
+
+### LOW — The proto walker reuse instruction is internally imprecise
+
+06-01 says to reuse `protoServices` while collecting package/RPC pairs. The existing helper only returns package-qualified service names and does not expose file contents or RPCs; see [grpc_api_coverage_test.go:115](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/test/meta/grpc_api_coverage_test.go:115). A shared file-walker helper would need to be extracted or extended. This is implementable, but “do not re-spell the walker” is not satisfied by the current helper API.
+
+## Suggestions
+
+- Resolve the admin detail-read authorization model before execution. Either add a deliberate player-admin property-read policy with adversarial tests, or define a narrow trusted repository projection justified by the already-passed `admin_section:characters` gate. Do not use a path that silently filters fields needed for editing.
+- Add and wire an explicit detail-reader dependency to `AdminPortalServer`; its interface should expose exactly the chosen detail-read operation.
+- Change `string status_filter = 4` to `AdminCharacterStatusFilter status_filter = 4`.
+- Replace `*AdminServer` with `*AdminPortalServer`.
+- Remove the stale `AssertSectionAccess` artifact/key-link requirements from 06-02 and point them to `internal/grpc/admin_interceptor.go`.
+- Make the rename fence executable: use a scoped allowlist test or filter allowed paths before asserting the remaining result set is empty.
+- Extract a reusable proto-file walker if the new placement test must share traversal logic.
+
+## Risk Assessment
+
+**HIGH.** The fail-closed gate itself is now well designed, and most cycle-2 repairs are real. But the character detail read—the data source that prevents destructive blank overwrites—cannot work under the specified caller and has no wired dependency. Combined with contradictory proto and handler instructions, the plans remain unsafe to execute without another targeted amendment.
+
+
+### Pass B — 06-05
+
+## Summary
+
+Plan 06-05 substantially improves the write design and genuinely closes most cycle-2 findings, especially the mixed-mask transaction, taxonomy ratchet, descriptor-based role fence, and empty-mask contract. It is not convergence-ready, however. The variadic interface repair still leaves an existing test double uncompilable, the new seed policy leaves a third exhaustive count assertion unscheduled, and the “zero changed attributes emits no admin envelope” guarantee is not implementable reliably through the proposed handler precheck. These are regressions or incomplete repairs rather than editorial issues.
+
+## Cycle-2 closure audit
+
+- **C2-05 — regressed.** The production interface is now scheduled for the variadic signature at `06-05-PLAN.md:521-539`, but the existing `recordingWorldMutator` implementation remains non-variadic at `internal/grpc/characteraccess_write_test.go:87`. That file is absent from both `files_modified` (`06-05-PLAN.md:7-32`) and Task 2’s file list (`:343`). Updating only `characterAccessWorldMutator` makes every test using that double fail to compile. Running `task test -- ./internal/grpc/` will discover the problem, but no task authorizes the required edit.
+
+- **C2-06 — genuinely closed on the normative behavior, but its rationale overclaims parity.** The plan now requires empty-mask success after authorization, existence, and version checks (`06-05-PLAN.md:487-497`), with explicit non-vacuous tests at `:706-707`. However, it says this is the “same answer as the player facade” (`:499`), while the shipped player facade explicitly accepts a stale version (`internal/grpc/characteraccess_write.go:318-330`) and the new admin test requires `Aborted` for the same stale empty-mask case (`06-05-PLAN.md:707`). The required admin behavior is coherent; the claimed absence of any divergence is not.
+
+- **C2-24 — only apparently closed.** The plan schedules the total count and name inventory (`06-05-PLAN.md:621-635`) but misses `TestSeedPoliciesEffectDistribution`, which independently asserts exactly 54 permit policies at `internal/access/policy/seed_test.go:81-95`. The added policy is a permit, so that test must become 55. The proposed census grep omits `permitCount`, and the acceptance criterion checks only `Len` and `expectedNames` (`06-05-PLAN.md:712`).
+
+- **C2-25 — only apparently closed.** Keeping the shared builder permissive is correct (`06-05-PLAN.md:249-255`), but the relocated admin-handler guarantee is not concretely designed. Existing world logic deliberately rewrites equal-valued profile rows, produces an empty `changed` list, bumps the version, and emits an envelope (`internal/world/service.go:1123-1134`, `:1237-1246`). The plan says a handler precheck prevents this (`06-05-PLAN.md:249-250`) but supplies no corresponding behavioral test for equal-valued `profile.*` fields; only same-value `description` is tested (`:711`). A pre-transaction handler comparison also cannot make the guarantee race-safe.
+
+- **C2-26 — genuinely closed.** The plan explicitly computes `descriptionChanged` before the empty-partition return and makes it defeat that return (`06-05-PLAN.md:547-564`). Both changed and equal-valued description cases have load-bearing acceptance criteria (`:710-711`).
+
+- **C2-27 — genuinely closed.** The misleading `description|pronouns|profile\.` grep is narrowed and its limited purpose explained (`06-05-PLAN.md:332`).
+
+- **C2-28 — genuinely closed.** The always-matching wildcard grep is replaced by three behavioral invalid-path cases (`06-05-PLAN.md:699`).
+
+- **C2-29 — genuinely closed.** The production allowlist is correctly limited to `internal/eventbus/audit/projection.go` (`06-05-PLAN.md:768-780`), matching the executed repository grep, whose only non-test Go hit is `internal/eventbus/audit/projection.go:376`.
+
+- **C2-30 — out of this plan’s scope.** Correctly delegated to 06-04.
+
+- **C2-31 — genuinely closed in the tasks and acceptance criteria.** The builder test now asserts exact serialized keys and reflected JSON tags and is mutation-proven (`06-05-PLAN.md:222-248`, `:334-335`). The end-to-end test carries the actual prose sentinels. The stale must-have at `:47` should still be corrected because it attributes the value test to the builder-level test.
+
+## Strengths
+
+- The combined description/profile write is grounded in the actual mutation seam. `worldMutator.updateCharacterProfileAttributes` already performs one guarded character update and all property writes inside one `mutate` transaction (`internal/world/mutator.go:323-363`), making the one-version/one-envelope design feasible.
+
+- The plan correctly identifies the description-only early-return hazard in `internal/world/service.go:1228-1236` and gives precise ordering rules rather than leaving implementation judgment open.
+
+- The eight-part taxonomy change is explicit and individually mutation-tested (`06-05-PLAN.md:260-306`, `:325-333`). This is a strong non-vacuous repair of the earlier partial ratchet.
+
+- The role-bearing-field guard walks generated descriptors recursively, includes cycle protection, requires a non-empty inspected set, and is proven RED with a planted field (`06-05-PLAN.md:669-686`).
+
+- The allowlist verification uses symmetric set equality and separately proves missing and extra directions (`06-05-PLAN.md:662-668`, `:695`).
+
+- The audit SQL fence is scoped to production Go, enumerates matching files rather than lines, and includes both positive and negative mutation demonstrations (`06-05-PLAN.md:768-791`, `:812-814`).
+
+## Concerns
+
+- **HIGH — [REGRESSION-FROM-FIX] Variadic interface repair still breaks the test suite.** `recordingWorldMutator.UpdateCharacterProfileAttributes` at `internal/grpc/characteraccess_write_test.go:87` no longer satisfies the modified interface. The file must be in Task 2 and its mock must accept `opts ...world.ProfileUpdateOption`, ideally asserting that character-access callers supply none.
+
+- **HIGH — C2-25’s admin no-empty-envelope guarantee is not actually enforced.** The plan’s proposed handler precheck cannot reliably establish “zero changed attributes” for profile fields under concurrency, while the domain method intentionally emits an empty-changed envelope for equal-valued row rewrites (`internal/world/service.go:1123-1134`). No acceptance criterion sends a non-empty mask containing only equal-valued `profile.*` fields. Either:
+
+  - withdraw the admin-only no-envelope guarantee for equal-valued non-empty masks, or
+  - add a typed domain option that suppresses equal-valued property rewrites inside the authoritative transaction, with a race-aware test.
+
+- **MEDIUM — [REGRESSION-FROM-FIX] Seed census bookkeeping remains incomplete.** Adding a permit policy makes `internal/access/policy/seed_test.go:94` fail. Update the action, file expectations, grep, and acceptance criteria to cover `permitCount`/`forbidCount`, not only total length and names.
+
+- **MEDIUM — Empty-mask “no divergence” language is false.** The admin path requires stale-version rejection (`06-05-PLAN.md:707`); the player path intentionally returns success for a stale empty mask (`internal/grpc/characteraccess_write.go:318-330`). State the remaining divergence explicitly and ground it in the admin contract instead of claiming complete parity.
+
+- **MEDIUM — Task 3’s rollback and replay mechanisms remain underspecified.** The plan asks to “force” an RPC mutation rollback and replay the same envelope twice, but names no injection seam or projection API. The existing rollback precedent manually duplicates an outbox intent within a real transaction (`test/integration/world/character_retire_atomicity_test.go:146-175`), which does not exercise the admin RPC. Specify whether the new proof extends that precedent, adds a fault-injectable harness option, or drives the projection through NATS/DLQ replay.
+
+- **LOW — stale plan metadata.** The must-have at `06-05-PLAN.md:47` still describes the builder-level test as checking old/new values, contradicting the corrected structural test at `:222-248`. The artifacts section also names the obsolete test `TestBuildCharacterProfileUpdatePayloadCarriesNamesNotValues`.
+
+- **LOW — malformed review-disposition markup.** `06-05-PLAN.md:916-918` closes `</review_dispositions>` before the R-04 row and then closes it again. This may break plan tooling or leave R-04 outside the table.
+
+## Suggestions
+
+- Add `internal/grpc/characteraccess_write_test.go` to `files_modified` and Task 2, and update `recordingWorldMutator` to the variadic signature.
+
+- Expand the seed bookkeeping to `55` permits at `internal/access/policy/seed_test.go:94`; include `permitCount|forbidCount` in the pre-edit census search.
+
+- Decide the equal-valued profile-field behavior explicitly. Add a test that sends a non-empty mask with stored-identical `profile.biography` and asserts the chosen version/envelope result.
+
+- Specify a concrete Task 3 fault and replay driver, citing the exact harness option or existing integration pattern it will use.
+
+- Correct the stale must-have, artifact name, empty-mask parity prose, and malformed closing tag.
+
+## Risk Assessment
+
+**HIGH.** The core architecture is sound and most prior findings are genuinely repaired, but the current plan still guarantees an immediate compile failure, an authorization-test failure, and a transaction-sensitive audit property whose proposed enforcement is incomplete. Those issues should be resolved before execution.
+
+
+### Pass C — 06-03, 06-06, 06-07, 06-08
+
+## Summary
+
+Cycle 3 closes most of the cycle-2 defects in these four plans, especially the container-query regression, Sheet portal geometry, byte-count census, row-overlay geometry, and narrowed invariant binding. However, the plans are not converged: one cycle-2 finding remains only apparently closed, the required `roles` migration misses live call sites, every newly named Svelte component test uses the wrong filename convention for this repository’s Vitest split, and an amendment retains stale `holomush.admin.v1` placement language after the proto rename. Risk remains HIGH.
+
+## Cycle-2 closure audit
+
+### Genuinely closed
+
+- **C2-07:** Closed. 06-03 now derives unresolved state from `isPlayerAuthenticated`, matching the shipped initialization and update behavior at [authStore.ts](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/src/lib/stores/authStore.ts:24). Its three-state render test is materially non-vacuous. See [06-03-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-03-PLAN.md:238).
+- **C2-15:** Closed. The amendment criterion now permits a `D-NN` or a named plan finding, resolving the internal contradiction at [06-03-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-03-PLAN.md:471).
+- **C2-16:** Closed. The proposed invariant is narrowed to filesystem uniqueness and explicitly disclaims behavioral proof at [06-03-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-03-PLAN.md:286).
+- **C2-02 / C2-08 / C2-42:** Closed. The authored container is removed, responsive behavior uses the same viewport-query mechanism as the shipped rail, and the Sheet remains body-portalled with `84vh`. The live fixed descendants that motivated the correction remain at [Composer.svelte](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/src/lib/components/terminal/Composer.svelte:190) and [CommandPalette.svelte](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/src/lib/components/terminal/CommandPalette.svelte:125).
+- **C2-32, C2-33, C2-35, C2-36:** Closed. The denial grep excludes generated bindings, artifact metadata matches the revised design, `git diff` is no longer misdescribed, and awaiting is covered behaviorally.
+- **C2-09 / C2-37 / C2-38:** Closed. The plans replace the broken `rg -c … totals` checks with file enumeration/counting and narrow the grab-handle check.
+- **C2-10:** Closed in design. The positioned ancestor is now the `<tr>`, and the browser proof explicitly taps a non-Name cell at [06-08-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-08-PLAN.md:520).
+- **C2-39 / C2-40 / C2-41:** Closed or honestly dispositioned. Page-level versus chrome-level opacity is explicitly bounded; over-cap values remain sendable; stale container-reference artifacts are removed.
+
+### Only apparently closed
+
+- **C2-34:** The 768–1023px path is repaired, but the `<768px` drawer half still lacks a realizable composition path. The parent drawer is a sibling of `.shell` and contains only its own `SectionRail` at [authed +layout.svelte](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/src/routes/(authed)/+layout.svelte:29). The plan says an `AdminNav` “mounted from the admin layout” populates that parent drawer at [06-06-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-06-PLAN.md:266), but specifies no slot, portal, shared store, or other DOM/data path that can put child-layout markup inside the parent Sheet.
+- **C2-03:** The Admin rail entry itself now has a concrete owner, but the associated claim that all `setPlayerProfile` callers are covered is false; see Concern 2.
+
+## Strengths
+
+- The viewport-query correction is well grounded in the live rail rule at [SectionRail.svelte](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/src/lib/components/shell/SectionRail.svelte:114).
+- The Sheet plan correctly distinguishes the Svelte `side` prop from CSS geometry and keeps the generated body portal intact; the underlying contract is visible at [sheet-content.svelte](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/src/lib/components/ui/sheet/sheet-content.svelte:20).
+- The 06-08 phone E2E now observes both attribute state and physical geometry, including topbar coverage, rather than inferring either from source.
+- The row-overlay repair adds the correct browser-level negative control: tapping a non-primary cell.
+- Acceptance checks no longer rely on the known-broken `rg -c … totals exactly N` formulation.
+- The error-boundary invariant now binds only what its filesystem census can prove.
+- The long/short byte-cap split is consistent across unit and E2E specifications.
+
+## Concerns
+
+### HIGH — [REGRESSION-FROM-FIX] Svelte component tests are assigned filenames that run in the wrong Vitest project
+
+The repository deliberately routes only `*.svelte.test.ts` files through the client project with browser resolution; ordinary `*.test.ts` files run in the server project. See [vite.config.ts](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/vite.config.ts:12).
+
+The plans instead name:
+
+- `SectionRail.test.ts` and `AdminNav.test.ts` at [06-06-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-06-PLAN.md:15)
+- `CharacterTable.test.ts` at [06-07-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-07-PLAN.md:12)
+- `EditCharacterSheet.test.ts` and `LifecycleConfirmDialog.test.ts` at [06-08-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-08-PLAN.md:9)
+
+Existing component tests consistently use names such as `SectionRail.svelte.test.ts`, `ProfileSection.svelte.test.ts`, and `CommandPalette.svelte.test.ts`. As written, the new mount/render/focus tests do not receive the project configuration explicitly created for Svelte components. Rename every component test artifact and every reference to `*.svelte.test.ts`.
+
+### HIGH — [REGRESSION-FROM-FIX] Required `roles` migration omits live `setPlayerProfile` callers
+
+06-06 claims every call site is updated and that omission becomes a `svelte-check` failure at [06-06-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-06-PLAN.md:276). The live tree has additional callers:
+
+- Root landing load: [+page.ts](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/src/routes/+page.ts:41)
+- Store tests: [authStore.test.ts](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/src/lib/stores/authStore.test.ts:15)
+
+Neither file appears in 06-06’s `files_modified` or action list. Making `roles` required therefore intentionally breaks a production route and likely the store tests. The test should also assert that `roles` is stored and reset.
+
+### HIGH — C2-34’s mobile drawer remains structurally unsatisfied
+
+At phone width, the plan sets both persistent nav columns to zero and promises one combined parent drawer. But the child admin layout cannot inject its `AdminNav` into the parent Sheet merely by mounting a drawer variant in its own subtree. The live parent Sheet content is closed over its own `SectionRail` at [authed +layout.svelte](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/src/routes/(authed)/+layout.svelte:31).
+
+The 375px E2E checks widths and `.mobilebar`, but does not require opening the hamburger drawer and navigating between two admin sections. Thus it can pass while the promised Admin group is absent. This needs an explicit composition seam and an E2E navigation assertion inside the opened drawer.
+
+### MEDIUM — [REGRESSION-FROM-FIX] Amendment 11 retains the old proto package and a now-invalid placement premise
+
+06-03 amendment 11 still describes the fence and interceptor in terms of `holomush.admin.v1` at [06-03-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-03-PLAN.md:419). That is the operator control-plane package, which legitimately contains `AdminReadStream`; it is not the portal prefix.
+
+The amendment must name `holomush.adminportal.v1.AdminPortalService` and avoid proposing a repo-wide “every `^Admin` RPC belongs to the portal” rule. Otherwise it reintroduces exactly the rename collision this cycle was intended to settle.
+
+### MEDIUM — 06-03 requires component tests without owning or naming a test file
+
+Task 2 mandates three Vitest render cases for `+error.svelte` at [06-03-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-03-PLAN.md:320), but its files list includes only the component, the Go census, and invariant documents at [06-03-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-03-PLAN.md:186). No test artifact is listed anywhere.
+
+Add a concrete `web/src/routes/+error.svelte.test.ts` artifact to frontmatter, task ownership, verification, and phase artifacts.
+
+### MEDIUM — The proposed CSS geometry unit test is not supported by the configured test environment
+
+06-07 requires `getComputedStyle` to prove media-query-dependent `<tr>`/`<td>` positioning at [06-07-PLAN.md](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/.planning/phases/06-admin-portal-shell-character-administration/06-07-PLAN.md:295). Both Vitest projects use `jsdom`, not a layout browser, at [vite.config.ts](/Volumes/Code/github.com/holomush/.worktrees/v013-phase-03/web/vite.config.ts:10). jsdom does not perform real viewport layout or reliably evaluate responsive computed geometry.
+
+The Playwright non-Name-cell tap is the valid proof. Keep a source/selector unit assertion if useful, but do not claim jsdom computed styles prove the media-band geometry.
+
+## Suggestions
+
+- Rename all Svelte component tests to `*.svelte.test.ts`.
+- Add `web/src/routes/+page.ts` and `web/src/lib/stores/authStore.test.ts` to 06-06’s role-threading work.
+- Define a real mobile-drawer composition seam, then assert that opening the 375px hamburger shows both `Workspace` and `Admin` groups and permits navigation between two admin sections.
+- Rewrite amendment 11 around the `holomush.adminportal.v1` service/package and explicitly exempt the existing operator package.
+- Add the missing root error-boundary component-test artifact.
+- Move responsive geometry assertions that require layout to Playwright.
+
+## Risk Assessment
+
+**HIGH.** The main container/portal regressions are repaired, but three execution blockers remain: component tests are routed to the wrong Vitest project, the required `roles` signature change misses live callers, and the phone drawer still has no structural path for admin sections. These are implementation-breaking rather than editorial defects, and two are regressions introduced by cycle-3 fixes.
+
+
+---
+
+## OpenCode Review — Cycle 3
+
+_Model: `openrouter/moonshotai/kimi-k3`._
+
+
+### Pass 1 — 06-01
+
+I'll verify the plan's claims against the tree. Starting with the load-bearing source claims.
+Now checking the remaining claims: REVIEWS.md C2 findings for 06-01, proto fence red-at-HEAD check, and a few cross-references.
+Verification complete. Writing the review.
+
+---
+
+# Cycle 3 Review — Pass 1 of 4 — 06-01-PLAN.md (fail-closed gate tracer)
+
+## 1. Summary
+
+This revision is, in large part, genuinely source-grounded and substantially improved: the package collision (C2-01) is closed by a real rename to `holomush.adminportal.v1` with the pre-existing UDS-served operator service correctly characterized; the impossible 43-site `grpc.NewServer` criterion (C2-04) is replaced by one I executed and confirmed satisfiable (3 lines at HEAD → 1 after refactor); the otelgrpc drift (C2-11) is corrected against the live composition at `sub_grpc.go:427-440`. **However, the C2-01 fix introduces a new unsatisfiable acceptance criterion of exactly the defect family this pass exists to catch**: the "superseded name" repo-wide grep includes the alternation `adminv1\.`, which matches ~20 files at HEAD that are not in its allowlist (`internal/eventbus/crypto/dek/rekey.go:93`, `internal/testsupport/holomushtest/server.go:257,295,307,312,333`, `internal/admin/auth/handler.go`, `internal/admin/readstream/handler.go`, `internal/admin/approval/handler.go`, `cmd/holomush/cmd_admin_read_stream.go`, `cmd_admin_approve.go`, plus e2e/unit test files). The criterion is red at HEAD and red after a correct implementation — the same shape as C2-04, reintroduced by the C2-01 repair.
+
+## 2. Cycle-2 closure audit (06-01's owned findings)
+
+| Ref | Verdict | Evidence |
+|---|---|---|
+| **C2-01** (package collision) | **Closed, with one regression (see Concerns H1).** | `admin.proto:6` (`package holomush.admin.v1`), `:19` (`service AdminService`), `:105` (`rpc AdminReadStream`) all verified. The operator service is indeed UDS-only (`internal/admin/socket/`, `cmd/holomush/admin_client.go` dial site). The rename propagates coherently: interceptor prefix `/holomush.adminportal.v1.`, fence's two-package allowed set, existence checks (`ls -d`, `rg '^service '`) before directory creation, `git diff --exit-code api/proto/holomush/admin/`. The fence is green at HEAD — I ran the underlying search: `rg -n 'rpc Admin' api/proto/` returns exactly one hit, `admin.proto:105`, covered by the allowed set. The disposition's correction of the reviewer's "prefix gate would cover TOTP reset" claim is **right**: that service never traverses the core server. |
+| **C2-04** (impossible server-count criterion) | **Genuinely closed.** | I executed the replacement: `rg -n 'grpc\.NewServer\(' cmd internal/grpc -g '!*_test.go'` prints exactly 3 lines at HEAD (`sub_grpc.go:427`, `server.go:632`, `:647`) and would print 1 after the refactor. The 43 total across `cmd internal test` is confirmed (I counted 43). Out-of-scope trees named explicitly. Zero callers of the two dead constructors verified — the only `NewGRPCServer` hits elsewhere are `internal/control` and `internal/world`'s own unrelated constructors. RED-at-2 demonstration is real. |
+| **C2-11** (otelgrpc StatsHandler) | **Genuinely closed.** | Verified: `server.go:637,655` carry `grpc.StatsHandler(otelgrpc.NewServerHandler())`; the live site `sub_grpc.go:427-440` carries creds, keepalive (`MinTime: 10s, PermitWithoutStream: true`), the three limits, and `grpcProxy.Handler()` — no StatsHandler. The plan now *drops* the option with a doc-comment rationale and a zero-match grep. The truth statement was corrected, not just the criterion. |
+| **C2-13** (wave-ordering `+error.svelte`) | **Closed as intended** (documentation, not re-wave). The `<done>` note explicitly disclaims indistinguishability at wave 1. Acceptable reasoning. |
+
+Also verified against the tree: `AssertSectionAccess` at `gate.go:234` with steps 1–4 at `:103-167`, static `denyAdminSection()` at `:179-181`, the pre-D-99 "redundancy is the point" comment at `:219-228` (the two-part removal grep is sound); seven-entry registry at `registry.go:102-116` with `validateEntries` re-derivation at `:179-193`; `ValidateAtBoot` at `boot.go:34`; type-scoped `seed:admin-section-access` DSL at `seed.go:987` with the `ResourceExact`-nil pin at `seed_profile_visibility_test.go:929-957`; `AdminSectionResource` empty-panic at `prefix.go:294-297`; `resolvePlayerSessionWithRepo` at `auth_handlers.go:174-180`; the five-part proxy shape and `headerInjectSessionToken` at `character_handlers.go:29-57`; `PolicyEvaluator`/`ActionRead`/`ActionWrite` all exist in `internal/admin/section`; `findRepoRoot` sole definition at `meta_helpers_test.go:41`; `protoPackageDecl`/`protoServiceDecl` reusable at `grpc_api_coverage_test.go:25-34`; harness's `coreServer` "no network transport" at `harness.go:163-164`; `CoreServerOption` at `server.go:242`; `WebCheckSessionResponse` at `web.proto:802-822`; `errutil.AssertErrorCode` is `oops.AsOops + Code()` at `pkg/errutil/testing.go:15-20`.
+
+## 3. Strengths
+
+- **The admission/access split is the correct reading of the tree.** `gate.go`'s step 1 is cleanly extractable (its body is self-contained, `:103-128`), and the plan's warning that the enumeration filter must use `AssertSectionAdmission` rather than `AssertSectionAccess` is load-bearing and true — the availability step at `gate.go:158-167` would refuse all six planned sections with `SECTION_NOT_IMPLEMENTED`. The paired criteria (comment-filtered `AssertSectionAccess` grep + seven-entry positive control) pin it from both sides.
+- **Test 5's out-of-prefix fixture** uses `/holomush.admin.v1.AdminService/Status` — a real method on the real operator service — so the pass-through arm also pins that the portal gate does not reach the break-glass surface. Thoughtful.
+- **The probe-immateriality test (Test 7)** is well-founded: I verified the policy is resource-type-scoped with `ResourceExact` nil and a `NotContains("admin_section:")` pin, so the "verdict identical across all seven ids" property holds today and the test's stated RED trigger is real.
+- **Stub-the-handler-empty criterion** (denial survives `AdminListSections` returning an empty response) is a genuinely discriminating guard against the "empty 200" degradation, and it's stated as an execute-and-revert demonstration rather than prose.
+- **The proto placement fence** reuses `findRepoRoot`/`protoPackageDecl` rather than re-spelling walkers, requires `require.NotEmpty` on collected pairs, prints per-entry reasons, and — critically — the plan demands it be run **green at HEAD first**, which I confirmed it would be.
+- The single-wrap assertion via `errors.Unwrap` chain depth (with planted-double-wrap RED demonstration) is the correct assertable form of the property, given `Code()` returns the deepest code.
+
+## 4. Concerns
+
+**H1 — HIGH [REGRESSION-FROM-FIX]: the "superseded name" criterion is unsatisfiable.** The criterion requires
+`rg -n 'holomush\.admin\.v1\.AdminService|RegisterAdminServiceServer|adminv1\.' cmd internal api/proto/holomush/adminportal api/proto/holomush/web web/src`
+to return zero matches outside an allowlist of `internal/admin/socket/`, `cmd/holomush/admin_client.go`, `cmd_admin_totp_reset.go`, `cmd_crypto_rekey.go`, and `api/proto/holomush/admin/`. I ran the underlying search: `adminv1\.` matches at HEAD in at least `internal/eventbus/crypto/dek/rekey.go:93`, `internal/testsupport/holomushtest/server.go:257,295,307,312,333`, `internal/admin/auth/handler.go` + `reset_handler.go` + tests, `internal/admin/readstream/handler.go` + support files, `internal/admin/approval/handler.go` + tests, `cmd/holomush/cmd_admin_read_stream.go`, `cmd/holomush/cmd_admin_approve.go`, and six `*_test.go`/e2e files — none in the allowlist, all legitimate consumers of the shipped operator client. This is precisely the C2-04 defect shape (a fence red before the phase adds anything), introduced by the C2-01 repair. Fix: either enumerate the full existing-consumer set (fragile), or — better — drop the `adminv1\.` alternative and assert only (a) zero matches for `holomush\.admin\.v1\.AdminService` and `RegisterAdminServiceServer` (both genuinely absent repo-wide today), and (b) `git diff --exit-code api/proto/holomush/admin/`, which is the actual "we didn't touch the operator surface" property.
+
+**M1 — MEDIUM: `must_haves.artifacts` self-contradiction on `admin_service.go`.** The artifact entry declares `contains: "AssertSectionAccess"`, while the acceptance criterion requires `rg -v '^\s*//' internal/grpc/admin_service.go | rg -q 'AssertSectionAccess'` to exit non-zero. It is satisfiable only if the string appears in a doc comment — which the criterion's own rationale anticipates — but an executor reading `contains` literally may inline a call and then fight the criterion. One-word fix: `contains: "AssertSectionAdmission"`.
+
+**M2 — MEDIUM: the `EnumeratesAllSections` descriptor carries `SectionID: ""` and the plan's own sentinel validation lives in a new `validateAdminDescriptors()` wired into `ValidateAtBoot` — but no acceptance criterion or test asserts that wiring.** `validateEntries` (registry.go:179-193) validates registry entries, not the method table; if the executor writes `validateAdminDescriptors` but forgets to call it from `ValidateAtBoot`, nothing fails. Add one test: a descriptor entry with empty `SectionID` and no flag makes `ValidateAtBoot` return `ADMIN_SECTION_REGISTRY_INVALID` (or the new code) — the mutate-and-restore technique already used elsewhere in this plan.
+
+**L1 — LOW: `sub_grpc.go` line citations drift.** The plan cites `policyEngine` at `:354` and `authPlayerSessionRepo` at `:359`; both are actually in the `:352-360` block (`policyEngine` is at `:353` by my read). Immaterial to execution, but this plan's own standard is path:line precision.
+
+**L2 — LOW: Test 1c / single-wrap criterion** instructs demonstrating RED by "temporarily wrapping the refusal in a second `oops.Code(...)`" — fine — but the plan doesn't say where the demonstration is recorded. Minor; the pattern is consistent with other execute-and-revert criteria here.
+
+## 5. Suggestions
+
+1. Rewrite the H1 criterion as two greps (`holomush\.admin\.v1\.AdminService`, `RegisterAdminServiceServer`, both repo-wide zero-match) plus the `git diff --exit-code` on the operator proto tree, and drop `adminv1\.` entirely.
+2. Add the M2 `ValidateAtBoot`-wiring test to Task 2's `descriptor_test.go` (one mutate-and-restore case).
+3. Change the artifact `contains` for `admin_service.go` to `AssertSectionAdmission` (M1).
+4. Consider adding to Task 2's fence a second planted-violation direction: an `^Admin` RPC planted in `holomush.web.v1` (not just `characteraccess.proto`) — cheap, and it pins that the fence is not accidentally scoped to non-web packages.
+
+## 6. Risk Assessment
+
+**MEDIUM.** The structural content of this plan is verified accurate against the tree at an unusually high rate — every load-bearing `path:line` I checked (roughly 25) resolved, all four owned C2 dispositions are genuinely closed, and the two flagship criteria (server-count, proto fence) are executed-and-confirmed satisfiable with real RED directions. The one HIGH is a single acceptance criterion that no correct implementation can pass; left unfixed it either blocks execution at Task 1 verification or trains the executor to waive criteria — the exact failure mode this phase's verification-integrity rules exist to prevent. It is a one-criterion repair, not a structural problem, which is why this is MEDIUM rather than HIGH.
+
+### Pass 2a — 06-02
+
+I'll ground this review in the tree. Let me verify the key claims.
+# Cross-AI Plan Review — Cycle 3 — 06-02 (Section Registry RPCs)
+
+## 1. Summary
+
+Plan 06-02 is source-accurate in every claim I checked. All three of its cycle-2 dispositions (C2-01, C2-12, C2-14) are genuinely closed in the plan text, and the factual premises those dispositions rest on hold against the tree at `a686c8086`: `protovalidate` appears nowhere under `internal/grpc`, `internal/web`, or `cmd` (exit 1, confirming C2-12's premise); `AssertSectionAccess` at `gate.go:234` returns `(Section, error)`, refuses an empty `sectionID` before evaluation (`gate.go:90-92`), and returns `SECTION_NOT_IMPLEMENTED` only after the gate permits; `CheckPlayerSessionResponse` (`core.proto:969`) carries no roles field today; `PostgresRoleStore.PlayerRoles` (`role_store.go:108`) is deliberately off the `RoleStore` interface and pinned by `TestRoleStoreInterfaceMethodSetIsUnchangedByPlayerRoles` (`role_store_player_roles_test.go:32`); the shared `attribute.PlayerRoleLookup` seam type exists at `viewer.go:35` with the wiring precedent at `subsystem.go:135`; both composition roots call `NewCoreServer` exactly where the plan says (`sub_grpc.go:811`, `harness.go:864`). The acceptance-criterion greps I executed behave as the plan claims. I found no regression from the cycle-3 structural changes in this plan's scope — the proto rename is applied consistently, and this backend plan touches none of the CSS/container-query surface. Concerns are few and low-severity.
+
+## 2. Cycle-2 closure audit
+
+**C2-01 (proto package collision) — genuinely closed.** Every proto path, package, service name, import alias, and receiver in the plan reads `holomush.adminportal.v1` / `AdminPortalService` / `adminportalv1` / `AdminPortalServer`. The only occurrence of the old name is inside the dispositions table itself, explaining the rename. No orphan references. The plan also correctly does **not** introduce any repo-wide "^Admin RPC lives in the portal package" guard, so the `AdminReadStream` trap (`admin.proto:105`) is not triggered by anything here.
+
+**C2-12 (buf.validate mechanism mis-attribution) — genuinely closed, and enforced.** Test 6 now asserts the refusal comes from the interceptor's `TrimSpace` check producing `ADMIN_SECTION_NO_SECTION_ID`, driven with a handler that fails if invoked — not from `buf.validate`. The plan explicitly names the blast radius of the wrong fix (a global validator interceptor changing every existing annotation's runtime behavior repo-wide) and keeps the annotation as documentation only. This is enforced by an executable test, not just prose.
+
+**C2-14 (vacuous harness-wiring RED) — genuinely closed.** Test 4's behavior block now specifies `require.Contains(t, resp.GetRoles(), "admin")` as a setup precondition *before* the denial assertion, and the criterion is rewritten so the demonstrated RED comes from that precondition failing when the harness `WithPlayerRoleLookup` line is removed. The reasoning (no rail, no drawing, denial path never consults `roles`) is correct — the old phrasing described a mechanism the test does not contain, and the new one is real.
+
+No regressions detected among the three.
+
+## 3. Strengths
+
+- **The gate-ordering claims are exactly right.** `gate.go` step 1 (`engine.Evaluate`) precedes step 2 (`lookup`), step 4 returns `SECTION_NOT_IMPLEMENTED` after the gate, and the empty-id guard at `gate.go:90-92` fires before evaluation — precisely as the plan's read_first and Test-6 mechanism describe. The plan's warning that a `SectionFromRequest` descriptor falling through to the fixed arm would make *every* `AdminGetSection` fail with `ADMIN_SECTION_REQUEST_MALFORMED` is correct against the source.
+- **The fail-closed third arm is the right shape.** Typed `GetSectionId()` assertion → `ADMIN_SECTION_NO_SECTION_ID` → `AssertSectionAccess` → stash the resolved `Section` mirrors the shipped `GetPlayerSessionToken()` assertion pattern, and the denying default arm makes a future fourth shape deny rather than inherit.
+- **Anti-vacuity is layered and mutually independent**: counting assertions (`deniedCount >= 7`, `notImplementedCount == 6`, `availableCount == 1` — the exact-equality pair catches a registry that loses a planned section), the stub-the-handler-empty control (Test 9) proving both answers originate upstream of the handler, the comment-filtered grep proving the handler carries no gate call, and the step-reorder demonstration in Task 3. I verified the reorder demonstration would genuinely go red: with lookup-first, a non-admin's unregistered-id error carries `DENY_ADMIN_SECTION_UNREGISTERED` with the probed id in the message, while the registered id returns the static `denyAdminSection()` string — the `assert.Equal` on the two strings fails.
+- **The injection-path analysis (R-09 fix) is complete and minimal.** All four edits are real and necessary: the core proto field, the `CoreServer` option reusing the existing `CoreServerOption` pattern (`server.go:242-360`), fail-quiet population (correct call for a nav hint — an empty list draws no `/admin` entrance, so fail-quiet *is* fail-closed), and wiring at both composition roots. The explicit refusal to widen `RoleStore` respects the pinned interface.
+- **R-10 fix is correct.** A zero-element repeated scalar is omitted from the wire and getters present nil/empty identically; `Len == 0` plus a grep asserting `NotNil` is absent is the durable assertion.
+- **The wire-vs-in-process assertion split** (wire: `status.Code` + exact `status.Convert(err).Message()`; in-process: `errutil.AssertErrorCode`) matches the corrected PORTAL-10 rule 5 position, and the `oops.AsOops` zero-match grep across the three test files enforces it mechanically.
+
+## 4. Concerns
+
+**LOW — The comment-filtered handler grep has an inline-comment false-positive.** `rg -v '^\s*//' internal/grpc/admin_sections.go | rg -q 'AssertSectionAccess|AssertSectionAdmission|section\.Lookup'` filters only full-line comments. An executor who writes `entry := AdminSectionFromContext(ctx) // interceptor already ran AssertSectionAccess` fails the criterion despite compliant code. The criterion's own rationale ("the handler's doc comment is expected to explain why") covers the likely case, and a false failure is safe-direction (it prompts a rewrite, not a bypass), so this is ergonomic, not soundness.
+
+**LOW — Test 5's mis-cased-id expectation deserves one explicit sentence.** `AdminGetSection("Characters")` by a *permitted* caller yields `DENY_ADMIN_SECTION_UNREGISTERED`, which `mapAdminSectionError` maps to the same static `PermissionDenied` message as a denial. So an admin mistyping a case gets a "denied"-flavored answer rather than a "no such section" one. This is the opacity-preserving choice and consistent with T-06-09, and `gate.go`'s step-2 code confirms the internal code — but the plan never states that the *permitted* caller's unregistered-id answer is deliberately indistinguishable from a denial on the wire. One line would forestall an executor "fixing" it into a distinguishable `NotFound`.
+
+**LOW — Test 9 (stub-the-handler-empty) is a source mutation, not a test.** It requires editing `(*AdminPortalServer).AdminGetSection` to return empty, running the suite, and reverting. The criterion says "record the demonstration," which is the right discipline, but unlike the step-reorder demonstration in Task 3 (which names its revert), Task 1's Test 9 buries "Revert after proving" mid-paragraph. Cosmetic; both are present.
+
+**MEDIUM (informational, not blocking) — EXT-02's probe row is still unresolved by design.** Flagged assumption 1 openly leaves the EXT-02 edge classification for human confirmation and does not collapse it into the ROADMAP-derived truths. Given ROADMAP Success Criterion 4's criteria are authored in full, this is honest bookkeeping rather than a gap — but a human should close that row before execution rather than letting it ride.
+
+## 5. Suggestions
+
+- Extend the comment-filtered grep's note to say "full-line comments only; keep the rationale in the doc comment, not inline," so the false-positive is documented rather than discovered.
+- In Test 5's behavior line, append: "the wire answer is the same static `PermissionDenied` message as a denial — an admin who mis-cases an id is deliberately not told the id was close."
+- Consider asserting in Task 2 that `WebAdminGetSectionRequest` carries **no** token field (the plan specifies this in the action but no criterion greps it), since a copied-and-pasted core message would silently re-introduce one. A one-line `rg` on the message block suffices.
+
+## 6. Risk Assessment
+
+**LOW.** Every load-bearing claim I checked against the tree held, all three cycle-2 findings are closed with enforcement (tests or executable greps) rather than prose, the acceptance criteria I executed behave as claimed, and the two cycle-3 structural changes in scope (the proto rename; the interceptor's third arm) are applied consistently with no orphan references and no blast radius beyond the plan's own files. The residual concerns are ergonomic wording issues, none of which would let a defect ship silently.
+
+### Pass 2b — 06-04
+
+# Cross-AI Plan Review — Cycle 3 — Plan 06-04
+
+## 1. Summary
+
+Plan 06-04 closed most of cycle 2 cleanly, and I verified the closures against the tree rather than the disposition tables: the sort enum is grounded in §11.3's actual Sort=Yes set (`01-SPEC.md:2734`, `:3168`), `charname.Normalize` really does reject blank/Cf-only input (`pipeline.go:118-130`), `world.Character` really has no `NormalizedName` field (`internal/world/character.go:15-39`), the migration premises all check out (`000001_baseline.sql:17,110,136,159,428`; `000055` is a `.go` file), and the proto rename is applied consistently with no orphan `holomush.admin.v1`/`AdminService` references. However, two of this revision's own fixes are internally contradicted by text the revision failed to update: the C2-22 enum fix left `string status_filter = 4` standing in the action its own criterion forbids, and the C2-17 layer fix composed the detail read from `world.Service.ListPropertiesByParent` without scheduling the dependency that would make that composition possible — the exact R-22 defect class from last cycle, reintroduced by the fix. Risk is MEDIUM.
+
+## 2. Cycle-2 closure audit
+
+| Ref | Verdict | Evidence |
+|---|---|---|
+| C2-17 (detail read mis-located) | **Partially closed — new gaps** | The layer decision is real (06-04-PLAN.md:233-246: no `CharacterRepository` method; compose at gRPC layer under the admin's own player subject; `isGovernedProfileName` reused). But see Concerns 1 and 2: the dependency injection for `ListPropertiesByParent` is unscheduled, and the promised twelve-plus-one criterion never reached Task 2's acceptance criteria. |
+| C2-18 (`normalized_name` truth unsatisfiable) | **Closed** | Truth now defines the projection "by reference to `Get`" and states `normalized_name` is SQL text only. Verified `Get` selects no `normalized_name` (`character_repo.go:47-50`) and `world.Character` has no such field. |
+| C2-19 (pagination bounds undischarged) | **Closed** | New truth (default/clamp 50, `page < 1` → InvalidArgument) plus a four-case wire criterion. Page size 50 matches UI-SPEC (`06-UI-SPEC.md:362`). T-06-24 now has a criterion behind it. |
+| C2-20 (un-falsifiable grep) | **Closed** | Criterion deleted, reason recorded in place, property attributed to Task 3's parse-based fence with a demonstrated RED. Correct call. |
+| C2-21 (RED mis-prescribes error path) | **Closed** | Criterion now names the failing assertion (unfiltered-first-page), not the error branch. |
+| C2-22 (`status_filter` unspecified) | **Only apparently closed** | Truth, criterion, and disposition all say closed enum — but the Task 2 action at line 388 still spells `string status_filter = 4`. See Concern 3. |
+| C2-23 (fence wording drift) | **Closed** | The thirteen-element literal is spelled at lines 517-521: `description` + twelve `profile.*` names. I counted; it matches §10.6's paths, and the load-bearing role of `description` is stated. |
+| C2-30 (ReadOnly ≠ snapshot) | **Closed** | `IsoLevel: pgx.RepeatableRead` added with the correct read-committed rationale and a second-connection concurrency test. The pgx option shape is right. |
+
+Cycle-1 dispositions re-spot-checked and still closed: R-17 (six-value enum, structural exclusion, RED-by-planting), R-18 (three-case contribution test), R-19 (escape order + `ESCAPE '\'` on both arms), R-20 (scalar count + `COUNT(*) OVER` grep), R-22 (all three wiring sites in `files_modified`), R-23 (both branches wire-asserted), R-24/R-25.
+
+## 3. Strengths
+
+- The migration section is fully source-grounded and every citation resolves: `pg_trgm` hard dependency at `000001_baseline.sql:17`, three `gin_trgm_ops` precedents at `:110,136,159`, extension drop at `:428`, `last_active_at BIGINT NOT NULL DEFAULT 0` at `000054:33`. The "no re-CREATE EXTENSION" and "plain CREATE INDEX inside goose's transaction" reasoning is correct.
+- The demonstrated-RED discipline remains real: deleting the leading `(c.last_active_at = 0)` clause genuinely fails only ASC; deleting the trailing tiebreak genuinely kills the never-block assertion; the fence is proven RED against a planted `OR c.description ILIKE …`.
+- The empty/Cf-only split is the only correct resolution given `pipeline.go:118-130`, and asserting it at the wire (Test 8) rather than the repository is exactly right.
+- Rename hygiene in this plan is clean: `holomush.adminportal.v1.AdminPortalService` and `api/proto/holomush/adminportal/v1/adminportal.proto` are used consistently; zero orphan `admin.v1`/`AdminService` references.
+
+## 4. Concerns
+
+- **HIGH [REGRESSION-FROM-FIX] — C2-17's fix composes the detail read from a dependency no plan schedules.** Task 1's action (lines 236-239) and Test 9 require the handler to call `world.Service.ListPropertiesByParent`, but the only constructor seam added is `WithAdminCharacterReader` — "a narrow interface carrying the three repository methods" (line 436) — and the wiring criterion (line 486) asserts exactly that and nothing else. 06-01's constructor takes `engine` + options (06-01-PLAN.md:554); nothing anywhere adds a world/property-reader option to `AdminPortalServer`, `sub_grpc.go`, or `harness.go`. This is precisely the R-22 defect (missing constructor/composition-root edits for a handler dependency), rated HIGH last cycle, reintroduced by the fix that moved the read up a layer. The executor must improvise a second option at both composition roots.
+- **MEDIUM [REGRESSION-FROM-FIX] — C2-17's promised leak-direction criterion was placed in the wrong task and never became a criterion.** The twelve-governed-plus-one-non-governed assertion lives in Task 1's action prose (lines 249-252), but Task 1 is the *repository* task — and the whole point of C2-17's fix is that no repository method exists to test it against. Task 2's `<behavior>` Test 9 covers only the positive direction ("returns … all twelve … for a character carrying them"), and Task 2's `<acceptance_criteria>` contain no omission assertion. The disposition claims "a missing row and a leaked row each fail it"; as planned, a leaked thirteenth row fails nothing.
+- **HIGH [REGRESSION-FROM-FIX] — the `status_filter` action contradicts its own criterion.** Line 388: "`AdminListCharactersRequest` carries … `string status_filter = 4`". Line 482: "`rg -n 'string status_filter' api/proto/holomush/adminportal/v1/adminportal.proto` returns zero matches". An executor following the action fails the criterion; one following the criterion must guess the intended spelling (`AdminCharacterStatusFilter status_filter = 4`) — and the repository-options text still says `StatusFilter (optional)` without the enum mapping. C2-22's fix updated the truth, the criterion, and the disposition, but not the action the executor actually builds from.
+- **LOW — stale disposition text.** The R-21 row (line 610) still describes the superseded design ("backed by a new `AdminGetCharacterDetail` repository method following `ownedProfileAttributes`"), flatly contradicting the C2-17 row two below it. A reader of the dispositions table gets two incompatible accounts of what ships.
+- **LOW — naming drift.** Line 422: "the three handlers on `*AdminServer`" — the type is `AdminPortalServer` everywhere else in this plan and in 06-01. Executor-confusion grade.
+- **LOW — `rg -n 'toLowerCase|normalize' web/src/lib/admin/` targets a directory that does not exist at HEAD** (verified: `ls web/src/lib/admin` → No such file). `rg` on a nonexistent path exits 2 with an error, not "zero matches"; whether it exists at execution time depends on wave ordering with 06-06/06-07. Scope the grep to `web/src/` or gate it on the directory existing.
+
+## 5. Suggestions
+
+1. Add a second option — e.g. `WithAdminPropertyReader` over a one-method interface wrapping `ListPropertiesByParent` — to Task 2's action, `files_modified` already covers the three wiring sites, and extend the line-486 criterion to assert both options at all three sites.
+2. Move the twelve-plus-one assertion into Task 2's Test 9 (seed the thirteenth non-governed row in the same fixture) and add it to Task 2's acceptance criteria verbatim.
+3. Fix line 388 to `AdminCharacterStatusFilter status_filter = 4` and state the repository mapping (enum → `StatusFilter` option) in one sentence.
+4. Correct the R-21 disposition row to describe the gRPC-layer composition, and change `*AdminServer` to `*AdminPortalServer` at line 422.
+5. Rescope the client-normalization grep to `web/src/` with a glob, or drop it into 06-06 where the admin web tree exists.
+
+## 6. Risk Assessment
+
+**MEDIUM.** Every verification I ran against the tree resolved, the cycle-2 closures are mostly genuine, and nothing here risks a silently-dead security property — the three real defects all fail loudly (criterion contradicts action; missing constructor argument; missing test). But two of the three are the same defect family this exercise exists to catch: repairs whose blast radius inside the plan document itself went unscheduled. Concerns 1–3 are a few lines each; with them fixed this plan is implementation-ready.
+
+### Pass 3 — 06-05
+
+All source checks complete. Here is the review.
+
+---
+
+## 1. Summary
+
+06-05 is the strongest revision of this plan so far. The two large cycle-1 structural fixes (the combined description/profile write under one version, and the world-layer authorization policy) are now specified to executable depth — the DSL text is in the plan for `abac-reviewer`, the variadic-interface compile break (C2-05) is correctly identified and scheduled, and the vacuous-test family is mostly eliminated (the `--- PASS:` criterion, both-directions set equality, the restructured structural payload test). All cycle-2 dispositions I re-verified against the tree hold except one piece of recorded evidence (C2-29) that does not reproduce. Two genuine problems remain: the empty-mask fix (C2-06) was withdrawn into a shape that contradicts the plan's own cited rationale and the shipped facade behavior on a stale version — a new, unflagged divergence in the opposite direction — and one acceptance grep can be self-invalidated by the doc comment the plan itself mandates.
+
+## 2. Cycle-2 closure audit
+
+| Ref | Verdict | Evidence |
+|---|---|---|
+| C2-05 (interface compile break) | **Genuinely closed** | Verified: `characteraccess_service.go:63-66` declares non-variadic `UpdateCharacterProfileAttributes`; call sites at `characteraccess_create.go:205` and `characteraccess_write.go:347` confirmed. The plan adds the file to `files_modified`, changes the interface in the same commit, and grep-asserts zero options at both call sites. Correct on the merits. |
+| C2-06 (empty-mask `InvalidArgument` contradiction) | **Closed, but the fix introduced a new divergence** — see Concern 1. | §9.5 rule 4 verified at `01-SPEC.md:2197` ("A request with no paths changes nothing and returns success") and §10.6's application of §9.5 to admin editing at `:2534`. Withdrawal is correct as far as it goes. |
+| C2-24 (seed census breakage) | **Genuinely closed** | Verified: `seed_test.go:37` asserts `Len(seeds, 64)`; `:214` `ElementsMatch` against the inventory beginning at `:99`. Plan schedules both edits and mandates a pre-edit sweep for a third enumeration. |
+| C2-25 (builder refusing zero changed) | **Genuinely closed** | `service.go:1115-1134`'s "both representable and honest" comment verified verbatim. Refusal relocated to the admin handler; Task 1 Test 5 now asserts the shared builder accepts an empty list. |
+| C2-26 (early-return vs `WithDescription`) | **Genuinely closed** | The empty-partition early return verified at `service.go:1228-1236` (fires after only the version check). The plan's four named rules correctly place `descriptionChanged` computation before it, with a demonstrated-RED description-only test. |
+| C2-27 (payload grep hits legit `Description` field) | **Genuinely closed** | `CharacterUpdateChangePayload.Description` verified at `payloads.go:302-305`. Grep correctly narrowed to `profile\.`. |
+| C2-28 (wildcard grep always matches) | **Genuinely closed** | Replaced with three behavioral prefix/glob cases — the right shape. |
+| C2-29 (fence allowlist) | **Only apparently closed — recorded evidence is false.** | The disposition claims "`rg -n 'INSERT INTO events_audit' --glob '*.go' -g '!*_test.go'` returns exactly one hit, `projection.go:376`". Executed: it returns **three** hits — `projection.go:376` plus `internal/testsupport/holomushtest/server.go:560,782` (both non-`_test.go` filenames). The fence's *property* survives because `worldFenceSkipDir` skips `internal/testsupport` (verified `world_sql_fence_test.go:325-328`), but the disposition's verbatim verification does not reproduce, and Task 3's action tells the executor to "establish that with the `rg` … record the output" — the executor will record three hits, contradicting the plan's stated "exactly one hit, `projection.go:376`". |
+| C2-31 (vacuous sentinel test) | **Genuinely closed** | Builder signature verified (`payloads.go:454`: takes no values). Test 4's structural key-set + reflected-tag shape with a planted-field RED is sound. |
+
+Cycle-1 dispositions re-spot-checked: R-27 (verified `seed.go:105-107` requires `principal is character`; `seed.go:985-987` player-flavored, `resource is admin_section` — the default-deny gap is real and the in-plan DSL closes it); R-28 (verified `characterUpdatePayload` carries the prose `description` string at `taxonomy.go:189-192`, and `UpdateCharacterProfileAttributes` rejects `description` at `service.go:1074-1082` — both load-bearing facts are true); R-31 (verified: zero production callers of `RetireCharacter`/`UnretireCharacter` outside `service.go`); R-33 (verified `MaxNameLength=100`, `MaxDescriptionLength=4000` at `internal/world/validation.go:20-21`).
+
+## 3. Strengths
+
+- The seed policy is written out as DSL in the action with each scoping choice justified against the question `abac-reviewer` will ask — exactly what the pre-push gate exists to review (`T-06-37a`). The `delete` omission pinned at two layers (action-list membership + real-engine denial) is the right depth.
+- The variadic-method-set distinction (C2-05) is explained in the action itself, with the facade's narrowness preserved *by assertion* (zero-options greps at both verified call sites) rather than by the old signature — and `task test -- ./internal/grpc/` is correctly scheduled inside the task.
+- The R-28 disposition found a stronger reason than the reviewers had: routing admin description edits through `UpdateCharacterDescription` would violate D-103 via `taxonomy.go:189-192`. Verified, and it converts a judgment call into a correctness argument.
+- The proto-descriptor role fence specifies the visited-set bound on recursion — the hang-vs-fail failure-mode reasoning is correct and pre-empts a real footgun with `google.protobuf.Struct`.
+- `-run` matching zero tests exits 0 is explicitly called out, with the `--- PASS:` line asserted instead — this is the correct fix for the cycle's dominant defect family.
+- The four `descriptionChanged` rules with the description-only demonstrated-RED test (C2-26) remove the improvisation surface on the phase's most sensitive method.
+
+## 4. Concerns
+
+**1. [MEDIUM] [REGRESSION-FROM-FIX] The empty-mask withdrawal contradicts its own cited rationale and creates a new, unflagged divergence from the player facade.** The plan justifies the no-op success by citing `service.go:1218-1227` and `characteraccess_write.go:315-336` — but that shipped comment says the facade's empty-mask path deliberately answers a *stale* caller with **success** ("A STALE CALLER IS ANSWERED, NOT REFUSED … a stale client is corrected by the answer itself"), and the code at `:330-336` does exactly that (returns `projectOwner(char, profile)` without comparing `expectedVersion`). The plan's Test 3b then requires an empty mask with a stale `expected_version` to return `codes.Aborted` — the domain no-op's semantics, not the facade's — while the must-have asserts "The admin path matches the PLAYER path here … for the same stated reason." Both cannot be true; the response-channel reasoning the plan cites is precisely the argument *for* answering the stale client. This is the same defect class as C2-06 (a divergence from a shipped, documented contract that no user decision authorizes), reintroduced one level down by the fix. Whichever behavior is intended, the plan must stop claiming the two paths match, and either flag Test 3b as a deliberate, justified divergence from the facade (defensible — a guard-bypass concern) or drop the Aborted assertion.
+
+**2. [MEDIUM] C2-29's recorded verification does not reproduce** (see audit table). The design is unaffected — the fence reuses `worldFenceSkipDir`, which skips `internal/testsupport` — but a disposition whose cited evidence is false is exactly what this cycle exists to catch, and the executor instruction to "record what the `rg` returned" will now produce output contradicting the plan. One sentence acknowledging the two `holomushtest/server.go` hits and naming the skip-dir as the reason they're out of scope closes it.
+
+**3. [LOW] The `UpdateCharacterDescription` zero-match grep can be self-invalidated by the doc comment the plan mandates.** The criterion requires `rg -n 'UpdateCharacterDescription' internal/grpc/admin_characters_write.go` to return zero matches, but the action's extensive prose about why the admin path must not route through that method is precisely the kind of thing an executor writes into the handler's doc block — and the plan elsewhere *requires* a doc block citing `service.go:1218-1227`. The plan already demonstrates the fix pattern (the `Roles` grep filters `^\s*//`); apply the same comment filter here or scope the grep to code lines.
+
+**4. [LOW] Malformed dispositions table.** A stray `| R-04 | task docs:proto omitted … |` row sits *after* the closing `</review_dispositions>` tag, and R-32 appears twice with different dispositions (the second correctly marked superseded). Cosmetic, but the trailing row will confuse any tooling that parses the block.
+
+## 5. Suggestions
+
+- Resolve Concern 1 by picking one behavior and saying so: my read is the plan's Test 3b (refuse stale) is the safer choice for an admin surface, but it must be flagged as a deliberate divergence from `characteraccess_write.go:315-336` with a one-line reason, not asserted to "match the PLAYER path".
+- Amend the C2-29 disposition and Task 3 action to record the actual three-hit `rg` output and attribute the two extra hits to the `internal/testsupport` skip.
+- Add the `^\s*//` filter to the `UpdateCharacterDescription` grep, mirroring the `Roles` criterion.
+- Consider asserting in Test 6b that the single emitted envelope's `Actor` equals `player:<id>` — currently that identity claim is only covered by Task 3 Test 1 (retire), not the update path.
+
+## 6. Risk Assessment
+
+**MEDIUM-LOW.** Every load-bearing factual claim I re-verified at source held except C2-29's evidence line, and the structural design (single combined write, in-plan reviewed policy, descriptor-level fences, both-directions set equality) is sound and well-pinned. The two MEDIUM findings are both repairable in a page of prose: neither invalidates the architecture, but Concern 1 is a genuine behavioral contradiction that will surface at execution time as a test the plan's own rationale argues against, and Concern 2 is a false-evidence entry in the closure record. No HIGH findings; nothing here warrants another full cycle — a targeted amendment pass on these two items suffices.
+
+### Pass 4a — 06-03, 06-06
+
+Critical check — the plan's exact DENY_ grep with its glob:
+One more cross-check on the placement fence in 06-01 (the AdminReadStream trap):
+# Pass 4a Review — 06-03 (components / error boundary) and 06-06 (admin shell + nav)
+
+## 1. Summary
+
+Both plans are substantially improved and most cycle-2 dispositions check out against the tree — the C2-07 auth-resolution repair is correctly grounded in `authStore.ts:25-33`, the container-query removal is real and its supporting claims (`SectionRail.svelte:113-118`, the three `position: fixed` descendants, zero authored `container-type` at HEAD) all verified. However, this pass found **two HIGH defects, both in the repair work itself**: the C2-32 fix's scoped grep uses an ripgrep exclusion glob that silently does not exclude (verified: the plan's literal command prints the 11 generated matches it claims to exclude, so the criterion fails every implementation including a correct one), and the C2-34 disposition for the phone-band drawer describes a mechanism that is physically impossible under the plan's own constraints (a child-mounted component cannot populate a parent-rendered Sheet, and the parent layout's diff is criterion-locked to the `roles` prop only). A further MEDIUM cluster: the plan's `setPlayerProfile` call-site enumeration misses a sixth production call site (`web/src/routes/+page.ts:41`), and 06-03's amendment 11 text is stale post-rename (misnames the fence test and cites the old `holomush.admin.v1` package as both fence target and interceptor prefix).
+
+## 2. Cycle-2 closure audit
+
+**06-03:**
+
+- **C2-07 — genuinely closed.** Verified: `initial` is `{isPlayerAuthenticated: false, isGuest: false, …}` (`authStore.ts:25-33`), so bare `isGuest` passthrough really would render both workspace entries to an unresolved viewer (`sections.ts:63-67` filters `requiresPlayer` only when `isGuest` is true). The `resolved ? $authState.isGuest : true` derivation, the fail-safe direction (unresolved → guest → smallest set), the no-new-field decision, and the three-Vitest-case + demonstrated-RED design are all sound. `setPlayerProfile` does set `isPlayerAuthenticated: true` on every resolution path including guest (`login/+page.svelte:97-114` confirms the guest round-trip through `webCheckSession`).
+- **C2-15 — closed.** The criterion now reads "cites its deciding source: a `D-NN` where one decides it, or — for items 10, 11 and 12 — the named plan finding", which no longer contradicts the items.
+- **C2-16 — closed.** The invariant summary is narrowed to the census property with the "precondition, not a proof" clause; the behavioural half is deliberately unregistered. `TestEveryRegistryInvariantHasBinding` (`invariant_registry_test.go:232`) and `TestBoundInvariantsAreGenuinelyAsserted` (`:1128`) both exist, so the acceptance criterion's `-run` is not vacuous.
+- **C2-01 (06-03's portion) — closed.** Amendment 12 exists, names `holomush.adminportal.v1.AdminPortalService` and the collision (`admin.proto:6,19` — verified `:6`; `AdminReadStream` at `:105` — verified), and the eleven→twelve count is swept through objective, task headings, label rule, criterion, artifacts, and success criteria. The withdrawn-amendment criterion is satisfiable: `rg -n 'oops\.AsOops' 06-0*-PLAN.md` returns only withdrawal prose, negative-grep instructions, and planner-discipline-allow comments (verified).
+
+**06-06:**
+
+- **C2-02 — closed, with a caveat on the guard's glob (see Concerns).** The container is genuinely removed; `rg -n 'container-type|container-name' web/src` is zero at HEAD (verified, exit 1); the only `@container` in the tree is the generated `ui/card/card-header.svelte:17` utility, which the criterion's pattern doesn't match. `Composer.svelte:190`, `CommandPalette.svelte:125,131`, `sheet-overlay.svelte:15`, `sheet-content.svelte:38` all verified as the descendants a containing block would have re-anchored.
+- **C2-03 — partially closed.** The `Admin` rail entry is now genuinely built (store field, required arg, prop, entry, tests), and the merged-strip redefinition (AdminNav narrows in its own column rather than injecting into the parent rail) is coherent with SvelteKit's downward data flow. **But** the call-site enumeration the fix rests on is wrong — see Concerns.
+- **C2-32 — NOT closed. [REGRESSION-FROM-FIX]** The rewritten criterion's exclusion glob does not exclude. Verified below.
+- **C2-33 — closed.** `<artifacts_this_phase_produces>` now states the two contradicted entries as explicit negatives and lists `vpContainer.ts` as not produced.
+- **C2-34 — only apparently closed.** The 768–1023px half is resolved by the C2-03 redefinition, but the **<768px drawer half is not** — see Concerns.
+- **C2-35 — closed.** The criterion is now a plain `git diff` with enumerated expected content plus a byte-identity claim on `:113-118`.
+- **C2-36 — closed.** The await is pinned behaviourally via promise-resolution ordering in `+layout.test.ts`.
+
+## 3. Strengths
+
+- The C2-07 repair is the best kind of fix: it reuses the shipped resolution bit rather than minting parallel state, and its RED demonstration is logically airtight against the tree — replacing the derivation with bare `$authState.isGuest` makes case (a) render both workspace entries because `initial.isGuest === false` (`authStore.ts:27`) and `visibleSections` only filters for `isGuest: true` (`sections.ts:66`).
+- The "required `roles` argument ⇒ missed call site is a `svelte-check` failure" reasoning is sound: `setPlayerProfile` is exported with a typed object parameter (`authStore.ts:38-43`), so a missing required property is a compile error at every call site, and the plan pins this with a demonstrated RED (delete `roles` from one site, watch svelte-check fail).
+- The container-removal rationale ("a viewport property is satisfied by construction by a viewport query at the same literal, only coincidentally by a container query") is the correct diagnosis of why two revisions failed, and the supporting evidence chain is fully verified: rail's rule is `@media (max-width: 767px)` at `SectionRail.svelte:113-118`; `.shell` is `calc(100vh - var(--topbar-h))`; the drawer Sheet is a DOM sibling of `.shell`.
+- The Sheet-geometry claims hold: `sheet-content.svelte:31` portals via `<SheetPortal {...portalProps}>` (bits-ui default target `document.body`), overlay and content are `fixed` (`sheet-overlay.svelte:15`, `sheet-content.svelte:38`), and 06-08 keeps `portalProps` grep-asserted absent with the overlay-rect and topbar-band-click E2E assertions (06-08:712).
+- The `AdminReadStream` trap is handled correctly on the 06-01 side: the placement fence is an explicit two-package allowed set, demonstrated green at HEAD with `admin.proto:105` accounted for (06-01:76,768), not a naive one-package guard.
+- 06-03 Task 2's "search before building" discipline, the claim that no in-tree mechanism enumerates web files, and the 26-member `test/meta/` count are accurate (verified: 26 files, all Go-AST/YAML/CI censuses).
+- The R-37/R-38 dispositions (test the `load` function that actually throws; narrow the redirect ban to the one legitimate canonical-index site) are exactly right, and `isRedirect` is indeed the shipped `(authed)/+layout.ts:4` shape.
+
+## 4. Concerns
+
+### HIGH — The C2-32 scoped grep's exclusion glob silently does not exclude; the criterion fails every correct implementation `[REGRESSION-FROM-FIX]`
+
+06-06 Task 2's headline criterion is:
+
+```
+rg -n 'DENY_' web/src --glob '!lib/connect/**'   →  asserted zero matches
+```
+
+I ran exactly that command at HEAD: **it prints all 11 generated matches** (`web/src/lib/connect/holomush/admin/v1/{admin_pb,read_stream_pb}.ts`). ripgrep matches globs against the path as searched — `web/src/lib/connect/...` does not match `!lib/connect/**`; the exclusion needs `!**/lib/connect/**` (verified: that spelling returns 0). So the criterion as written is false at HEAD, false after a correct implementation, and its own "demonstrated RED" (adding a `DENY_` read to `errors.ts`) would be invisible against the 11-line baseline noise unless the executor diffs the output by hand. This is precisely the defect class C2-32 existed to fix, reintroduced by its fix. The disposition text even says "verified at HEAD" — the verification must have been of the match count, not of the exclusion working.
+
+### HIGH — The <768px drawer grouping has no workable mechanism and no verifying criterion (C2-34 only apparently closed)
+
+Task 1 specifies: "the drawer holds rail sections and admin sections **together**, separated by a divider and two group labels (`Workspace`, `Admin`)… The drawer is rendered by `(authed)/+layout.svelte`, which cannot see the admin section list — so the admin group is populated by `AdminNav`'s own drawer variant, **mounted from the admin layout**." This is incoherent under the plan's own constraints:
+
+- The shipped drawer is `<SheetContent><SectionRail variant="drawer"/></SheetContent>` in the **parent** layout (`(authed)/+layout.svelte:31-37`). A component mounted in the child admin layout cannot project content into that Sheet — the same "data flows downward" argument the plan uses to kill the rail-injection applies to DOM containment.
+- The escape hatches are all closed: the parent's `(authed)/+layout.svelte` diff is criterion-locked to "only the `roles` prop threaded into the two `SectionRail` instances", so the parent drawer markup cannot gain an Admin group; and a *second* Sheet mounted by the admin layout and bound to the same `mobileNavOpen` store would double-overlay the drawer.
+- No acceptance criterion pins the drawer's Admin group at all — the Task 1 criteria cover the rail entry, the containment ratchet, and the two-column composition, but nothing asserts the two-group drawer exists, and 06-08's 375px E2E (from the excerpt at 06-08:68) asserts the mobilebar and zero-width rails, not drawer contents. The sketch-locked phone-band admin navigation is thus both unspecifiable-as-written and unverified.
+
+### MEDIUM — Same broken glob shape in the containment ratchet
+
+`rg -n 'container-type|container-name' web/src --glob '!lib/components/ui/**'` (06-06:64, :321) has the identical dead exclusion — verified with a control pattern (`portalProps`, which exists only under `ui/**`): the `!lib/components/ui/**` form prints 18 matches, the `!**/…` form prints 0. Today this criterion passes because zero files anywhere match `container-type|container-name`, but the exclusion it advertises is non-functional: the generated tree already carries a container *utility* (`@container/card-header`, `card-header.svelte:17`), and if a future shadcn regeneration adds a `container-type` declaration to a `ui/**` component, the criterion will RED-flag generated code it claims to spare. The fix is the same one-character-class change.
+
+### MEDIUM — `setPlayerProfile` call-site enumeration is wrong; `files_modified` omits a required file
+
+06-06 Task 1's `read_first` says "The four `setPlayerProfile` call sites" and step 2 enumerates five (including the `:118` fallback). There are **six** production call sites — the plan misses `web/src/routes/+page.ts:41` (the public landing page's `webCheckSession` round-trip, verified) — plus two more in `web/src/lib/stores/authStore.test.ts:15,30`. Neither `web/src/routes/+page.ts` nor `authStore.test.ts` is in `files_modified`. The plan's own safety net (required argument ⇒ svelte-check failure, with a demonstrated RED) does make this self-correcting — an executor who follows the list will hit the compile error and fix it — but the plan's confident enumeration is wrong, the file list is incomplete, and `+page.ts:41` is a session-resolution path where a missed `roles` pass is exactly the "silently role-less rail" the required-arg design exists to prevent.
+
+### MEDIUM — 06-03 amendment 11's text is stale post-rename (orphan old-name references)
+
+Item 11 says: "Plan 06-01 ships `TestEveryAdminPrefixedRPCLivesInAdminPackage`, which fences RPCs whose method name begins with `Admin` into `holomush.admin.v1`… escapes both the fence and the `/holomush.admin.v1.` interceptor prefix." Three errors, each verified against 06-01: the shipped test is named `TestEveryAdminPrefixedRPCLivesInAnAdminPackage` (06-01:699); the fence allows **either** `holomush.adminportal.v1` **or** `holomush.admin.v1` (06-01:76,770), not the old package alone; and the interceptor prefix is the adminportal prefix (`adminPortalServicePrefix`, 06-01:793), not `/holomush.admin.v1.`. As filed, the issue would misdescribe the mechanism it asks to extend — ironic for an amendment whose purpose is precision about a boundary. This is also a small instance of the audit's rename-orphan check: these are exactly the old-name references the cycle-3 sweep was supposed to catch.
+
+### MEDIUM — `[section]/+page.svelte` throws `error(404)` from the component, and its test criterion is not observable as specified
+
+Task 3 resolves `entry === undefined` → `error(404)` **inside the Svelte component**, and the criterion says `page.test.ts` asserts an absent id "renders the not-found (`error(404)`)". A component that throws during mount does not render anything — in the repo's `mount`/`unmount` Vitest project, the observable assertion is `expect(() => mount(...)).toThrow()`, not a rendered page. This sits oddly against the plan's own R-37 disposition, which (correctly) moved the sibling zero-sections 404 into `+layout.test.ts` precisely because "a component test cannot observe a route decision". The idiomatic SvelteKit placement for this branch is a `[section]/+page.ts` load, which would also make the three-outcome logic unit-testable the same way Task 2's load is. Runtime behavior is probably fine (client render errors do hit the root boundary), but the test as worded will be written as a throw assertion while claiming a render assertion.
+
+### LOW — `.mobilebar` ownership is unspecified and collides with the shipped TopBar hamburger
+
+Task 1's <768px band says "a `.mobilebar` (hamburger + breadcrumb) renders", but no task file creates it, and `TopBar.svelte:60` already ships a `.icon-btn.mobile-only` hamburger (`Menu` icon, `aria-label="Open navigation"` — itself an aria-label-only name, though outside the plan's grep scope). Whether the admin band reuses the TopBar control or adds a second hamburger is undecided in the text; 06-08's E2E asserts "the mobilebar renders" without identifying the element.
+
+## 5. Suggestions
+
+1. Fix both globs to `--glob '!**/lib/connect/**'` and `--glob '!**/lib/components/ui/**'`, and add the verified HEAD output (11 lines → 0) to the criterion text so the exclusion's function is pinned, not just its intent.
+2. Resolve the drawer grouping honestly: either (a) loosen the `(authed)/+layout.svelte` diff criterion to permit an optional admin-group slot in the parent drawer fed by a small child-to-parent registration (and say so), or (b) drop the two-group single-drawer design for v0.13 and let AdminNav's own drawer variant be the admin drawer's whole content on `/admin/*` — then say *that*. Either way, add a criterion (component test or the 06-08 E2E) that pins whichever grouping ships.
+3. Correct the call-site list to six production sites + the test file, and add `web/src/routes/+page.ts` and `web/src/lib/stores/authStore.test.ts` to `files_modified`.
+4. Rewrite amendment 11's body against 06-01's actual test name, two-package fence, and adminportal interceptor prefix.
+5. Move the `[section]` three-outcome resolution into a `[section]/+page.ts` load and test it in a `+page.test.ts` mirroring Task 2's `+layout.test.ts` pattern; keep `+page.svelte` purely presentational.
+6. State explicitly whether the <768px `.mobilebar` is the existing TopBar control or a new element, and if new, which file owns it.
+
+## 6. Risk Assessment
+
+**MEDIUM.** The structural direction of both plans is sound and most cycle-2 closures are genuine and well-evidenced — the auth-resolution fix, the container removal, and the two-package placement fence are all verified correct against the tree. But two cycle-2 *repairs* fail on execution: one acceptance criterion that cannot pass (the dead exclusion glob — the exact vacuous-criteria family this review process exists to catch, now in its third consecutive cycle), and one design claim (the unified phone drawer) that cannot be built as constrained and is covered by no test. Neither requires re-architecting; both are one-paragraph fixes plus a criterion each. The MEDIUM cluster (call-site miscount, stale amendment text, component-thrown 404) is self-correcting or cosmetic individually but collectively says the rename sweep and the web-file enumeration were not executed against the tree before writing. Execute the two greps, fix the drawer mechanism, and this pass should converge.
+
+### Pass 4b1 — 06-07
+
+# Cycle 3 Review — 06-07 (the character table)
+
+## 1. Summary
+
+The two cycle-2 findings this plan owned are addressed with real mechanisms, not prose: the C2-10 overlay defect is fixed at the correct level (the positioning context moves from the `<td>` to the `<tr>`, which is the actual containing-block repair), and the `@container vp` → viewport `@media (max-width: 767px)` conversion is complete and internally consistent, with a zero-match `@container` grep as the orphan guard. Copy strings, column sets, and pagination rules were re-verified against `06-UI-SPEC.md` and match verbatim. However, **the repair's own unit-test proof is unsatisfiable in this repo's test environment**: the plan mandates a Vitest computed-`position` assertion *inside the phone band*, but the suite runs under jsdom (`web/vite.config.ts:10`), where `@media (max-width: 767px)` never applies — the existing tests stub `matchMedia` to `matches: false` precisely because of this (`SectionRail.svelte.test.ts:21-30`). A correct implementation fails that case. A second criterion asserts "the Sheet opened" from the table's own test, but the Sheet is 06-08's artifact (wave 5) and the table "owns presentation only". Both are plan-level fixes; the C2-10 mechanism itself is sound because its real teeth were (correctly) moved to 06-08's Playwright tap.
+
+## 2. Cycle-2 closure audit
+
+| Ref | Verdict | Evidence |
+|---|---|---|
+| C2-10 (overlay covering Name cell only) | **Mechanism genuinely closed; the new unit proof is broken** | The plan now puts `position: relative` on the `<tr>` inside the same `@media` block with every `<td>` static — that is the correct containing-block fix. The 375px tap is retargeted to a non-Name cell, delegated to 06-08 (outside this pass; its presence there MUST be confirmed in the 06-08 pass). **But** the added Vitest case — "asserts the computed `position` of the `<tr>` is `relative` … within the phone band", with a mandatory RED demonstration — cannot observe a `@media (max-width: 767px)`-guarded rule under jsdom 29 (`web/package.json:34`): jsdom has no viewport below 1024px and the repo's own stub returns `matches: false` for every query. Computed `position` reads `static` on a *correct* implementation, and the "move it back onto the `<td>` → FAIL" demonstration proves nothing, because the case fails in both configurations. The accompanying `rg -n 'position: *relative'` grep (row vs cell selector) is satisfiable and is the load-bearing half. |
+| C2-02 follow-on (`@container` → `@media` in this plan) | **Genuinely closed** | The column-drop, row-overlay, and row-action band rules are all written as `@media (max-width: 767px)`; the acceptance criterion greps `@container\|container-type\|container-name` to zero *in the new component* and widens the `@media` whitelist to `prefers-reduced-motion` + the 767px literal (the rail's own literal, verified `SectionRail.svelte:114`). The only pre-existing `@container` in the tree is Tailwind's generated `@container/card-header` utility (`web/src/lib/components/ui/card/card-header.svelte:17`) — outside the criterion's scope, correctly untouched. No `vp`/`container-name`/`portalProps` orphans exist in this plan. |
+
+Cycle-1 findings in scope (R-40, R-41, R-42, R-43) were confirmed RESOLVED in cycle 2 and their mechanisms survive this revision unchanged: the primary-cell-button markup is still specified (R-40), the `Select` count is still deferred to 06-03's generated shape plus the export-independent `getAllByRole('combobox')` length-1 assertion (R-41), `player_id` remains an equality filter only (R-42), and the index-for-index row-order assertion plus the `.sort(|toSorted|localeCompare` zero-match grep still pin the no-client-resort contract (R-43).
+
+## 3. Strengths
+
+- **Copy is verbatim-traceable to the UI contract.** All four list-state strings in Task 3 match `06-UI-SPEC.md:525-526,536,555-556` exactly; pagination (`{start}–{end} of {total}`, size 50, hidden at 0/1 pages) matches `:362,680`; the six-column/four-column split matches `:674`.
+- **Factual claims verified at source.** Character names bounded at 32 runes (`internal/charname/syntax/syntax.go:41`), usernames at 30 (`internal/auth/player.go:25`), `last_active_at BIGINT NOT NULL DEFAULT 0` sentinel (`000054:33`), the `just-arrived` keyframe inside the shipped `prefers-reduced-motion: no-preference` guard (`web/src/app.css:96-110`), and the authored-union error idiom with its anti-`e.message` rationale (`web/src/lib/components/characters/ProfileSection.svelte:28-38`) all check out.
+- **The no-resort discipline has real teeth.** The `.sort(|toSorted|localeCompare` grep plus a Vitest case feeding a deliberately unsorted array and asserting index-for-index render order is the only test shape that proves this property.
+- **The R-40 markup specification is correct HTML.** Primary-cell `<button type="button">` + `::after { inset: 0 }` with a handler-free, role-free `<tr>` is the standard full-row-overlay pattern; `position: relative` on `<tr>` is honored by every current engine; the `<tr[^>]*onclick|role="button"` grep guards the degenerate shape.
+- **Task 1's formatter is enforced structurally, not by trust** — the function returns a bare `string`, so no absolute timestamp is reachable at the call site, and the `toISOString|toLocaleString|toUTCString` grep backs it.
+
+## 4. Concerns
+
+- **HIGH — [REGRESSION-FROM-FIX] The C2-10 computed-position Vitest case is unsatisfiable under jsdom and fails a correct implementation.** The criterion requires asserting, *inside the phone band*, computed `position: relative` on the `<tr>` and `static` on the Name `<td>`, with a demonstrated RED. The rule being asserted lives inside `@media (max-width: 767px)`; the suite runs in jsdom (`web/vite.config.ts:10`, jsdom 29.1.1), which has no sub-1024px viewport and whose media evaluation this repo already knows is unreliable — `SectionRail.svelte.test.ts:21-30` stubs `matchMedia` to `matches: false` for exactly this reason. The case therefore reads `static` whether the CSS is right or wrong, and the mandated "move `position: relative` back onto the `<td>` → FAIL" experiment demonstrates nothing. Fix: drop the computed-style assertion and rely on (a) the already-present selector-level grep (`position: relative` on the row selector, not a cell selector) and (b) 06-08's retargeted Playwright tap on a non-Name cell, which is the only environment that can actually prove span. If a unit-level guard is wanted, assert on the stylesheet text (the rule appears inside the `@media` block and targets the `tr` selector).
+- **MEDIUM — Task 2's Vitest case "asserts the Sheet opened" is unsatisfiable as written.** The plan itself says the table "owns presentation only; the page owns fetching and mutation" with `onedit`/`onlifecycle` callbacks, and the edit Sheet is 06-08's artifact in wave 5 — it does not exist when 06-07 executes. A keyboard-activation case in `CharacterTable.test.ts` can assert `onedit` fired with the row id (the actual contract); asserting a Sheet opened either forces a mock that proves nothing about 06-08 or blocks the task on a future plan. Reword to the callback assertion; the Sheet-open proof already lives in 06-08's 375px block.
+- **LOW — The normalize-grep scope is narrower than the truth it guards.** The must-have says "no client-side mirror of `charname.Normalize` exists **anywhere under `web/src/`**", but Task 3's criterion greps only `web/src/lib/admin/` and `web/src/lib/components/admin/`. A normalization helper added anywhere else under `web/src` passes. Widen the grep to `web/src` (excluding `lib/connect/` generated code, which legitimately contains `Normalize`-adjacent protobuf strings — check before pinning).
+- **LOW — `rg -n 'name="status"'` in Task 3's criteria has no path argument**, so it searches the invocation cwd. It happens to be a presence criterion so it can't false-fail, but pin the same `CharacterFilterBar.svelte` path as the `name="q"` sibling for determinism.
+
+## 5. Suggestions
+
+1. Replace the computed-position Vitest with a stylesheet-text assertion (media block present, `position: relative` on the row selector) and record that the span proof is browser-level only, owned by 06-08's non-Name-cell tap.
+2. Reword the keyboard-activation case to assert the `onedit` callback contract; note explicitly that Sheet-open behavior is proven in 06-08.
+3. Widen the normalization grep per Concern 3.
+4. Add the missing path to the `name="status"` grep.
+5. In the SUMMARY, record that UI-SPEC's anti-pattern table (`06-UI-SPEC.md:78`, "The table has five columns") is a second stale instance of the R-13 family (the "(5 columns)" note already dispositioned in 06-03) so the next reader isn't trapped twice.
+
+## 6. Risk Assessment
+
+**MEDIUM.** The structural content of this revision is sound: the C2-10 containing-block fix is the correct repair, the media-query conversion is clean, and every load-bearing copy/contract claim re-verified against the tree. The residual risk is concentrated in the cycle's dominant defect family — acceptance criteria that cannot pass a correct implementation: the jsdom-blind computed-position case (HIGH) and the Sheet-assertion against a not-yet-existing component (MEDIUM). Both are single-criterion rewrites with the real proofs already correctly located elsewhere (grep + 06-08 Playwright). With those two repaired, this plan drops to **LOW**; the one cross-plan dependency to confirm in the 06-08 pass is that the retargeted 375px non-Name-cell tap actually landed there, since it now carries the entire browser-level weight of C2-10.
+
+### Pass 4b2 — 06-08
+
+# Cross-AI Plan Review — Cycle 3 — 06-08 (edit Sheet & mutation loop)
+
+## 1. Summary
+
+This is the strongest revision of the three cycles for this plan. Every path:line claim I executed against the tree held: the `side`-is-a-prop mechanism correction (the cycle's load-bearing fix), the TextEncoder census, the `<Toaster` zero-count, the byte-cap constants, the telnet-vs-portal spec warning, and the cross-plan dependencies (06-04's `AdminCharacterDetail`, 06-06's rail entry, 06-07's `::after` row target) all check out verbatim. All eight cycle-2 dispositions in this plan's scope are genuinely closed with enforceable criteria, not prose. The only findings are three LOW citation drifts and one LOW judgment-phrased criterion, none of which affect executability or vacuity. The two structural cycle-3 changes this plan touches (container-query removal, no-portal geometry) are fully propagated — I found no orphan `vp`/`container-name`/`vpContainer` reference that instructs new work; every occurrence is historical disposition text or a negative-grep target.
+
+## 2. Cycle-2 closure audit
+
+| Ref | Verdict | Evidence |
+|---|---|---|
+| C2-08 (portal rebase) | **Genuinely closed** | `sheet-content.svelte:31` is `<SheetPortal {...portalProps}>` — passing nothing keeps the generated body target; `:18` `side = "right"`, `:25` `side?: Side`, `:36` `data-side={side}`, `:38` carries `data-[side=right]:sm:max-w-sm` (384px, override justified). `sheet-overlay.svelte:15` is `fixed inset-0`. The new E2E assertions (overlay rect `top===0`/`height===innerHeight`, dismissing click at `(x,10)` in the topbar band, `body.contains(sheet) && !shell.contains(sheet)`) observe exactly the property the old shape failed. `84vh` removes the percentage-ancestry argument by construction. |
+| C2-09 (TextEncoder count) | **Genuinely closed** | I executed the replacement: `rg -l 'new TextEncoder\(\)\.encode' web/src --glob '!*.test.ts' --glob '!*.test.svelte.ts'` lists exactly one file at HEAD (`ByteCounter.svelte`), as claimed. The six-occurrences/five-files claim is exact: `ByteCounter.svelte:10,34`, `CharacterPortrait.svelte:28`, `ByteCounter.svelte.test.ts:43`, `ProfileSection.svelte.test.ts:253`, `CreateCharacterForm.svelte.test.ts:318`. The oracle-vs-implementation distinction is correctly reasoned. |
+| C2-37 (`<Toaster` count) | **Genuinely closed** | `rg -n '<Toaster' web/src` exits 1 at HEAD — zero occurrences, as claimed; `rg -l … \| wc -l` on one mount prints `1`. Satisfiable and falsifiable. |
+| C2-38 (`handle` substring) | **Genuinely closed** | Alternation narrowed to `grabber\|grab-handle\|drag-handle` with the no-re-widening note inline, plus a property assertion (no `role="separator"`/drag affordance above the header). |
+| C2-39 (chrome-level residual) | **Genuinely closed (as a reasoned accept)** | The SvelteKit layout-above-failed-segment mechanism is correctly stated; the backstop truth names the residual, Proof 4 is scoped inside the `+error.svelte` subtree, and an acceptance criterion requires the describe-block comment citing the backstop — so it can't be silently "strengthened" later. |
+| C2-40 (over-cap disables Save) | **Genuinely closed** | The exactly-two disable conditions are enumerated, and the Vitest case is demonstrated RED by binding `disabled` to the over-cap predicate. Matches `ByteCounter.svelte:34-36`'s shipped contract ("no disabling of the Save. The server owns the refusal", `:28-30`). |
+| C2-41 (layout artifact claim) | **Genuinely closed** | The artifacts entry now produces the `<Toaster />` mount "and **nothing else**", with the negative spelled out. |
+| C2-42 (portal assertion = containment defect) | **Genuinely closed** | The E2E asserts the inverse of the previous assertion, which is correct because the correct property is the inverse. |
+
+No regressions from these fixes found. The R-44 disposition's further simplification (matchMedia instead of ResizeObserver-on-container) is coherent with 06-06's container removal and shrinks the blast radius rather than growing it.
+
+## 3. Strengths
+
+- **The mechanism correction is source-true.** `side` is a Svelte prop (`sheet-content.svelte:18,25`) emitted as `data-side` (`:36`); CSS cannot mutate it. The plan's matched pair of demonstrated REDs (`84vh→50vh` fails only the CSS half; literal `side="right"` fails only the attribute half) is the correct non-vacuity proof for two independent mechanisms.
+- **Byte-cap grounding is exact.** `internal/world/validation.go:20-21` — `MaxNameLength = 100`, `MaxDescriptionLength = 4000`; `internal/grpc/characteraccess_write.go:138-161` confirms the short/long split across the paths. The toast-overflow dismissal's "bounded server-side at 32 runes" is also true (`internal/charname/syntax/syntax.go:41`).
+- **The extraction target is real and the wording-gate note exists.** `ByteCounter.svelte:34` has the expression; `:10-15` carries the server-agreement rationale (`characteraccess_write.go:213-224` byte comparison); `:17-21` carries the "words the forbidden spelling" note the plan says to keep working.
+- **Cross-plan claims verified.** 06-04:411-412 lands `AdminCharacterDetail` (`description` + twelve `profile.*`); 06-06:69 owns the `Admin` rail entry and :261 the `.is-context` band treatment; 06-07:228-254 has the Name-cell button with the row-spanning `::after` — so the C2-10 tap-target distinction (tap `Status`/`Last active`, not `Name`) is a real discriminating assertion, not ceremony.
+- **The telnet-spec warning is correct.** `web/e2e/admin.spec.ts:44` is `test.describe('Admin Commands')` over a terminal flow; `task test:e2e` exists (`Taskfile.yaml:310`).
+- **The D-110 conflict copy leaks numbers, not strings**, and `isAbortedError` is reused (`web/src/lib/connect/errors.ts:35-37`), not re-spelled.
+
+## 4. Concerns
+
+1. **LOW** — `read_first` says "the 20 existing specs" in `web/e2e/`; there are **19** `*.spec.ts` files at HEAD (`ls web/e2e/*.spec.ts | wc -l` → 19). Not an acceptance criterion; harmless but wrong.
+2. **LOW** — `ProfileSection.svelte:40-60` is cited for "the state shape: `loaded` vs `working` `$state` records seeded through `untrack`, `busy`, `saved`, `failure` union". Lines 40-60 are the `Field` type definition; the state shape is at **`:84-96`** (`untrack` imports at `:6`, doc rationale `:70-83`). Substance correct, range wrong.
+3. **LOW** — `errors.ts:28-36` cited for `isAbortedError`; the function with its doc comment spans ~`:29-37`. Trivial drift.
+4. **LOW** — The criterion `rg -n "side=" … shows side bound to a derived value rather than a literal` uses the judgment-phrased "shows" shape this review has flagged before. It is rescued by the adjacent Vitest stub case that asserts the property mechanically, so it is not vacuous — but the grep half alone would be un-falsifiable prose.
+
+No HIGH or MEDIUM findings; no `[REGRESSION-FROM-FIX]` introduced by this revision that I could ground.
+
+## 5. Suggestions
+
+- Correct the three line citations (19 specs; `ProfileSection.svelte:84-96`; `errors.ts:29-37`) in a final pass — cheap, and this plan is otherwise citation-clean.
+- Consider rephrasing the `side=` grep criterion to assert the absence of a literal: `rg -n 'side="(right|bottom)"' EditCharacterSheet.svelte` returning zero matches is falsifiable in both directions and needs no human judgment.
+- When Proof 1b lands, keep its `Admin`-entry assertion (`.is-context`) synced with 06-06:261 — both plans assert the same treatment; if either band rule changes, both must move.
+
+## 6. Risk Assessment
+
+**LOW.** Every load-bearing claim executed true against the tree; all eight C2 dispositions are closed with criteria that can fail; the two demonstrated-RED pairs and the negative control give the plan genuine non-vacuity on its highest-risk properties (phone band, opacity, no-refetch). The residual findings are citation drift only. This plan is ready to execute.
