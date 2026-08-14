@@ -54,6 +54,12 @@ const migrationsSourceDir = "../../../internal/store/migrations"
 // outside from the demonstration it is supposed to be.
 const stagedVersion55 = 55
 
+// withheldVersion56 is the ONE migration this suite stages without: 000056's
+// UNIQUE index over normalized_name. Every other migration in the tree is
+// copied verbatim, including versions above it — so this is the version that
+// must be ABSENT, never an upper bound on what may be present.
+const withheldVersion56 = 56
+
 // stageSchemaWithoutUniqueIndex brings a blank database up to version 55 — the
 // whole chain except 000056 — and returns its connection string.
 //
@@ -121,12 +127,21 @@ func stageSchemaWithoutUniqueIndex(ctx context.Context, t testing.TB) string {
 	// deliberately distinct from the specs' own assertions: a mis-staged run must
 	// abort as a broken fixture, not produce a failure that reads like the
 	// demonstration.
+	// The withheld version is 000056 SPECIFICALLY — not "everything above 55".
+	// The copy loop above deliberately carries every later migration verbatim, so
+	// an assertion of the form `NotTo(BeNumerically(">=", 56))` states something
+	// this fixture never intended and goes red the moment a 000057 lands (it did:
+	// 000057_character_admin_search_indexes). Assert the withholding itself.
 	var sawGoMigration55 bool
+	var highestStaged int64
 	for _, src := range provider.ListSources() {
 		if src.Version == stagedVersion55 && src.Type == goose.TypeGo {
 			sawGoMigration55 = true
 		}
-		Expect(src.Version).NotTo(BeNumerically(">=", 56),
+		if src.Version > highestStaged {
+			highestStaged = src.Version
+		}
+		Expect(src.Version).NotTo(BeEquivalentTo(withheldVersion56),
 			"000056 must be withheld from the staged corpus; staging recipe: copy the real .sql "+
 				"files except 000056 into a temp dir and leave the global registry ENABLED")
 	}
@@ -138,8 +153,18 @@ func stageSchemaWithoutUniqueIndex(ctx context.Context, t testing.TB) string {
 
 	dbVersion, err := provider.GetDBVersion(ctx)
 	Expect(err).NotTo(HaveOccurred())
-	Expect(dbVersion).To(BeEquivalentTo(stagedVersion55),
-		"the staged database must report version 55")
+	// The whole staged chain must have applied — which means the highest STAGED
+	// version, not a hardcoded 55. Pinning 55 here encodes "56 is the last
+	// migration in the tree" a second time, in a place whose failure message
+	// blames the staging rather than the pin.
+	Expect(dbVersion).To(BeEquivalentTo(highestStaged),
+		"the staged database must report the highest staged migration version")
+	// What the negative controls actually require is that the schema sits at or
+	// above 55 (so normalized_name and the skeleton columns from 000054 exist)
+	// while 000056's UNIQUE index does not. The withholding is asserted above;
+	// this pins the floor that makes a create-path failure diagnostic.
+	Expect(dbVersion).To(BeNumerically(">=", stagedVersion55),
+		"the staged schema must include 000054's columns and the registered Go migration 55")
 
 	return connStr
 }
