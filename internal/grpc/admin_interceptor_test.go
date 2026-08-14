@@ -383,6 +383,119 @@ func TestTheResolvedPlayerIsReadableFromContextByTheHandler(t *testing.T) {
 	require.Equal(t, 1, repo.calls, "the player MUST be resolved exactly once per request")
 }
 
+// tokenOnlyRequest carries a session token but NO GetSectionId accessor, so it
+// passes the subject arm and then fails the SectionFromRequest arm's typed
+// assertion — the exact shape a future request message that forgot the field
+// would have.
+type tokenOnlyRequest struct{}
+
+func (tokenOnlyRequest) GetPlayerSessionToken() string { return "raw-token" }
+
+// TestASectionFromRequestMethodWithNoUsableIDIsRefusedBeforeTheHandler pins the
+// third gating arm's two fail-closed inputs: a request that cannot carry a
+// section id at all, and one whose id is blank once trimmed.
+//
+// Neither may be defaulted. Falling through to the fixed-SectionID arm would
+// call AssertSectionAccess with an empty id, which gate.go refuses with
+// ADMIN_SECTION_REQUEST_MALFORMED BEFORE evaluation — turning every
+// AdminGetSection call, admin or not, into a failure before the handler ran.
+func TestASectionFromRequestMethodWithNoUsableIDIsRefusedBeforeTheHandler(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		req  any
+	}{
+		{"no GetSectionId accessor", tokenOnlyRequest{}},
+		{
+			"whitespace-only id",
+			&adminportalv1.AdminGetSectionRequest{SectionId: "  \t ", PlayerSessionToken: "raw-token"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := &recordingHandler{}
+			interceptor := NewAdminSectionInterceptor(AdminInterceptorDeps{
+				Engine:      seedEngineFor(t, adminPlayerULID(), "admin"),
+				SessionRepo: sessionRepoFor(t, adminPlayerULID()),
+			})
+
+			_, err := interceptor(t.Context(), tc.req, getSectionInfo(), handler.unary())
+
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, "ADMIN_SECTION_NO_SECTION_ID")
+			require.Zero(t, handler.calls, "the wrapped handler MUST record zero invocations")
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
+			require.Equal(t, adminDeniedMessage, status.Convert(err).Message())
+		})
+	}
+}
+
+// TestADescriptorCarryingNoRecognisedShapeHitsTheDenyingDefault pins that the
+// shape switch is EXHAUSTIVE with a denying default.
+//
+// A fourth shape added later must DENY rather than acquire whichever arm
+// happened to be reachable — an entry that silently inherited the enumerating
+// arm would be gated at the resource type instead of at its section, and an
+// entry that inherited the fixed arm would be gated against an empty id.
+//
+// The entry is planted at runtime because validateAdminDescriptors refuses to
+// let one exist at boot; that refusal is the first line of defence and this is
+// the second.
+func TestADescriptorCarryingNoRecognisedShapeHitsTheDenyingDefault(t *testing.T) {
+	const planted = "AdminShapelessMethod"
+	section.AdminDescriptors[planted] = section.MethodDescriptor{Action: section.ActionRead}
+	t.Cleanup(func() { delete(section.AdminDescriptors, planted) })
+
+	handler := &recordingHandler{}
+	interceptor := NewAdminSectionInterceptor(AdminInterceptorDeps{
+		Engine:      seedEngineFor(t, adminPlayerULID(), "admin"),
+		SessionRepo: sessionRepoFor(t, adminPlayerULID()),
+	})
+
+	_, err := interceptor(t.Context(),
+		&adminportalv1.AdminGetSectionRequest{SectionId: "characters", PlayerSessionToken: "raw-token"},
+		&grpc.UnaryServerInfo{FullMethod: "/holomush.adminportal.v1.AdminPortalService/" + planted},
+		handler.unary())
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "ADMIN_SECTION_NOT_DECLARED")
+	require.Zero(t, handler.calls, "an unrecognised descriptor shape MUST deny, never pass through")
+}
+
+// TestAdminSectionFromContextReportsAbsenceRatherThanAnEmptySection pins the
+// section accessor's fail-closed shape, for the same reason its player twin
+// does: a zero-valued Section is an unauthorized entry wearing an authorized
+// shape, and a handler projecting one would answer for a section no gate
+// resolved.
+func TestAdminSectionFromContextReportsAbsenceRatherThanAnEmptySection(t *testing.T) {
+	got, ok := AdminSectionFromContext(context.Background())
+	require.False(t, ok)
+	require.Empty(t, got.ID)
+}
+
+// TestTheResolvedSectionIsReadableFromContextByTheHandler is the positive
+// control for the accessor above: after a PASSED gate on a SectionFromRequest
+// method, the resolved entry is on the context for the handler to project.
+func TestTheResolvedSectionIsReadableFromContextByTheHandler(t *testing.T) {
+	interceptor := NewAdminSectionInterceptor(AdminInterceptorDeps{
+		Engine:      seedEngineFor(t, adminPlayerULID(), "admin"),
+		SessionRepo: sessionRepoFor(t, adminPlayerULID()),
+	})
+
+	var seen section.Section
+	_, err := interceptor(t.Context(),
+		&adminportalv1.AdminGetSectionRequest{SectionId: "characters", PlayerSessionToken: "raw-token"},
+		getSectionInfo(),
+		func(ctx context.Context, _ any) (any, error) {
+			var ok bool
+			seen, ok = AdminSectionFromContext(ctx)
+			require.True(t, ok, "the handler MUST find the gated section on the context")
+			return &adminportalv1.AdminGetSectionResponse{}, nil
+		})
+
+	require.NoError(t, err)
+	require.Equal(t, section.ID("characters"), seen.ID)
+	require.Equal(t, section.StatusAvailable, seen.Status)
+}
+
 // TestAdminPlayerFromContextReportsAbsenceRatherThanAZeroPlayer pins the
 // accessor's fail-closed shape: a bare context yields ok=false, never a
 // zero-valued session a caller could mistake for an authenticated one.

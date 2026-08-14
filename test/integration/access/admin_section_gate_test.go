@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/holomush/holomush/internal/admin/section"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
 )
@@ -120,4 +121,113 @@ func TestAnAdminCallingTheAdminPortalDirectlyOverGRPCReceivesEverySection(t *tes
 		"all six PLANNED sections MUST be listed: the enumeration filter is admission, not access")
 	require.Equal(t, 1, available)
 	require.Contains(t, ids, "characters")
+}
+
+// TestEverySectionIsReachableGatedAndRefusingAfterTheGateAtTheWire is ROADMAP
+// Success Criterion 4, asserted over a real gRPC connection for ALL SEVEN
+// sections through ONE RPC.
+//
+// The ids come from section.All(), never a hand-written list: a registry that
+// grew or lost a section changes what this test covers rather than leaving the
+// new one unproven. Every denial is paired with a positive control on the SAME
+// section through the SAME RPC, and the counts are asserted at the end so a
+// loop that silently iterated nothing fails loudly instead of passing vacuously.
+//
+// Wire assertions here carry NO oops code: an oops value does not survive a
+// gRPC round trip. The typed internal codes are asserted in-process in
+// internal/grpc/admin_sections_test.go.
+func TestEverySectionIsReachableGatedAndRefusingAfterTheGateAtTheWire(t *testing.T) {
+	ctx := context.Background()
+
+	srv := integrationtest.Start(
+		t,
+		integrationtest.WithRealABAC(),
+		integrationtest.WithGatedGRPCListener(),
+	)
+	defer srv.Stop()
+
+	client := adminportalv1.NewAdminPortalServiceClient(srv.GatedGRPCConn())
+	nonAdmin := srv.ConnectAuthed(ctx, "Plainget")
+	admin := srv.ConnectAuthedWithRoles(ctx, "Adminget", []string{"admin"})
+
+	get := func(token, id string) (*adminportalv1.AdminGetSectionResponse, error) {
+		return client.AdminGetSection(ctx, &adminportalv1.AdminGetSectionRequest{
+			SectionId:          id,
+			PlayerSessionToken: token,
+		})
+	}
+
+	denied, permitted, notImplemented, available := 0, 0, 0, 0
+
+	for _, entry := range section.All() {
+		t.Run(string(entry.ID), func(t *testing.T) {
+			_, denyErr := get(nonAdmin.PlayerSessionToken(), string(entry.ID))
+			require.Error(t, denyErr, "a non-admin MUST be refused for every section")
+			require.Equal(t, codes.PermissionDenied, status.Code(denyErr))
+			require.Equal(t, "admin section access denied", status.Convert(denyErr).Message(),
+				"the refusal MUST be the same static message for every section")
+			denied++
+
+			resp, adminErr := get(admin.PlayerSessionToken(), string(entry.ID))
+			switch entry.Status {
+			case section.StatusAvailable:
+				require.NoError(t, adminErr, "positive control: an admin MUST reach an available section")
+				require.Equal(t, string(entry.ID), resp.GetSection().GetId())
+				available++
+			case section.StatusPlanned:
+				require.Error(t, adminErr)
+				require.Equal(t, codes.FailedPrecondition, status.Code(adminErr),
+					"a PERMITTED caller MUST get past the gate and be refused for a different reason")
+				notImplemented++
+			default:
+				t.Fatalf("section %q carries status %q, outside the closed vocabulary", entry.ID, entry.Status)
+			}
+			permitted++
+		})
+	}
+
+	require.GreaterOrEqual(t, denied, 7, "a loop that iterated zero sections MUST fail")
+	require.GreaterOrEqual(t, permitted, 7, "every denial MUST be paired with a positive control")
+	require.Equal(t, 6, notImplemented, "all six deferred sections MUST refuse AFTER the gate")
+	require.Equal(t, 1, available)
+}
+
+// TestADeniedCallerGetsByteIdenticalRefusalsForRegisteredAndUnregisteredIDsAtTheWire
+// is the INV-PRIVACY-11 differential asserted where it matters — on the wire,
+// for the ONE RPC whose section id is attacker-controlled.
+//
+// The comparison is require.Equal on the exact strings, not Contains: a
+// substring match would pass for two messages that differ in a suffix, which is
+// precisely the distinguishing field the contract forbids.
+func TestADeniedCallerGetsByteIdenticalRefusalsForRegisteredAndUnregisteredIDsAtTheWire(t *testing.T) {
+	ctx := context.Background()
+
+	srv := integrationtest.Start(
+		t,
+		integrationtest.WithRealABAC(),
+		integrationtest.WithGatedGRPCListener(),
+	)
+	defer srv.Stop()
+
+	client := adminportalv1.NewAdminPortalServiceClient(srv.GatedGRPCConn())
+	nonAdmin := srv.ConnectAuthed(ctx, "Plaindiff")
+
+	call := func(id string) error {
+		_, err := client.AdminGetSection(ctx, &adminportalv1.AdminGetSectionRequest{
+			SectionId:          id,
+			PlayerSessionToken: nonAdmin.PlayerSessionToken(),
+		})
+		return err
+	}
+
+	registeredErr := call("characters")
+	unregisteredErr := call("no-such-section-01JQ")
+
+	require.Error(t, registeredErr)
+	require.Error(t, unregisteredErr)
+	require.Equal(t, status.Code(registeredErr), status.Code(unregisteredErr))
+	require.Equal(t,
+		status.Convert(registeredErr).Message(),
+		status.Convert(unregisteredErr).Message(),
+		"the registry MUST NOT be enumerable through this parameter")
 }
