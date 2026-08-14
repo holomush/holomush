@@ -8,13 +8,15 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
+import type { FieldMask } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file holomush/adminportal/v1/adminportal.proto.
  */
 export const file_holomush_adminportal_v1_adminportal: GenFile = /*@__PURE__*/
-  fileDesc("Cilob2xvbXVzaC9hZG1pbnBvcnRhbC92MS9hZG1pbnBvcnRhbC5wcm90bxIXaG9sb211c2guYWRtaW5wb3J0YWwudjEiQQoYQWRtaW5MaXN0U2VjdGlvbnNSZXF1ZXN0EiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJQge6SARyAhABIlQKGUFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2USNwoIc2VjdGlvbnMYASADKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iXAoWQWRtaW5HZXRTZWN0aW9uUmVxdWVzdBIbCgpzZWN0aW9uX2lkGAEgASgJQge6SARyAhABEiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJQge6SARyAhABIlEKF0FkbWluR2V0U2VjdGlvblJlc3BvbnNlEjYKB3NlY3Rpb24YASABKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iQAoMQWRtaW5TZWN0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIOCgZzdGF0dXMYAyABKAkinQIKGkFkbWluTGlzdENoYXJhY3RlcnNSZXF1ZXN0EiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJQge6SARyAhABEkQKCnNvcnRfZmllbGQYAiABKA4yMC5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlclNvcnRGaWVsZBISCgpkZXNjZW5kaW5nGAMgASgIEkoKDXN0YXR1c19maWx0ZXIYBCABKA4yMy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlclN0YXR1c0ZpbHRlchIRCglwbGF5ZXJfaWQYBSABKAkSDAoEcGFnZRgGIAEoBRIRCglwYWdlX3NpemUYByABKAUibwobQWRtaW5MaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEjsKCmNoYXJhY3RlcnMYASADKAsyJy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlchITCgt0b3RhbF9jb3VudBgCIAEoAyKuAgocQWRtaW5TZWFyY2hDaGFyYWN0ZXJzUmVxdWVzdBIlChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCUIHukgEcgIQARJECgpzb3J0X2ZpZWxkGAIgASgOMjAuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJTb3J0RmllbGQSEgoKZGVzY2VuZGluZxgDIAEoCBJKCg1zdGF0dXNfZmlsdGVyGAQgASgOMjMuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJTdGF0dXNGaWx0ZXISEQoJcGxheWVyX2lkGAUgASgJEgwKBHBhZ2UYBiABKAUSEQoJcGFnZV9zaXplGAcgASgFEg0KBXF1ZXJ5GAggASgJInEKHUFkbWluU2VhcmNoQ2hhcmFjdGVyc1Jlc3BvbnNlEjsKCmNoYXJhY3RlcnMYASADKAsyJy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlchITCgt0b3RhbF9jb3VudBgCIAEoAyJgChhBZG1pbkdldENoYXJhY3RlclJlcXVlc3QSJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAlCB7pIBHICEAESHQoMY2hhcmFjdGVyX2lkGAIgASgJQge6SARyAhABIl0KGUFkbWluR2V0Q2hhcmFjdGVyUmVzcG9uc2USQAoJY2hhcmFjdGVyGAEgASgLMi0uaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJEZXRhaWwiowEKDkFkbWluQ2hhcmFjdGVyEgoKAmlkGAEgASgJEhEKCXBsYXllcl9pZBgCIAEoCRIXCg9wbGF5ZXJfdXNlcm5hbWUYAyABKAkSDAoEbmFtZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkSFgoObGFzdF9hY3RpdmVfYXQYBiABKAMSEgoKY3JlYXRlZF9hdBgHIAEoAxIPCgd2ZXJzaW9uGAggASgFIuQBChRBZG1pbkNoYXJhY3RlckRldGFpbBI6CgljaGFyYWN0ZXIYASABKAsyJy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlchITCgtkZXNjcmlwdGlvbhgCIAEoCRJLCgdwcm9maWxlGAMgAygLMjouaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJEZXRhaWwuUHJvZmlsZUVudHJ5Gi4KDFByb2ZpbGVFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBKpsCChdBZG1pbkNoYXJhY3RlclNvcnRGaWVsZBIqCiZBRE1JTl9DSEFSQUNURVJfU09SVF9GSUVMRF9VTlNQRUNJRklFRBAAEiMKH0FETUlOX0NIQVJBQ1RFUl9TT1JUX0ZJRUxEX05BTUUQARIpCiVBRE1JTl9DSEFSQUNURVJfU09SVF9GSUVMRF9DUkVBVEVEX0FUEAISJQohQURNSU5fQ0hBUkFDVEVSX1NPUlRfRklFTERfU1RBVFVTEAMSLQopQURNSU5fQ0hBUkFDVEVSX1NPUlRfRklFTERfTEFTVF9BQ1RJVkVfQVQQBBIuCipBRE1JTl9DSEFSQUNURVJfU09SVF9GSUVMRF9QTEFZRVJfVVNFUk5BTUUQBSrIAQoaQWRtaW5DaGFyYWN0ZXJTdGF0dXNGaWx0ZXISLQopQURNSU5fQ0hBUkFDVEVSX1NUQVRVU19GSUxURVJfVU5TUEVDSUZJRUQQABIoCiRBRE1JTl9DSEFSQUNURVJfU1RBVFVTX0ZJTFRFUl9BQ1RJVkUQARImCiJBRE1JTl9DSEFSQUNURVJfU1RBVFVTX0ZJTFRFUl9JRExFEAISKQolQURNSU5fQ0hBUkFDVEVSX1NUQVRVU19GSUxURVJfUkVUSVJFRBADMo4FChJBZG1pblBvcnRhbFNlcnZpY2USegoRQWRtaW5MaXN0U2VjdGlvbnMSMS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkxpc3RTZWN0aW9uc1JlcXVlc3QaMi5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkxpc3RTZWN0aW9uc1Jlc3BvbnNlEnQKD0FkbWluR2V0U2VjdGlvbhIvLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluR2V0U2VjdGlvblJlcXVlc3QaMC5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkdldFNlY3Rpb25SZXNwb25zZRKAAQoTQWRtaW5MaXN0Q2hhcmFjdGVycxIzLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdENoYXJhY3RlcnNSZXF1ZXN0GjQuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5MaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEoYBChVBZG1pblNlYXJjaENoYXJhY3RlcnMSNS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlYXJjaENoYXJhY3RlcnNSZXF1ZXN0GjYuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5TZWFyY2hDaGFyYWN0ZXJzUmVzcG9uc2USegoRQWRtaW5HZXRDaGFyYWN0ZXISMS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkdldENoYXJhY3RlclJlcXVlc3QaMi5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkdldENoYXJhY3RlclJlc3BvbnNlQk5aTGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2FkbWlucG9ydGFsL3YxO2FkbWlucG9ydGFsdjFiBnByb3RvMw", [file_buf_validate_validate]);
+  fileDesc("Cilob2xvbXVzaC9hZG1pbnBvcnRhbC92MS9hZG1pbnBvcnRhbC5wcm90bxIXaG9sb211c2guYWRtaW5wb3J0YWwudjEiQQoYQWRtaW5MaXN0U2VjdGlvbnNSZXF1ZXN0EiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJQge6SARyAhABIlQKGUFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2USNwoIc2VjdGlvbnMYASADKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iXAoWQWRtaW5HZXRTZWN0aW9uUmVxdWVzdBIbCgpzZWN0aW9uX2lkGAEgASgJQge6SARyAhABEiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJQge6SARyAhABIlEKF0FkbWluR2V0U2VjdGlvblJlc3BvbnNlEjYKB3NlY3Rpb24YASABKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iQAoMQWRtaW5TZWN0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIOCgZzdGF0dXMYAyABKAkinQIKGkFkbWluTGlzdENoYXJhY3RlcnNSZXF1ZXN0EiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJQge6SARyAhABEkQKCnNvcnRfZmllbGQYAiABKA4yMC5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlclNvcnRGaWVsZBISCgpkZXNjZW5kaW5nGAMgASgIEkoKDXN0YXR1c19maWx0ZXIYBCABKA4yMy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlclN0YXR1c0ZpbHRlchIRCglwbGF5ZXJfaWQYBSABKAkSDAoEcGFnZRgGIAEoBRIRCglwYWdlX3NpemUYByABKAUibwobQWRtaW5MaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEjsKCmNoYXJhY3RlcnMYASADKAsyJy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlchITCgt0b3RhbF9jb3VudBgCIAEoAyKuAgocQWRtaW5TZWFyY2hDaGFyYWN0ZXJzUmVxdWVzdBIlChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCUIHukgEcgIQARJECgpzb3J0X2ZpZWxkGAIgASgOMjAuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJTb3J0RmllbGQSEgoKZGVzY2VuZGluZxgDIAEoCBJKCg1zdGF0dXNfZmlsdGVyGAQgASgOMjMuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJTdGF0dXNGaWx0ZXISEQoJcGxheWVyX2lkGAUgASgJEgwKBHBhZ2UYBiABKAUSEQoJcGFnZV9zaXplGAcgASgFEg0KBXF1ZXJ5GAggASgJInEKHUFkbWluU2VhcmNoQ2hhcmFjdGVyc1Jlc3BvbnNlEjsKCmNoYXJhY3RlcnMYASADKAsyJy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlchITCgt0b3RhbF9jb3VudBgCIAEoAyJgChhBZG1pbkdldENoYXJhY3RlclJlcXVlc3QSJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAlCB7pIBHICEAESHQoMY2hhcmFjdGVyX2lkGAIgASgJQge6SARyAhABIl0KGUFkbWluR2V0Q2hhcmFjdGVyUmVzcG9uc2USQAoJY2hhcmFjdGVyGAEgASgLMi0uaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJEZXRhaWwiowEKDkFkbWluQ2hhcmFjdGVyEgoKAmlkGAEgASgJEhEKCXBsYXllcl9pZBgCIAEoCRIXCg9wbGF5ZXJfdXNlcm5hbWUYAyABKAkSDAoEbmFtZRgEIAEoCRIOCgZzdGF0dXMYBSABKAkSFgoObGFzdF9hY3RpdmVfYXQYBiABKAMSEgoKY3JlYXRlZF9hdBgHIAEoAxIPCgd2ZXJzaW9uGAggASgFIuQBChRBZG1pbkNoYXJhY3RlckRldGFpbBI6CgljaGFyYWN0ZXIYASABKAsyJy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkNoYXJhY3RlchITCgtkZXNjcmlwdGlvbhgCIAEoCRJLCgdwcm9maWxlGAMgAygLMjouaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXJEZXRhaWwuUHJvZmlsZUVudHJ5Gi4KDFByb2ZpbGVFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIqcDChtBZG1pblVwZGF0ZUNoYXJhY3RlclJlcXVlc3QSJQoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAlCB7pIBHICEAESHQoMY2hhcmFjdGVyX2lkGAIgASgJQge6SARyAhABEiEKEGV4cGVjdGVkX3ZlcnNpb24YAyABKAVCB7pIBBoCKAESLwoLdXBkYXRlX21hc2sYBCABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrEhMKC2Rlc2NyaXB0aW9uGAUgASgJEhAKCHByb25vdW5zGAYgASgJEg8KB2NvbmNlcHQYByABKAkSDwoHc3BlY2llcxgIIAEoCRILCgNhZ2UYCSABKAkSDwoHZmFjdGlvbhgKIAEoCRIRCgljdXJyZW50bHkYCyABKAkSEAoIdGltZXpvbmUYDCABKAkSEgoKYXBwZWFyYW5jZRgNIAEoCRITCgtwZXJzb25hbGl0eRgOIAEoCRIRCgliaW9ncmFwaHkYDyABKAkSDgoGcnVtb3JzGBAgASgJEhYKDnJwX3ByZWZlcmVuY2VzGBEgASgJIloKHEFkbWluVXBkYXRlQ2hhcmFjdGVyUmVzcG9uc2USOgoJY2hhcmFjdGVyGAEgASgLMicuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXIihgEKG0FkbWluUmV0aXJlQ2hhcmFjdGVyUmVxdWVzdBIlChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCUIHukgEcgIQARIdCgxjaGFyYWN0ZXJfaWQYAiABKAlCB7pIBHICEAESIQoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBUIHukgEGgIoASJaChxBZG1pblJldGlyZUNoYXJhY3RlclJlc3BvbnNlEjoKCWNoYXJhY3RlchgBIAEoCzInLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluQ2hhcmFjdGVyIogBCh1BZG1pblVucmV0aXJlQ2hhcmFjdGVyUmVxdWVzdBIlChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCUIHukgEcgIQARIdCgxjaGFyYWN0ZXJfaWQYAiABKAlCB7pIBHICEAESIQoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoBUIHukgEGgIoASJcCh5BZG1pblVucmV0aXJlQ2hhcmFjdGVyUmVzcG9uc2USOgoJY2hhcmFjdGVyGAEgASgLMicuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5DaGFyYWN0ZXIqmwIKF0FkbWluQ2hhcmFjdGVyU29ydEZpZWxkEioKJkFETUlOX0NIQVJBQ1RFUl9TT1JUX0ZJRUxEX1VOU1BFQ0lGSUVEEAASIwofQURNSU5fQ0hBUkFDVEVSX1NPUlRfRklFTERfTkFNRRABEikKJUFETUlOX0NIQVJBQ1RFUl9TT1JUX0ZJRUxEX0NSRUFURURfQVQQAhIlCiFBRE1JTl9DSEFSQUNURVJfU09SVF9GSUVMRF9TVEFUVVMQAxItCilBRE1JTl9DSEFSQUNURVJfU09SVF9GSUVMRF9MQVNUX0FDVElWRV9BVBAEEi4KKkFETUlOX0NIQVJBQ1RFUl9TT1JUX0ZJRUxEX1BMQVlFUl9VU0VSTkFNRRAFKsgBChpBZG1pbkNoYXJhY3RlclN0YXR1c0ZpbHRlchItCilBRE1JTl9DSEFSQUNURVJfU1RBVFVTX0ZJTFRFUl9VTlNQRUNJRklFRBAAEigKJEFETUlOX0NIQVJBQ1RFUl9TVEFUVVNfRklMVEVSX0FDVElWRRABEiYKIkFETUlOX0NIQVJBQ1RFUl9TVEFUVVNfRklMVEVSX0lETEUQAhIpCiVBRE1JTl9DSEFSQUNURVJfU1RBVFVTX0ZJTFRFUl9SRVRJUkVEEAMypggKEkFkbWluUG9ydGFsU2VydmljZRJ6ChFBZG1pbkxpc3RTZWN0aW9ucxIxLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdFNlY3Rpb25zUmVxdWVzdBoyLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2USdAoPQWRtaW5HZXRTZWN0aW9uEi8uaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5HZXRTZWN0aW9uUmVxdWVzdBowLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluR2V0U2VjdGlvblJlc3BvbnNlEoABChNBZG1pbkxpc3RDaGFyYWN0ZXJzEjMuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5MaXN0Q2hhcmFjdGVyc1JlcXVlc3QaNC5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pbkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2UShgEKFUFkbWluU2VhcmNoQ2hhcmFjdGVycxI1LmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluU2VhcmNoQ2hhcmFjdGVyc1JlcXVlc3QaNi5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlYXJjaENoYXJhY3RlcnNSZXNwb25zZRJ6ChFBZG1pbkdldENoYXJhY3RlchIxLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluR2V0Q2hhcmFjdGVyUmVxdWVzdBoyLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluR2V0Q2hhcmFjdGVyUmVzcG9uc2USgwEKFEFkbWluVXBkYXRlQ2hhcmFjdGVyEjQuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5VcGRhdGVDaGFyYWN0ZXJSZXF1ZXN0GjUuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5VcGRhdGVDaGFyYWN0ZXJSZXNwb25zZRKDAQoUQWRtaW5SZXRpcmVDaGFyYWN0ZXISNC5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblJldGlyZUNoYXJhY3RlclJlcXVlc3QaNS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblJldGlyZUNoYXJhY3RlclJlc3BvbnNlEokBChZBZG1pblVucmV0aXJlQ2hhcmFjdGVyEjYuaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5VbnJldGlyZUNoYXJhY3RlclJlcXVlc3QaNy5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblVucmV0aXJlQ2hhcmFjdGVyUmVzcG9uc2VCTlpMZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvYWRtaW5wb3J0YWwvdjE7YWRtaW5wb3J0YWx2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask]);
 
 /**
  * AdminListSectionsRequest carries only the caller's bearer token, because
@@ -602,6 +604,321 @@ export const AdminCharacterDetailSchema: GenMessage<AdminCharacterDetail> = /*@_
   messageDesc(file_holomush_adminportal_v1_adminportal, 12);
 
 /**
+ * AdminUpdateCharacterRequest carries one partial edit: which of the thirteen
+ * §10.6-writable paths to apply, their new values, and the optimistic-
+ * concurrency token the write is fenced on.
+ *
+ * # Why the values are flat fields rather than a map
+ *
+ * The mask is the allowlist, and adminProfileMaskablePaths pairs each path name
+ * with the ACCESSOR for its value, so every name is written down exactly once on
+ * the server. A map<string,string> would move the key space onto the wire, where
+ * an unlisted key would have to be rejected by a second check rather than being
+ * inexpressible in the first place.
+ *
+ * It carries NO role, grant, permission or capability field, now or ever:
+ * TestAdminCharacterMessagesCarryNoRoleBearingField walks this message's
+ * descriptor and fails if one is ever added.
+ *
+ * @generated from message holomush.adminportal.v1.AdminUpdateCharacterRequest
+ */
+export type AdminUpdateCharacterRequest = Message<"holomush.adminportal.v1.AdminUpdateCharacterRequest"> & {
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * X-Session-Token header, resolved server-side.
+   *
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+
+  /**
+   * character_id is the ULID to edit. It names SOMEONE ELSE'S character — this
+   * is the cross-owner surface, which is why a stale expected_version is refused
+   * rather than answered.
+   *
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+
+  /**
+   * expected_version is the characters.version the caller composed this edit
+   * against. AdminPortalServer refuses an absent, zero or negative value with
+   * InvalidArgument BEFORE any domain call: zero is never read as "write without
+   * the guard" and never defaulted to the row's current version.
+   *
+   * @generated from field: int32 expected_version = 3;
+   */
+  expectedVersion: number;
+
+  /**
+   * update_mask names which of the thirteen paths to apply. Paths are compared
+   * by EXACT string: no prefix, no wildcard, no glob, no dotted-subtree
+   * expansion — `profile` MUST NOT reach `profile.rp_preferences`. An unlisted
+   * path is REJECTED, not ignored. An EMPTY mask changes nothing and returns
+   * success carrying current state (§9.5 rule 4), after the guards have run.
+   *
+   * @generated from field: google.protobuf.FieldMask update_mask = 4;
+   */
+  updateMask?: FieldMask | undefined;
+
+  /**
+   * description is characters.description, the in-world `look` text. It is a
+   * COLUMN on characters rather than a property row, which is why the twelve
+   * below are twelve and the writable set is thirteen. Its cap is enforced in
+   * the domain by world.Character.SetDescription, in BYTES.
+   *
+   * @generated from field: string description = 5;
+   */
+  description: string;
+
+  /**
+   * pronouns is the `profile.pronouns` property row. Its cap and the six short
+   * fields' below is world.MaxNameLength, measured in BYTES so a CJK value that
+   * looks short is refused at the same boundary an ASCII one is.
+   *
+   * @generated from field: string pronouns = 6;
+   */
+  pronouns: string;
+
+  /**
+   * concept is the `profile.concept` property row: the one-line character
+   * premise the roster renders.
+   *
+   * @generated from field: string concept = 7;
+   */
+  concept: string;
+
+  /**
+   * species is the `profile.species` property row.
+   *
+   * @generated from field: string species = 8;
+   */
+  species: string;
+
+  /**
+   * age is the `profile.age` property row. It is FREE TEXT, not a number: the
+   * server stores whatever prose the operator typed.
+   *
+   * @generated from field: string age = 9;
+   */
+  age: string;
+
+  /**
+   * faction is the `profile.faction` property row.
+   *
+   * @generated from field: string faction = 10;
+   */
+  faction: string;
+
+  /**
+   * currently is the `profile.currently` property row: the short "what this
+   * character is up to" line.
+   *
+   * @generated from field: string currently = 11;
+   */
+  currently: string;
+
+  /**
+   * timezone is the `profile.timezone` property row. It is free text the server
+   * does not resolve against any zone database.
+   *
+   * @generated from field: string timezone = 12;
+   */
+  timezone: string;
+
+  /**
+   * appearance is the `profile.appearance` property row. Its cap and the four
+   * long fields' below is world.MaxDescriptionLength, also in BYTES.
+   *
+   * @generated from field: string appearance = 13;
+   */
+  appearance: string;
+
+  /**
+   * personality is the `profile.personality` property row.
+   *
+   * @generated from field: string personality = 14;
+   */
+  personality: string;
+
+  /**
+   * biography is the `profile.biography` property row.
+   *
+   * @generated from field: string biography = 15;
+   */
+  biography: string;
+
+  /**
+   * rumors is the `profile.rumors` property row: in-character hearsay others
+   * may know.
+   *
+   * @generated from field: string rumors = 16;
+   */
+  rumors: string;
+
+  /**
+   * rp_preferences is the `profile.rp_preferences` property row: the
+   * out-of-character play preferences the profile surfaces.
+   *
+   * @generated from field: string rp_preferences = 17;
+   */
+  rpPreferences: string;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminUpdateCharacterRequest.
+ * Use `create(AdminUpdateCharacterRequestSchema)` to create a new message.
+ */
+export const AdminUpdateCharacterRequestSchema: GenMessage<AdminUpdateCharacterRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 13);
+
+/**
+ * AdminUpdateCharacterResponse carries the post-write row so the admin table can
+ * update in place.
+ *
+ * @generated from message holomush.adminportal.v1.AdminUpdateCharacterResponse
+ */
+export type AdminUpdateCharacterResponse = Message<"holomush.adminportal.v1.AdminUpdateCharacterResponse"> & {
+  /**
+   * character is the §11.3 projection re-read after the write, carrying the NEW
+   * version the client sends as its next expected_version. Guessing that number
+   * client-side is how a correct client becomes a stale one after its first
+   * successful edit. On the empty-mask no-op it carries the UNCHANGED current
+   * version.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminCharacter character = 1;
+   */
+  character?: AdminCharacter | undefined;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminUpdateCharacterResponse.
+ * Use `create(AdminUpdateCharacterResponseSchema)` to create a new message.
+ */
+export const AdminUpdateCharacterResponseSchema: GenMessage<AdminUpdateCharacterResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 14);
+
+/**
+ * AdminRetireCharacterRequest names one character to soft-retire.
+ *
+ * @generated from message holomush.adminportal.v1.AdminRetireCharacterRequest
+ */
+export type AdminRetireCharacterRequest = Message<"holomush.adminportal.v1.AdminRetireCharacterRequest"> & {
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * X-Session-Token header, resolved server-side.
+   *
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+
+  /**
+   * character_id is the ULID to retire.
+   *
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+
+  /**
+   * expected_version is the characters.version the caller read. An absent, zero
+   * or negative value is refused with InvalidArgument before any domain call;
+   * a stale one surfaces as Aborted and neither the status change nor its
+   * envelope lands.
+   *
+   * @generated from field: int32 expected_version = 3;
+   */
+  expectedVersion: number;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminRetireCharacterRequest.
+ * Use `create(AdminRetireCharacterRequestSchema)` to create a new message.
+ */
+export const AdminRetireCharacterRequestSchema: GenMessage<AdminRetireCharacterRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 15);
+
+/**
+ * AdminRetireCharacterResponse carries the post-transition row.
+ *
+ * @generated from message holomush.adminportal.v1.AdminRetireCharacterResponse
+ */
+export type AdminRetireCharacterResponse = Message<"holomush.adminportal.v1.AdminRetireCharacterResponse"> & {
+  /**
+   * character is the §11.3 projection re-read after the transition, with status
+   * `retired` and the bumped version.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminCharacter character = 1;
+   */
+  character?: AdminCharacter | undefined;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminRetireCharacterResponse.
+ * Use `create(AdminRetireCharacterResponseSchema)` to create a new message.
+ */
+export const AdminRetireCharacterResponseSchema: GenMessage<AdminRetireCharacterResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 16);
+
+/**
+ * AdminUnretireCharacterRequest names one retired character to return to play.
+ *
+ * @generated from message holomush.adminportal.v1.AdminUnretireCharacterRequest
+ */
+export type AdminUnretireCharacterRequest = Message<"holomush.adminportal.v1.AdminUnretireCharacterRequest"> & {
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * X-Session-Token header, resolved server-side.
+   *
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+
+  /**
+   * character_id is the ULID to un-retire.
+   *
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+
+  /**
+   * expected_version is the characters.version the caller read, under the same
+   * guard rules retire applies.
+   *
+   * @generated from field: int32 expected_version = 3;
+   */
+  expectedVersion: number;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminUnretireCharacterRequest.
+ * Use `create(AdminUnretireCharacterRequestSchema)` to create a new message.
+ */
+export const AdminUnretireCharacterRequestSchema: GenMessage<AdminUnretireCharacterRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 17);
+
+/**
+ * AdminUnretireCharacterResponse carries the post-transition row.
+ *
+ * @generated from message holomush.adminportal.v1.AdminUnretireCharacterResponse
+ */
+export type AdminUnretireCharacterResponse = Message<"holomush.adminportal.v1.AdminUnretireCharacterResponse"> & {
+  /**
+   * character is the §11.3 projection re-read after the transition, with status
+   * `active` and the bumped version.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminCharacter character = 1;
+   */
+  character?: AdminCharacter | undefined;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminUnretireCharacterResponse.
+ * Use `create(AdminUnretireCharacterResponseSchema)` to create a new message.
+ */
+export const AdminUnretireCharacterResponseSchema: GenMessage<AdminUnretireCharacterResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 18);
+
+/**
  * AdminCharacterSortField is the CLOSED ordering vocabulary of the admin
  * character list — 01-SPEC §11.3's five rows marked Sort=Yes.
  *
@@ -845,6 +1162,64 @@ export const AdminPortalService: GenService<{
     methodKind: "unary";
     input: typeof AdminGetCharacterRequestSchema;
     output: typeof AdminGetCharacterResponseSchema;
+  },
+  /**
+   * AdminUpdateCharacter applies a partial edit to ONE character's thirteen
+   * §10.6-writable values under a closed update_mask allowlist.
+   *
+   * AdminPortalServer.AdminUpdateCharacter resolves each mask path by EXACT
+   * map lookup against adminProfileMaskablePaths — `description` plus the twelve
+   * `profile.*` names — and refuses an unlisted path with InvalidArgument rather
+   * than ignoring it. `roles` is not among them and no admin RPC mutates a role.
+   * The whole edit is ONE call to world.Service.UpdateCharacterProfileAttributes
+   * with a WithDescription option, so a mask naming `description` alongside
+   * `profile.*` paths is one transaction, one version bump and one envelope.
+   * An EMPTY mask is a no-op success carrying current state, after the
+   * authorization, existence and expected_version guards have all run.
+   *
+   * @generated from rpc holomush.adminportal.v1.AdminPortalService.AdminUpdateCharacter
+   */
+  adminUpdateCharacter: {
+    methodKind: "unary";
+    input: typeof AdminUpdateCharacterRequestSchema;
+    output: typeof AdminUpdateCharacterResponseSchema;
+  },
+  /**
+   * AdminRetireCharacter soft-retires ONE character through the canonical
+   * world.Service.RetireCharacter, so an admin transition and any future
+   * player-initiated one cannot diverge.
+   *
+   * It destroys nothing: the row, its entity properties and its name
+   * reservation all survive, and AdminUnretireCharacter reverses it. There is
+   * deliberately NO AdminDeleteCharacter — retire is the only admin-reachable
+   * lifecycle exit, and world.Service.DeleteCharacter is reachable from no admin
+   * RPC and denied to a player-principal admin by seed policy.
+   * A second call on an already-retired character is refused by the shipped
+   * lifecycle guard before any write, so it emits no second envelope.
+   *
+   * @generated from rpc holomush.adminportal.v1.AdminPortalService.AdminRetireCharacter
+   */
+  adminRetireCharacter: {
+    methodKind: "unary";
+    input: typeof AdminRetireCharacterRequestSchema;
+    output: typeof AdminRetireCharacterResponseSchema;
+  },
+  /**
+   * AdminUnretireCharacter returns ONE retired character to play through the
+   * canonical world.Service.UnretireCharacter.
+   *
+   * AdminPortalServer.AdminUnretireCharacter reaches the same guard chain retire
+   * does — the version precheck ahead of the lifecycle guard — so a caller
+   * racing a completed unretire sees the conflict rather than the racing
+   * writer's outcome. It does not restore players.default_character_id; retire
+   * cleared it in its own transaction and the old value is preserved nowhere.
+   *
+   * @generated from rpc holomush.adminportal.v1.AdminPortalService.AdminUnretireCharacter
+   */
+  adminUnretireCharacter: {
+    methodKind: "unary";
+    input: typeof AdminUnretireCharacterRequestSchema;
+    output: typeof AdminUnretireCharacterResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_adminportal_v1_adminportal, 0);

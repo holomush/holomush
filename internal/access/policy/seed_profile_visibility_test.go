@@ -777,7 +777,34 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	// (compiled target) and in the exact-DSL assertions after it. Widening either
 	// entry's action list to include "read" IS the D-29 leak, and it would leave
 	// this family's name set unchanged.
+	// v0.13 phase 06 plan 05 adds the SIXTH argument to this family, and it is a
+	// different one again: seed:admin-character-administration. Read it against
+	// the three-part risk above.
+	//
+	//   - PRINCIPAL is `player`, not `character` — so D-29's "every ephemeral
+	//     guest" concern does not reach it at all. A guest holds no player:
+	//     subject on this surface, and the `when` clause narrows further to
+	//     players carrying the `admin` role.
+	//   - It is the WORLD-LAYER half of a gate the caller has ALREADY passed. An
+	//     admin portal RPC is authorized by the section interceptor against
+	//     `admin_section:characters` before any handler runs; this policy is what
+	//     lets the same caller then pass world.Service's own checkAccess on
+	//     `character:<id>`, which every reused world method runs. Without it the
+	//     admin write path is default-denied one layer down.
+	//   - `delete` IS ABSENT, deliberately, and its own test asserts both that
+	//     the action list has exactly four members and that a real engine denies
+	//     a player-admin `delete` on a character. world.Service.DeleteCharacter
+	//     is irreversible and cascades entity_properties (§4.4), so the RPC-level
+	//     absence of AdminDeleteCharacter is backed at the policy layer too.
+	//
+	// It DOES carry `read`, which the paragraphs above name as the widening that
+	// matters — and unlike the two `read_description` entries, `read` here does
+	// reach world.Service.GetCharacter and therefore characterToProto's PlayerId
+	// and LocationId. What bounds it is the principal: an admin operator, not a
+	// guest. The action list is pinned in wantShapes below, so narrowing or
+	// widening it turns this RED by shape even though the name set is unchanged.
 	want := []string{
+		"seed:admin-character-administration",
 		"seed:character-description-read",
 		"seed:job-fixture-instance-scoped",
 		"seed:job-retirement-instance-scoped",
@@ -789,6 +816,7 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	// The compiled target shape of every member, so a widening of an EXISTING
 	// member is caught even though the name set is unchanged.
 	wantShapes := map[string]characterSeedTargetShape{
+		"seed:admin-character-administration":    {principal: "player", actions: []string{"read", "write", "retire", "unretire"}},
 		"seed:character-description-read":        {principal: "character", actions: []string{"read_description"}},
 		"seed:job-fixture-instance-scoped":       {principal: "job", actions: []string{"write"}},
 		"seed:job-retirement-instance-scoped":    {principal: "job", actions: []string{"read", "write"}},
@@ -955,6 +983,50 @@ func TestSeedAdminSectionAccessIsTypeScopedAndPlayerFlavored(t *testing.T) {
 
 	assert.Equal(t, []string{"read", "write"}, compiled.Target.ActionList,
 		"§10.4: `read` to reach a section, `write` for a mutation within it")
+}
+
+// TestSeedAdminCharacterAdministrationIsCharacterScopedAndExcludesDelete pins
+// the WORLD-LAYER gate that lets the D-104 player-flavoured admin caller reach
+// world.Service's own checkAccess.
+//
+// Without it every admin character write is DEFAULT-DENIED one layer below the
+// section interceptor: seed:admin-full-access requires `principal is character`
+// and never fires for a player principal, and seed:admin-section-access is
+// scoped `resource is admin_section` and does not reach a `character:` resource.
+//
+// `delete` is DELIBERATELY absent from the action list. world.Service's
+// DeleteCharacter is irreversible and cascades entity_properties (§4.4); there is
+// no AdminDeleteCharacter RPC, and this omission makes the same guarantee hold at
+// the POLICY layer, where an RPC-level omission cannot be quietly undone.
+func TestSeedAdminCharacterAdministrationIsCharacterScopedAndExcludesDelete(t *testing.T) {
+	t.Parallel()
+
+	s := requireSeedPolicy(t, "seed:admin-character-administration")
+
+	const want = `permit(principal is player, action in ["read", "write", "retire", "unretire"], resource is character) ` +
+		`when { "admin" in principal.player.roles };`
+	assert.Equal(t, want, s.DSLText)
+
+	compiled, _, err := NewCompiler(emptySchema()).Compile(s.DSLText)
+	require.NoError(t, err)
+
+	require.NotNil(t, compiled.Target.PrincipalType)
+	assert.Equal(t, "player", *compiled.Target.PrincipalType,
+		"D-104 forces a player-flavoured caller so the envelope Actor is player:<id>; a character-flavoured "+
+			"one would put the acting-character id back into the retained audit trail")
+
+	require.NotNil(t, compiled.Target.ResourceType)
+	assert.Equal(t, "character", *compiled.Target.ResourceType,
+		"narrower than seed:admin-full-access's unrestricted resource")
+
+	assert.Nil(t, compiled.Target.ResourceExact,
+		"scoped by resource TYPE, like its admin_section sibling")
+
+	require.Len(t, compiled.Target.ActionList, 4,
+		"exactly the four actions the admin RPCs traverse, and no more")
+	assert.Equal(t, []string{"read", "write", "retire", "unretire"}, compiled.Target.ActionList)
+	assert.NotContains(t, compiled.Target.ActionList, "delete",
+		"world.Service.DeleteCharacter MUST stay unreachable from the admin boundary at the POLICY layer too")
 }
 
 // --- Attribute-reference coverage ---

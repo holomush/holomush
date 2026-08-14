@@ -22,11 +22,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AdminPortalService_AdminListSections_FullMethodName     = "/holomush.adminportal.v1.AdminPortalService/AdminListSections"
-	AdminPortalService_AdminGetSection_FullMethodName       = "/holomush.adminportal.v1.AdminPortalService/AdminGetSection"
-	AdminPortalService_AdminListCharacters_FullMethodName   = "/holomush.adminportal.v1.AdminPortalService/AdminListCharacters"
-	AdminPortalService_AdminSearchCharacters_FullMethodName = "/holomush.adminportal.v1.AdminPortalService/AdminSearchCharacters"
-	AdminPortalService_AdminGetCharacter_FullMethodName     = "/holomush.adminportal.v1.AdminPortalService/AdminGetCharacter"
+	AdminPortalService_AdminListSections_FullMethodName      = "/holomush.adminportal.v1.AdminPortalService/AdminListSections"
+	AdminPortalService_AdminGetSection_FullMethodName        = "/holomush.adminportal.v1.AdminPortalService/AdminGetSection"
+	AdminPortalService_AdminListCharacters_FullMethodName    = "/holomush.adminportal.v1.AdminPortalService/AdminListCharacters"
+	AdminPortalService_AdminSearchCharacters_FullMethodName  = "/holomush.adminportal.v1.AdminPortalService/AdminSearchCharacters"
+	AdminPortalService_AdminGetCharacter_FullMethodName      = "/holomush.adminportal.v1.AdminPortalService/AdminGetCharacter"
+	AdminPortalService_AdminUpdateCharacter_FullMethodName   = "/holomush.adminportal.v1.AdminPortalService/AdminUpdateCharacter"
+	AdminPortalService_AdminRetireCharacter_FullMethodName   = "/holomush.adminportal.v1.AdminPortalService/AdminRetireCharacter"
+	AdminPortalService_AdminUnretireCharacter_FullMethodName = "/holomush.adminportal.v1.AdminPortalService/AdminUnretireCharacter"
 )
 
 // AdminPortalServiceClient is the client API for AdminPortalService service.
@@ -107,6 +110,40 @@ type AdminPortalServiceClient interface {
 	// static message that names no id, so the RPC is not an existence oracle for
 	// a caller the gate already permitted.
 	AdminGetCharacter(ctx context.Context, in *AdminGetCharacterRequest, opts ...grpc.CallOption) (*AdminGetCharacterResponse, error)
+	// AdminUpdateCharacter applies a partial edit to ONE character's thirteen
+	// §10.6-writable values under a closed update_mask allowlist.
+	//
+	// AdminPortalServer.AdminUpdateCharacter resolves each mask path by EXACT
+	// map lookup against adminProfileMaskablePaths — `description` plus the twelve
+	// `profile.*` names — and refuses an unlisted path with InvalidArgument rather
+	// than ignoring it. `roles` is not among them and no admin RPC mutates a role.
+	// The whole edit is ONE call to world.Service.UpdateCharacterProfileAttributes
+	// with a WithDescription option, so a mask naming `description` alongside
+	// `profile.*` paths is one transaction, one version bump and one envelope.
+	// An EMPTY mask is a no-op success carrying current state, after the
+	// authorization, existence and expected_version guards have all run.
+	AdminUpdateCharacter(ctx context.Context, in *AdminUpdateCharacterRequest, opts ...grpc.CallOption) (*AdminUpdateCharacterResponse, error)
+	// AdminRetireCharacter soft-retires ONE character through the canonical
+	// world.Service.RetireCharacter, so an admin transition and any future
+	// player-initiated one cannot diverge.
+	//
+	// It destroys nothing: the row, its entity properties and its name
+	// reservation all survive, and AdminUnretireCharacter reverses it. There is
+	// deliberately NO AdminDeleteCharacter — retire is the only admin-reachable
+	// lifecycle exit, and world.Service.DeleteCharacter is reachable from no admin
+	// RPC and denied to a player-principal admin by seed policy.
+	// A second call on an already-retired character is refused by the shipped
+	// lifecycle guard before any write, so it emits no second envelope.
+	AdminRetireCharacter(ctx context.Context, in *AdminRetireCharacterRequest, opts ...grpc.CallOption) (*AdminRetireCharacterResponse, error)
+	// AdminUnretireCharacter returns ONE retired character to play through the
+	// canonical world.Service.UnretireCharacter.
+	//
+	// AdminPortalServer.AdminUnretireCharacter reaches the same guard chain retire
+	// does — the version precheck ahead of the lifecycle guard — so a caller
+	// racing a completed unretire sees the conflict rather than the racing
+	// writer's outcome. It does not restore players.default_character_id; retire
+	// cleared it in its own transaction and the old value is preserved nowhere.
+	AdminUnretireCharacter(ctx context.Context, in *AdminUnretireCharacterRequest, opts ...grpc.CallOption) (*AdminUnretireCharacterResponse, error)
 }
 
 type adminPortalServiceClient struct {
@@ -161,6 +198,36 @@ func (c *adminPortalServiceClient) AdminGetCharacter(ctx context.Context, in *Ad
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AdminGetCharacterResponse)
 	err := c.cc.Invoke(ctx, AdminPortalService_AdminGetCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminPortalServiceClient) AdminUpdateCharacter(ctx context.Context, in *AdminUpdateCharacterRequest, opts ...grpc.CallOption) (*AdminUpdateCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminUpdateCharacterResponse)
+	err := c.cc.Invoke(ctx, AdminPortalService_AdminUpdateCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminPortalServiceClient) AdminRetireCharacter(ctx context.Context, in *AdminRetireCharacterRequest, opts ...grpc.CallOption) (*AdminRetireCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminRetireCharacterResponse)
+	err := c.cc.Invoke(ctx, AdminPortalService_AdminRetireCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminPortalServiceClient) AdminUnretireCharacter(ctx context.Context, in *AdminUnretireCharacterRequest, opts ...grpc.CallOption) (*AdminUnretireCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminUnretireCharacterResponse)
+	err := c.cc.Invoke(ctx, AdminPortalService_AdminUnretireCharacter_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -245,6 +312,40 @@ type AdminPortalServiceServer interface {
 	// static message that names no id, so the RPC is not an existence oracle for
 	// a caller the gate already permitted.
 	AdminGetCharacter(context.Context, *AdminGetCharacterRequest) (*AdminGetCharacterResponse, error)
+	// AdminUpdateCharacter applies a partial edit to ONE character's thirteen
+	// §10.6-writable values under a closed update_mask allowlist.
+	//
+	// AdminPortalServer.AdminUpdateCharacter resolves each mask path by EXACT
+	// map lookup against adminProfileMaskablePaths — `description` plus the twelve
+	// `profile.*` names — and refuses an unlisted path with InvalidArgument rather
+	// than ignoring it. `roles` is not among them and no admin RPC mutates a role.
+	// The whole edit is ONE call to world.Service.UpdateCharacterProfileAttributes
+	// with a WithDescription option, so a mask naming `description` alongside
+	// `profile.*` paths is one transaction, one version bump and one envelope.
+	// An EMPTY mask is a no-op success carrying current state, after the
+	// authorization, existence and expected_version guards have all run.
+	AdminUpdateCharacter(context.Context, *AdminUpdateCharacterRequest) (*AdminUpdateCharacterResponse, error)
+	// AdminRetireCharacter soft-retires ONE character through the canonical
+	// world.Service.RetireCharacter, so an admin transition and any future
+	// player-initiated one cannot diverge.
+	//
+	// It destroys nothing: the row, its entity properties and its name
+	// reservation all survive, and AdminUnretireCharacter reverses it. There is
+	// deliberately NO AdminDeleteCharacter — retire is the only admin-reachable
+	// lifecycle exit, and world.Service.DeleteCharacter is reachable from no admin
+	// RPC and denied to a player-principal admin by seed policy.
+	// A second call on an already-retired character is refused by the shipped
+	// lifecycle guard before any write, so it emits no second envelope.
+	AdminRetireCharacter(context.Context, *AdminRetireCharacterRequest) (*AdminRetireCharacterResponse, error)
+	// AdminUnretireCharacter returns ONE retired character to play through the
+	// canonical world.Service.UnretireCharacter.
+	//
+	// AdminPortalServer.AdminUnretireCharacter reaches the same guard chain retire
+	// does — the version precheck ahead of the lifecycle guard — so a caller
+	// racing a completed unretire sees the conflict rather than the racing
+	// writer's outcome. It does not restore players.default_character_id; retire
+	// cleared it in its own transaction and the old value is preserved nowhere.
+	AdminUnretireCharacter(context.Context, *AdminUnretireCharacterRequest) (*AdminUnretireCharacterResponse, error)
 	mustEmbedUnimplementedAdminPortalServiceServer()
 }
 
@@ -269,6 +370,15 @@ func (UnimplementedAdminPortalServiceServer) AdminSearchCharacters(context.Conte
 }
 func (UnimplementedAdminPortalServiceServer) AdminGetCharacter(context.Context, *AdminGetCharacterRequest) (*AdminGetCharacterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AdminGetCharacter not implemented")
+}
+func (UnimplementedAdminPortalServiceServer) AdminUpdateCharacter(context.Context, *AdminUpdateCharacterRequest) (*AdminUpdateCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminUpdateCharacter not implemented")
+}
+func (UnimplementedAdminPortalServiceServer) AdminRetireCharacter(context.Context, *AdminRetireCharacterRequest) (*AdminRetireCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminRetireCharacter not implemented")
+}
+func (UnimplementedAdminPortalServiceServer) AdminUnretireCharacter(context.Context, *AdminUnretireCharacterRequest) (*AdminUnretireCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminUnretireCharacter not implemented")
 }
 func (UnimplementedAdminPortalServiceServer) mustEmbedUnimplementedAdminPortalServiceServer() {}
 func (UnimplementedAdminPortalServiceServer) testEmbeddedByValue()                            {}
@@ -381,6 +491,60 @@ func _AdminPortalService_AdminGetCharacter_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminPortalService_AdminUpdateCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminUpdateCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminPortalServiceServer).AdminUpdateCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminPortalService_AdminUpdateCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminPortalServiceServer).AdminUpdateCharacter(ctx, req.(*AdminUpdateCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminPortalService_AdminRetireCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRetireCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminPortalServiceServer).AdminRetireCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminPortalService_AdminRetireCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminPortalServiceServer).AdminRetireCharacter(ctx, req.(*AdminRetireCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminPortalService_AdminUnretireCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminUnretireCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminPortalServiceServer).AdminUnretireCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminPortalService_AdminUnretireCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminPortalServiceServer).AdminUnretireCharacter(ctx, req.(*AdminUnretireCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminPortalService_ServiceDesc is the grpc.ServiceDesc for AdminPortalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -407,6 +571,18 @@ var AdminPortalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AdminGetCharacter",
 			Handler:    _AdminPortalService_AdminGetCharacter_Handler,
+		},
+		{
+			MethodName: "AdminUpdateCharacter",
+			Handler:    _AdminPortalService_AdminUpdateCharacter_Handler,
+		},
+		{
+			MethodName: "AdminRetireCharacter",
+			Handler:    _AdminPortalService_AdminRetireCharacter_Handler,
+		},
+		{
+			MethodName: "AdminUnretireCharacter",
+			Handler:    _AdminPortalService_AdminUnretireCharacter_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

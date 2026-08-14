@@ -89,6 +89,14 @@ var AdminDescriptors = map[string]MethodDescriptor{
 	"AdminListCharacters":   {SectionID: "characters", Action: ActionRead},
 	"AdminSearchCharacters": {SectionID: "characters", Action: ActionRead},
 	"AdminGetCharacter":     {SectionID: "characters", Action: ActionRead},
+	// The three character WRITES. Same fixed-id shape, but ActionWrite — and the
+	// action is what makes the ABAC decision differ from the reads' above, so
+	// reusing ActionRead here would grant every reader the write surface. §10.4
+	// splits `read` (reach a section) from `write` (mutate within it) precisely
+	// so a policy can grant one without the other.
+	"AdminUpdateCharacter":   {SectionID: "characters", Action: ActionWrite},
+	"AdminRetireCharacter":   {SectionID: "characters", Action: ActionWrite},
+	"AdminUnretireCharacter": {SectionID: "characters", Action: ActionWrite},
 }
 
 // LookupMethodDescriptor resolves a BARE method name to its declaration.

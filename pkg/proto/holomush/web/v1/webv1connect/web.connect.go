@@ -206,6 +206,15 @@ const (
 	// WebServiceWebAdminGetCharacterProcedure is the fully-qualified name of the WebService's
 	// WebAdminGetCharacter RPC.
 	WebServiceWebAdminGetCharacterProcedure = "/holomush.web.v1.WebService/WebAdminGetCharacter"
+	// WebServiceWebAdminUpdateCharacterProcedure is the fully-qualified name of the WebService's
+	// WebAdminUpdateCharacter RPC.
+	WebServiceWebAdminUpdateCharacterProcedure = "/holomush.web.v1.WebService/WebAdminUpdateCharacter"
+	// WebServiceWebAdminRetireCharacterProcedure is the fully-qualified name of the WebService's
+	// WebAdminRetireCharacter RPC.
+	WebServiceWebAdminRetireCharacterProcedure = "/holomush.web.v1.WebService/WebAdminRetireCharacter"
+	// WebServiceWebAdminUnretireCharacterProcedure is the fully-qualified name of the WebService's
+	// WebAdminUnretireCharacter RPC.
+	WebServiceWebAdminUnretireCharacterProcedure = "/holomush.web.v1.WebService/WebAdminUnretireCharacter"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -476,6 +485,21 @@ type WebServiceClient interface {
 	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
 	// message unmodified; the core's static NotFound reaches the browser as-is.
 	WebAdminGetCharacter(context.Context, *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error)
+	// WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+	// Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+	// the expected_version verbatim and computes nothing: the closed allowlist,
+	// the byte caps, the version guard and the section gate all live core-side,
+	// where a caller speaking gRPC directly cannot skip them.
+	WebAdminUpdateCharacter(context.Context, *connect.Request[v1.WebAdminUpdateCharacterRequest]) (*connect.Response[v1.WebAdminUpdateCharacterResponse], error)
+	// WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+	// Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+	// the core's Aborted for a stale version and FailedPrecondition for an
+	// already-retired character both reach the browser unmodified.
+	WebAdminRetireCharacter(context.Context, *connect.Request[v1.WebAdminRetireCharacterRequest]) (*connect.Response[v1.WebAdminRetireCharacterResponse], error)
+	// WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+	// with the same forward-verbatim shape its retire peer has. There is no
+	// WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+	WebAdminUnretireCharacter(context.Context, *connect.Request[v1.WebAdminUnretireCharacterRequest]) (*connect.Response[v1.WebAdminUnretireCharacterResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -843,6 +867,24 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebAdminGetCharacter")),
 			connect.WithClientOptions(opts...),
 		),
+		webAdminUpdateCharacter: connect.NewClient[v1.WebAdminUpdateCharacterRequest, v1.WebAdminUpdateCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminUpdateCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminUpdateCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminRetireCharacter: connect.NewClient[v1.WebAdminRetireCharacterRequest, v1.WebAdminRetireCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminRetireCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminRetireCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminUnretireCharacter: connect.NewClient[v1.WebAdminUnretireCharacterRequest, v1.WebAdminUnretireCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminUnretireCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminUnretireCharacter")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -907,6 +949,9 @@ type webServiceClient struct {
 	webAdminListCharacters        *connect.Client[v1.WebAdminListCharactersRequest, v1.WebAdminListCharactersResponse]
 	webAdminSearchCharacters      *connect.Client[v1.WebAdminSearchCharactersRequest, v1.WebAdminSearchCharactersResponse]
 	webAdminGetCharacter          *connect.Client[v1.WebAdminGetCharacterRequest, v1.WebAdminGetCharacterResponse]
+	webAdminUpdateCharacter       *connect.Client[v1.WebAdminUpdateCharacterRequest, v1.WebAdminUpdateCharacterResponse]
+	webAdminRetireCharacter       *connect.Client[v1.WebAdminRetireCharacterRequest, v1.WebAdminRetireCharacterResponse]
+	webAdminUnretireCharacter     *connect.Client[v1.WebAdminUnretireCharacterRequest, v1.WebAdminUnretireCharacterResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -1204,6 +1249,21 @@ func (c *webServiceClient) WebAdminGetCharacter(ctx context.Context, req *connec
 	return c.webAdminGetCharacter.CallUnary(ctx, req)
 }
 
+// WebAdminUpdateCharacter calls holomush.web.v1.WebService.WebAdminUpdateCharacter.
+func (c *webServiceClient) WebAdminUpdateCharacter(ctx context.Context, req *connect.Request[v1.WebAdminUpdateCharacterRequest]) (*connect.Response[v1.WebAdminUpdateCharacterResponse], error) {
+	return c.webAdminUpdateCharacter.CallUnary(ctx, req)
+}
+
+// WebAdminRetireCharacter calls holomush.web.v1.WebService.WebAdminRetireCharacter.
+func (c *webServiceClient) WebAdminRetireCharacter(ctx context.Context, req *connect.Request[v1.WebAdminRetireCharacterRequest]) (*connect.Response[v1.WebAdminRetireCharacterResponse], error) {
+	return c.webAdminRetireCharacter.CallUnary(ctx, req)
+}
+
+// WebAdminUnretireCharacter calls holomush.web.v1.WebService.WebAdminUnretireCharacter.
+func (c *webServiceClient) WebAdminUnretireCharacter(ctx context.Context, req *connect.Request[v1.WebAdminUnretireCharacterRequest]) (*connect.Response[v1.WebAdminUnretireCharacterResponse], error) {
+	return c.webAdminUnretireCharacter.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -1472,6 +1532,21 @@ type WebServiceHandler interface {
 	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
 	// message unmodified; the core's static NotFound reaches the browser as-is.
 	WebAdminGetCharacter(context.Context, *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error)
+	// WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+	// Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+	// the expected_version verbatim and computes nothing: the closed allowlist,
+	// the byte caps, the version guard and the section gate all live core-side,
+	// where a caller speaking gRPC directly cannot skip them.
+	WebAdminUpdateCharacter(context.Context, *connect.Request[v1.WebAdminUpdateCharacterRequest]) (*connect.Response[v1.WebAdminUpdateCharacterResponse], error)
+	// WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+	// Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+	// the core's Aborted for a stale version and FailedPrecondition for an
+	// already-retired character both reach the browser unmodified.
+	WebAdminRetireCharacter(context.Context, *connect.Request[v1.WebAdminRetireCharacterRequest]) (*connect.Response[v1.WebAdminRetireCharacterResponse], error)
+	// WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+	// with the same forward-verbatim shape its retire peer has. There is no
+	// WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+	WebAdminUnretireCharacter(context.Context, *connect.Request[v1.WebAdminUnretireCharacterRequest]) (*connect.Response[v1.WebAdminUnretireCharacterResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1835,6 +1910,24 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebAdminGetCharacter")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebAdminUpdateCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminUpdateCharacterProcedure,
+		svc.WebAdminUpdateCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminUpdateCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminRetireCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminRetireCharacterProcedure,
+		svc.WebAdminRetireCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminRetireCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminUnretireCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminUnretireCharacterProcedure,
+		svc.WebAdminUnretireCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminUnretireCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -1955,6 +2048,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebAdminSearchCharactersHandler.ServeHTTP(w, r)
 		case WebServiceWebAdminGetCharacterProcedure:
 			webServiceWebAdminGetCharacterHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminUpdateCharacterProcedure:
+			webServiceWebAdminUpdateCharacterHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminRetireCharacterProcedure:
+			webServiceWebAdminRetireCharacterHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminUnretireCharacterProcedure:
+			webServiceWebAdminUnretireCharacterHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2198,4 +2297,16 @@ func (UnimplementedWebServiceHandler) WebAdminSearchCharacters(context.Context, 
 
 func (UnimplementedWebServiceHandler) WebAdminGetCharacter(context.Context, *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminGetCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminUpdateCharacter(context.Context, *connect.Request[v1.WebAdminUpdateCharacterRequest]) (*connect.Response[v1.WebAdminUpdateCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminUpdateCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminRetireCharacter(context.Context, *connect.Request[v1.WebAdminRetireCharacterRequest]) (*connect.Response[v1.WebAdminRetireCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminRetireCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminUnretireCharacter(context.Context, *connect.Request[v1.WebAdminUnretireCharacterRequest]) (*connect.Response[v1.WebAdminUnretireCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminUnretireCharacter is not implemented"))
 }

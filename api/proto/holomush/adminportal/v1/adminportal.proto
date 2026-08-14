@@ -6,6 +6,7 @@ syntax = "proto3";
 package holomush.adminportal.v1;
 
 import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1;adminportalv1";
 
@@ -83,6 +84,40 @@ service AdminPortalService {
   // static message that names no id, so the RPC is not an existence oracle for
   // a caller the gate already permitted.
   rpc AdminGetCharacter(AdminGetCharacterRequest) returns (AdminGetCharacterResponse);
+  // AdminUpdateCharacter applies a partial edit to ONE character's thirteen
+  // §10.6-writable values under a closed update_mask allowlist.
+  //
+  // AdminPortalServer.AdminUpdateCharacter resolves each mask path by EXACT
+  // map lookup against adminProfileMaskablePaths — `description` plus the twelve
+  // `profile.*` names — and refuses an unlisted path with InvalidArgument rather
+  // than ignoring it. `roles` is not among them and no admin RPC mutates a role.
+  // The whole edit is ONE call to world.Service.UpdateCharacterProfileAttributes
+  // with a WithDescription option, so a mask naming `description` alongside
+  // `profile.*` paths is one transaction, one version bump and one envelope.
+  // An EMPTY mask is a no-op success carrying current state, after the
+  // authorization, existence and expected_version guards have all run.
+  rpc AdminUpdateCharacter(AdminUpdateCharacterRequest) returns (AdminUpdateCharacterResponse);
+  // AdminRetireCharacter soft-retires ONE character through the canonical
+  // world.Service.RetireCharacter, so an admin transition and any future
+  // player-initiated one cannot diverge.
+  //
+  // It destroys nothing: the row, its entity properties and its name
+  // reservation all survive, and AdminUnretireCharacter reverses it. There is
+  // deliberately NO AdminDeleteCharacter — retire is the only admin-reachable
+  // lifecycle exit, and world.Service.DeleteCharacter is reachable from no admin
+  // RPC and denied to a player-principal admin by seed policy.
+  // A second call on an already-retired character is refused by the shipped
+  // lifecycle guard before any write, so it emits no second envelope.
+  rpc AdminRetireCharacter(AdminRetireCharacterRequest) returns (AdminRetireCharacterResponse);
+  // AdminUnretireCharacter returns ONE retired character to play through the
+  // canonical world.Service.UnretireCharacter.
+  //
+  // AdminPortalServer.AdminUnretireCharacter reaches the same guard chain retire
+  // does — the version precheck ahead of the lifecycle guard — so a caller
+  // racing a completed unretire sees the conflict rather than the racing
+  // writer's outcome. It does not restore players.default_character_id; retire
+  // cleared it in its own transaction and the old value is preserved nowhere.
+  rpc AdminUnretireCharacter(AdminUnretireCharacterRequest) returns (AdminUnretireCharacterResponse);
 }
 
 // AdminCharacterSortField is the CLOSED ordering vocabulary of the admin
@@ -392,4 +427,129 @@ message AdminCharacterDetail {
   // flag-style row does not round-trip through the edit surface as a blank the
   // operator never authored.
   map<string, string> profile = 3;
+}
+
+// AdminUpdateCharacterRequest carries one partial edit: which of the thirteen
+// §10.6-writable paths to apply, their new values, and the optimistic-
+// concurrency token the write is fenced on.
+//
+// # Why the values are flat fields rather than a map
+//
+// The mask is the allowlist, and adminProfileMaskablePaths pairs each path name
+// with the ACCESSOR for its value, so every name is written down exactly once on
+// the server. A map<string,string> would move the key space onto the wire, where
+// an unlisted key would have to be rejected by a second check rather than being
+// inexpressible in the first place.
+//
+// It carries NO role, grant, permission or capability field, now or ever:
+// TestAdminCharacterMessagesCarryNoRoleBearingField walks this message's
+// descriptor and fails if one is ever added.
+message AdminUpdateCharacterRequest {
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // X-Session-Token header, resolved server-side.
+  string player_session_token = 1 [(buf.validate.field).string.min_len = 1];
+  // character_id is the ULID to edit. It names SOMEONE ELSE'S character — this
+  // is the cross-owner surface, which is why a stale expected_version is refused
+  // rather than answered.
+  string character_id = 2 [(buf.validate.field).string.min_len = 1];
+  // expected_version is the characters.version the caller composed this edit
+  // against. AdminPortalServer refuses an absent, zero or negative value with
+  // InvalidArgument BEFORE any domain call: zero is never read as "write without
+  // the guard" and never defaulted to the row's current version.
+  int32 expected_version = 3 [(buf.validate.field).int32.gte = 1];
+  // update_mask names which of the thirteen paths to apply. Paths are compared
+  // by EXACT string: no prefix, no wildcard, no glob, no dotted-subtree
+  // expansion — `profile` MUST NOT reach `profile.rp_preferences`. An unlisted
+  // path is REJECTED, not ignored. An EMPTY mask changes nothing and returns
+  // success carrying current state (§9.5 rule 4), after the guards have run.
+  google.protobuf.FieldMask update_mask = 4;
+  // description is characters.description, the in-world `look` text. It is a
+  // COLUMN on characters rather than a property row, which is why the twelve
+  // below are twelve and the writable set is thirteen. Its cap is enforced in
+  // the domain by world.Character.SetDescription, in BYTES.
+  string description = 5;
+  // pronouns is the `profile.pronouns` property row. Its cap and the six short
+  // fields' below is world.MaxNameLength, measured in BYTES so a CJK value that
+  // looks short is refused at the same boundary an ASCII one is.
+  string pronouns = 6;
+  // concept is the `profile.concept` property row: the one-line character
+  // premise the roster renders.
+  string concept = 7;
+  // species is the `profile.species` property row.
+  string species = 8;
+  // age is the `profile.age` property row. It is FREE TEXT, not a number: the
+  // server stores whatever prose the operator typed.
+  string age = 9;
+  // faction is the `profile.faction` property row.
+  string faction = 10;
+  // currently is the `profile.currently` property row: the short "what this
+  // character is up to" line.
+  string currently = 11;
+  // timezone is the `profile.timezone` property row. It is free text the server
+  // does not resolve against any zone database.
+  string timezone = 12;
+  // appearance is the `profile.appearance` property row. Its cap and the four
+  // long fields' below is world.MaxDescriptionLength, also in BYTES.
+  string appearance = 13;
+  // personality is the `profile.personality` property row.
+  string personality = 14;
+  // biography is the `profile.biography` property row.
+  string biography = 15;
+  // rumors is the `profile.rumors` property row: in-character hearsay others
+  // may know.
+  string rumors = 16;
+  // rp_preferences is the `profile.rp_preferences` property row: the
+  // out-of-character play preferences the profile surfaces.
+  string rp_preferences = 17;
+}
+
+// AdminUpdateCharacterResponse carries the post-write row so the admin table can
+// update in place.
+message AdminUpdateCharacterResponse {
+  // character is the §11.3 projection re-read after the write, carrying the NEW
+  // version the client sends as its next expected_version. Guessing that number
+  // client-side is how a correct client becomes a stale one after its first
+  // successful edit. On the empty-mask no-op it carries the UNCHANGED current
+  // version.
+  AdminCharacter character = 1;
+}
+
+// AdminRetireCharacterRequest names one character to soft-retire.
+message AdminRetireCharacterRequest {
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // X-Session-Token header, resolved server-side.
+  string player_session_token = 1 [(buf.validate.field).string.min_len = 1];
+  // character_id is the ULID to retire.
+  string character_id = 2 [(buf.validate.field).string.min_len = 1];
+  // expected_version is the characters.version the caller read. An absent, zero
+  // or negative value is refused with InvalidArgument before any domain call;
+  // a stale one surfaces as Aborted and neither the status change nor its
+  // envelope lands.
+  int32 expected_version = 3 [(buf.validate.field).int32.gte = 1];
+}
+
+// AdminRetireCharacterResponse carries the post-transition row.
+message AdminRetireCharacterResponse {
+  // character is the §11.3 projection re-read after the transition, with status
+  // `retired` and the bumped version.
+  AdminCharacter character = 1;
+}
+
+// AdminUnretireCharacterRequest names one retired character to return to play.
+message AdminUnretireCharacterRequest {
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // X-Session-Token header, resolved server-side.
+  string player_session_token = 1 [(buf.validate.field).string.min_len = 1];
+  // character_id is the ULID to un-retire.
+  string character_id = 2 [(buf.validate.field).string.min_len = 1];
+  // expected_version is the characters.version the caller read, under the same
+  // guard rules retire applies.
+  int32 expected_version = 3 [(buf.validate.field).int32.gte = 1];
+}
+
+// AdminUnretireCharacterResponse carries the post-transition row.
+message AdminUnretireCharacterResponse {
+  // character is the §11.3 projection re-read after the transition, with status
+  // `active` and the bumped version.
+  AdminCharacter character = 1;
 }

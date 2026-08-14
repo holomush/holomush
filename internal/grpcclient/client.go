@@ -560,6 +560,38 @@ func (c *Client) AdminGetCharacter(ctx context.Context, req *adminportalv1.Admin
 	return resp, nil
 }
 
+// AdminUpdateCharacter forwards to AdminPortalService.AdminUpdateCharacter.
+//
+// The unwrapped pass-through is what keeps the core's per-outcome statuses
+// distinguishable at the browser: InvalidArgument for an unlisted mask path or a
+// zero version, Aborted for a stale one, and the SAME opaque PermissionDenied
+// for both authorization layers.
+func (c *Client) AdminUpdateCharacter(ctx context.Context, req *adminportalv1.AdminUpdateCharacterRequest) (*adminportalv1.AdminUpdateCharacterResponse, error) {
+	resp, err := c.adminPortalClient.AdminUpdateCharacter(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminRetireCharacter forwards to AdminPortalService.AdminRetireCharacter.
+func (c *Client) AdminRetireCharacter(ctx context.Context, req *adminportalv1.AdminRetireCharacterRequest) (*adminportalv1.AdminRetireCharacterResponse, error) {
+	resp, err := c.adminPortalClient.AdminRetireCharacter(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminUnretireCharacter forwards to AdminPortalService.AdminUnretireCharacter.
+func (c *Client) AdminUnretireCharacter(ctx context.Context, req *adminportalv1.AdminUnretireCharacterRequest) (*adminportalv1.AdminUnretireCharacterResponse, error) {
+	resp, err := c.adminPortalClient.AdminUnretireCharacter(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
 // ListScenesForViewer returns the public scene board filtered by the player's preferences.
 func (c *Client) ListScenesForViewer(ctx context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
 	resp, err := c.sceneAccessClient.ListScenesForViewer(ctx, req)

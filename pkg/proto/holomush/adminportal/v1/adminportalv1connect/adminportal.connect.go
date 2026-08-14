@@ -51,6 +51,15 @@ const (
 	// AdminPortalServiceAdminGetCharacterProcedure is the fully-qualified name of the
 	// AdminPortalService's AdminGetCharacter RPC.
 	AdminPortalServiceAdminGetCharacterProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminGetCharacter"
+	// AdminPortalServiceAdminUpdateCharacterProcedure is the fully-qualified name of the
+	// AdminPortalService's AdminUpdateCharacter RPC.
+	AdminPortalServiceAdminUpdateCharacterProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminUpdateCharacter"
+	// AdminPortalServiceAdminRetireCharacterProcedure is the fully-qualified name of the
+	// AdminPortalService's AdminRetireCharacter RPC.
+	AdminPortalServiceAdminRetireCharacterProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminRetireCharacter"
+	// AdminPortalServiceAdminUnretireCharacterProcedure is the fully-qualified name of the
+	// AdminPortalService's AdminUnretireCharacter RPC.
+	AdminPortalServiceAdminUnretireCharacterProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminUnretireCharacter"
 )
 
 // AdminPortalServiceClient is a client for the holomush.adminportal.v1.AdminPortalService service.
@@ -112,6 +121,40 @@ type AdminPortalServiceClient interface {
 	// static message that names no id, so the RPC is not an existence oracle for
 	// a caller the gate already permitted.
 	AdminGetCharacter(context.Context, *connect.Request[v1.AdminGetCharacterRequest]) (*connect.Response[v1.AdminGetCharacterResponse], error)
+	// AdminUpdateCharacter applies a partial edit to ONE character's thirteen
+	// §10.6-writable values under a closed update_mask allowlist.
+	//
+	// AdminPortalServer.AdminUpdateCharacter resolves each mask path by EXACT
+	// map lookup against adminProfileMaskablePaths — `description` plus the twelve
+	// `profile.*` names — and refuses an unlisted path with InvalidArgument rather
+	// than ignoring it. `roles` is not among them and no admin RPC mutates a role.
+	// The whole edit is ONE call to world.Service.UpdateCharacterProfileAttributes
+	// with a WithDescription option, so a mask naming `description` alongside
+	// `profile.*` paths is one transaction, one version bump and one envelope.
+	// An EMPTY mask is a no-op success carrying current state, after the
+	// authorization, existence and expected_version guards have all run.
+	AdminUpdateCharacter(context.Context, *connect.Request[v1.AdminUpdateCharacterRequest]) (*connect.Response[v1.AdminUpdateCharacterResponse], error)
+	// AdminRetireCharacter soft-retires ONE character through the canonical
+	// world.Service.RetireCharacter, so an admin transition and any future
+	// player-initiated one cannot diverge.
+	//
+	// It destroys nothing: the row, its entity properties and its name
+	// reservation all survive, and AdminUnretireCharacter reverses it. There is
+	// deliberately NO AdminDeleteCharacter — retire is the only admin-reachable
+	// lifecycle exit, and world.Service.DeleteCharacter is reachable from no admin
+	// RPC and denied to a player-principal admin by seed policy.
+	// A second call on an already-retired character is refused by the shipped
+	// lifecycle guard before any write, so it emits no second envelope.
+	AdminRetireCharacter(context.Context, *connect.Request[v1.AdminRetireCharacterRequest]) (*connect.Response[v1.AdminRetireCharacterResponse], error)
+	// AdminUnretireCharacter returns ONE retired character to play through the
+	// canonical world.Service.UnretireCharacter.
+	//
+	// AdminPortalServer.AdminUnretireCharacter reaches the same guard chain retire
+	// does — the version precheck ahead of the lifecycle guard — so a caller
+	// racing a completed unretire sees the conflict rather than the racing
+	// writer's outcome. It does not restore players.default_character_id; retire
+	// cleared it in its own transaction and the old value is preserved nowhere.
+	AdminUnretireCharacter(context.Context, *connect.Request[v1.AdminUnretireCharacterRequest]) (*connect.Response[v1.AdminUnretireCharacterResponse], error)
 }
 
 // NewAdminPortalServiceClient constructs a client for the
@@ -155,16 +198,37 @@ func NewAdminPortalServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(adminPortalServiceMethods.ByName("AdminGetCharacter")),
 			connect.WithClientOptions(opts...),
 		),
+		adminUpdateCharacter: connect.NewClient[v1.AdminUpdateCharacterRequest, v1.AdminUpdateCharacterResponse](
+			httpClient,
+			baseURL+AdminPortalServiceAdminUpdateCharacterProcedure,
+			connect.WithSchema(adminPortalServiceMethods.ByName("AdminUpdateCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		adminRetireCharacter: connect.NewClient[v1.AdminRetireCharacterRequest, v1.AdminRetireCharacterResponse](
+			httpClient,
+			baseURL+AdminPortalServiceAdminRetireCharacterProcedure,
+			connect.WithSchema(adminPortalServiceMethods.ByName("AdminRetireCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		adminUnretireCharacter: connect.NewClient[v1.AdminUnretireCharacterRequest, v1.AdminUnretireCharacterResponse](
+			httpClient,
+			baseURL+AdminPortalServiceAdminUnretireCharacterProcedure,
+			connect.WithSchema(adminPortalServiceMethods.ByName("AdminUnretireCharacter")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // adminPortalServiceClient implements AdminPortalServiceClient.
 type adminPortalServiceClient struct {
-	adminListSections     *connect.Client[v1.AdminListSectionsRequest, v1.AdminListSectionsResponse]
-	adminGetSection       *connect.Client[v1.AdminGetSectionRequest, v1.AdminGetSectionResponse]
-	adminListCharacters   *connect.Client[v1.AdminListCharactersRequest, v1.AdminListCharactersResponse]
-	adminSearchCharacters *connect.Client[v1.AdminSearchCharactersRequest, v1.AdminSearchCharactersResponse]
-	adminGetCharacter     *connect.Client[v1.AdminGetCharacterRequest, v1.AdminGetCharacterResponse]
+	adminListSections      *connect.Client[v1.AdminListSectionsRequest, v1.AdminListSectionsResponse]
+	adminGetSection        *connect.Client[v1.AdminGetSectionRequest, v1.AdminGetSectionResponse]
+	adminListCharacters    *connect.Client[v1.AdminListCharactersRequest, v1.AdminListCharactersResponse]
+	adminSearchCharacters  *connect.Client[v1.AdminSearchCharactersRequest, v1.AdminSearchCharactersResponse]
+	adminGetCharacter      *connect.Client[v1.AdminGetCharacterRequest, v1.AdminGetCharacterResponse]
+	adminUpdateCharacter   *connect.Client[v1.AdminUpdateCharacterRequest, v1.AdminUpdateCharacterResponse]
+	adminRetireCharacter   *connect.Client[v1.AdminRetireCharacterRequest, v1.AdminRetireCharacterResponse]
+	adminUnretireCharacter *connect.Client[v1.AdminUnretireCharacterRequest, v1.AdminUnretireCharacterResponse]
 }
 
 // AdminListSections calls holomush.adminportal.v1.AdminPortalService.AdminListSections.
@@ -190,6 +254,21 @@ func (c *adminPortalServiceClient) AdminSearchCharacters(ctx context.Context, re
 // AdminGetCharacter calls holomush.adminportal.v1.AdminPortalService.AdminGetCharacter.
 func (c *adminPortalServiceClient) AdminGetCharacter(ctx context.Context, req *connect.Request[v1.AdminGetCharacterRequest]) (*connect.Response[v1.AdminGetCharacterResponse], error) {
 	return c.adminGetCharacter.CallUnary(ctx, req)
+}
+
+// AdminUpdateCharacter calls holomush.adminportal.v1.AdminPortalService.AdminUpdateCharacter.
+func (c *adminPortalServiceClient) AdminUpdateCharacter(ctx context.Context, req *connect.Request[v1.AdminUpdateCharacterRequest]) (*connect.Response[v1.AdminUpdateCharacterResponse], error) {
+	return c.adminUpdateCharacter.CallUnary(ctx, req)
+}
+
+// AdminRetireCharacter calls holomush.adminportal.v1.AdminPortalService.AdminRetireCharacter.
+func (c *adminPortalServiceClient) AdminRetireCharacter(ctx context.Context, req *connect.Request[v1.AdminRetireCharacterRequest]) (*connect.Response[v1.AdminRetireCharacterResponse], error) {
+	return c.adminRetireCharacter.CallUnary(ctx, req)
+}
+
+// AdminUnretireCharacter calls holomush.adminportal.v1.AdminPortalService.AdminUnretireCharacter.
+func (c *adminPortalServiceClient) AdminUnretireCharacter(ctx context.Context, req *connect.Request[v1.AdminUnretireCharacterRequest]) (*connect.Response[v1.AdminUnretireCharacterResponse], error) {
+	return c.adminUnretireCharacter.CallUnary(ctx, req)
 }
 
 // AdminPortalServiceHandler is an implementation of the holomush.adminportal.v1.AdminPortalService
@@ -252,6 +331,40 @@ type AdminPortalServiceHandler interface {
 	// static message that names no id, so the RPC is not an existence oracle for
 	// a caller the gate already permitted.
 	AdminGetCharacter(context.Context, *connect.Request[v1.AdminGetCharacterRequest]) (*connect.Response[v1.AdminGetCharacterResponse], error)
+	// AdminUpdateCharacter applies a partial edit to ONE character's thirteen
+	// §10.6-writable values under a closed update_mask allowlist.
+	//
+	// AdminPortalServer.AdminUpdateCharacter resolves each mask path by EXACT
+	// map lookup against adminProfileMaskablePaths — `description` plus the twelve
+	// `profile.*` names — and refuses an unlisted path with InvalidArgument rather
+	// than ignoring it. `roles` is not among them and no admin RPC mutates a role.
+	// The whole edit is ONE call to world.Service.UpdateCharacterProfileAttributes
+	// with a WithDescription option, so a mask naming `description` alongside
+	// `profile.*` paths is one transaction, one version bump and one envelope.
+	// An EMPTY mask is a no-op success carrying current state, after the
+	// authorization, existence and expected_version guards have all run.
+	AdminUpdateCharacter(context.Context, *connect.Request[v1.AdminUpdateCharacterRequest]) (*connect.Response[v1.AdminUpdateCharacterResponse], error)
+	// AdminRetireCharacter soft-retires ONE character through the canonical
+	// world.Service.RetireCharacter, so an admin transition and any future
+	// player-initiated one cannot diverge.
+	//
+	// It destroys nothing: the row, its entity properties and its name
+	// reservation all survive, and AdminUnretireCharacter reverses it. There is
+	// deliberately NO AdminDeleteCharacter — retire is the only admin-reachable
+	// lifecycle exit, and world.Service.DeleteCharacter is reachable from no admin
+	// RPC and denied to a player-principal admin by seed policy.
+	// A second call on an already-retired character is refused by the shipped
+	// lifecycle guard before any write, so it emits no second envelope.
+	AdminRetireCharacter(context.Context, *connect.Request[v1.AdminRetireCharacterRequest]) (*connect.Response[v1.AdminRetireCharacterResponse], error)
+	// AdminUnretireCharacter returns ONE retired character to play through the
+	// canonical world.Service.UnretireCharacter.
+	//
+	// AdminPortalServer.AdminUnretireCharacter reaches the same guard chain retire
+	// does — the version precheck ahead of the lifecycle guard — so a caller
+	// racing a completed unretire sees the conflict rather than the racing
+	// writer's outcome. It does not restore players.default_character_id; retire
+	// cleared it in its own transaction and the old value is preserved nowhere.
+	AdminUnretireCharacter(context.Context, *connect.Request[v1.AdminUnretireCharacterRequest]) (*connect.Response[v1.AdminUnretireCharacterResponse], error)
 }
 
 // NewAdminPortalServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -291,6 +404,24 @@ func NewAdminPortalServiceHandler(svc AdminPortalServiceHandler, opts ...connect
 		connect.WithSchema(adminPortalServiceMethods.ByName("AdminGetCharacter")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminPortalServiceAdminUpdateCharacterHandler := connect.NewUnaryHandler(
+		AdminPortalServiceAdminUpdateCharacterProcedure,
+		svc.AdminUpdateCharacter,
+		connect.WithSchema(adminPortalServiceMethods.ByName("AdminUpdateCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminPortalServiceAdminRetireCharacterHandler := connect.NewUnaryHandler(
+		AdminPortalServiceAdminRetireCharacterProcedure,
+		svc.AdminRetireCharacter,
+		connect.WithSchema(adminPortalServiceMethods.ByName("AdminRetireCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	adminPortalServiceAdminUnretireCharacterHandler := connect.NewUnaryHandler(
+		AdminPortalServiceAdminUnretireCharacterProcedure,
+		svc.AdminUnretireCharacter,
+		connect.WithSchema(adminPortalServiceMethods.ByName("AdminUnretireCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.adminportal.v1.AdminPortalService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminPortalServiceAdminListSectionsProcedure:
@@ -303,6 +434,12 @@ func NewAdminPortalServiceHandler(svc AdminPortalServiceHandler, opts ...connect
 			adminPortalServiceAdminSearchCharactersHandler.ServeHTTP(w, r)
 		case AdminPortalServiceAdminGetCharacterProcedure:
 			adminPortalServiceAdminGetCharacterHandler.ServeHTTP(w, r)
+		case AdminPortalServiceAdminUpdateCharacterProcedure:
+			adminPortalServiceAdminUpdateCharacterHandler.ServeHTTP(w, r)
+		case AdminPortalServiceAdminRetireCharacterProcedure:
+			adminPortalServiceAdminRetireCharacterHandler.ServeHTTP(w, r)
+		case AdminPortalServiceAdminUnretireCharacterProcedure:
+			adminPortalServiceAdminUnretireCharacterHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -330,4 +467,16 @@ func (UnimplementedAdminPortalServiceHandler) AdminSearchCharacters(context.Cont
 
 func (UnimplementedAdminPortalServiceHandler) AdminGetCharacter(context.Context, *connect.Request[v1.AdminGetCharacterRequest]) (*connect.Response[v1.AdminGetCharacterResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminGetCharacter is not implemented"))
+}
+
+func (UnimplementedAdminPortalServiceHandler) AdminUpdateCharacter(context.Context, *connect.Request[v1.AdminUpdateCharacterRequest]) (*connect.Response[v1.AdminUpdateCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminUpdateCharacter is not implemented"))
+}
+
+func (UnimplementedAdminPortalServiceHandler) AdminRetireCharacter(context.Context, *connect.Request[v1.AdminRetireCharacterRequest]) (*connect.Response[v1.AdminRetireCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminRetireCharacter is not implemented"))
+}
+
+func (UnimplementedAdminPortalServiceHandler) AdminUnretireCharacter(context.Context, *connect.Request[v1.AdminUnretireCharacterRequest]) (*connect.Response[v1.AdminUnretireCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminUnretireCharacter is not implemented"))
 }

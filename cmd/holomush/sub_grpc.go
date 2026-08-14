@@ -904,10 +904,17 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	// admin character reads run downstream of the interceptor's decision and
 	// evaluate no second policy. admin_characters_read.go's file doc block
 	// carries the authorization argument and names the rejected alternative.
+	//
+	// The WRITER is world.Service, not a repository, and that asymmetry is the
+	// point: the reads evaluate no second policy, while every write runs
+	// world.Service's own checkAccess on `character:<id>` — satisfied by exactly
+	// one seed policy, seed:admin-character-administration. There is no raw
+	// repository write path on this surface.
 	adminportalv1.RegisterAdminPortalServiceServer(s.grpcServer,
 		holoGRPC.NewAdminPortalServer(policyEngine,
 			holoGRPC.WithAdminCharacterReader(charRepo),
-			holoGRPC.WithAdminProfileReader(propertyRepo)))
+			holoGRPC.WithAdminProfileReader(propertyRepo),
+			holoGRPC.WithAdminCharacterWriter(worldService)))
 	slog.InfoContext(ctx, "adminPortalService registered")
 
 	// 10. Construct the session reaper (launch deferred to Activate — row 16).

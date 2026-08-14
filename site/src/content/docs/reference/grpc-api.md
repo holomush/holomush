@@ -123,9 +123,15 @@ title: "gRPC API Reference"
     - [AdminListCharactersResponse](#holomush-adminportal-v1-AdminListCharactersResponse)
     - [AdminListSectionsRequest](#holomush-adminportal-v1-AdminListSectionsRequest)
     - [AdminListSectionsResponse](#holomush-adminportal-v1-AdminListSectionsResponse)
+    - [AdminRetireCharacterRequest](#holomush-adminportal-v1-AdminRetireCharacterRequest)
+    - [AdminRetireCharacterResponse](#holomush-adminportal-v1-AdminRetireCharacterResponse)
     - [AdminSearchCharactersRequest](#holomush-adminportal-v1-AdminSearchCharactersRequest)
     - [AdminSearchCharactersResponse](#holomush-adminportal-v1-AdminSearchCharactersResponse)
     - [AdminSection](#holomush-adminportal-v1-AdminSection)
+    - [AdminUnretireCharacterRequest](#holomush-adminportal-v1-AdminUnretireCharacterRequest)
+    - [AdminUnretireCharacterResponse](#holomush-adminportal-v1-AdminUnretireCharacterResponse)
+    - [AdminUpdateCharacterRequest](#holomush-adminportal-v1-AdminUpdateCharacterRequest)
+    - [AdminUpdateCharacterResponse](#holomush-adminportal-v1-AdminUpdateCharacterResponse)
   
     - [AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField)
     - [AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter)
@@ -557,8 +563,14 @@ title: "gRPC API Reference"
     - [WebAdminListCharactersResponse](#holomush-web-v1-WebAdminListCharactersResponse)
     - [WebAdminListSectionsRequest](#holomush-web-v1-WebAdminListSectionsRequest)
     - [WebAdminListSectionsResponse](#holomush-web-v1-WebAdminListSectionsResponse)
+    - [WebAdminRetireCharacterRequest](#holomush-web-v1-WebAdminRetireCharacterRequest)
+    - [WebAdminRetireCharacterResponse](#holomush-web-v1-WebAdminRetireCharacterResponse)
     - [WebAdminSearchCharactersRequest](#holomush-web-v1-WebAdminSearchCharactersRequest)
     - [WebAdminSearchCharactersResponse](#holomush-web-v1-WebAdminSearchCharactersResponse)
+    - [WebAdminUnretireCharacterRequest](#holomush-web-v1-WebAdminUnretireCharacterRequest)
+    - [WebAdminUnretireCharacterResponse](#holomush-web-v1-WebAdminUnretireCharacterResponse)
+    - [WebAdminUpdateCharacterRequest](#holomush-web-v1-WebAdminUpdateCharacterRequest)
+    - [WebAdminUpdateCharacterResponse](#holomush-web-v1-WebAdminUpdateCharacterResponse)
     - [WebAuthenticatePlayerRequest](#holomush-web-v1-WebAuthenticatePlayerRequest)
     - [WebAuthenticatePlayerResponse](#holomush-web-v1-WebAuthenticatePlayerResponse)
     - [WebAvailableCommand](#holomush-web-v1-WebAvailableCommand)
@@ -2728,6 +2740,38 @@ section registry to drift from it.
 
 
 
+<a name="holomush-adminportal-v1-AdminRetireCharacterRequest"></a>
+
+### AdminRetireCharacterRequest
+AdminRetireCharacterRequest names one character to soft-retire.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side. |
+| character_id | [string](#string) |  | character_id is the ULID to retire. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller read. An absent, zero or negative value is refused with InvalidArgument before any domain call; a stale one surfaces as Aborted and neither the status change nor its envelope lands. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminRetireCharacterResponse"></a>
+
+### AdminRetireCharacterResponse
+AdminRetireCharacterResponse carries the post-transition row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the §11.3 projection re-read after the transition, with status `retired` and the bumped version. |
+
+
+
+
+
+
 <a name="holomush-adminportal-v1-AdminSearchCharactersRequest"></a>
 
 ### AdminSearchCharactersRequest
@@ -2781,6 +2825,99 @@ AdminSection is one row of the admin section registry
 | id | [string](#string) |  | id is the registry entry&#39;s section id, verbatim — the same lowercase-ASCII token section.Lookup matches and access.AdminSectionResource derives the `admin_section:` reference from. Matching is exact; there is no case folding anywhere on this path. |
 | display_name | [string](#string) |  | display_name is the human label the nav draws for this section. |
 | status | [string](#string) |  | status is section.Status as a string: exactly &#34;available&#34; or &#34;planned&#34; and nothing else. It is carried as DATA so the nav can render a planned section in its own treatment; it is not an authorization signal, and the handler does not filter on it. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminUnretireCharacterRequest"></a>
+
+### AdminUnretireCharacterRequest
+AdminUnretireCharacterRequest names one retired character to return to play.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side. |
+| character_id | [string](#string) |  | character_id is the ULID to un-retire. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller read, under the same guard rules retire applies. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminUnretireCharacterResponse"></a>
+
+### AdminUnretireCharacterResponse
+AdminUnretireCharacterResponse carries the post-transition row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the §11.3 projection re-read after the transition, with status `active` and the bumped version. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminUpdateCharacterRequest"></a>
+
+### AdminUpdateCharacterRequest
+AdminUpdateCharacterRequest carries one partial edit: which of the thirteen
+§10.6-writable paths to apply, their new values, and the optimistic-
+concurrency token the write is fenced on.
+
+# Why the values are flat fields rather than a map
+
+The mask is the allowlist, and adminProfileMaskablePaths pairs each path name
+with the ACCESSOR for its value, so every name is written down exactly once on
+the server. A map&lt;string,string&gt; would move the key space onto the wire, where
+an unlisted key would have to be rejected by a second check rather than being
+inexpressible in the first place.
+
+It carries NO role, grant, permission or capability field, now or ever:
+TestAdminCharacterMessagesCarryNoRoleBearingField walks this message&#39;s
+descriptor and fails if one is ever added.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side. |
+| character_id | [string](#string) |  | character_id is the ULID to edit. It names SOMEONE ELSE&#39;S character — this is the cross-owner surface, which is why a stale expected_version is refused rather than answered. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller composed this edit against. AdminPortalServer refuses an absent, zero or negative value with InvalidArgument BEFORE any domain call: zero is never read as &#34;write without the guard&#34; and never defaulted to the row&#39;s current version. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | update_mask names which of the thirteen paths to apply. Paths are compared by EXACT string: no prefix, no wildcard, no glob, no dotted-subtree expansion — `profile` MUST NOT reach `profile.rp_preferences`. An unlisted path is REJECTED, not ignored. An EMPTY mask changes nothing and returns success carrying current state (§9.5 rule 4), after the guards have run. |
+| description | [string](#string) |  | description is characters.description, the in-world `look` text. It is a COLUMN on characters rather than a property row, which is why the twelve below are twelve and the writable set is thirteen. Its cap is enforced in the domain by world.Character.SetDescription, in BYTES. |
+| pronouns | [string](#string) |  | pronouns is the `profile.pronouns` property row. Its cap and the six short fields&#39; below is world.MaxNameLength, measured in BYTES so a CJK value that looks short is refused at the same boundary an ASCII one is. |
+| concept | [string](#string) |  | concept is the `profile.concept` property row: the one-line character premise the roster renders. |
+| species | [string](#string) |  | species is the `profile.species` property row. |
+| age | [string](#string) |  | age is the `profile.age` property row. It is FREE TEXT, not a number: the server stores whatever prose the operator typed. |
+| faction | [string](#string) |  | faction is the `profile.faction` property row. |
+| currently | [string](#string) |  | currently is the `profile.currently` property row: the short &#34;what this character is up to&#34; line. |
+| timezone | [string](#string) |  | timezone is the `profile.timezone` property row. It is free text the server does not resolve against any zone database. |
+| appearance | [string](#string) |  | appearance is the `profile.appearance` property row. Its cap and the four long fields&#39; below is world.MaxDescriptionLength, also in BYTES. |
+| personality | [string](#string) |  | personality is the `profile.personality` property row. |
+| biography | [string](#string) |  | biography is the `profile.biography` property row. |
+| rumors | [string](#string) |  | rumors is the `profile.rumors` property row: in-character hearsay others may know. |
+| rp_preferences | [string](#string) |  | rp_preferences is the `profile.rp_preferences` property row: the out-of-character play preferences the profile surfaces. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminUpdateCharacterResponse"></a>
+
+### AdminUpdateCharacterResponse
+AdminUpdateCharacterResponse carries the post-write row so the admin table can
+update in place.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the §11.3 projection re-read after the write, carrying the NEW version the client sends as its next expected_version. Guessing that number client-side is how a correct client becomes a stale one after its first successful edit. On the empty-mask no-op it carries the UNCHANGED current version. |
 
 
 
@@ -2876,6 +3013,15 @@ AdminPortalServer.AdminSearchCharacters normalizes the caller&#39;s raw query th
 | AdminGetCharacter | [AdminGetCharacterRequest](#holomush-adminportal-v1-AdminGetCharacterRequest) | [AdminGetCharacterResponse](#holomush-adminportal-v1-AdminGetCharacterResponse) | AdminGetCharacter returns ONE character with the thirteen values the admin edit surface writes back.
 
 AdminPortalServer.AdminGetCharacter composes it from CharacterRepository.Get and a name-closed projection of PropertyRepository.ListByParent. An unknown id is codes.NotFound with a static message that names no id, so the RPC is not an existence oracle for a caller the gate already permitted. |
+| AdminUpdateCharacter | [AdminUpdateCharacterRequest](#holomush-adminportal-v1-AdminUpdateCharacterRequest) | [AdminUpdateCharacterResponse](#holomush-adminportal-v1-AdminUpdateCharacterResponse) | AdminUpdateCharacter applies a partial edit to ONE character&#39;s thirteen §10.6-writable values under a closed update_mask allowlist.
+
+AdminPortalServer.AdminUpdateCharacter resolves each mask path by EXACT map lookup against adminProfileMaskablePaths — `description` plus the twelve `profile.*` names — and refuses an unlisted path with InvalidArgument rather than ignoring it. `roles` is not among them and no admin RPC mutates a role. The whole edit is ONE call to world.Service.UpdateCharacterProfileAttributes with a WithDescription option, so a mask naming `description` alongside `profile.*` paths is one transaction, one version bump and one envelope. An EMPTY mask is a no-op success carrying current state, after the authorization, existence and expected_version guards have all run. |
+| AdminRetireCharacter | [AdminRetireCharacterRequest](#holomush-adminportal-v1-AdminRetireCharacterRequest) | [AdminRetireCharacterResponse](#holomush-adminportal-v1-AdminRetireCharacterResponse) | AdminRetireCharacter soft-retires ONE character through the canonical world.Service.RetireCharacter, so an admin transition and any future player-initiated one cannot diverge.
+
+It destroys nothing: the row, its entity properties and its name reservation all survive, and AdminUnretireCharacter reverses it. There is deliberately NO AdminDeleteCharacter — retire is the only admin-reachable lifecycle exit, and world.Service.DeleteCharacter is reachable from no admin RPC and denied to a player-principal admin by seed policy. A second call on an already-retired character is refused by the shipped lifecycle guard before any write, so it emits no second envelope. |
+| AdminUnretireCharacter | [AdminUnretireCharacterRequest](#holomush-adminportal-v1-AdminUnretireCharacterRequest) | [AdminUnretireCharacterResponse](#holomush-adminportal-v1-AdminUnretireCharacterResponse) | AdminUnretireCharacter returns ONE retired character to play through the canonical world.Service.UnretireCharacter.
+
+AdminPortalServer.AdminUnretireCharacter reaches the same guard chain retire does — the version precheck ahead of the lifecycle guard — so a caller racing a completed unretire sees the conflict rather than the racing writer&#39;s outcome. It does not restore players.default_character_id; retire cleared it in its own transaction and the old value is preserved nowhere. |
 
  
 
@@ -9458,6 +9604,38 @@ WebAdminListSectionsResponse re-exports the portal&#39;s projection verbatim.
 
 
 
+<a name="holomush-web-v1-WebAdminRetireCharacterRequest"></a>
+
+### WebAdminRetireCharacterRequest
+WebAdminRetireCharacterRequest names the character to soft-retire and the
+version the operator read it at.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is forwarded verbatim to AdminPortalService.AdminRetireCharacter. |
+| expected_version | [int32](#int32) |  | expected_version is forwarded verbatim; the core refuses an absent or zero value and answers a stale one with Aborted. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminRetireCharacterResponse"></a>
+
+### WebAdminRetireCharacterResponse
+WebAdminRetireCharacterResponse re-exports the portal&#39;s post-transition row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the row AdminPortalService returned, with status `retired`. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebAdminSearchCharactersRequest"></a>
 
 ### WebAdminSearchCharactersRequest
@@ -9491,6 +9669,83 @@ verbatim.
 | ----- | ---- | ----- | ----------- |
 | characters | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) | repeated | characters is the matching page AdminPortalService returned, in its order. |
 | total_count | [int64](#int64) |  | total_count is forwarded unmodified. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminUnretireCharacterRequest"></a>
+
+### WebAdminUnretireCharacterRequest
+WebAdminUnretireCharacterRequest names the retired character to return to play.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is forwarded verbatim to AdminPortalService.AdminUnretireCharacter. |
+| expected_version | [int32](#int32) |  | expected_version is forwarded verbatim, under the same guard rules retire applies. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminUnretireCharacterResponse"></a>
+
+### WebAdminUnretireCharacterResponse
+WebAdminUnretireCharacterResponse re-exports the portal&#39;s post-transition row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the row AdminPortalService returned, with status `active`. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminUpdateCharacterRequest"></a>
+
+### WebAdminUpdateCharacterRequest
+WebAdminUpdateCharacterRequest mirrors the portal&#39;s edit request minus the
+token, which the gateway lifts from the X-Session-Token header.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is forwarded verbatim to AdminPortalService.AdminUpdateCharacter. |
+| expected_version | [int32](#int32) |  | expected_version is the optimistic-concurrency token the write is fenced on, forwarded verbatim. The gateway does not default or clamp it; the core refuses an absent or zero value. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | update_mask names which of the thirteen writable paths to apply, forwarded verbatim. The gateway neither validates nor expands it: the closed exact-string allowlist is core-side. |
+| description | [string](#string) |  | description is the in-world `look` text, applied when update_mask names it. |
+| pronouns | [string](#string) |  | pronouns is the `profile.pronouns` value, applied when update_mask names it. |
+| concept | [string](#string) |  | concept is the `profile.concept` value, applied when update_mask names it. |
+| species | [string](#string) |  | species is the `profile.species` value, applied when update_mask names it. |
+| age | [string](#string) |  | age is the `profile.age` free-text value, applied when update_mask names it. |
+| faction | [string](#string) |  | faction is the `profile.faction` value, applied when update_mask names it. |
+| currently | [string](#string) |  | currently is the `profile.currently` value, applied when update_mask names it. |
+| timezone | [string](#string) |  | timezone is the `profile.timezone` free-text value, applied when update_mask names it. |
+| appearance | [string](#string) |  | appearance is the `profile.appearance` value, applied when update_mask names it. |
+| personality | [string](#string) |  | personality is the `profile.personality` value, applied when update_mask names it. |
+| biography | [string](#string) |  | biography is the `profile.biography` value, applied when update_mask names it. |
+| rumors | [string](#string) |  | rumors is the `profile.rumors` value, applied when update_mask names it. |
+| rp_preferences | [string](#string) |  | rp_preferences is the `profile.rp_preferences` value, applied when update_mask names it. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminUpdateCharacterResponse"></a>
+
+### WebAdminUpdateCharacterResponse
+WebAdminUpdateCharacterResponse re-exports the portal&#39;s post-write row verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the row AdminPortalService returned, carrying the version the client sends as its next expected_version. |
 
 
 
@@ -11423,6 +11678,9 @@ It has NO browser caller in v0.13, and that is deliberate rather than dead code:
 | WebAdminListCharacters | [WebAdminListCharactersRequest](#holomush-web-v1-WebAdminListCharactersRequest) | [WebAdminListCharactersResponse](#holomush-web-v1-WebAdminListCharactersResponse) | WebAdminListCharacters proxies AdminPortalService.AdminListCharacters. Handler.WebAdminListCharacters lifts the session token from the X-Session-Token header and forwards the page and ordering fields verbatim. It computes nothing: the clamp, the enum switches and the section gate all live core-side, where a caller speaking gRPC directly cannot skip them. |
 | WebAdminSearchCharacters | [WebAdminSearchCharactersRequest](#holomush-web-v1-WebAdminSearchCharactersRequest) | [WebAdminSearchCharactersResponse](#holomush-web-v1-WebAdminSearchCharactersResponse) | WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters. Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING — it does not trim, case-fold or normalize it, because normalization is core-side through the one charname pipeline and a gateway mirror of it would be a second definition of name equality. |
 | WebAdminGetCharacter | [WebAdminGetCharacterRequest](#holomush-web-v1-WebAdminGetCharacterRequest) | [WebAdminGetCharacterResponse](#holomush-web-v1-WebAdminGetCharacterResponse) | WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter. Handler.WebAdminGetCharacter forwards character_id and returns the detail message unmodified; the core&#39;s static NotFound reaches the browser as-is. |
+| WebAdminUpdateCharacter | [WebAdminUpdateCharacterRequest](#holomush-web-v1-WebAdminUpdateCharacterRequest) | [WebAdminUpdateCharacterResponse](#holomush-web-v1-WebAdminUpdateCharacterResponse) | WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter. Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and the expected_version verbatim and computes nothing: the closed allowlist, the byte caps, the version guard and the section gate all live core-side, where a caller speaking gRPC directly cannot skip them. |
+| WebAdminRetireCharacter | [WebAdminRetireCharacterRequest](#holomush-web-v1-WebAdminRetireCharacterRequest) | [WebAdminRetireCharacterResponse](#holomush-web-v1-WebAdminRetireCharacterResponse) | WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter. Handler.WebAdminRetireCharacter forwards character_id and expected_version; the core&#39;s Aborted for a stale version and FailedPrecondition for an already-retired character both reach the browser unmodified. |
+| WebAdminUnretireCharacter | [WebAdminUnretireCharacterRequest](#holomush-web-v1-WebAdminUnretireCharacterRequest) | [WebAdminUnretireCharacterResponse](#holomush-web-v1-WebAdminUnretireCharacterResponse) | WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter, with the same forward-verbatim shape its retire peer has. There is no WebAdminDeleteCharacter: no admin delete RPC exists to proxy. |
 
  
 

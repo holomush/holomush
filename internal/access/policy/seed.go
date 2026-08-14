@@ -987,5 +987,37 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is player, action in ["read", "write"], resource is admin_section) when { "admin" in principal.player.roles };`,
 			SeedVersion: 1,
 		},
+
+		// --- Admin character administration (ADMIN-03/04/05, §10.4) ---
+		//
+		// THE WORLD-LAYER GATE, and without it the whole admin character write
+		// path is default-denied one layer BELOW the section interceptor. Every
+		// world method the admin RPCs reuse runs its own checkAccess on a
+		// `character:<id>` resource — "retire", "unretire" and "write" — and
+		// neither shipped policy reaches it: seed:admin-full-access above
+		// requires `principal is character` and never fires for a player
+		// principal, and seed:admin-section-access is scoped
+		// `resource is admin_section`.
+		//
+		// PLAYER-FLAVORED PRINCIPAL, and here it is REQUIRED rather than
+		// preferred. D-104 makes the admin caller player-flavoured so the
+		// envelope Actor is `player:<id>`; a character-flavoured caller would put
+		// the acting-character id back into the RETAINED audit trail, which is
+		// precisely what D-104 exists to remove. Same family of reason as its
+		// admin_section sibling above: one answer to "is this human an admin",
+		// not two.
+		//
+		// `delete` IS DELIBERATELY ABSENT. world.Service.DeleteCharacter is
+		// irreversible and cascades entity_properties (§4.4). There is no
+		// AdminDeleteCharacter RPC, and omitting the action here makes the same
+		// guarantee hold at the POLICY layer: a player-principal admin is denied
+		// `delete` on a character by the ENGINE, not only by the absence of a
+		// button — which an RPC-level omission alone could be quietly undone by.
+		{
+			Name:        "seed:admin-character-administration",
+			Description: "Admin players may read, write and move the lifecycle of any character, scoped to the character resource type (ADMIN-03/04/05, §10.4). Not delete.",
+			DSLText:     `permit(principal is player, action in ["read", "write", "retire", "unretire"], resource is character) when { "admin" in principal.player.roles };`,
+			SeedVersion: 1,
+		},
 	}
 }

@@ -221,3 +221,123 @@ func (h *Handler) WebAdminGetCharacter(
 		Character: resp.GetCharacter(),
 	}), nil
 }
+
+// WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+//
+// It forwards the mask, the thirteen values and the expected_version verbatim
+// and COMPUTES NOTHING. The closed exact-string allowlist, the byte caps, the
+// version guard and the section gate all live core-side, where a caller speaking
+// gRPC directly cannot skip them — a gateway-side copy of any of them would be a
+// second definition that can drift, and the one that matters is the one a direct
+// caller reaches.
+func (h *Handler) WebAdminUpdateCharacter(
+	ctx context.Context,
+	req *connect.Request[webv1.WebAdminUpdateCharacterRequest],
+) (*connect.Response[webv1.WebAdminUpdateCharacterResponse], error) {
+	slog.DebugContext(ctx, "web: WebAdminUpdateCharacter")
+	if h.adminPortal == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("admin portal client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.adminPortal.AdminUpdateCharacter(rpcCtx, &adminportalv1.AdminUpdateCharacterRequest{
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		ExpectedVersion:    req.Msg.GetExpectedVersion(),
+		UpdateMask:         req.Msg.GetUpdateMask(),
+		Description:        req.Msg.GetDescription(),
+		Pronouns:           req.Msg.GetPronouns(),
+		Concept:            req.Msg.GetConcept(),
+		Species:            req.Msg.GetSpecies(),
+		Age:                req.Msg.GetAge(),
+		Faction:            req.Msg.GetFaction(),
+		Currently:          req.Msg.GetCurrently(),
+		Timezone:           req.Msg.GetTimezone(),
+		Appearance:         req.Msg.GetAppearance(),
+		Personality:        req.Msg.GetPersonality(),
+		Biography:          req.Msg.GetBiography(),
+		Rumors:             req.Msg.GetRumors(),
+		RpPreferences:      req.Msg.GetRpPreferences(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: admin update character RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebAdminUpdateCharacterResponse{
+		Character: resp.GetCharacter(),
+	}), nil
+}
+
+// WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+//
+// The core's Aborted for a stale version and FailedPrecondition for an
+// already-retired character both reach the browser unmodified; the gateway
+// neither retries nor re-reads, because a retry here would reintroduce
+// last-write-wins one layer up from the guard that exists to prevent it.
+func (h *Handler) WebAdminRetireCharacter(
+	ctx context.Context,
+	req *connect.Request[webv1.WebAdminRetireCharacterRequest],
+) (*connect.Response[webv1.WebAdminRetireCharacterResponse], error) {
+	slog.DebugContext(ctx, "web: WebAdminRetireCharacter")
+	if h.adminPortal == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("admin portal client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.adminPortal.AdminRetireCharacter(rpcCtx, &adminportalv1.AdminRetireCharacterRequest{
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		ExpectedVersion:    req.Msg.GetExpectedVersion(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: admin retire character RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebAdminRetireCharacterResponse{
+		Character: resp.GetCharacter(),
+	}), nil
+}
+
+// WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+// with the same forward-verbatim shape its retire peer has.
+//
+// There is no WebAdminDeleteCharacter, because no admin delete RPC exists to
+// proxy: retire is the only admin-reachable lifecycle exit and it is reversible.
+func (h *Handler) WebAdminUnretireCharacter(
+	ctx context.Context,
+	req *connect.Request[webv1.WebAdminUnretireCharacterRequest],
+) (*connect.Response[webv1.WebAdminUnretireCharacterResponse], error) {
+	slog.DebugContext(ctx, "web: WebAdminUnretireCharacter")
+	if h.adminPortal == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("admin portal client not configured"))
+	}
+
+	token := req.Header().Get(headerInjectSessionToken)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.adminPortal.AdminUnretireCharacter(rpcCtx, &adminportalv1.AdminUnretireCharacterRequest{
+		PlayerSessionToken: token,
+		CharacterId:        req.Msg.GetCharacterId(),
+		ExpectedVersion:    req.Msg.GetExpectedVersion(),
+	})
+	if err != nil {
+		errutil.LogErrorContext(ctx, "web: admin unretire character RPC failed", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+
+	return connect.NewResponse(&webv1.WebAdminUnretireCharacterResponse{
+		Character: resp.GetCharacter(),
+	}), nil
+}

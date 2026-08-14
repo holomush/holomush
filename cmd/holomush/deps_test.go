@@ -351,6 +351,18 @@ func (m *mockGRPCClient) AdminGetCharacter(_ context.Context, _ *adminportalv1.A
 	return nil, nil
 }
 
+func (m *mockGRPCClient) AdminUpdateCharacter(_ context.Context, _ *adminportalv1.AdminUpdateCharacterRequest) (*adminportalv1.AdminUpdateCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminRetireCharacter(_ context.Context, _ *adminportalv1.AdminRetireCharacterRequest) (*adminportalv1.AdminRetireCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminUnretireCharacter(_ context.Context, _ *adminportalv1.AdminUnretireCharacterRequest) (*adminportalv1.AdminUnretireCharacterResponse, error) {
+	return nil, nil
+}
+
 // mockListener implements net.Listener for testing.
 type mockListener struct {
 	acceptFunc func() (net.Conn, error)

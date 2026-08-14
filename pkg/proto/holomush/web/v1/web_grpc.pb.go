@@ -81,6 +81,9 @@ const (
 	WebService_WebAdminListCharacters_FullMethodName        = "/holomush.web.v1.WebService/WebAdminListCharacters"
 	WebService_WebAdminSearchCharacters_FullMethodName      = "/holomush.web.v1.WebService/WebAdminSearchCharacters"
 	WebService_WebAdminGetCharacter_FullMethodName          = "/holomush.web.v1.WebService/WebAdminGetCharacter"
+	WebService_WebAdminUpdateCharacter_FullMethodName       = "/holomush.web.v1.WebService/WebAdminUpdateCharacter"
+	WebService_WebAdminRetireCharacter_FullMethodName       = "/holomush.web.v1.WebService/WebAdminRetireCharacter"
+	WebService_WebAdminUnretireCharacter_FullMethodName     = "/holomush.web.v1.WebService/WebAdminUnretireCharacter"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -363,6 +366,21 @@ type WebServiceClient interface {
 	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
 	// message unmodified; the core's static NotFound reaches the browser as-is.
 	WebAdminGetCharacter(ctx context.Context, in *WebAdminGetCharacterRequest, opts ...grpc.CallOption) (*WebAdminGetCharacterResponse, error)
+	// WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+	// Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+	// the expected_version verbatim and computes nothing: the closed allowlist,
+	// the byte caps, the version guard and the section gate all live core-side,
+	// where a caller speaking gRPC directly cannot skip them.
+	WebAdminUpdateCharacter(ctx context.Context, in *WebAdminUpdateCharacterRequest, opts ...grpc.CallOption) (*WebAdminUpdateCharacterResponse, error)
+	// WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+	// Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+	// the core's Aborted for a stale version and FailedPrecondition for an
+	// already-retired character both reach the browser unmodified.
+	WebAdminRetireCharacter(ctx context.Context, in *WebAdminRetireCharacterRequest, opts ...grpc.CallOption) (*WebAdminRetireCharacterResponse, error)
+	// WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+	// with the same forward-verbatim shape its retire peer has. There is no
+	// WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+	WebAdminUnretireCharacter(ctx context.Context, in *WebAdminUnretireCharacterRequest, opts ...grpc.CallOption) (*WebAdminUnretireCharacterResponse, error)
 }
 
 type webServiceClient struct {
@@ -972,6 +990,36 @@ func (c *webServiceClient) WebAdminGetCharacter(ctx context.Context, in *WebAdmi
 	return out, nil
 }
 
+func (c *webServiceClient) WebAdminUpdateCharacter(ctx context.Context, in *WebAdminUpdateCharacterRequest, opts ...grpc.CallOption) (*WebAdminUpdateCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminUpdateCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminUpdateCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminRetireCharacter(ctx context.Context, in *WebAdminRetireCharacterRequest, opts ...grpc.CallOption) (*WebAdminRetireCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminRetireCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminRetireCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminUnretireCharacter(ctx context.Context, in *WebAdminUnretireCharacterRequest, opts ...grpc.CallOption) (*WebAdminUnretireCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminUnretireCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminUnretireCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -1252,6 +1300,21 @@ type WebServiceServer interface {
 	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
 	// message unmodified; the core's static NotFound reaches the browser as-is.
 	WebAdminGetCharacter(context.Context, *WebAdminGetCharacterRequest) (*WebAdminGetCharacterResponse, error)
+	// WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+	// Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+	// the expected_version verbatim and computes nothing: the closed allowlist,
+	// the byte caps, the version guard and the section gate all live core-side,
+	// where a caller speaking gRPC directly cannot skip them.
+	WebAdminUpdateCharacter(context.Context, *WebAdminUpdateCharacterRequest) (*WebAdminUpdateCharacterResponse, error)
+	// WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+	// Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+	// the core's Aborted for a stale version and FailedPrecondition for an
+	// already-retired character both reach the browser unmodified.
+	WebAdminRetireCharacter(context.Context, *WebAdminRetireCharacterRequest) (*WebAdminRetireCharacterResponse, error)
+	// WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+	// with the same forward-verbatim shape its retire peer has. There is no
+	// WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+	WebAdminUnretireCharacter(context.Context, *WebAdminUnretireCharacterRequest) (*WebAdminUnretireCharacterResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -1438,6 +1501,15 @@ func (UnimplementedWebServiceServer) WebAdminSearchCharacters(context.Context, *
 }
 func (UnimplementedWebServiceServer) WebAdminGetCharacter(context.Context, *WebAdminGetCharacterRequest) (*WebAdminGetCharacterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebAdminGetCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminUpdateCharacter(context.Context, *WebAdminUpdateCharacterRequest) (*WebAdminUpdateCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminUpdateCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminRetireCharacter(context.Context, *WebAdminRetireCharacterRequest) (*WebAdminRetireCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminRetireCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminUnretireCharacter(context.Context, *WebAdminUnretireCharacterRequest) (*WebAdminUnretireCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminUnretireCharacter not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -2515,6 +2587,60 @@ func _WebService_WebAdminGetCharacter_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebAdminUpdateCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminUpdateCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminUpdateCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminUpdateCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminUpdateCharacter(ctx, req.(*WebAdminUpdateCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminRetireCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminRetireCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminRetireCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminRetireCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminRetireCharacter(ctx, req.(*WebAdminRetireCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminUnretireCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminUnretireCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminUnretireCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminUnretireCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminUnretireCharacter(ctx, req.(*WebAdminUnretireCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2753,6 +2879,18 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebAdminGetCharacter",
 			Handler:    _WebService_WebAdminGetCharacter_Handler,
+		},
+		{
+			MethodName: "WebAdminUpdateCharacter",
+			Handler:    _WebService_WebAdminUpdateCharacter_Handler,
+		},
+		{
+			MethodName: "WebAdminRetireCharacter",
+			Handler:    _WebService_WebAdminRetireCharacter_Handler,
+		},
+		{
+			MethodName: "WebAdminUnretireCharacter",
+			Handler:    _WebService_WebAdminUnretireCharacter_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

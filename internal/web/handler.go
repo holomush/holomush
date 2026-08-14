@@ -159,6 +159,9 @@ type AdminPortalClient interface {
 	AdminListCharacters(ctx context.Context, req *adminportalv1.AdminListCharactersRequest) (*adminportalv1.AdminListCharactersResponse, error)
 	AdminSearchCharacters(ctx context.Context, req *adminportalv1.AdminSearchCharactersRequest) (*adminportalv1.AdminSearchCharactersResponse, error)
 	AdminGetCharacter(ctx context.Context, req *adminportalv1.AdminGetCharacterRequest) (*adminportalv1.AdminGetCharacterResponse, error)
+	AdminUpdateCharacter(ctx context.Context, req *adminportalv1.AdminUpdateCharacterRequest) (*adminportalv1.AdminUpdateCharacterResponse, error)
+	AdminRetireCharacter(ctx context.Context, req *adminportalv1.AdminRetireCharacterRequest) (*adminportalv1.AdminRetireCharacterResponse, error)
+	AdminUnretireCharacter(ctx context.Context, req *adminportalv1.AdminUnretireCharacterRequest) (*adminportalv1.AdminUnretireCharacterResponse, error)
 }
 
 // Handler implements WebServiceHandler by delegating to the core gRPC client.

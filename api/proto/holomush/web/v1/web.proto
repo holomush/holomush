@@ -431,6 +431,21 @@ service WebService {
   // Handler.WebAdminGetCharacter forwards character_id and returns the detail
   // message unmodified; the core's static NotFound reaches the browser as-is.
   rpc WebAdminGetCharacter(WebAdminGetCharacterRequest) returns (WebAdminGetCharacterResponse);
+  // WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+  // Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+  // the expected_version verbatim and computes nothing: the closed allowlist,
+  // the byte caps, the version guard and the section gate all live core-side,
+  // where a caller speaking gRPC directly cannot skip them.
+  rpc WebAdminUpdateCharacter(WebAdminUpdateCharacterRequest) returns (WebAdminUpdateCharacterResponse);
+  // WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+  // Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+  // the core's Aborted for a stale version and FailedPrecondition for an
+  // already-retired character both reach the browser unmodified.
+  rpc WebAdminRetireCharacter(WebAdminRetireCharacterRequest) returns (WebAdminRetireCharacterResponse);
+  // WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+  // with the same forward-verbatim shape its retire peer has. There is no
+  // WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+  rpc WebAdminUnretireCharacter(WebAdminUnretireCharacterRequest) returns (WebAdminUnretireCharacterResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -1871,4 +1886,86 @@ message WebAdminGetCharacterResponse {
   // character is the detail message AdminPortalService returned, forwarded
   // unmodified — including its closed twelve-key profile map.
   holomush.adminportal.v1.AdminCharacterDetail character = 1;
+}
+
+// WebAdminUpdateCharacterRequest mirrors the portal's edit request minus the
+// token, which the gateway lifts from the X-Session-Token header.
+message WebAdminUpdateCharacterRequest {
+  // character_id is forwarded verbatim to AdminPortalService.AdminUpdateCharacter.
+  string character_id = 1;
+  // expected_version is the optimistic-concurrency token the write is fenced on,
+  // forwarded verbatim. The gateway does not default or clamp it; the core
+  // refuses an absent or zero value.
+  int32 expected_version = 2;
+  // update_mask names which of the thirteen writable paths to apply, forwarded
+  // verbatim. The gateway neither validates nor expands it: the closed
+  // exact-string allowlist is core-side.
+  google.protobuf.FieldMask update_mask = 3;
+  // description is the in-world `look` text, applied when update_mask names it.
+  string description = 4;
+  // pronouns is the `profile.pronouns` value, applied when update_mask names it.
+  string pronouns = 5;
+  // concept is the `profile.concept` value, applied when update_mask names it.
+  string concept = 6;
+  // species is the `profile.species` value, applied when update_mask names it.
+  string species = 7;
+  // age is the `profile.age` free-text value, applied when update_mask names it.
+  string age = 8;
+  // faction is the `profile.faction` value, applied when update_mask names it.
+  string faction = 9;
+  // currently is the `profile.currently` value, applied when update_mask names it.
+  string currently = 10;
+  // timezone is the `profile.timezone` free-text value, applied when update_mask
+  // names it.
+  string timezone = 11;
+  // appearance is the `profile.appearance` value, applied when update_mask names it.
+  string appearance = 12;
+  // personality is the `profile.personality` value, applied when update_mask names it.
+  string personality = 13;
+  // biography is the `profile.biography` value, applied when update_mask names it.
+  string biography = 14;
+  // rumors is the `profile.rumors` value, applied when update_mask names it.
+  string rumors = 15;
+  // rp_preferences is the `profile.rp_preferences` value, applied when
+  // update_mask names it.
+  string rp_preferences = 16;
+}
+
+// WebAdminUpdateCharacterResponse re-exports the portal's post-write row verbatim.
+message WebAdminUpdateCharacterResponse {
+  // character is the row AdminPortalService returned, carrying the version the
+  // client sends as its next expected_version.
+  holomush.adminportal.v1.AdminCharacter character = 1;
+}
+
+// WebAdminRetireCharacterRequest names the character to soft-retire and the
+// version the operator read it at.
+message WebAdminRetireCharacterRequest {
+  // character_id is forwarded verbatim to AdminPortalService.AdminRetireCharacter.
+  string character_id = 1;
+  // expected_version is forwarded verbatim; the core refuses an absent or zero
+  // value and answers a stale one with Aborted.
+  int32 expected_version = 2;
+}
+
+// WebAdminRetireCharacterResponse re-exports the portal's post-transition row.
+message WebAdminRetireCharacterResponse {
+  // character is the row AdminPortalService returned, with status `retired`.
+  holomush.adminportal.v1.AdminCharacter character = 1;
+}
+
+// WebAdminUnretireCharacterRequest names the retired character to return to play.
+message WebAdminUnretireCharacterRequest {
+  // character_id is forwarded verbatim to
+  // AdminPortalService.AdminUnretireCharacter.
+  string character_id = 1;
+  // expected_version is forwarded verbatim, under the same guard rules retire
+  // applies.
+  int32 expected_version = 2;
+}
+
+// WebAdminUnretireCharacterResponse re-exports the portal's post-transition row.
+message WebAdminUnretireCharacterResponse {
+  // character is the row AdminPortalService returned, with status `active`.
+  holomush.adminportal.v1.AdminCharacter character = 1;
 }

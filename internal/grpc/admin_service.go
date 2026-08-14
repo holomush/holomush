@@ -28,9 +28,10 @@ import (
 type AdminPortalServer struct {
 	adminportalv1.UnimplementedAdminPortalServiceServer
 
-	engine        section.PolicyEvaluator
-	characters    AdminCharacterReader
-	profileReader AdminProfileReader
+	engine          section.PolicyEvaluator
+	characters      AdminCharacterReader
+	profileReader   AdminProfileReader
+	characterWriter AdminCharacterWriter
 }
 
 // AdminCharacterReader is the narrow slice of the character repository the
@@ -63,6 +64,38 @@ type AdminCharacterReader interface {
 // incidental.
 type AdminProfileReader interface {
 	ListByParent(ctx context.Context, parentType string, parentID ulid.ULID) ([]*world.EntityProperty, error)
+}
+
+// AdminCharacterWriter is the narrow slice of world.Service the three admin
+// character WRITE RPCs need — and no fourth method.
+//
+// THE ABSENCES ARE LOAD-BEARING. world.Service.DeleteCharacter is deliberately
+// not declared here, so an admin delete is a COMPILE ERROR rather than a review
+// finding; §4.4 makes that operation irreversible and cascading, and
+// seed:admin-character-administration omits `delete` from its action list so the
+// same guarantee holds one layer lower. UpdateCharacterDescription is likewise
+// absent: routing an admin description edit through it would emit
+// kindCharacterUpdated, whose declared payload carries the description STRING —
+// player-authored prose into the retained events_audit, which D-103 forbids.
+// The description travels as a world.WithDescription option on the profile write
+// instead.
+//
+// It is an interface at THIS layer for the same reason AdminCharacterReader is:
+// internal/grpc names what it needs and nothing beneath it.
+type AdminCharacterWriter interface {
+	UpdateCharacterProfileAttributes(ctx context.Context, caller world.Caller, characterID ulid.ULID, expectedVersion int, attributes map[string]string, opts ...world.ProfileUpdateOption) error
+	RetireCharacter(ctx context.Context, caller world.Caller, characterID ulid.ULID, expectedVersion int, opts ...world.LifecycleOption) error
+	UnretireCharacter(ctx context.Context, caller world.Caller, characterID ulid.ULID, expectedVersion int, opts ...world.LifecycleOption) error
+}
+
+// WithAdminCharacterWriter supplies the world command service the three admin
+// character write RPCs mutate through.
+//
+// A server built WITHOUT it answers those RPCs with codes.Internal, NEVER with a
+// silent success: reporting success for a write that reached no domain command
+// would tell an operator they changed a character they did not.
+func WithAdminCharacterWriter(w AdminCharacterWriter) AdminPortalServerOption {
+	return func(s *AdminPortalServer) { s.characterWriter = w }
 }
 
 // WithAdminCharacterReader supplies the character repository the three

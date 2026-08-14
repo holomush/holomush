@@ -13,6 +13,7 @@ import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -1144,11 +1145,516 @@ func (x *AdminCharacterDetail) GetProfile() map[string]string {
 	return nil
 }
 
+// AdminUpdateCharacterRequest carries one partial edit: which of the thirteen
+// §10.6-writable paths to apply, their new values, and the optimistic-
+// concurrency token the write is fenced on.
+//
+// # Why the values are flat fields rather than a map
+//
+// The mask is the allowlist, and adminProfileMaskablePaths pairs each path name
+// with the ACCESSOR for its value, so every name is written down exactly once on
+// the server. A map<string,string> would move the key space onto the wire, where
+// an unlisted key would have to be rejected by a second check rather than being
+// inexpressible in the first place.
+//
+// It carries NO role, grant, permission or capability field, now or ever:
+// TestAdminCharacterMessagesCarryNoRoleBearingField walks this message's
+// descriptor and fails if one is ever added.
+type AdminUpdateCharacterRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// X-Session-Token header, resolved server-side.
+	PlayerSessionToken string `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	// character_id is the ULID to edit. It names SOMEONE ELSE'S character — this
+	// is the cross-owner surface, which is why a stale expected_version is refused
+	// rather than answered.
+	CharacterId string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// expected_version is the characters.version the caller composed this edit
+	// against. AdminPortalServer refuses an absent, zero or negative value with
+	// InvalidArgument BEFORE any domain call: zero is never read as "write without
+	// the guard" and never defaulted to the row's current version.
+	ExpectedVersion int32 `protobuf:"varint,3,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	// update_mask names which of the thirteen paths to apply. Paths are compared
+	// by EXACT string: no prefix, no wildcard, no glob, no dotted-subtree
+	// expansion — `profile` MUST NOT reach `profile.rp_preferences`. An unlisted
+	// path is REJECTED, not ignored. An EMPTY mask changes nothing and returns
+	// success carrying current state (§9.5 rule 4), after the guards have run.
+	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,4,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	// description is characters.description, the in-world `look` text. It is a
+	// COLUMN on characters rather than a property row, which is why the twelve
+	// below are twelve and the writable set is thirteen. Its cap is enforced in
+	// the domain by world.Character.SetDescription, in BYTES.
+	Description string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	// pronouns is the `profile.pronouns` property row. Its cap and the six short
+	// fields' below is world.MaxNameLength, measured in BYTES so a CJK value that
+	// looks short is refused at the same boundary an ASCII one is.
+	Pronouns string `protobuf:"bytes,6,opt,name=pronouns,proto3" json:"pronouns,omitempty"`
+	// concept is the `profile.concept` property row: the one-line character
+	// premise the roster renders.
+	Concept string `protobuf:"bytes,7,opt,name=concept,proto3" json:"concept,omitempty"`
+	// species is the `profile.species` property row.
+	Species string `protobuf:"bytes,8,opt,name=species,proto3" json:"species,omitempty"`
+	// age is the `profile.age` property row. It is FREE TEXT, not a number: the
+	// server stores whatever prose the operator typed.
+	Age string `protobuf:"bytes,9,opt,name=age,proto3" json:"age,omitempty"`
+	// faction is the `profile.faction` property row.
+	Faction string `protobuf:"bytes,10,opt,name=faction,proto3" json:"faction,omitempty"`
+	// currently is the `profile.currently` property row: the short "what this
+	// character is up to" line.
+	Currently string `protobuf:"bytes,11,opt,name=currently,proto3" json:"currently,omitempty"`
+	// timezone is the `profile.timezone` property row. It is free text the server
+	// does not resolve against any zone database.
+	Timezone string `protobuf:"bytes,12,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	// appearance is the `profile.appearance` property row. Its cap and the four
+	// long fields' below is world.MaxDescriptionLength, also in BYTES.
+	Appearance string `protobuf:"bytes,13,opt,name=appearance,proto3" json:"appearance,omitempty"`
+	// personality is the `profile.personality` property row.
+	Personality string `protobuf:"bytes,14,opt,name=personality,proto3" json:"personality,omitempty"`
+	// biography is the `profile.biography` property row.
+	Biography string `protobuf:"bytes,15,opt,name=biography,proto3" json:"biography,omitempty"`
+	// rumors is the `profile.rumors` property row: in-character hearsay others
+	// may know.
+	Rumors string `protobuf:"bytes,16,opt,name=rumors,proto3" json:"rumors,omitempty"`
+	// rp_preferences is the `profile.rp_preferences` property row: the
+	// out-of-character play preferences the profile surfaces.
+	RpPreferences string `protobuf:"bytes,17,opt,name=rp_preferences,json=rpPreferences,proto3" json:"rp_preferences,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminUpdateCharacterRequest) Reset() {
+	*x = AdminUpdateCharacterRequest{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminUpdateCharacterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminUpdateCharacterRequest) ProtoMessage() {}
+
+func (x *AdminUpdateCharacterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminUpdateCharacterRequest.ProtoReflect.Descriptor instead.
+func (*AdminUpdateCharacterRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *AdminUpdateCharacterRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetExpectedVersion() int32 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+func (x *AdminUpdateCharacterRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
+func (x *AdminUpdateCharacterRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetPronouns() string {
+	if x != nil {
+		return x.Pronouns
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetConcept() string {
+	if x != nil {
+		return x.Concept
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetSpecies() string {
+	if x != nil {
+		return x.Species
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetAge() string {
+	if x != nil {
+		return x.Age
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetFaction() string {
+	if x != nil {
+		return x.Faction
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetCurrently() string {
+	if x != nil {
+		return x.Currently
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetAppearance() string {
+	if x != nil {
+		return x.Appearance
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetPersonality() string {
+	if x != nil {
+		return x.Personality
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetBiography() string {
+	if x != nil {
+		return x.Biography
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetRumors() string {
+	if x != nil {
+		return x.Rumors
+	}
+	return ""
+}
+
+func (x *AdminUpdateCharacterRequest) GetRpPreferences() string {
+	if x != nil {
+		return x.RpPreferences
+	}
+	return ""
+}
+
+// AdminUpdateCharacterResponse carries the post-write row so the admin table can
+// update in place.
+type AdminUpdateCharacterResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the §11.3 projection re-read after the write, carrying the NEW
+	// version the client sends as its next expected_version. Guessing that number
+	// client-side is how a correct client becomes a stale one after its first
+	// successful edit. On the empty-mask no-op it carries the UNCHANGED current
+	// version.
+	Character     *AdminCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminUpdateCharacterResponse) Reset() {
+	*x = AdminUpdateCharacterResponse{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminUpdateCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminUpdateCharacterResponse) ProtoMessage() {}
+
+func (x *AdminUpdateCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminUpdateCharacterResponse.ProtoReflect.Descriptor instead.
+func (*AdminUpdateCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *AdminUpdateCharacterResponse) GetCharacter() *AdminCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
+// AdminRetireCharacterRequest names one character to soft-retire.
+type AdminRetireCharacterRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// X-Session-Token header, resolved server-side.
+	PlayerSessionToken string `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	// character_id is the ULID to retire.
+	CharacterId string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// expected_version is the characters.version the caller read. An absent, zero
+	// or negative value is refused with InvalidArgument before any domain call;
+	// a stale one surfaces as Aborted and neither the status change nor its
+	// envelope lands.
+	ExpectedVersion int32 `protobuf:"varint,3,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *AdminRetireCharacterRequest) Reset() {
+	*x = AdminRetireCharacterRequest{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminRetireCharacterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminRetireCharacterRequest) ProtoMessage() {}
+
+func (x *AdminRetireCharacterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminRetireCharacterRequest.ProtoReflect.Descriptor instead.
+func (*AdminRetireCharacterRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *AdminRetireCharacterRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *AdminRetireCharacterRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *AdminRetireCharacterRequest) GetExpectedVersion() int32 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+// AdminRetireCharacterResponse carries the post-transition row.
+type AdminRetireCharacterResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the §11.3 projection re-read after the transition, with status
+	// `retired` and the bumped version.
+	Character     *AdminCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminRetireCharacterResponse) Reset() {
+	*x = AdminRetireCharacterResponse{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminRetireCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminRetireCharacterResponse) ProtoMessage() {}
+
+func (x *AdminRetireCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminRetireCharacterResponse.ProtoReflect.Descriptor instead.
+func (*AdminRetireCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AdminRetireCharacterResponse) GetCharacter() *AdminCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
+// AdminUnretireCharacterRequest names one retired character to return to play.
+type AdminUnretireCharacterRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// X-Session-Token header, resolved server-side.
+	PlayerSessionToken string `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	// character_id is the ULID to un-retire.
+	CharacterId string `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// expected_version is the characters.version the caller read, under the same
+	// guard rules retire applies.
+	ExpectedVersion int32 `protobuf:"varint,3,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *AdminUnretireCharacterRequest) Reset() {
+	*x = AdminUnretireCharacterRequest{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminUnretireCharacterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminUnretireCharacterRequest) ProtoMessage() {}
+
+func (x *AdminUnretireCharacterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminUnretireCharacterRequest.ProtoReflect.Descriptor instead.
+func (*AdminUnretireCharacterRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *AdminUnretireCharacterRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *AdminUnretireCharacterRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *AdminUnretireCharacterRequest) GetExpectedVersion() int32 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+// AdminUnretireCharacterResponse carries the post-transition row.
+type AdminUnretireCharacterResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the §11.3 projection re-read after the transition, with status
+	// `active` and the bumped version.
+	Character     *AdminCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminUnretireCharacterResponse) Reset() {
+	*x = AdminUnretireCharacterResponse{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminUnretireCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminUnretireCharacterResponse) ProtoMessage() {}
+
+func (x *AdminUnretireCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminUnretireCharacterResponse.ProtoReflect.Descriptor instead.
+func (*AdminUnretireCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *AdminUnretireCharacterResponse) GetCharacter() *AdminCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
 var File_holomush_adminportal_v1_adminportal_proto protoreflect.FileDescriptor
 
 const file_holomush_adminportal_v1_adminportal_proto_rawDesc = "" +
 	"\n" +
-	")holomush/adminportal/v1/adminportal.proto\x12\x17holomush.adminportal.v1\x1a\x1bbuf/validate/validate.proto\"U\n" +
+	")holomush/adminportal/v1/adminportal.proto\x12\x17holomush.adminportal.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\"U\n" +
 	"\x18AdminListSectionsRequest\x129\n" +
 	"\x14player_session_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\"^\n" +
 	"\x19AdminListSectionsResponse\x12A\n" +
@@ -1219,7 +1725,43 @@ const file_holomush_adminportal_v1_adminportal_proto_rawDesc = "" +
 	"\aprofile\x18\x03 \x03(\v2:.holomush.adminportal.v1.AdminCharacterDetail.ProfileEntryR\aprofile\x1a:\n" +
 	"\fProfileEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x9b\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xec\x04\n" +
+	"\x1bAdminUpdateCharacterRequest\x129\n" +
+	"\x14player_session_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\x12*\n" +
+	"\fcharacter_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x122\n" +
+	"\x10expected_version\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\x0fexpectedVersion\x12;\n" +
+	"\vupdate_mask\x18\x04 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\x12 \n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x1a\n" +
+	"\bpronouns\x18\x06 \x01(\tR\bpronouns\x12\x18\n" +
+	"\aconcept\x18\a \x01(\tR\aconcept\x12\x18\n" +
+	"\aspecies\x18\b \x01(\tR\aspecies\x12\x10\n" +
+	"\x03age\x18\t \x01(\tR\x03age\x12\x18\n" +
+	"\afaction\x18\n" +
+	" \x01(\tR\afaction\x12\x1c\n" +
+	"\tcurrently\x18\v \x01(\tR\tcurrently\x12\x1a\n" +
+	"\btimezone\x18\f \x01(\tR\btimezone\x12\x1e\n" +
+	"\n" +
+	"appearance\x18\r \x01(\tR\n" +
+	"appearance\x12 \n" +
+	"\vpersonality\x18\x0e \x01(\tR\vpersonality\x12\x1c\n" +
+	"\tbiography\x18\x0f \x01(\tR\tbiography\x12\x16\n" +
+	"\x06rumors\x18\x10 \x01(\tR\x06rumors\x12%\n" +
+	"\x0erp_preferences\x18\x11 \x01(\tR\rrpPreferences\"e\n" +
+	"\x1cAdminUpdateCharacterResponse\x12E\n" +
+	"\tcharacter\x18\x01 \x01(\v2'.holomush.adminportal.v1.AdminCharacterR\tcharacter\"\xb8\x01\n" +
+	"\x1bAdminRetireCharacterRequest\x129\n" +
+	"\x14player_session_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\x12*\n" +
+	"\fcharacter_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x122\n" +
+	"\x10expected_version\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\x0fexpectedVersion\"e\n" +
+	"\x1cAdminRetireCharacterResponse\x12E\n" +
+	"\tcharacter\x18\x01 \x01(\v2'.holomush.adminportal.v1.AdminCharacterR\tcharacter\"\xba\x01\n" +
+	"\x1dAdminUnretireCharacterRequest\x129\n" +
+	"\x14player_session_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\x12*\n" +
+	"\fcharacter_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x122\n" +
+	"\x10expected_version\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\x0fexpectedVersion\"g\n" +
+	"\x1eAdminUnretireCharacterResponse\x12E\n" +
+	"\tcharacter\x18\x01 \x01(\v2'.holomush.adminportal.v1.AdminCharacterR\tcharacter*\x9b\x02\n" +
 	"\x17AdminCharacterSortField\x12*\n" +
 	"&ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fADMIN_CHARACTER_SORT_FIELD_NAME\x10\x01\x12)\n" +
@@ -1231,13 +1773,16 @@ const file_holomush_adminportal_v1_adminportal_proto_rawDesc = "" +
 	")ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED\x10\x00\x12(\n" +
 	"$ADMIN_CHARACTER_STATUS_FILTER_ACTIVE\x10\x01\x12&\n" +
 	"\"ADMIN_CHARACTER_STATUS_FILTER_IDLE\x10\x02\x12)\n" +
-	"%ADMIN_CHARACTER_STATUS_FILTER_RETIRED\x10\x032\x8e\x05\n" +
+	"%ADMIN_CHARACTER_STATUS_FILTER_RETIRED\x10\x032\xa6\b\n" +
 	"\x12AdminPortalService\x12z\n" +
 	"\x11AdminListSections\x121.holomush.adminportal.v1.AdminListSectionsRequest\x1a2.holomush.adminportal.v1.AdminListSectionsResponse\x12t\n" +
 	"\x0fAdminGetSection\x12/.holomush.adminportal.v1.AdminGetSectionRequest\x1a0.holomush.adminportal.v1.AdminGetSectionResponse\x12\x80\x01\n" +
 	"\x13AdminListCharacters\x123.holomush.adminportal.v1.AdminListCharactersRequest\x1a4.holomush.adminportal.v1.AdminListCharactersResponse\x12\x86\x01\n" +
 	"\x15AdminSearchCharacters\x125.holomush.adminportal.v1.AdminSearchCharactersRequest\x1a6.holomush.adminportal.v1.AdminSearchCharactersResponse\x12z\n" +
-	"\x11AdminGetCharacter\x121.holomush.adminportal.v1.AdminGetCharacterRequest\x1a2.holomush.adminportal.v1.AdminGetCharacterResponseB\xfb\x01\n" +
+	"\x11AdminGetCharacter\x121.holomush.adminportal.v1.AdminGetCharacterRequest\x1a2.holomush.adminportal.v1.AdminGetCharacterResponse\x12\x83\x01\n" +
+	"\x14AdminUpdateCharacter\x124.holomush.adminportal.v1.AdminUpdateCharacterRequest\x1a5.holomush.adminportal.v1.AdminUpdateCharacterResponse\x12\x83\x01\n" +
+	"\x14AdminRetireCharacter\x124.holomush.adminportal.v1.AdminRetireCharacterRequest\x1a5.holomush.adminportal.v1.AdminRetireCharacterResponse\x12\x89\x01\n" +
+	"\x16AdminUnretireCharacter\x126.holomush.adminportal.v1.AdminUnretireCharacterRequest\x1a7.holomush.adminportal.v1.AdminUnretireCharacterResponseB\xfb\x01\n" +
 	"\x1bcom.holomush.adminportal.v1B\x10AdminportalProtoP\x01ZLgithub.com/holomush/holomush/pkg/proto/holomush/adminportal/v1;adminportalv1\xa2\x02\x03HAX\xaa\x02\x17Holomush.Adminportal.V1\xca\x02\x17Holomush\\Adminportal\\V1\xe2\x02#Holomush\\Adminportal\\V1\\GPBMetadata\xea\x02\x19Holomush::Adminportal::V1b\x06proto3"
 
 var (
@@ -1253,24 +1798,31 @@ func file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_adminportal_v1_adminportal_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_holomush_adminportal_v1_adminportal_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_holomush_adminportal_v1_adminportal_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_holomush_adminportal_v1_adminportal_proto_goTypes = []any{
-	(AdminCharacterSortField)(0),          // 0: holomush.adminportal.v1.AdminCharacterSortField
-	(AdminCharacterStatusFilter)(0),       // 1: holomush.adminportal.v1.AdminCharacterStatusFilter
-	(*AdminListSectionsRequest)(nil),      // 2: holomush.adminportal.v1.AdminListSectionsRequest
-	(*AdminListSectionsResponse)(nil),     // 3: holomush.adminportal.v1.AdminListSectionsResponse
-	(*AdminGetSectionRequest)(nil),        // 4: holomush.adminportal.v1.AdminGetSectionRequest
-	(*AdminGetSectionResponse)(nil),       // 5: holomush.adminportal.v1.AdminGetSectionResponse
-	(*AdminSection)(nil),                  // 6: holomush.adminportal.v1.AdminSection
-	(*AdminListCharactersRequest)(nil),    // 7: holomush.adminportal.v1.AdminListCharactersRequest
-	(*AdminListCharactersResponse)(nil),   // 8: holomush.adminportal.v1.AdminListCharactersResponse
-	(*AdminSearchCharactersRequest)(nil),  // 9: holomush.adminportal.v1.AdminSearchCharactersRequest
-	(*AdminSearchCharactersResponse)(nil), // 10: holomush.adminportal.v1.AdminSearchCharactersResponse
-	(*AdminGetCharacterRequest)(nil),      // 11: holomush.adminportal.v1.AdminGetCharacterRequest
-	(*AdminGetCharacterResponse)(nil),     // 12: holomush.adminportal.v1.AdminGetCharacterResponse
-	(*AdminCharacter)(nil),                // 13: holomush.adminportal.v1.AdminCharacter
-	(*AdminCharacterDetail)(nil),          // 14: holomush.adminportal.v1.AdminCharacterDetail
-	nil,                                   // 15: holomush.adminportal.v1.AdminCharacterDetail.ProfileEntry
+	(AdminCharacterSortField)(0),           // 0: holomush.adminportal.v1.AdminCharacterSortField
+	(AdminCharacterStatusFilter)(0),        // 1: holomush.adminportal.v1.AdminCharacterStatusFilter
+	(*AdminListSectionsRequest)(nil),       // 2: holomush.adminportal.v1.AdminListSectionsRequest
+	(*AdminListSectionsResponse)(nil),      // 3: holomush.adminportal.v1.AdminListSectionsResponse
+	(*AdminGetSectionRequest)(nil),         // 4: holomush.adminportal.v1.AdminGetSectionRequest
+	(*AdminGetSectionResponse)(nil),        // 5: holomush.adminportal.v1.AdminGetSectionResponse
+	(*AdminSection)(nil),                   // 6: holomush.adminportal.v1.AdminSection
+	(*AdminListCharactersRequest)(nil),     // 7: holomush.adminportal.v1.AdminListCharactersRequest
+	(*AdminListCharactersResponse)(nil),    // 8: holomush.adminportal.v1.AdminListCharactersResponse
+	(*AdminSearchCharactersRequest)(nil),   // 9: holomush.adminportal.v1.AdminSearchCharactersRequest
+	(*AdminSearchCharactersResponse)(nil),  // 10: holomush.adminportal.v1.AdminSearchCharactersResponse
+	(*AdminGetCharacterRequest)(nil),       // 11: holomush.adminportal.v1.AdminGetCharacterRequest
+	(*AdminGetCharacterResponse)(nil),      // 12: holomush.adminportal.v1.AdminGetCharacterResponse
+	(*AdminCharacter)(nil),                 // 13: holomush.adminportal.v1.AdminCharacter
+	(*AdminCharacterDetail)(nil),           // 14: holomush.adminportal.v1.AdminCharacterDetail
+	(*AdminUpdateCharacterRequest)(nil),    // 15: holomush.adminportal.v1.AdminUpdateCharacterRequest
+	(*AdminUpdateCharacterResponse)(nil),   // 16: holomush.adminportal.v1.AdminUpdateCharacterResponse
+	(*AdminRetireCharacterRequest)(nil),    // 17: holomush.adminportal.v1.AdminRetireCharacterRequest
+	(*AdminRetireCharacterResponse)(nil),   // 18: holomush.adminportal.v1.AdminRetireCharacterResponse
+	(*AdminUnretireCharacterRequest)(nil),  // 19: holomush.adminportal.v1.AdminUnretireCharacterRequest
+	(*AdminUnretireCharacterResponse)(nil), // 20: holomush.adminportal.v1.AdminUnretireCharacterResponse
+	nil,                                    // 21: holomush.adminportal.v1.AdminCharacterDetail.ProfileEntry
+	(*fieldmaskpb.FieldMask)(nil),          // 22: google.protobuf.FieldMask
 }
 var file_holomush_adminportal_v1_adminportal_proto_depIdxs = []int32{
 	6,  // 0: holomush.adminportal.v1.AdminListSectionsResponse.sections:type_name -> holomush.adminportal.v1.AdminSection
@@ -1283,22 +1835,32 @@ var file_holomush_adminportal_v1_adminportal_proto_depIdxs = []int32{
 	13, // 7: holomush.adminportal.v1.AdminSearchCharactersResponse.characters:type_name -> holomush.adminportal.v1.AdminCharacter
 	14, // 8: holomush.adminportal.v1.AdminGetCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacterDetail
 	13, // 9: holomush.adminportal.v1.AdminCharacterDetail.character:type_name -> holomush.adminportal.v1.AdminCharacter
-	15, // 10: holomush.adminportal.v1.AdminCharacterDetail.profile:type_name -> holomush.adminportal.v1.AdminCharacterDetail.ProfileEntry
-	2,  // 11: holomush.adminportal.v1.AdminPortalService.AdminListSections:input_type -> holomush.adminportal.v1.AdminListSectionsRequest
-	4,  // 12: holomush.adminportal.v1.AdminPortalService.AdminGetSection:input_type -> holomush.adminportal.v1.AdminGetSectionRequest
-	7,  // 13: holomush.adminportal.v1.AdminPortalService.AdminListCharacters:input_type -> holomush.adminportal.v1.AdminListCharactersRequest
-	9,  // 14: holomush.adminportal.v1.AdminPortalService.AdminSearchCharacters:input_type -> holomush.adminportal.v1.AdminSearchCharactersRequest
-	11, // 15: holomush.adminportal.v1.AdminPortalService.AdminGetCharacter:input_type -> holomush.adminportal.v1.AdminGetCharacterRequest
-	3,  // 16: holomush.adminportal.v1.AdminPortalService.AdminListSections:output_type -> holomush.adminportal.v1.AdminListSectionsResponse
-	5,  // 17: holomush.adminportal.v1.AdminPortalService.AdminGetSection:output_type -> holomush.adminportal.v1.AdminGetSectionResponse
-	8,  // 18: holomush.adminportal.v1.AdminPortalService.AdminListCharacters:output_type -> holomush.adminportal.v1.AdminListCharactersResponse
-	10, // 19: holomush.adminportal.v1.AdminPortalService.AdminSearchCharacters:output_type -> holomush.adminportal.v1.AdminSearchCharactersResponse
-	12, // 20: holomush.adminportal.v1.AdminPortalService.AdminGetCharacter:output_type -> holomush.adminportal.v1.AdminGetCharacterResponse
-	16, // [16:21] is the sub-list for method output_type
-	11, // [11:16] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	21, // 10: holomush.adminportal.v1.AdminCharacterDetail.profile:type_name -> holomush.adminportal.v1.AdminCharacterDetail.ProfileEntry
+	22, // 11: holomush.adminportal.v1.AdminUpdateCharacterRequest.update_mask:type_name -> google.protobuf.FieldMask
+	13, // 12: holomush.adminportal.v1.AdminUpdateCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacter
+	13, // 13: holomush.adminportal.v1.AdminRetireCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacter
+	13, // 14: holomush.adminportal.v1.AdminUnretireCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacter
+	2,  // 15: holomush.adminportal.v1.AdminPortalService.AdminListSections:input_type -> holomush.adminportal.v1.AdminListSectionsRequest
+	4,  // 16: holomush.adminportal.v1.AdminPortalService.AdminGetSection:input_type -> holomush.adminportal.v1.AdminGetSectionRequest
+	7,  // 17: holomush.adminportal.v1.AdminPortalService.AdminListCharacters:input_type -> holomush.adminportal.v1.AdminListCharactersRequest
+	9,  // 18: holomush.adminportal.v1.AdminPortalService.AdminSearchCharacters:input_type -> holomush.adminportal.v1.AdminSearchCharactersRequest
+	11, // 19: holomush.adminportal.v1.AdminPortalService.AdminGetCharacter:input_type -> holomush.adminportal.v1.AdminGetCharacterRequest
+	15, // 20: holomush.adminportal.v1.AdminPortalService.AdminUpdateCharacter:input_type -> holomush.adminportal.v1.AdminUpdateCharacterRequest
+	17, // 21: holomush.adminportal.v1.AdminPortalService.AdminRetireCharacter:input_type -> holomush.adminportal.v1.AdminRetireCharacterRequest
+	19, // 22: holomush.adminportal.v1.AdminPortalService.AdminUnretireCharacter:input_type -> holomush.adminportal.v1.AdminUnretireCharacterRequest
+	3,  // 23: holomush.adminportal.v1.AdminPortalService.AdminListSections:output_type -> holomush.adminportal.v1.AdminListSectionsResponse
+	5,  // 24: holomush.adminportal.v1.AdminPortalService.AdminGetSection:output_type -> holomush.adminportal.v1.AdminGetSectionResponse
+	8,  // 25: holomush.adminportal.v1.AdminPortalService.AdminListCharacters:output_type -> holomush.adminportal.v1.AdminListCharactersResponse
+	10, // 26: holomush.adminportal.v1.AdminPortalService.AdminSearchCharacters:output_type -> holomush.adminportal.v1.AdminSearchCharactersResponse
+	12, // 27: holomush.adminportal.v1.AdminPortalService.AdminGetCharacter:output_type -> holomush.adminportal.v1.AdminGetCharacterResponse
+	16, // 28: holomush.adminportal.v1.AdminPortalService.AdminUpdateCharacter:output_type -> holomush.adminportal.v1.AdminUpdateCharacterResponse
+	18, // 29: holomush.adminportal.v1.AdminPortalService.AdminRetireCharacter:output_type -> holomush.adminportal.v1.AdminRetireCharacterResponse
+	20, // 30: holomush.adminportal.v1.AdminPortalService.AdminUnretireCharacter:output_type -> holomush.adminportal.v1.AdminUnretireCharacterResponse
+	23, // [23:31] is the sub-list for method output_type
+	15, // [15:23] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_holomush_adminportal_v1_adminportal_proto_init() }
@@ -1312,7 +1874,7 @@ func file_holomush_adminportal_v1_adminportal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_adminportal_v1_adminportal_proto_rawDesc), len(file_holomush_adminportal_v1_adminportal_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   14,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

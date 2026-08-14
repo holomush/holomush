@@ -62,7 +62,18 @@ type characterAccessWorldReader interface {
 // it. One interface per capability.
 type characterAccessWorldMutator interface {
 	UpdateCharacterDescription(ctx context.Context, subjectID world.Caller, characterID ulid.ULID, description string) error
-	UpdateCharacterProfileAttributes(ctx context.Context, caller world.Caller, characterID ulid.ULID, expectedVersion int, attributes map[string]string) error
+	// The trailing opts is a SIGNATURE change, not a widening. *world.Service
+	// grew a variadic ProfileUpdateOption tail for the ADMIN write surface
+	// (v0.13 phase-06 plan 05), and a variadic tail changes the METHOD SET — so
+	// leaving this declaration non-variadic would stop *world.Service satisfying
+	// this interface, a compile break rather than a runtime surprise.
+	//
+	// The narrowness the doc block above argues for is preserved by ASSERTION
+	// instead of by the old signature: both call sites
+	// (characteraccess_create.go, characteraccess_write.go) pass ZERO options,
+	// and recordingWorldMutator asserts require.Empty on opts, so every
+	// character-access test that reaches the mutator checks it at runtime.
+	UpdateCharacterProfileAttributes(ctx context.Context, caller world.Caller, characterID ulid.ULID, expectedVersion int, attributes map[string]string, opts ...world.ProfileUpdateOption) error
 }
 
 // characterAccessProfileVisibility is the narrow interface CharacterAccessServer

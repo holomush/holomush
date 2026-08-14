@@ -7980,6 +7980,447 @@ func (x *WebAdminGetCharacterResponse) GetCharacter() *v12.AdminCharacterDetail 
 	return nil
 }
 
+// WebAdminUpdateCharacterRequest mirrors the portal's edit request minus the
+// token, which the gateway lifts from the X-Session-Token header.
+type WebAdminUpdateCharacterRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is forwarded verbatim to AdminPortalService.AdminUpdateCharacter.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// expected_version is the optimistic-concurrency token the write is fenced on,
+	// forwarded verbatim. The gateway does not default or clamp it; the core
+	// refuses an absent or zero value.
+	ExpectedVersion int32 `protobuf:"varint,2,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	// update_mask names which of the thirteen writable paths to apply, forwarded
+	// verbatim. The gateway neither validates nor expands it: the closed
+	// exact-string allowlist is core-side.
+	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	// description is the in-world `look` text, applied when update_mask names it.
+	Description string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	// pronouns is the `profile.pronouns` value, applied when update_mask names it.
+	Pronouns string `protobuf:"bytes,5,opt,name=pronouns,proto3" json:"pronouns,omitempty"`
+	// concept is the `profile.concept` value, applied when update_mask names it.
+	Concept string `protobuf:"bytes,6,opt,name=concept,proto3" json:"concept,omitempty"`
+	// species is the `profile.species` value, applied when update_mask names it.
+	Species string `protobuf:"bytes,7,opt,name=species,proto3" json:"species,omitempty"`
+	// age is the `profile.age` free-text value, applied when update_mask names it.
+	Age string `protobuf:"bytes,8,opt,name=age,proto3" json:"age,omitempty"`
+	// faction is the `profile.faction` value, applied when update_mask names it.
+	Faction string `protobuf:"bytes,9,opt,name=faction,proto3" json:"faction,omitempty"`
+	// currently is the `profile.currently` value, applied when update_mask names it.
+	Currently string `protobuf:"bytes,10,opt,name=currently,proto3" json:"currently,omitempty"`
+	// timezone is the `profile.timezone` free-text value, applied when update_mask
+	// names it.
+	Timezone string `protobuf:"bytes,11,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	// appearance is the `profile.appearance` value, applied when update_mask names it.
+	Appearance string `protobuf:"bytes,12,opt,name=appearance,proto3" json:"appearance,omitempty"`
+	// personality is the `profile.personality` value, applied when update_mask names it.
+	Personality string `protobuf:"bytes,13,opt,name=personality,proto3" json:"personality,omitempty"`
+	// biography is the `profile.biography` value, applied when update_mask names it.
+	Biography string `protobuf:"bytes,14,opt,name=biography,proto3" json:"biography,omitempty"`
+	// rumors is the `profile.rumors` value, applied when update_mask names it.
+	Rumors string `protobuf:"bytes,15,opt,name=rumors,proto3" json:"rumors,omitempty"`
+	// rp_preferences is the `profile.rp_preferences` value, applied when
+	// update_mask names it.
+	RpPreferences string `protobuf:"bytes,16,opt,name=rp_preferences,json=rpPreferences,proto3" json:"rp_preferences,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebAdminUpdateCharacterRequest) Reset() {
+	*x = WebAdminUpdateCharacterRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[125]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebAdminUpdateCharacterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebAdminUpdateCharacterRequest) ProtoMessage() {}
+
+func (x *WebAdminUpdateCharacterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[125]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebAdminUpdateCharacterRequest.ProtoReflect.Descriptor instead.
+func (*WebAdminUpdateCharacterRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{125}
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetExpectedVersion() int32 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetPronouns() string {
+	if x != nil {
+		return x.Pronouns
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetConcept() string {
+	if x != nil {
+		return x.Concept
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetSpecies() string {
+	if x != nil {
+		return x.Species
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetAge() string {
+	if x != nil {
+		return x.Age
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetFaction() string {
+	if x != nil {
+		return x.Faction
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetCurrently() string {
+	if x != nil {
+		return x.Currently
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetAppearance() string {
+	if x != nil {
+		return x.Appearance
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetPersonality() string {
+	if x != nil {
+		return x.Personality
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetBiography() string {
+	if x != nil {
+		return x.Biography
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetRumors() string {
+	if x != nil {
+		return x.Rumors
+	}
+	return ""
+}
+
+func (x *WebAdminUpdateCharacterRequest) GetRpPreferences() string {
+	if x != nil {
+		return x.RpPreferences
+	}
+	return ""
+}
+
+// WebAdminUpdateCharacterResponse re-exports the portal's post-write row verbatim.
+type WebAdminUpdateCharacterResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the row AdminPortalService returned, carrying the version the
+	// client sends as its next expected_version.
+	Character     *v12.AdminCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebAdminUpdateCharacterResponse) Reset() {
+	*x = WebAdminUpdateCharacterResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[126]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebAdminUpdateCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebAdminUpdateCharacterResponse) ProtoMessage() {}
+
+func (x *WebAdminUpdateCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[126]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebAdminUpdateCharacterResponse.ProtoReflect.Descriptor instead.
+func (*WebAdminUpdateCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{126}
+}
+
+func (x *WebAdminUpdateCharacterResponse) GetCharacter() *v12.AdminCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
+// WebAdminRetireCharacterRequest names the character to soft-retire and the
+// version the operator read it at.
+type WebAdminRetireCharacterRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is forwarded verbatim to AdminPortalService.AdminRetireCharacter.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// expected_version is forwarded verbatim; the core refuses an absent or zero
+	// value and answers a stale one with Aborted.
+	ExpectedVersion int32 `protobuf:"varint,2,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *WebAdminRetireCharacterRequest) Reset() {
+	*x = WebAdminRetireCharacterRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[127]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebAdminRetireCharacterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebAdminRetireCharacterRequest) ProtoMessage() {}
+
+func (x *WebAdminRetireCharacterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[127]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebAdminRetireCharacterRequest.ProtoReflect.Descriptor instead.
+func (*WebAdminRetireCharacterRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{127}
+}
+
+func (x *WebAdminRetireCharacterRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *WebAdminRetireCharacterRequest) GetExpectedVersion() int32 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+// WebAdminRetireCharacterResponse re-exports the portal's post-transition row.
+type WebAdminRetireCharacterResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the row AdminPortalService returned, with status `retired`.
+	Character     *v12.AdminCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebAdminRetireCharacterResponse) Reset() {
+	*x = WebAdminRetireCharacterResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[128]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebAdminRetireCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebAdminRetireCharacterResponse) ProtoMessage() {}
+
+func (x *WebAdminRetireCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[128]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebAdminRetireCharacterResponse.ProtoReflect.Descriptor instead.
+func (*WebAdminRetireCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{128}
+}
+
+func (x *WebAdminRetireCharacterResponse) GetCharacter() *v12.AdminCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
+// WebAdminUnretireCharacterRequest names the retired character to return to play.
+type WebAdminUnretireCharacterRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character_id is forwarded verbatim to
+	// AdminPortalService.AdminUnretireCharacter.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// expected_version is forwarded verbatim, under the same guard rules retire
+	// applies.
+	ExpectedVersion int32 `protobuf:"varint,2,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *WebAdminUnretireCharacterRequest) Reset() {
+	*x = WebAdminUnretireCharacterRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[129]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebAdminUnretireCharacterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebAdminUnretireCharacterRequest) ProtoMessage() {}
+
+func (x *WebAdminUnretireCharacterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[129]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebAdminUnretireCharacterRequest.ProtoReflect.Descriptor instead.
+func (*WebAdminUnretireCharacterRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{129}
+}
+
+func (x *WebAdminUnretireCharacterRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *WebAdminUnretireCharacterRequest) GetExpectedVersion() int32 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+// WebAdminUnretireCharacterResponse re-exports the portal's post-transition row.
+type WebAdminUnretireCharacterResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// character is the row AdminPortalService returned, with status `active`.
+	Character     *v12.AdminCharacter `protobuf:"bytes,1,opt,name=character,proto3" json:"character,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebAdminUnretireCharacterResponse) Reset() {
+	*x = WebAdminUnretireCharacterResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[130]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebAdminUnretireCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebAdminUnretireCharacterResponse) ProtoMessage() {}
+
+func (x *WebAdminUnretireCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[130]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebAdminUnretireCharacterResponse.ProtoReflect.Descriptor instead.
+func (*WebAdminUnretireCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{130}
+}
+
+func (x *WebAdminUnretireCharacterResponse) GetCharacter() *v12.AdminCharacter {
+	if x != nil {
+		return x.Character
+	}
+	return nil
+}
+
 var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
 
 const file_holomush_web_v1_web_proto_rawDesc = "" +
@@ -8506,7 +8947,40 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x1bWebAdminGetCharacterRequest\x12!\n" +
 	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\"k\n" +
 	"\x1cWebAdminGetCharacterResponse\x12K\n" +
-	"\tcharacter\x18\x01 \x01(\v2-.holomush.adminportal.v1.AdminCharacterDetailR\tcharacter*\x98\x01\n" +
+	"\tcharacter\x18\x01 \x01(\v2-.holomush.adminportal.v1.AdminCharacterDetailR\tcharacter\"\xa2\x04\n" +
+	"\x1eWebAdminUpdateCharacterRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12)\n" +
+	"\x10expected_version\x18\x02 \x01(\x05R\x0fexpectedVersion\x12;\n" +
+	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x1a\n" +
+	"\bpronouns\x18\x05 \x01(\tR\bpronouns\x12\x18\n" +
+	"\aconcept\x18\x06 \x01(\tR\aconcept\x12\x18\n" +
+	"\aspecies\x18\a \x01(\tR\aspecies\x12\x10\n" +
+	"\x03age\x18\b \x01(\tR\x03age\x12\x18\n" +
+	"\afaction\x18\t \x01(\tR\afaction\x12\x1c\n" +
+	"\tcurrently\x18\n" +
+	" \x01(\tR\tcurrently\x12\x1a\n" +
+	"\btimezone\x18\v \x01(\tR\btimezone\x12\x1e\n" +
+	"\n" +
+	"appearance\x18\f \x01(\tR\n" +
+	"appearance\x12 \n" +
+	"\vpersonality\x18\r \x01(\tR\vpersonality\x12\x1c\n" +
+	"\tbiography\x18\x0e \x01(\tR\tbiography\x12\x16\n" +
+	"\x06rumors\x18\x0f \x01(\tR\x06rumors\x12%\n" +
+	"\x0erp_preferences\x18\x10 \x01(\tR\rrpPreferences\"h\n" +
+	"\x1fWebAdminUpdateCharacterResponse\x12E\n" +
+	"\tcharacter\x18\x01 \x01(\v2'.holomush.adminportal.v1.AdminCharacterR\tcharacter\"n\n" +
+	"\x1eWebAdminRetireCharacterRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12)\n" +
+	"\x10expected_version\x18\x02 \x01(\x05R\x0fexpectedVersion\"h\n" +
+	"\x1fWebAdminRetireCharacterResponse\x12E\n" +
+	"\tcharacter\x18\x01 \x01(\v2'.holomush.adminportal.v1.AdminCharacterR\tcharacter\"p\n" +
+	" WebAdminUnretireCharacterRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12)\n" +
+	"\x10expected_version\x18\x02 \x01(\x05R\x0fexpectedVersion\"j\n" +
+	"!WebAdminUnretireCharacterResponse\x12E\n" +
+	"\tcharacter\x18\x01 \x01(\v2'.holomush.adminportal.v1.AdminCharacterR\tcharacter*\x98\x01\n" +
 	"\fEventChannel\x12\x1d\n" +
 	"\x19EVENT_CHANNEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
@@ -8529,7 +9003,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x1eWEB_PRESENCE_STATE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19WEB_PRESENCE_STATE_ACTIVE\x10\x01\x12\x1f\n" +
 	"\x1bWEB_PRESENCE_STATE_DETACHED\x10\x02\x12\x1f\n" +
-	"\x1bWEB_PRESENCE_STATE_INACTIVE\x10\x032\xba3\n" +
+	"\x1bWEB_PRESENCE_STATE_INACTIVE\x10\x032\xbb6\n" +
 	"\n" +
 	"WebService\x12X\n" +
 	"\vSendCommand\x12#.holomush.web.v1.SendCommandRequest\x1a$.holomush.web.v1.SendCommandResponse\x12]\n" +
@@ -8591,7 +9065,10 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x12WebAdminGetSection\x12*.holomush.web.v1.WebAdminGetSectionRequest\x1a+.holomush.web.v1.WebAdminGetSectionResponse\x12y\n" +
 	"\x16WebAdminListCharacters\x12..holomush.web.v1.WebAdminListCharactersRequest\x1a/.holomush.web.v1.WebAdminListCharactersResponse\x12\x7f\n" +
 	"\x18WebAdminSearchCharacters\x120.holomush.web.v1.WebAdminSearchCharactersRequest\x1a1.holomush.web.v1.WebAdminSearchCharactersResponse\x12s\n" +
-	"\x14WebAdminGetCharacter\x12,.holomush.web.v1.WebAdminGetCharacterRequest\x1a-.holomush.web.v1.WebAdminGetCharacterResponseB\xbb\x01\n" +
+	"\x14WebAdminGetCharacter\x12,.holomush.web.v1.WebAdminGetCharacterRequest\x1a-.holomush.web.v1.WebAdminGetCharacterResponse\x12|\n" +
+	"\x17WebAdminUpdateCharacter\x12/.holomush.web.v1.WebAdminUpdateCharacterRequest\x1a0.holomush.web.v1.WebAdminUpdateCharacterResponse\x12|\n" +
+	"\x17WebAdminRetireCharacter\x12/.holomush.web.v1.WebAdminRetireCharacterRequest\x1a0.holomush.web.v1.WebAdminRetireCharacterResponse\x12\x82\x01\n" +
+	"\x19WebAdminUnretireCharacter\x121.holomush.web.v1.WebAdminUnretireCharacterRequest\x1a2.holomush.web.v1.WebAdminUnretireCharacterResponseB\xbb\x01\n" +
 	"\x13com.holomush.web.v1B\bWebProtoP\x01Z<github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1\xa2\x02\x03HWX\xaa\x02\x0fHolomush.Web.V1\xca\x02\x0fHolomush\\Web\\V1\xe2\x02\x1bHolomush\\Web\\V1\\GPBMetadata\xea\x02\x11Holomush::Web::V1b\x06proto3"
 
 var (
@@ -8607,7 +9084,7 @@ func file_holomush_web_v1_web_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_web_v1_web_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 127)
+var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 133)
 var file_holomush_web_v1_web_proto_goTypes = []any{
 	(EventChannel)(0),                             // 0: holomush.web.v1.EventChannel
 	(ControlSignal)(0),                            // 1: holomush.web.v1.ControlSignal
@@ -8738,203 +9215,219 @@ var file_holomush_web_v1_web_proto_goTypes = []any{
 	(*WebAdminSearchCharactersResponse)(nil),      // 126: holomush.web.v1.WebAdminSearchCharactersResponse
 	(*WebAdminGetCharacterRequest)(nil),           // 127: holomush.web.v1.WebAdminGetCharacterRequest
 	(*WebAdminGetCharacterResponse)(nil),          // 128: holomush.web.v1.WebAdminGetCharacterResponse
-	nil,                                           // 129: holomush.web.v1.WebContentItem.MetadataEntry
-	nil,                                           // 130: holomush.web.v1.WebListCommandsResponse.AliasesEntry
-	(*structpb.Struct)(nil),                       // 131: google.protobuf.Struct
-	(*v1.OwnCharacter)(nil),                       // 132: holomush.characteraccess.v1.OwnCharacter
-	(*timestamppb.Timestamp)(nil),                 // 133: google.protobuf.Timestamp
-	(*v11.SceneInfo)(nil),                         // 134: holomush.scene.v1.SceneInfo
-	(*v11.CharacterSceneInfo)(nil),                // 135: holomush.scene.v1.CharacterSceneInfo
-	(*v11.ParticipantInfo)(nil),                   // 136: holomush.scene.v1.ParticipantInfo
-	(*v11.PublicSceneArchive)(nil),                // 137: holomush.scene.v1.PublicSceneArchive
-	(*v11.PublishedSceneEntry)(nil),               // 138: holomush.scene.v1.PublishedSceneEntry
-	(*v11.PublishedSceneVoteSummary)(nil),         // 139: holomush.scene.v1.PublishedSceneVoteSummary
-	(*fieldmaskpb.FieldMask)(nil),                 // 140: google.protobuf.FieldMask
-	(*v1.PublicCharacter)(nil),                    // 141: holomush.characteraccess.v1.PublicCharacter
-	(*v1.PublicCharacterSummary)(nil),             // 142: holomush.characteraccess.v1.PublicCharacterSummary
-	(*v12.AdminSection)(nil),                      // 143: holomush.adminportal.v1.AdminSection
-	(v12.AdminCharacterSortField)(0),              // 144: holomush.adminportal.v1.AdminCharacterSortField
-	(v12.AdminCharacterStatusFilter)(0),           // 145: holomush.adminportal.v1.AdminCharacterStatusFilter
-	(*v12.AdminCharacter)(nil),                    // 146: holomush.adminportal.v1.AdminCharacter
-	(*v12.AdminCharacterDetail)(nil),              // 147: holomush.adminportal.v1.AdminCharacterDetail
+	(*WebAdminUpdateCharacterRequest)(nil),        // 129: holomush.web.v1.WebAdminUpdateCharacterRequest
+	(*WebAdminUpdateCharacterResponse)(nil),       // 130: holomush.web.v1.WebAdminUpdateCharacterResponse
+	(*WebAdminRetireCharacterRequest)(nil),        // 131: holomush.web.v1.WebAdminRetireCharacterRequest
+	(*WebAdminRetireCharacterResponse)(nil),       // 132: holomush.web.v1.WebAdminRetireCharacterResponse
+	(*WebAdminUnretireCharacterRequest)(nil),      // 133: holomush.web.v1.WebAdminUnretireCharacterRequest
+	(*WebAdminUnretireCharacterResponse)(nil),     // 134: holomush.web.v1.WebAdminUnretireCharacterResponse
+	nil,                                   // 135: holomush.web.v1.WebContentItem.MetadataEntry
+	nil,                                   // 136: holomush.web.v1.WebListCommandsResponse.AliasesEntry
+	(*structpb.Struct)(nil),               // 137: google.protobuf.Struct
+	(*v1.OwnCharacter)(nil),               // 138: holomush.characteraccess.v1.OwnCharacter
+	(*timestamppb.Timestamp)(nil),         // 139: google.protobuf.Timestamp
+	(*v11.SceneInfo)(nil),                 // 140: holomush.scene.v1.SceneInfo
+	(*v11.CharacterSceneInfo)(nil),        // 141: holomush.scene.v1.CharacterSceneInfo
+	(*v11.ParticipantInfo)(nil),           // 142: holomush.scene.v1.ParticipantInfo
+	(*v11.PublicSceneArchive)(nil),        // 143: holomush.scene.v1.PublicSceneArchive
+	(*v11.PublishedSceneEntry)(nil),       // 144: holomush.scene.v1.PublishedSceneEntry
+	(*v11.PublishedSceneVoteSummary)(nil), // 145: holomush.scene.v1.PublishedSceneVoteSummary
+	(*fieldmaskpb.FieldMask)(nil),         // 146: google.protobuf.FieldMask
+	(*v1.PublicCharacter)(nil),            // 147: holomush.characteraccess.v1.PublicCharacter
+	(*v1.PublicCharacterSummary)(nil),     // 148: holomush.characteraccess.v1.PublicCharacterSummary
+	(*v12.AdminSection)(nil),              // 149: holomush.adminportal.v1.AdminSection
+	(v12.AdminCharacterSortField)(0),      // 150: holomush.adminportal.v1.AdminCharacterSortField
+	(v12.AdminCharacterStatusFilter)(0),   // 151: holomush.adminportal.v1.AdminCharacterStatusFilter
+	(*v12.AdminCharacter)(nil),            // 152: holomush.adminportal.v1.AdminCharacter
+	(*v12.AdminCharacterDetail)(nil),      // 153: holomush.adminportal.v1.AdminCharacterDetail
 }
 var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	1,   // 0: holomush.web.v1.ControlFrame.signal:type_name -> holomush.web.v1.ControlSignal
 	0,   // 1: holomush.web.v1.GameEvent.display_target:type_name -> holomush.web.v1.EventChannel
-	131, // 2: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
+	137, // 2: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
 	8,   // 3: holomush.web.v1.StreamEventsResponse.event:type_name -> holomush.web.v1.GameEvent
 	4,   // 4: holomush.web.v1.StreamEventsResponse.control:type_name -> holomush.web.v1.ControlFrame
 	14,  // 5: holomush.web.v1.WebAuthenticatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	14,  // 6: holomush.web.v1.WebCreatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	14,  // 7: holomush.web.v1.WebCreateGuestResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	132, // 8: holomush.web.v1.WebCreateCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	138, // 8: holomush.web.v1.WebCreateCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
 	14,  // 9: holomush.web.v1.WebListCharactersResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	14,  // 10: holomush.web.v1.WebCheckSessionResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	39,  // 11: holomush.web.v1.WebGetContentResponse.item:type_name -> holomush.web.v1.WebContentItem
 	39,  // 12: holomush.web.v1.WebListContentResponse.items:type_name -> holomush.web.v1.WebContentItem
-	129, // 13: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
+	135, // 13: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
 	8,   // 14: holomush.web.v1.WebQueryStreamHistoryResponse.events:type_name -> holomush.web.v1.GameEvent
-	133, // 15: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
-	133, // 16: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
+	139, // 15: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
+	139, // 16: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
 	45,  // 17: holomush.web.v1.WebListPlayerSessionsResponse.sessions:type_name -> holomush.web.v1.WebPlayerSessionInfo
 	3,   // 18: holomush.web.v1.WebPresenceEntry.state:type_name -> holomush.web.v1.WebPresenceState
 	2,   // 19: holomush.web.v1.WebListFocusPresenceResponse.context:type_name -> holomush.web.v1.WebPresenceContext
 	51,  // 20: holomush.web.v1.WebListFocusPresenceResponse.entries:type_name -> holomush.web.v1.WebPresenceEntry
 	54,  // 21: holomush.web.v1.WebListCommandsResponse.commands:type_name -> holomush.web.v1.WebAvailableCommand
-	130, // 22: holomush.web.v1.WebListCommandsResponse.aliases:type_name -> holomush.web.v1.WebListCommandsResponse.AliasesEntry
-	134, // 23: holomush.web.v1.WebListScenesResponse.scenes:type_name -> holomush.scene.v1.SceneInfo
-	134, // 24: holomush.web.v1.WebGetSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	135, // 25: holomush.web.v1.WebListMyScenesResponse.scenes:type_name -> holomush.scene.v1.CharacterSceneInfo
-	136, // 26: holomush.web.v1.WebWatchSceneResponse.participant:type_name -> holomush.scene.v1.ParticipantInfo
-	134, // 27: holomush.web.v1.WebCreateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	137, // 28: holomush.web.v1.WebListPublishedScenesResponse.archives:type_name -> holomush.scene.v1.PublicSceneArchive
-	138, // 29: holomush.web.v1.WebGetPublicSceneArchiveResponse.content_entries:type_name -> holomush.scene.v1.PublishedSceneEntry
-	134, // 30: holomush.web.v1.WebEndSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	139, // 31: holomush.web.v1.WebGetPublishedSceneResponse.vote_summary:type_name -> holomush.scene.v1.PublishedSceneVoteSummary
-	134, // 32: holomush.web.v1.WebPauseSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	134, // 33: holomush.web.v1.WebResumeSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	140, // 34: holomush.web.v1.WebUpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
-	134, // 35: holomush.web.v1.WebUpdateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	141, // 36: holomush.web.v1.WebGetCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.PublicCharacter
-	132, // 37: holomush.web.v1.WebListMyCharactersResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
-	132, // 38: holomush.web.v1.WebGetMyCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	140, // 39: holomush.web.v1.WebUpdateCharacterProfileRequest.update_mask:type_name -> google.protobuf.FieldMask
-	132, // 40: holomush.web.v1.WebUpdateCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	132, // 41: holomush.web.v1.WebUpdateCharacterDescriptionResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
-	132, // 42: holomush.web.v1.WebSetDefaultCharacterResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
-	142, // 43: holomush.web.v1.WebListCharacterDirectoryResponse.characters:type_name -> holomush.characteraccess.v1.PublicCharacterSummary
-	143, // 44: holomush.web.v1.WebAdminListSectionsResponse.sections:type_name -> holomush.adminportal.v1.AdminSection
-	143, // 45: holomush.web.v1.WebAdminGetSectionResponse.section:type_name -> holomush.adminportal.v1.AdminSection
-	144, // 46: holomush.web.v1.WebAdminListCharactersRequest.sort_field:type_name -> holomush.adminportal.v1.AdminCharacterSortField
-	145, // 47: holomush.web.v1.WebAdminListCharactersRequest.status_filter:type_name -> holomush.adminportal.v1.AdminCharacterStatusFilter
-	146, // 48: holomush.web.v1.WebAdminListCharactersResponse.characters:type_name -> holomush.adminportal.v1.AdminCharacter
-	144, // 49: holomush.web.v1.WebAdminSearchCharactersRequest.sort_field:type_name -> holomush.adminportal.v1.AdminCharacterSortField
-	145, // 50: holomush.web.v1.WebAdminSearchCharactersRequest.status_filter:type_name -> holomush.adminportal.v1.AdminCharacterStatusFilter
-	146, // 51: holomush.web.v1.WebAdminSearchCharactersResponse.characters:type_name -> holomush.adminportal.v1.AdminCharacter
-	147, // 52: holomush.web.v1.WebAdminGetCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacterDetail
-	5,   // 53: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
-	7,   // 54: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
-	10,  // 55: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
-	12,  // 56: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
-	15,  // 57: holomush.web.v1.WebService.WebAuthenticatePlayer:input_type -> holomush.web.v1.WebAuthenticatePlayerRequest
-	17,  // 58: holomush.web.v1.WebService.WebSelectCharacter:input_type -> holomush.web.v1.WebSelectCharacterRequest
-	19,  // 59: holomush.web.v1.WebService.WebCreatePlayer:input_type -> holomush.web.v1.WebCreatePlayerRequest
-	21,  // 60: holomush.web.v1.WebService.WebCreateGuest:input_type -> holomush.web.v1.WebCreateGuestRequest
-	23,  // 61: holomush.web.v1.WebService.WebCreateCharacter:input_type -> holomush.web.v1.WebCreateCharacterRequest
-	25,  // 62: holomush.web.v1.WebService.WebListCharacters:input_type -> holomush.web.v1.WebListCharactersRequest
-	27,  // 63: holomush.web.v1.WebService.WebLogout:input_type -> holomush.web.v1.WebLogoutRequest
-	29,  // 64: holomush.web.v1.WebService.WebRequestPasswordReset:input_type -> holomush.web.v1.WebRequestPasswordResetRequest
-	31,  // 65: holomush.web.v1.WebService.WebConfirmPasswordReset:input_type -> holomush.web.v1.WebConfirmPasswordResetRequest
-	33,  // 66: holomush.web.v1.WebService.WebCheckSession:input_type -> holomush.web.v1.WebCheckSessionRequest
-	35,  // 67: holomush.web.v1.WebService.WebGetContent:input_type -> holomush.web.v1.WebGetContentRequest
-	37,  // 68: holomush.web.v1.WebService.WebListContent:input_type -> holomush.web.v1.WebListContentRequest
-	40,  // 69: holomush.web.v1.WebService.WebQueryStreamHistory:input_type -> holomush.web.v1.WebQueryStreamHistoryRequest
-	42,  // 70: holomush.web.v1.WebService.WebListSessionStreams:input_type -> holomush.web.v1.WebListSessionStreamsRequest
-	44,  // 71: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
-	47,  // 72: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
-	49,  // 73: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
-	52,  // 74: holomush.web.v1.WebService.WebListFocusPresence:input_type -> holomush.web.v1.WebListFocusPresenceRequest
-	55,  // 75: holomush.web.v1.WebService.WebListCommands:input_type -> holomush.web.v1.WebListCommandsRequest
-	57,  // 76: holomush.web.v1.WebService.WebListScenes:input_type -> holomush.web.v1.WebListScenesRequest
-	59,  // 77: holomush.web.v1.WebService.WebGetScene:input_type -> holomush.web.v1.WebGetSceneRequest
-	61,  // 78: holomush.web.v1.WebService.WebListMyScenes:input_type -> holomush.web.v1.WebListMyScenesRequest
-	63,  // 79: holomush.web.v1.WebService.WebWatchScene:input_type -> holomush.web.v1.WebWatchSceneRequest
-	65,  // 80: holomush.web.v1.WebService.WebCreateScene:input_type -> holomush.web.v1.WebCreateSceneRequest
-	77,  // 81: holomush.web.v1.WebService.WebEndScene:input_type -> holomush.web.v1.WebEndSceneRequest
-	87,  // 82: holomush.web.v1.WebService.WebPauseScene:input_type -> holomush.web.v1.WebPauseSceneRequest
-	89,  // 83: holomush.web.v1.WebService.WebResumeScene:input_type -> holomush.web.v1.WebResumeSceneRequest
-	91,  // 84: holomush.web.v1.WebService.WebMuteScene:input_type -> holomush.web.v1.WebMuteSceneRequest
-	93,  // 85: holomush.web.v1.WebService.WebSetSceneNotifyPref:input_type -> holomush.web.v1.WebSetSceneNotifyPrefRequest
-	103, // 86: holomush.web.v1.WebService.WebUpdateScene:input_type -> holomush.web.v1.WebUpdateSceneRequest
-	95,  // 87: holomush.web.v1.WebService.WebInviteToScene:input_type -> holomush.web.v1.WebInviteToSceneRequest
-	97,  // 88: holomush.web.v1.WebService.WebKickFromScene:input_type -> holomush.web.v1.WebKickFromSceneRequest
-	99,  // 89: holomush.web.v1.WebService.WebTransferOwnership:input_type -> holomush.web.v1.WebTransferOwnershipRequest
-	101, // 90: holomush.web.v1.WebService.WebLeaveScene:input_type -> holomush.web.v1.WebLeaveSceneRequest
-	67,  // 91: holomush.web.v1.WebService.WebExportScene:input_type -> holomush.web.v1.WebExportSceneRequest
-	69,  // 92: holomush.web.v1.WebService.WebSetSceneFocus:input_type -> holomush.web.v1.WebSetSceneFocusRequest
-	71,  // 93: holomush.web.v1.WebService.WebListPublishedScenes:input_type -> holomush.web.v1.WebListPublishedScenesRequest
-	73,  // 94: holomush.web.v1.WebService.WebGetPublicSceneArchive:input_type -> holomush.web.v1.WebGetPublicSceneArchiveRequest
-	75,  // 95: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:input_type -> holomush.web.v1.WebDownloadPublicSceneArchiveRequest
-	79,  // 96: holomush.web.v1.WebService.WebStartScenePublish:input_type -> holomush.web.v1.WebStartScenePublishRequest
-	81,  // 97: holomush.web.v1.WebService.WebCastPublishSceneVote:input_type -> holomush.web.v1.WebCastPublishSceneVoteRequest
-	83,  // 98: holomush.web.v1.WebService.WebWithdrawScenePublish:input_type -> holomush.web.v1.WebWithdrawScenePublishRequest
-	85,  // 99: holomush.web.v1.WebService.WebGetPublishedScene:input_type -> holomush.web.v1.WebGetPublishedSceneRequest
-	105, // 100: holomush.web.v1.WebService.WebGetCharacterProfile:input_type -> holomush.web.v1.WebGetCharacterProfileRequest
-	107, // 101: holomush.web.v1.WebService.WebListMyCharacters:input_type -> holomush.web.v1.WebListMyCharactersRequest
-	109, // 102: holomush.web.v1.WebService.WebGetMyCharacter:input_type -> holomush.web.v1.WebGetMyCharacterRequest
-	111, // 103: holomush.web.v1.WebService.WebUpdateCharacterProfile:input_type -> holomush.web.v1.WebUpdateCharacterProfileRequest
-	113, // 104: holomush.web.v1.WebService.WebUpdateCharacterDescription:input_type -> holomush.web.v1.WebUpdateCharacterDescriptionRequest
-	115, // 105: holomush.web.v1.WebService.WebSetDefaultCharacter:input_type -> holomush.web.v1.WebSetDefaultCharacterRequest
-	117, // 106: holomush.web.v1.WebService.WebListCharacterDirectory:input_type -> holomush.web.v1.WebListCharacterDirectoryRequest
-	119, // 107: holomush.web.v1.WebService.WebAdminListSections:input_type -> holomush.web.v1.WebAdminListSectionsRequest
-	121, // 108: holomush.web.v1.WebService.WebAdminGetSection:input_type -> holomush.web.v1.WebAdminGetSectionRequest
-	123, // 109: holomush.web.v1.WebService.WebAdminListCharacters:input_type -> holomush.web.v1.WebAdminListCharactersRequest
-	125, // 110: holomush.web.v1.WebService.WebAdminSearchCharacters:input_type -> holomush.web.v1.WebAdminSearchCharactersRequest
-	127, // 111: holomush.web.v1.WebService.WebAdminGetCharacter:input_type -> holomush.web.v1.WebAdminGetCharacterRequest
-	6,   // 112: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
-	9,   // 113: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
-	11,  // 114: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
-	13,  // 115: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
-	16,  // 116: holomush.web.v1.WebService.WebAuthenticatePlayer:output_type -> holomush.web.v1.WebAuthenticatePlayerResponse
-	18,  // 117: holomush.web.v1.WebService.WebSelectCharacter:output_type -> holomush.web.v1.WebSelectCharacterResponse
-	20,  // 118: holomush.web.v1.WebService.WebCreatePlayer:output_type -> holomush.web.v1.WebCreatePlayerResponse
-	22,  // 119: holomush.web.v1.WebService.WebCreateGuest:output_type -> holomush.web.v1.WebCreateGuestResponse
-	24,  // 120: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
-	26,  // 121: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
-	28,  // 122: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
-	30,  // 123: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
-	32,  // 124: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
-	34,  // 125: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
-	36,  // 126: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
-	38,  // 127: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
-	41,  // 128: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
-	43,  // 129: holomush.web.v1.WebService.WebListSessionStreams:output_type -> holomush.web.v1.WebListSessionStreamsResponse
-	46,  // 130: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
-	48,  // 131: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
-	50,  // 132: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
-	53,  // 133: holomush.web.v1.WebService.WebListFocusPresence:output_type -> holomush.web.v1.WebListFocusPresenceResponse
-	56,  // 134: holomush.web.v1.WebService.WebListCommands:output_type -> holomush.web.v1.WebListCommandsResponse
-	58,  // 135: holomush.web.v1.WebService.WebListScenes:output_type -> holomush.web.v1.WebListScenesResponse
-	60,  // 136: holomush.web.v1.WebService.WebGetScene:output_type -> holomush.web.v1.WebGetSceneResponse
-	62,  // 137: holomush.web.v1.WebService.WebListMyScenes:output_type -> holomush.web.v1.WebListMyScenesResponse
-	64,  // 138: holomush.web.v1.WebService.WebWatchScene:output_type -> holomush.web.v1.WebWatchSceneResponse
-	66,  // 139: holomush.web.v1.WebService.WebCreateScene:output_type -> holomush.web.v1.WebCreateSceneResponse
-	78,  // 140: holomush.web.v1.WebService.WebEndScene:output_type -> holomush.web.v1.WebEndSceneResponse
-	88,  // 141: holomush.web.v1.WebService.WebPauseScene:output_type -> holomush.web.v1.WebPauseSceneResponse
-	90,  // 142: holomush.web.v1.WebService.WebResumeScene:output_type -> holomush.web.v1.WebResumeSceneResponse
-	92,  // 143: holomush.web.v1.WebService.WebMuteScene:output_type -> holomush.web.v1.WebMuteSceneResponse
-	94,  // 144: holomush.web.v1.WebService.WebSetSceneNotifyPref:output_type -> holomush.web.v1.WebSetSceneNotifyPrefResponse
-	104, // 145: holomush.web.v1.WebService.WebUpdateScene:output_type -> holomush.web.v1.WebUpdateSceneResponse
-	96,  // 146: holomush.web.v1.WebService.WebInviteToScene:output_type -> holomush.web.v1.WebInviteToSceneResponse
-	98,  // 147: holomush.web.v1.WebService.WebKickFromScene:output_type -> holomush.web.v1.WebKickFromSceneResponse
-	100, // 148: holomush.web.v1.WebService.WebTransferOwnership:output_type -> holomush.web.v1.WebTransferOwnershipResponse
-	102, // 149: holomush.web.v1.WebService.WebLeaveScene:output_type -> holomush.web.v1.WebLeaveSceneResponse
-	68,  // 150: holomush.web.v1.WebService.WebExportScene:output_type -> holomush.web.v1.WebExportSceneResponse
-	70,  // 151: holomush.web.v1.WebService.WebSetSceneFocus:output_type -> holomush.web.v1.WebSetSceneFocusResponse
-	72,  // 152: holomush.web.v1.WebService.WebListPublishedScenes:output_type -> holomush.web.v1.WebListPublishedScenesResponse
-	74,  // 153: holomush.web.v1.WebService.WebGetPublicSceneArchive:output_type -> holomush.web.v1.WebGetPublicSceneArchiveResponse
-	76,  // 154: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:output_type -> holomush.web.v1.WebDownloadPublicSceneArchiveResponse
-	80,  // 155: holomush.web.v1.WebService.WebStartScenePublish:output_type -> holomush.web.v1.WebStartScenePublishResponse
-	82,  // 156: holomush.web.v1.WebService.WebCastPublishSceneVote:output_type -> holomush.web.v1.WebCastPublishSceneVoteResponse
-	84,  // 157: holomush.web.v1.WebService.WebWithdrawScenePublish:output_type -> holomush.web.v1.WebWithdrawScenePublishResponse
-	86,  // 158: holomush.web.v1.WebService.WebGetPublishedScene:output_type -> holomush.web.v1.WebGetPublishedSceneResponse
-	106, // 159: holomush.web.v1.WebService.WebGetCharacterProfile:output_type -> holomush.web.v1.WebGetCharacterProfileResponse
-	108, // 160: holomush.web.v1.WebService.WebListMyCharacters:output_type -> holomush.web.v1.WebListMyCharactersResponse
-	110, // 161: holomush.web.v1.WebService.WebGetMyCharacter:output_type -> holomush.web.v1.WebGetMyCharacterResponse
-	112, // 162: holomush.web.v1.WebService.WebUpdateCharacterProfile:output_type -> holomush.web.v1.WebUpdateCharacterProfileResponse
-	114, // 163: holomush.web.v1.WebService.WebUpdateCharacterDescription:output_type -> holomush.web.v1.WebUpdateCharacterDescriptionResponse
-	116, // 164: holomush.web.v1.WebService.WebSetDefaultCharacter:output_type -> holomush.web.v1.WebSetDefaultCharacterResponse
-	118, // 165: holomush.web.v1.WebService.WebListCharacterDirectory:output_type -> holomush.web.v1.WebListCharacterDirectoryResponse
-	120, // 166: holomush.web.v1.WebService.WebAdminListSections:output_type -> holomush.web.v1.WebAdminListSectionsResponse
-	122, // 167: holomush.web.v1.WebService.WebAdminGetSection:output_type -> holomush.web.v1.WebAdminGetSectionResponse
-	124, // 168: holomush.web.v1.WebService.WebAdminListCharacters:output_type -> holomush.web.v1.WebAdminListCharactersResponse
-	126, // 169: holomush.web.v1.WebService.WebAdminSearchCharacters:output_type -> holomush.web.v1.WebAdminSearchCharactersResponse
-	128, // 170: holomush.web.v1.WebService.WebAdminGetCharacter:output_type -> holomush.web.v1.WebAdminGetCharacterResponse
-	112, // [112:171] is the sub-list for method output_type
-	53,  // [53:112] is the sub-list for method input_type
-	53,  // [53:53] is the sub-list for extension type_name
-	53,  // [53:53] is the sub-list for extension extendee
-	0,   // [0:53] is the sub-list for field type_name
+	136, // 22: holomush.web.v1.WebListCommandsResponse.aliases:type_name -> holomush.web.v1.WebListCommandsResponse.AliasesEntry
+	140, // 23: holomush.web.v1.WebListScenesResponse.scenes:type_name -> holomush.scene.v1.SceneInfo
+	140, // 24: holomush.web.v1.WebGetSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	141, // 25: holomush.web.v1.WebListMyScenesResponse.scenes:type_name -> holomush.scene.v1.CharacterSceneInfo
+	142, // 26: holomush.web.v1.WebWatchSceneResponse.participant:type_name -> holomush.scene.v1.ParticipantInfo
+	140, // 27: holomush.web.v1.WebCreateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	143, // 28: holomush.web.v1.WebListPublishedScenesResponse.archives:type_name -> holomush.scene.v1.PublicSceneArchive
+	144, // 29: holomush.web.v1.WebGetPublicSceneArchiveResponse.content_entries:type_name -> holomush.scene.v1.PublishedSceneEntry
+	140, // 30: holomush.web.v1.WebEndSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	145, // 31: holomush.web.v1.WebGetPublishedSceneResponse.vote_summary:type_name -> holomush.scene.v1.PublishedSceneVoteSummary
+	140, // 32: holomush.web.v1.WebPauseSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	140, // 33: holomush.web.v1.WebResumeSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	146, // 34: holomush.web.v1.WebUpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
+	140, // 35: holomush.web.v1.WebUpdateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
+	147, // 36: holomush.web.v1.WebGetCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.PublicCharacter
+	138, // 37: holomush.web.v1.WebListMyCharactersResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
+	138, // 38: holomush.web.v1.WebGetMyCharacterResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	146, // 39: holomush.web.v1.WebUpdateCharacterProfileRequest.update_mask:type_name -> google.protobuf.FieldMask
+	138, // 40: holomush.web.v1.WebUpdateCharacterProfileResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	138, // 41: holomush.web.v1.WebUpdateCharacterDescriptionResponse.character:type_name -> holomush.characteraccess.v1.OwnCharacter
+	138, // 42: holomush.web.v1.WebSetDefaultCharacterResponse.characters:type_name -> holomush.characteraccess.v1.OwnCharacter
+	148, // 43: holomush.web.v1.WebListCharacterDirectoryResponse.characters:type_name -> holomush.characteraccess.v1.PublicCharacterSummary
+	149, // 44: holomush.web.v1.WebAdminListSectionsResponse.sections:type_name -> holomush.adminportal.v1.AdminSection
+	149, // 45: holomush.web.v1.WebAdminGetSectionResponse.section:type_name -> holomush.adminportal.v1.AdminSection
+	150, // 46: holomush.web.v1.WebAdminListCharactersRequest.sort_field:type_name -> holomush.adminportal.v1.AdminCharacterSortField
+	151, // 47: holomush.web.v1.WebAdminListCharactersRequest.status_filter:type_name -> holomush.adminportal.v1.AdminCharacterStatusFilter
+	152, // 48: holomush.web.v1.WebAdminListCharactersResponse.characters:type_name -> holomush.adminportal.v1.AdminCharacter
+	150, // 49: holomush.web.v1.WebAdminSearchCharactersRequest.sort_field:type_name -> holomush.adminportal.v1.AdminCharacterSortField
+	151, // 50: holomush.web.v1.WebAdminSearchCharactersRequest.status_filter:type_name -> holomush.adminportal.v1.AdminCharacterStatusFilter
+	152, // 51: holomush.web.v1.WebAdminSearchCharactersResponse.characters:type_name -> holomush.adminportal.v1.AdminCharacter
+	153, // 52: holomush.web.v1.WebAdminGetCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacterDetail
+	146, // 53: holomush.web.v1.WebAdminUpdateCharacterRequest.update_mask:type_name -> google.protobuf.FieldMask
+	152, // 54: holomush.web.v1.WebAdminUpdateCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacter
+	152, // 55: holomush.web.v1.WebAdminRetireCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacter
+	152, // 56: holomush.web.v1.WebAdminUnretireCharacterResponse.character:type_name -> holomush.adminportal.v1.AdminCharacter
+	5,   // 57: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
+	7,   // 58: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
+	10,  // 59: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
+	12,  // 60: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
+	15,  // 61: holomush.web.v1.WebService.WebAuthenticatePlayer:input_type -> holomush.web.v1.WebAuthenticatePlayerRequest
+	17,  // 62: holomush.web.v1.WebService.WebSelectCharacter:input_type -> holomush.web.v1.WebSelectCharacterRequest
+	19,  // 63: holomush.web.v1.WebService.WebCreatePlayer:input_type -> holomush.web.v1.WebCreatePlayerRequest
+	21,  // 64: holomush.web.v1.WebService.WebCreateGuest:input_type -> holomush.web.v1.WebCreateGuestRequest
+	23,  // 65: holomush.web.v1.WebService.WebCreateCharacter:input_type -> holomush.web.v1.WebCreateCharacterRequest
+	25,  // 66: holomush.web.v1.WebService.WebListCharacters:input_type -> holomush.web.v1.WebListCharactersRequest
+	27,  // 67: holomush.web.v1.WebService.WebLogout:input_type -> holomush.web.v1.WebLogoutRequest
+	29,  // 68: holomush.web.v1.WebService.WebRequestPasswordReset:input_type -> holomush.web.v1.WebRequestPasswordResetRequest
+	31,  // 69: holomush.web.v1.WebService.WebConfirmPasswordReset:input_type -> holomush.web.v1.WebConfirmPasswordResetRequest
+	33,  // 70: holomush.web.v1.WebService.WebCheckSession:input_type -> holomush.web.v1.WebCheckSessionRequest
+	35,  // 71: holomush.web.v1.WebService.WebGetContent:input_type -> holomush.web.v1.WebGetContentRequest
+	37,  // 72: holomush.web.v1.WebService.WebListContent:input_type -> holomush.web.v1.WebListContentRequest
+	40,  // 73: holomush.web.v1.WebService.WebQueryStreamHistory:input_type -> holomush.web.v1.WebQueryStreamHistoryRequest
+	42,  // 74: holomush.web.v1.WebService.WebListSessionStreams:input_type -> holomush.web.v1.WebListSessionStreamsRequest
+	44,  // 75: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
+	47,  // 76: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
+	49,  // 77: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
+	52,  // 78: holomush.web.v1.WebService.WebListFocusPresence:input_type -> holomush.web.v1.WebListFocusPresenceRequest
+	55,  // 79: holomush.web.v1.WebService.WebListCommands:input_type -> holomush.web.v1.WebListCommandsRequest
+	57,  // 80: holomush.web.v1.WebService.WebListScenes:input_type -> holomush.web.v1.WebListScenesRequest
+	59,  // 81: holomush.web.v1.WebService.WebGetScene:input_type -> holomush.web.v1.WebGetSceneRequest
+	61,  // 82: holomush.web.v1.WebService.WebListMyScenes:input_type -> holomush.web.v1.WebListMyScenesRequest
+	63,  // 83: holomush.web.v1.WebService.WebWatchScene:input_type -> holomush.web.v1.WebWatchSceneRequest
+	65,  // 84: holomush.web.v1.WebService.WebCreateScene:input_type -> holomush.web.v1.WebCreateSceneRequest
+	77,  // 85: holomush.web.v1.WebService.WebEndScene:input_type -> holomush.web.v1.WebEndSceneRequest
+	87,  // 86: holomush.web.v1.WebService.WebPauseScene:input_type -> holomush.web.v1.WebPauseSceneRequest
+	89,  // 87: holomush.web.v1.WebService.WebResumeScene:input_type -> holomush.web.v1.WebResumeSceneRequest
+	91,  // 88: holomush.web.v1.WebService.WebMuteScene:input_type -> holomush.web.v1.WebMuteSceneRequest
+	93,  // 89: holomush.web.v1.WebService.WebSetSceneNotifyPref:input_type -> holomush.web.v1.WebSetSceneNotifyPrefRequest
+	103, // 90: holomush.web.v1.WebService.WebUpdateScene:input_type -> holomush.web.v1.WebUpdateSceneRequest
+	95,  // 91: holomush.web.v1.WebService.WebInviteToScene:input_type -> holomush.web.v1.WebInviteToSceneRequest
+	97,  // 92: holomush.web.v1.WebService.WebKickFromScene:input_type -> holomush.web.v1.WebKickFromSceneRequest
+	99,  // 93: holomush.web.v1.WebService.WebTransferOwnership:input_type -> holomush.web.v1.WebTransferOwnershipRequest
+	101, // 94: holomush.web.v1.WebService.WebLeaveScene:input_type -> holomush.web.v1.WebLeaveSceneRequest
+	67,  // 95: holomush.web.v1.WebService.WebExportScene:input_type -> holomush.web.v1.WebExportSceneRequest
+	69,  // 96: holomush.web.v1.WebService.WebSetSceneFocus:input_type -> holomush.web.v1.WebSetSceneFocusRequest
+	71,  // 97: holomush.web.v1.WebService.WebListPublishedScenes:input_type -> holomush.web.v1.WebListPublishedScenesRequest
+	73,  // 98: holomush.web.v1.WebService.WebGetPublicSceneArchive:input_type -> holomush.web.v1.WebGetPublicSceneArchiveRequest
+	75,  // 99: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:input_type -> holomush.web.v1.WebDownloadPublicSceneArchiveRequest
+	79,  // 100: holomush.web.v1.WebService.WebStartScenePublish:input_type -> holomush.web.v1.WebStartScenePublishRequest
+	81,  // 101: holomush.web.v1.WebService.WebCastPublishSceneVote:input_type -> holomush.web.v1.WebCastPublishSceneVoteRequest
+	83,  // 102: holomush.web.v1.WebService.WebWithdrawScenePublish:input_type -> holomush.web.v1.WebWithdrawScenePublishRequest
+	85,  // 103: holomush.web.v1.WebService.WebGetPublishedScene:input_type -> holomush.web.v1.WebGetPublishedSceneRequest
+	105, // 104: holomush.web.v1.WebService.WebGetCharacterProfile:input_type -> holomush.web.v1.WebGetCharacterProfileRequest
+	107, // 105: holomush.web.v1.WebService.WebListMyCharacters:input_type -> holomush.web.v1.WebListMyCharactersRequest
+	109, // 106: holomush.web.v1.WebService.WebGetMyCharacter:input_type -> holomush.web.v1.WebGetMyCharacterRequest
+	111, // 107: holomush.web.v1.WebService.WebUpdateCharacterProfile:input_type -> holomush.web.v1.WebUpdateCharacterProfileRequest
+	113, // 108: holomush.web.v1.WebService.WebUpdateCharacterDescription:input_type -> holomush.web.v1.WebUpdateCharacterDescriptionRequest
+	115, // 109: holomush.web.v1.WebService.WebSetDefaultCharacter:input_type -> holomush.web.v1.WebSetDefaultCharacterRequest
+	117, // 110: holomush.web.v1.WebService.WebListCharacterDirectory:input_type -> holomush.web.v1.WebListCharacterDirectoryRequest
+	119, // 111: holomush.web.v1.WebService.WebAdminListSections:input_type -> holomush.web.v1.WebAdminListSectionsRequest
+	121, // 112: holomush.web.v1.WebService.WebAdminGetSection:input_type -> holomush.web.v1.WebAdminGetSectionRequest
+	123, // 113: holomush.web.v1.WebService.WebAdminListCharacters:input_type -> holomush.web.v1.WebAdminListCharactersRequest
+	125, // 114: holomush.web.v1.WebService.WebAdminSearchCharacters:input_type -> holomush.web.v1.WebAdminSearchCharactersRequest
+	127, // 115: holomush.web.v1.WebService.WebAdminGetCharacter:input_type -> holomush.web.v1.WebAdminGetCharacterRequest
+	129, // 116: holomush.web.v1.WebService.WebAdminUpdateCharacter:input_type -> holomush.web.v1.WebAdminUpdateCharacterRequest
+	131, // 117: holomush.web.v1.WebService.WebAdminRetireCharacter:input_type -> holomush.web.v1.WebAdminRetireCharacterRequest
+	133, // 118: holomush.web.v1.WebService.WebAdminUnretireCharacter:input_type -> holomush.web.v1.WebAdminUnretireCharacterRequest
+	6,   // 119: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
+	9,   // 120: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
+	11,  // 121: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
+	13,  // 122: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
+	16,  // 123: holomush.web.v1.WebService.WebAuthenticatePlayer:output_type -> holomush.web.v1.WebAuthenticatePlayerResponse
+	18,  // 124: holomush.web.v1.WebService.WebSelectCharacter:output_type -> holomush.web.v1.WebSelectCharacterResponse
+	20,  // 125: holomush.web.v1.WebService.WebCreatePlayer:output_type -> holomush.web.v1.WebCreatePlayerResponse
+	22,  // 126: holomush.web.v1.WebService.WebCreateGuest:output_type -> holomush.web.v1.WebCreateGuestResponse
+	24,  // 127: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
+	26,  // 128: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
+	28,  // 129: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
+	30,  // 130: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
+	32,  // 131: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
+	34,  // 132: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
+	36,  // 133: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
+	38,  // 134: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
+	41,  // 135: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
+	43,  // 136: holomush.web.v1.WebService.WebListSessionStreams:output_type -> holomush.web.v1.WebListSessionStreamsResponse
+	46,  // 137: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
+	48,  // 138: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
+	50,  // 139: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
+	53,  // 140: holomush.web.v1.WebService.WebListFocusPresence:output_type -> holomush.web.v1.WebListFocusPresenceResponse
+	56,  // 141: holomush.web.v1.WebService.WebListCommands:output_type -> holomush.web.v1.WebListCommandsResponse
+	58,  // 142: holomush.web.v1.WebService.WebListScenes:output_type -> holomush.web.v1.WebListScenesResponse
+	60,  // 143: holomush.web.v1.WebService.WebGetScene:output_type -> holomush.web.v1.WebGetSceneResponse
+	62,  // 144: holomush.web.v1.WebService.WebListMyScenes:output_type -> holomush.web.v1.WebListMyScenesResponse
+	64,  // 145: holomush.web.v1.WebService.WebWatchScene:output_type -> holomush.web.v1.WebWatchSceneResponse
+	66,  // 146: holomush.web.v1.WebService.WebCreateScene:output_type -> holomush.web.v1.WebCreateSceneResponse
+	78,  // 147: holomush.web.v1.WebService.WebEndScene:output_type -> holomush.web.v1.WebEndSceneResponse
+	88,  // 148: holomush.web.v1.WebService.WebPauseScene:output_type -> holomush.web.v1.WebPauseSceneResponse
+	90,  // 149: holomush.web.v1.WebService.WebResumeScene:output_type -> holomush.web.v1.WebResumeSceneResponse
+	92,  // 150: holomush.web.v1.WebService.WebMuteScene:output_type -> holomush.web.v1.WebMuteSceneResponse
+	94,  // 151: holomush.web.v1.WebService.WebSetSceneNotifyPref:output_type -> holomush.web.v1.WebSetSceneNotifyPrefResponse
+	104, // 152: holomush.web.v1.WebService.WebUpdateScene:output_type -> holomush.web.v1.WebUpdateSceneResponse
+	96,  // 153: holomush.web.v1.WebService.WebInviteToScene:output_type -> holomush.web.v1.WebInviteToSceneResponse
+	98,  // 154: holomush.web.v1.WebService.WebKickFromScene:output_type -> holomush.web.v1.WebKickFromSceneResponse
+	100, // 155: holomush.web.v1.WebService.WebTransferOwnership:output_type -> holomush.web.v1.WebTransferOwnershipResponse
+	102, // 156: holomush.web.v1.WebService.WebLeaveScene:output_type -> holomush.web.v1.WebLeaveSceneResponse
+	68,  // 157: holomush.web.v1.WebService.WebExportScene:output_type -> holomush.web.v1.WebExportSceneResponse
+	70,  // 158: holomush.web.v1.WebService.WebSetSceneFocus:output_type -> holomush.web.v1.WebSetSceneFocusResponse
+	72,  // 159: holomush.web.v1.WebService.WebListPublishedScenes:output_type -> holomush.web.v1.WebListPublishedScenesResponse
+	74,  // 160: holomush.web.v1.WebService.WebGetPublicSceneArchive:output_type -> holomush.web.v1.WebGetPublicSceneArchiveResponse
+	76,  // 161: holomush.web.v1.WebService.WebDownloadPublicSceneArchive:output_type -> holomush.web.v1.WebDownloadPublicSceneArchiveResponse
+	80,  // 162: holomush.web.v1.WebService.WebStartScenePublish:output_type -> holomush.web.v1.WebStartScenePublishResponse
+	82,  // 163: holomush.web.v1.WebService.WebCastPublishSceneVote:output_type -> holomush.web.v1.WebCastPublishSceneVoteResponse
+	84,  // 164: holomush.web.v1.WebService.WebWithdrawScenePublish:output_type -> holomush.web.v1.WebWithdrawScenePublishResponse
+	86,  // 165: holomush.web.v1.WebService.WebGetPublishedScene:output_type -> holomush.web.v1.WebGetPublishedSceneResponse
+	106, // 166: holomush.web.v1.WebService.WebGetCharacterProfile:output_type -> holomush.web.v1.WebGetCharacterProfileResponse
+	108, // 167: holomush.web.v1.WebService.WebListMyCharacters:output_type -> holomush.web.v1.WebListMyCharactersResponse
+	110, // 168: holomush.web.v1.WebService.WebGetMyCharacter:output_type -> holomush.web.v1.WebGetMyCharacterResponse
+	112, // 169: holomush.web.v1.WebService.WebUpdateCharacterProfile:output_type -> holomush.web.v1.WebUpdateCharacterProfileResponse
+	114, // 170: holomush.web.v1.WebService.WebUpdateCharacterDescription:output_type -> holomush.web.v1.WebUpdateCharacterDescriptionResponse
+	116, // 171: holomush.web.v1.WebService.WebSetDefaultCharacter:output_type -> holomush.web.v1.WebSetDefaultCharacterResponse
+	118, // 172: holomush.web.v1.WebService.WebListCharacterDirectory:output_type -> holomush.web.v1.WebListCharacterDirectoryResponse
+	120, // 173: holomush.web.v1.WebService.WebAdminListSections:output_type -> holomush.web.v1.WebAdminListSectionsResponse
+	122, // 174: holomush.web.v1.WebService.WebAdminGetSection:output_type -> holomush.web.v1.WebAdminGetSectionResponse
+	124, // 175: holomush.web.v1.WebService.WebAdminListCharacters:output_type -> holomush.web.v1.WebAdminListCharactersResponse
+	126, // 176: holomush.web.v1.WebService.WebAdminSearchCharacters:output_type -> holomush.web.v1.WebAdminSearchCharactersResponse
+	128, // 177: holomush.web.v1.WebService.WebAdminGetCharacter:output_type -> holomush.web.v1.WebAdminGetCharacterResponse
+	130, // 178: holomush.web.v1.WebService.WebAdminUpdateCharacter:output_type -> holomush.web.v1.WebAdminUpdateCharacterResponse
+	132, // 179: holomush.web.v1.WebService.WebAdminRetireCharacter:output_type -> holomush.web.v1.WebAdminRetireCharacterResponse
+	134, // 180: holomush.web.v1.WebService.WebAdminUnretireCharacter:output_type -> holomush.web.v1.WebAdminUnretireCharacterResponse
+	119, // [119:181] is the sub-list for method output_type
+	57,  // [57:119] is the sub-list for method input_type
+	57,  // [57:57] is the sub-list for extension type_name
+	57,  // [57:57] is the sub-list for extension extendee
+	0,   // [0:57] is the sub-list for field type_name
 }
 
 func init() { file_holomush_web_v1_web_proto_init() }
@@ -8952,7 +9445,7 @@ func file_holomush_web_v1_web_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_web_v1_web_proto_rawDesc), len(file_holomush_web_v1_web_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   127,
+			NumMessages:   133,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

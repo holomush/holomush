@@ -1186,6 +1186,11 @@ func (s *Server) startGatedGRPCListener() {
 		s.accessEngine,
 		holoGRPC.WithAdminCharacterReader(s.worldCharRepo),
 		holoGRPC.WithAdminProfileReader(s.propertyRepo),
+		// The writer is the harness's ONE world.Service — the same instance
+		// Server.World() hands a spec — so a spec that drives an admin write over
+		// the wire and then reads through the service is looking at one write path,
+		// not two differently-configured ones.
+		holoGRPC.WithAdminCharacterWriter(s.worldSvc),
 	))
 
 	go func() {

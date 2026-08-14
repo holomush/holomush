@@ -1051,13 +1051,45 @@ var profileAttributeNames = map[string]struct{}{
 // use of the property repository was a ListByParent read and the delete-cascade
 // DeleteByParent, so there is no older property write path to stay consistent
 // with — the row-construction contract above is set here, not inherited.
+// # The optional ADMIN channels (opts) and where the description write sits
+//
+// opts is the TRAILING VARIADIC admin seam (options.go). Supplying none is the
+// player path, byte-identical to the shipped behaviour. WithDescription supplies
+// the in-world characters.description through a SEPARATE channel, so
+// `description` never enters attributes and step (1)'s closed §7.2 name-set
+// validation is untouched.
+//
+// FOUR RULES govern where that description write sits, because a
+// description-only mask puts NOTHING in attributes and would otherwise be
+// swallowed by the empty-partition return below:
+//
+//  1. descriptionChanged — the option was supplied AND its value differs from
+//     char.Description — is computed BEFORE the empty-partition check, and its
+//     value is validated there too, so an invalid description is refused whether
+//     or not any partition is non-empty.
+//  2. The empty-partition return fires only when all three partitions are empty
+//     AND !descriptionChanged. Its version-mismatch refusal (CodeConcurrentEdit)
+//     is unchanged and still runs first.
+//  3. When descriptionChanged is true, execution continues into the transaction
+//     as if a partition were non-empty: the CAS, the SINGLE version bump,
+//     "description" in changed, and the ONE envelope all happen exactly once.
+//     The column itself is written by the same characterWriter.Update the CAS
+//     already runs — no second statement, no second transaction.
+//  4. Option supplied but EQUAL to the stored value ⇒ descriptionChanged is
+//     false ⇒ the documented no-op, same as any other unchanged field.
+//
+// WithSkipUnchangedProperties additionally drops an equal-valued name from the
+// updates partition; see its doc comment for why that decision cannot live in a
+// handler precheck.
 func (s *Service) UpdateCharacterProfileAttributes(
 	ctx context.Context,
 	caller Caller,
 	characterID ulid.ULID,
 	expectedVersion int,
 	attributes map[string]string,
+	opts ...ProfileUpdateOption,
 ) error {
+	resolved := resolveProfileUpdateOptions(opts)
 	// (0) Reject an absent/zero/negative caller version BEFORE any read.
 	if expectedVersion <= 0 {
 		return oops.Code("CHARACTER_VERSION_REQUIRED").
@@ -1148,6 +1180,17 @@ func (s *Service) UpdateCharacterProfileAttributes(
 				changed = append(changed, name)
 			}
 		case found:
+			// THE ADMIN-ONLY SKIP (WithSkipUnchangedProperties). The comparison
+			// is against the row read INSIDE this method, under the CAS that
+			// follows — never against a value a handler read beforehand without
+			// a lock. Dropping the name here is what lets the empty-partition
+			// return below fire on a mask naming only equal-valued fields, so no
+			// row is rewritten, no version is bumped and no envelope is emitted.
+			// The player path supplies no options and keeps the unconditional
+			// rewrite documented below.
+			if resolved.skipUnchangedProperties && current.Value != nil && *current.Value == value {
+				continue
+			}
 			// Carry the row's ID, Owner, Visibility and CreatedAt forward
 			// unchanged and move only the value: an update must not silently
 			// re-home ownership or re-open visibility.
@@ -1185,6 +1228,24 @@ func (s *Service) UpdateCharacterProfileAttributes(
 			})
 			changed = append(changed, name)
 		}
+	}
+	// RULE 1 — descriptionChanged is computed BEFORE the empty-partition return,
+	// and its value is validated here, so an invalid description is refused
+	// whether or not any attribute partition has work. char.Description is the
+	// value read at step (3); comparing against it is what makes a
+	// supplied-but-equal description the documented no-op (RULE 4).
+	descriptionChanged := resolved.description != nil && *resolved.description != char.Description
+	if descriptionChanged {
+		// SetDescription owns the in-world description's BYTE cap and its
+		// control-character rule — the domain layer, per D-82, which is the
+		// opposite of the twelve profile.* caps the facade owns. Mutating char
+		// here is safe: descriptionChanged was already decided above, and the
+		// same characterWriter.Update the CAS runs writes the column, so there is
+		// no second statement and no second version bump.
+		if setErr := char.SetDescription(*resolved.description); setErr != nil {
+			return oops.Code(CodeCharacterInvalid).Wrap(setErr)
+		}
+		changed = append(changed, "description")
 	}
 	// The executor check stays AHEAD of the empty-partition return below: a
 	// misconfigured service must fail loudly on every call, not only on the ones
@@ -1225,7 +1286,14 @@ func (s *Service) UpdateCharacterProfileAttributes(
 	// itself. This method returns only an error, so it has no channel to hand the
 	// current version back — refusing is the only way its caller learns it is
 	// stale. Do not collapse the two without changing what each can answer with.
-	if len(creates) == 0 && len(updates) == 0 && len(deletes) == 0 {
+	//
+	// RULE 2 — the !descriptionChanged conjunct is load-bearing. A
+	// description-only mask puts NOTHING in attributes, so all three partitions
+	// are empty; without it this return fires and the description is never
+	// written, silently, for exactly the mask the combined admin write exists to
+	// serve. The version-mismatch refusal below is unchanged and still runs
+	// first.
+	if len(creates) == 0 && len(updates) == 0 && len(deletes) == 0 && !descriptionChanged {
 		if char.Version != expectedVersion {
 			return oops.Code(CodeConcurrentEdit).
 				With("character_id", characterID.String()).
@@ -1234,7 +1302,11 @@ func (s *Service) UpdateCharacterProfileAttributes(
 		}
 		return nil
 	}
-	payload, err := BuildCharacterProfileUpdatePayload(characterID, changed, AuditContext{})
+	// RULE 3 — from here the write proceeds exactly as if a partition were
+	// non-empty: one CAS, one version bump, "description" already in changed, one
+	// envelope. The payload carries NAMES only; the description's VALUE reaches
+	// no field of it (D-103).
+	payload, err := BuildCharacterProfileUpdatePayload(characterID, changed, resolved.audit)
 	if err != nil {
 		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
 			Wrapf(err, "build character profile update payload %s", characterID)

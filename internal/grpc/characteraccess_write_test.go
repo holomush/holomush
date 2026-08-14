@@ -84,11 +84,17 @@ type recordingWorldMutator struct {
 	descWrites    []recordedDescriptionWrite
 }
 
-func (m *recordingWorldMutator) UpdateCharacterProfileAttributes(_ context.Context, caller world.Caller, characterID ulid.ULID, expectedVersion int, attributes map[string]string) error {
+func (m *recordingWorldMutator) UpdateCharacterProfileAttributes(_ context.Context, caller world.Caller, characterID ulid.ULID, expectedVersion int, attributes map[string]string, opts ...world.ProfileUpdateOption) error {
 	m.t.Helper()
 	if m.failOnCall {
 		m.t.Fatal("the handler MUST NOT reach the domain profile write on this path")
 	}
+	// THE FACADE'S NARROWNESS, PINNED BY EXECUTION. The variadic tail exists for
+	// the ADMIN write surface (v0.13 phase-06 plan 05); the character-access
+	// facade names the two commands and nothing beneath them, so it supplies no
+	// option. Asserting it here turns two greps on the call sites into a runtime
+	// check on every character-access test that reaches the mutator.
+	require.Empty(m.t, opts, "character-access callers MUST pass no ProfileUpdateOption")
 	copied := make(map[string]string, len(attributes))
 	for k, v := range attributes {
 		copied[k] = v
