@@ -1234,7 +1234,7 @@ func (s *Service) UpdateCharacterProfileAttributes(
 		}
 		return nil
 	}
-	payload, err := BuildCharacterProfileUpdatePayload(characterID, changed)
+	payload, err := BuildCharacterProfileUpdatePayload(characterID, changed, AuditContext{})
 	if err != nil {
 		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
 			Wrapf(err, "build character profile update payload %s", characterID)
@@ -1305,7 +1305,11 @@ func (s *Service) UpdateCharacterProfileAttributes(
 // requires each command's own body to call s.checkAccess
 // (test/meta/world_caller_census_test.go). A shared helper would hide both
 // signals from the AST and turn two green censuses red.
-func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterID ulid.ULID, expectedVersion int) error {
+// opts is the TRAILING VARIADIC admin seam (see options.go). A player caller
+// supplies nothing and gets the zero AuditContext, so the emitted payload's
+// section and action are empty — the shipped behaviour, unchanged.
+func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterID ulid.ULID, expectedVersion int, opts ...LifecycleOption) error {
+	resolved := resolveLifecycleOptions(opts)
 	// (0) Reject an absent/zero/negative caller version BEFORE any read.
 	if expectedVersion <= 0 {
 		return oops.Code("CHARACTER_VERSION_REQUIRED").
@@ -1360,7 +1364,10 @@ func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterI
 	if s.mutator == nil {
 		return oops.Code("CHARACTER_RETIRE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	payload, err := BuildCharacterLifecyclePayload(characterID, StatusRetired)
+	// char.Status was read at step (2) and is still live here — the before-status
+	// costs no repository round trip. CharacterRepository.SetStatus uses
+	// RETURNING version only and could not yield it anyway.
+	payload, err := BuildCharacterLifecyclePayload(characterID, char.Status, StatusRetired, resolved.audit)
 	if err != nil {
 		return oops.Code("CHARACTER_RETIRE_FAILED").Wrapf(err, "build character lifecycle payload %s", characterID)
 	}
@@ -1405,7 +1412,10 @@ func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterI
 // An already-active (or idle) character is a typed error rather than a silent
 // success: reporting success for a transition that did not happen would let a
 // caller believe it moved a character it did not move.
-func (s *Service) UnretireCharacter(ctx context.Context, caller Caller, characterID ulid.ULID, expectedVersion int) error {
+// opts is the TRAILING VARIADIC admin seam (see options.go), exactly as on
+// RetireCharacter.
+func (s *Service) UnretireCharacter(ctx context.Context, caller Caller, characterID ulid.ULID, expectedVersion int, opts ...LifecycleOption) error {
+	resolved := resolveLifecycleOptions(opts)
 	// (0) Reject an absent/zero/negative caller version BEFORE any read.
 	if expectedVersion <= 0 {
 		return oops.Code("CHARACTER_VERSION_REQUIRED").
@@ -1458,7 +1468,8 @@ func (s *Service) UnretireCharacter(ctx context.Context, caller Caller, characte
 	if s.mutator == nil {
 		return oops.Code("CHARACTER_UNRETIRE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	payload, err := BuildCharacterLifecyclePayload(characterID, StatusActive)
+	// char.Status was read at step (2) and is still live here — no second read.
+	payload, err := BuildCharacterLifecyclePayload(characterID, char.Status, StatusActive, resolved.audit)
 	if err != nil {
 		return oops.Code("CHARACTER_UNRETIRE_FAILED").Wrapf(err, "build character lifecycle payload %s", characterID)
 	}

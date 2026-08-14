@@ -5,6 +5,8 @@ package world_test
 
 import (
 	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -12,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestMovePayload_JSON(t *testing.T) {
@@ -1050,4 +1053,166 @@ func TestBuildObjectMovePayload_CarriesFromAndToContainment(t *testing.T) {
 	assert.Equal(t, "location", got.FromType)
 	require.NotNil(t, got.FromID)
 	assert.Equal(t, fromLoc.String(), *got.FromID)
+}
+
+// --- 06-05 Task 1: the widened character lifecycle / profile payloads (D-103) ---
+
+// TestBuildCharacterLifecyclePayloadCarriesADifferingBeforeStatus pins the
+// D-103 before-value for a LIFECYCLE transition: the payload carries both the
+// status it left and the status it reached, and on a real transition the two
+// DIFFER.
+//
+// The differing assertion is the load-bearing one. An assertion that a
+// before_status is merely PRESENT passes under the pre-widening shape the moment
+// the field is added with any value at all, including the new status — which is
+// exactly the bug that would make the audit record say nothing.
+func TestBuildCharacterLifecyclePayloadCarriesADifferingBeforeStatus(t *testing.T) {
+	id := ulid.Make()
+
+	raw, err := world.BuildCharacterLifecyclePayload(id, world.StatusActive, world.StatusRetired, world.AuditContext{})
+	require.NoError(t, err)
+
+	var got world.CharacterLifecycleChangePayload
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, id.String(), got.CharacterID)
+	assert.Equal(t, string(world.StatusActive), got.BeforeStatus)
+	assert.Equal(t, string(world.StatusRetired), got.Status)
+	require.NotEqual(t, got.BeforeStatus, got.Status,
+		"a real transition's before and after MUST differ; a presence-only assertion would pass under the pre-widening shape")
+
+	// A player-initiated transition supplies no admin context, so both fields
+	// are empty — the widening does not change what the player path emits.
+	assert.Empty(t, got.Section)
+	assert.Empty(t, got.Action)
+
+	// The marshalled key set is exactly the five declared fields.
+	var keys map[string]any
+	require.NoError(t, json.Unmarshal(raw, &keys))
+	require.Len(t, keys, 5)
+	for _, k := range []string{"character_id", "status", "before_status", "section", "action"} {
+		require.Contains(t, keys, k)
+	}
+}
+
+// TestBuildCharacterLifecyclePayloadCarriesTheEvaluatedSectionAndAction pins the
+// admin half: the evaluated §10.7 section and action reach the payload verbatim.
+func TestBuildCharacterLifecyclePayloadCarriesTheEvaluatedSectionAndAction(t *testing.T) {
+	id := ulid.Make()
+
+	raw, err := world.BuildCharacterLifecyclePayload(id, world.StatusRetired, world.StatusActive,
+		world.AuditContext{Section: "characters", Action: "write"})
+	require.NoError(t, err)
+
+	var got world.CharacterLifecycleChangePayload
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, "characters", got.Section)
+	assert.Equal(t, "write", got.Action)
+	assert.Equal(t, string(world.StatusRetired), got.BeforeStatus)
+	assert.Equal(t, string(world.StatusActive), got.Status)
+}
+
+// TestBuildCharacterLifecyclePayloadRefusesAnEqualValuedTransition proves the
+// builder itself refuses to describe a transition that did not happen.
+//
+// The lifecycle guard upstream should already have refused, so reaching here
+// with equal statuses is a bug — and a builder that would emit
+// before_status == status turns that bug into a durable audit row asserting a
+// change nobody made.
+func TestBuildCharacterLifecyclePayloadRefusesAnEqualValuedTransition(t *testing.T) {
+	_, err := world.BuildCharacterLifecyclePayload(ulid.Make(), world.StatusRetired, world.StatusRetired, world.AuditContext{})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CHARACTER_LIFECYCLE_PAYLOAD_NO_TRANSITION")
+}
+
+// TestCharacterProfileUpdatePayloadExposesNoValueBearingField is the STRUCTURAL
+// half of D-103's erasure-safe guarantee, and it is deliberately structural.
+//
+// BuildCharacterProfileUpdatePayload's parameters are
+// (characterID, changed []string, auditCtx) — it receives no profile VALUE at
+// all. A test that declared local old/new sentinel strings and asserted their
+// absence from the marshalled bytes would therefore be vacuous by construction:
+// those strings never enter the builder, so the assertion passes identically
+// whether or not the payload COULD carry values (cross-AI review C2-31).
+//
+// So this test asserts the property that makes a leak impossible instead: the
+// marshalled key set and the struct's reflected json tags are exactly the four
+// declared names, with no value-bearing field among them. A value-bearing field
+// added later fails here immediately.
+//
+// The end-to-end value-absence proof — real old and new prose flowing through
+// AdminUpdateCharacter into an emitted envelope, asserted with NotContains over
+// the serialized bytes — lives at the layer where values actually flow
+// (06-05 Task 2 Test 6b and Task 3 Test 5).
+func TestCharacterProfileUpdatePayloadExposesNoValueBearingField(t *testing.T) {
+	id := ulid.Make()
+
+	// Deliberately NON-sorted input, so the sorted-output assertion below is not
+	// satisfied by the caller's ordering.
+	raw, err := world.BuildCharacterProfileUpdatePayload(id,
+		[]string{"profile.biography", "description"}, world.AuditContext{Section: "characters", Action: "write"})
+	require.NoError(t, err)
+
+	var keys map[string]any
+	require.NoError(t, json.Unmarshal(raw, &keys))
+	require.NotEmpty(t, keys, "an empty key set would satisfy the Len assertion vacuously")
+	require.Len(t, keys, 4, "the payload declares exactly four fields; a fifth is a value-bearing leak")
+	for _, k := range []string{"character_id", "changed_attributes", "section", "action"} {
+		require.Contains(t, keys, k)
+	}
+
+	var got world.CharacterProfileUpdateChangePayload
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, []string{"description", "profile.biography"}, got.ChangedAttributes,
+		"changed_attributes is SORTED, so the payload is byte-stable for equal input")
+	for _, name := range got.ChangedAttributes {
+		assert.NotContains(t, name, " ",
+			"each element is a bare attribute NAME, never prose")
+	}
+
+	// The reflected struct tags, so a field added with `json:"-"` or one the
+	// fixture happened not to populate cannot slip past the key-set assertion.
+	tags := jsonFieldTags(reflect.TypeOf(world.CharacterProfileUpdateChangePayload{}))
+	require.NotEmpty(t, tags, "a reflection call that returned nothing would pass vacuously")
+	assert.ElementsMatch(t, []string{"character_id", "changed_attributes", "section", "action"}, tags,
+		"the struct declares exactly the four names and no value-bearing field")
+}
+
+// jsonFieldTags returns the json tag NAME of every field on a struct type,
+// falling back to the field name when no tag is present — so an untagged
+// value-bearing field is still reported rather than invisible.
+func jsonFieldTags(t reflect.Type) []string {
+	out := make([]string, 0, t.NumField())
+	for i := range t.NumField() {
+		f := t.Field(i)
+		tag := f.Tag.Get("json")
+		if tag == "" {
+			out = append(out, f.Name)
+			continue
+		}
+		out = append(out, strings.Split(tag, ",")[0])
+	}
+	return out
+}
+
+// TestBuildCharacterProfileUpdatePayloadAcceptsAnEmptyChangedList pins the
+// shared builder's tolerance of an empty changed list.
+//
+// The shipped PLAYER path emits exactly that on an all-identical resubmit —
+// world.Service documents it as "both representable and honest"
+// (service.go, the changed-accumulator comment) — and that path calls THIS
+// builder. A builder that errored on an empty list would convert a live player
+// success into a failure. The admin surface's "no envelope for zero changes"
+// guarantee is enforced elsewhere, inside the authoritative transaction.
+func TestBuildCharacterProfileUpdatePayloadAcceptsAnEmptyChangedList(t *testing.T) {
+	id := ulid.Make()
+
+	for _, changed := range [][]string{nil, {}} {
+		raw, err := world.BuildCharacterProfileUpdatePayload(id, changed, world.AuditContext{})
+		require.NoError(t, err, "the shared builder MUST accept an empty changed list")
+
+		var got world.CharacterProfileUpdateChangePayload
+		require.NoError(t, json.Unmarshal(raw, &got))
+		assert.Equal(t, id.String(), got.CharacterID)
+		assert.Empty(t, got.ChangedAttributes)
+	}
 }

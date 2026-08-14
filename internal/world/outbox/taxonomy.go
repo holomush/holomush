@@ -25,8 +25,12 @@ import (
 // independently of this registry revision. Revision 2 (plan 03-01) adds the
 // character lifecycle kinds KindCharacterRetired and KindCharacterUnretired.
 // Revision 3 (plan 04-09) adds KindCharacterProfileUpdate, the character
-// profile-attribute write.
-const AppSchemaVersion = 3
+// profile-attribute write. Revision 4 (v0.13 phase-06 plan 05) widens BOTH
+// character-payload shapes for the admin write surface: characterLifecyclePayload
+// gains before_status plus the evaluated admin section/action, and
+// characterProfilePayload gains the same section/action. All three affected kinds
+// move to SchemaVersion 2 in the same change — the ratchet is all-or-none.
+const AppSchemaVersion = 4
 
 // The declared world-change envelope kinds. These are the taxonomy VOCABULARY the
 // mechanical emission rollout (05-10/05-11) wires each world write command to; the
@@ -141,9 +145,12 @@ var registry = func() map[string]KindSchema {
 		{Kind: KindCharacterDeleted, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Tombstone: true, Payload: tombstonePayload},
 		{Kind: KindCharacterMoved, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: movePayload},
 		{Kind: KindCharacterPreferencesUpdate, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterPreferencesPayload},
-		{Kind: KindCharacterRetired, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterLifecyclePayload},
-		{Kind: KindCharacterUnretired, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterLifecyclePayload},
-		{Kind: KindCharacterProfileUpdate, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 1, Payload: characterProfilePayload},
+		// SchemaVersion 2 on these three: v0.13 phase-06 plan 05 widened both
+		// payload shapes below (before_status, section, action). Reverting any
+		// one of the three back to 1 fails a taxonomy test on its own.
+		{Kind: KindCharacterRetired, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 2, Payload: characterLifecyclePayload},
+		{Kind: KindCharacterUnretired, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 2, Payload: characterLifecyclePayload},
+		{Kind: KindCharacterProfileUpdate, Aggregate: wmodel.AggregateCharacter, SchemaVersion: 2, Payload: characterProfilePayload},
 	}
 	m := make(map[string]KindSchema, len(entries))
 	for _, e := range entries {
@@ -195,12 +202,25 @@ var (
 		{Name: "preferences", Type: "json"},
 	}
 	// characterLifecyclePayload is the shape both lifecycle kinds declare: the
-	// character id plus the COMMITTED new status. characterUpdatePayload is not
-	// reusable — it declares a description field these kinds never carry, and
-	// the registry rule is new-values-only and erasure-safe.
+	// character id, the COMMITTED new status, the status the character LEFT, and
+	// the admin section/action the transition was evaluated under (§10.7).
+	// characterUpdatePayload is not reusable — it declares a description field
+	// these kinds never carry.
+	//
+	// before_status is the ONE deliberate exception to the registry's
+	// new-values-only rule (D-103), and it is exactly as wide as its
+	// justification: a lifecycle status is a closed enum the server assigns, not
+	// player-authored content, so recording the value it left copies nothing a
+	// player wrote into the retained audit trail. The prose half of the same
+	// decision goes the other way — see characterProfilePayload.
+	//
+	// section and action are EMPTY for a player-initiated transition.
 	characterLifecyclePayload = []PayloadField{
 		{Name: "character_id", Type: "ulid"},
 		{Name: "status", Type: "string"},
+		{Name: "before_status", Type: "string"},
+		{Name: "section", Type: "string"},
+		{Name: "action", Type: "string"},
 	}
 	// characterProfilePayload declares the character id plus the NAMES of the
 	// profile attributes the write changed — never their values. Profile prose is
@@ -208,9 +228,19 @@ var (
 	// new-values-only AND erasure-safe: a consumer needs to know THAT a profile
 	// changed and which fields, and can read the current values through the
 	// authorized read path, where the per-attribute tier floor still applies.
+	//
+	// It is REUSED by the admin profile write rather than split into an
+	// admin-flavoured kind: the envelope Actor already records who acted, and one
+	// kind for "a character's profile changed" is a better audit model than two.
+	// The player path emits EMPTY section and action on it, which is correct.
+	// When an admin edits the in-world description alongside the twelve profile
+	// fields, "description" appears in changed_attributes as a NAME; its value
+	// reaches no field here.
 	characterProfilePayload = []PayloadField{
 		{Name: "character_id", Type: "ulid"},
 		{Name: "changed_attributes", Type: "json"},
+		{Name: "section", Type: "string"},
+		{Name: "action", Type: "string"},
 	}
 )
 

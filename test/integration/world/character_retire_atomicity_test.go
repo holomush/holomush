@@ -53,7 +53,10 @@ func characterRow(ctx context.Context, characterID ulid.ULID) (status string, ve
 // out here; every one of them mirrors internal/world/service.go:990.
 func retireIntent(characterID ulid.ULID, actor string) wmodel.EnvelopeIntent {
 	GinkgoHelper()
-	payload, err := world.BuildCharacterLifecyclePayload(characterID, world.StatusRetired)
+	// active -> retired, the same transition the service builds. The builder
+	// REFUSES an equal-valued transition (v0.13 phase-06 plan 05), so the
+	// before-status is supplied here rather than defaulted.
+	payload, err := world.BuildCharacterLifecyclePayload(characterID, world.StatusActive, world.StatusRetired, world.AuditContext{})
 	Expect(err).NotTo(HaveOccurred(), "build character lifecycle payload")
 	return wmodel.NewEnvelopeIntent(wmodel.IntentParams{
 		Kind:          outbox.KindCharacterRetired,

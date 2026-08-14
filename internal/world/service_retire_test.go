@@ -5,6 +5,7 @@ package world_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -16,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/internal/world/wmodel"
 	"github.com/holomush/holomush/internal/world/worldtest"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -328,4 +330,108 @@ func TestWorldServiceUnretireCharacter(t *testing.T) {
 		mockRepo.AssertNotCalled(t, "Get")
 		assert.Zero(t, outbox.calls)
 	})
+}
+
+// --- 06-05 Task 1: the widened lifecycle payload at the command layer ---
+
+// decodeLifecyclePayload unmarshals one lifecycle envelope's payload so the
+// assertion is made against the BYTES a consumer receives.
+func decodeLifecyclePayload(t *testing.T, intent wmodel.EnvelopeIntent) world.CharacterLifecycleChangePayload {
+	t.Helper()
+	var got world.CharacterLifecycleChangePayload
+	require.NoError(t, json.Unmarshal(intent.Payload, &got))
+	return got
+}
+
+// TestWorldServiceLifecycleWithNoOptionsLeavesTheAdminContextEmpty is the
+// player-path control for the variadic widening: RetireCharacter and
+// UnretireCharacter called with NO options emit the same envelope they always
+// did, plus a real before-status and an EMPTY section/action.
+//
+// It is what proves the widening touched no non-admin caller.
+func TestWorldServiceLifecycleWithNoOptionsLeavesTheAdminContextEmpty(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("retire", func(t *testing.T) {
+		charID := ulid.Make()
+		subjectID := access.CharacterSubject(ulid.Make().String())
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "retire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.StatusActive}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+		mockRepo.EXPECT().SetStatus(mock.Anything, charID, world.StatusRetired, 5).Return(nil, nil)
+
+		require.NoError(t, svc.RetireCharacter(ctx, world.HumanCaller(subjectID), charID, 5))
+		require.Equal(t, 1, outbox.calls)
+
+		got := decodeLifecyclePayload(t, outbox.lastIntent)
+		assert.Equal(t, string(world.StatusActive), got.BeforeStatus)
+		assert.Equal(t, string(world.StatusRetired), got.Status)
+		assert.Empty(t, got.Section, "a player-initiated transition carries no admin section")
+		assert.Empty(t, got.Action, "a player-initiated transition carries no admin action")
+	})
+
+	t.Run("unretire", func(t *testing.T) {
+		charID := ulid.Make()
+		subjectID := access.CharacterSubject(ulid.Make().String())
+		svc, mockRepo, outbox := retireFixture(t, subjectID, "unretire", charID)
+
+		stored := &world.Character{ID: charID, Name: "Alice", Version: 4, Status: world.StatusRetired}
+		mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+		mockRepo.EXPECT().SetStatus(mock.Anything, charID, world.StatusActive, 4).Return(nil, nil)
+
+		require.NoError(t, svc.UnretireCharacter(ctx, world.HumanCaller(subjectID), charID, 4))
+		require.Equal(t, 1, outbox.calls)
+
+		got := decodeLifecyclePayload(t, outbox.lastIntent)
+		assert.Equal(t, string(world.StatusRetired), got.BeforeStatus)
+		assert.Equal(t, string(world.StatusActive), got.Status)
+		assert.Empty(t, got.Section)
+		assert.Empty(t, got.Action)
+	})
+}
+
+// TestWorldServiceLifecycleWithAuditContextCarriesItIntoThePayload pins the
+// typed seam the admin handler supplies its evaluated section and action
+// through: a trailing variadic option, so every existing caller compiles
+// unchanged and Caller is not overloaded with an admin concern.
+func TestWorldServiceLifecycleWithAuditContextCarriesItIntoThePayload(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.PlayerSubject(ulid.Make().String())
+	svc, mockRepo, outbox := retireFixture(t, subjectID, "retire", charID)
+
+	stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.StatusActive}
+	mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+	mockRepo.EXPECT().SetStatus(mock.Anything, charID, world.StatusRetired, 5).Return(nil, nil)
+
+	require.NoError(t, svc.RetireCharacter(ctx, world.HumanCaller(subjectID), charID, 5,
+		world.WithAuditContext(world.AuditContext{Section: "characters", Action: "write"})))
+	require.Equal(t, 1, outbox.calls)
+
+	got := decodeLifecyclePayload(t, outbox.lastIntent)
+	assert.Equal(t, "characters", got.Section)
+	assert.Equal(t, "write", got.Action)
+	assert.Equal(t, string(world.StatusActive), got.BeforeStatus)
+	assert.Equal(t, string(world.StatusRetired), got.Status)
+	assert.NotEqual(t, got.BeforeStatus, got.Status)
+}
+
+// TestWorldServiceRetireOfAnAlreadyRetiredCharacterEmitsNothing is the reason
+// an emitted lifecycle payload can never carry equal before/after values: the
+// lifecycle guard refuses the no-op transition BEFORE any payload is built.
+func TestWorldServiceRetireOfAnAlreadyRetiredCharacterEmitsNothing(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(ulid.Make().String())
+	svc, mockRepo, outbox := retireFixture(t, subjectID, "retire", charID)
+
+	stored := &world.Character{ID: charID, Name: "Alice", Version: 5, Status: world.StatusRetired}
+	mockRepo.EXPECT().Get(ctx, charID).Return(stored, nil)
+
+	err := svc.RetireCharacter(ctx, world.HumanCaller(subjectID), charID, 5)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CHARACTER_ALREADY_RETIRED")
+	assert.Equal(t, 0, outbox.calls,
+		"the guard refuses first, so before and after can never be equal in an EMITTED payload")
 }
