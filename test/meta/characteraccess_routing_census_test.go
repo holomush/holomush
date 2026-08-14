@@ -877,3 +877,51 @@ func TestCharacterAccessRoutingCensusIsCharacterScoped(t *testing.T) {
 			scene)
 	}
 }
+
+// TestCharacterAccessRoutingCensusExcludesAdminRPCs is a PLACEMENT guard, not a
+// third audience-partition member.
+//
+// # Why placement rather than partition
+//
+// The admin surface lives on its own service (holomush.adminportal.v1), behind
+// its own gate (the section interceptor over section.AdminDescriptors, not
+// resolveAndGate), with its own served-set completeness proof
+// (TestEveryServedAdminMethodHasADescriptor). Widening
+// characterFacadeReceiverTypes() to admit it would do to criterion 1 exactly
+// what :130-139 already warns about for SceneAccessServer: convert a proof about
+// the CHARACTER audience into a snapshot of two facades.
+//
+// So instead of admitting the admin surface into the partition, this asserts it
+// is ABSENT from the character one. It goes RED the moment an admin RPC is
+// added to CharacterAccessServer or an admin proxy is hung off the character
+// facade client — the hole a third partition member would have closed, without
+// diluting the proof that already works.
+//
+// # What it does NOT cover
+//
+// It fences the CHARACTER facade only. An admin RPC landing on a third service
+// is invisible here by construction; TestEveryAdminPrefixedRPCLivesInAnAdminPackage
+// closes that class at the proto layer.
+func TestCharacterAccessRoutingCensusExcludesAdminRPCs(t *testing.T) {
+	facade := characterFacadeUniverse(t)
+	require.NotEmpty(t, facade,
+		"the facade universe is empty — this exclusion would pass vacuously")
+	for _, m := range facade {
+		assert.Falsef(t, strings.HasPrefix(m.name, "Admin"),
+			"%s is an Admin-prefixed method on the CHARACTER facade (%s). Admin RPCs belong on "+
+				"holomush.adminportal.v1.AdminPortalService, whose interceptor prefix gates them; a method "+
+				"here is outside /holomush.adminportal.v1. and is therefore NOT gated by the section "+
+				"interceptor at all. Do NOT repair this by widening characterFacadeReceiverTypes()",
+			m.name, m.file)
+	}
+
+	proxies := characterWebProxyUniverse(t)
+	require.NotEmpty(t, proxies,
+		"the web character-proxy universe is empty — this exclusion would pass vacuously")
+	for _, m := range proxies {
+		assert.Falsef(t, strings.HasPrefix(m.name, "WebAdmin"),
+			"%s is a WebAdmin-prefixed proxy reaching the CHARACTER facade client (%s). An admin proxy "+
+				"must forward to the admin portal client, not the character one",
+			m.name, m.file)
+	}
+}

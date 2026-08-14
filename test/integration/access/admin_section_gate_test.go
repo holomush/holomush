@@ -35,6 +35,8 @@ import (
 // assertion that appeared to pass on one here would be reading something else.
 // The typed internal code (DENY_ADMIN_SECTION) is asserted in-process at the
 // interceptor, in internal/grpc/admin_interceptor_test.go.
+//
+// Verifies: INV-PRIVACY-12
 func TestANonAdminCallingTheAdminPortalDirectlyOverGRPCIsDeniedAtTheWire(t *testing.T) {
 	ctx := context.Background()
 

@@ -2421,6 +2421,36 @@ invariants:
     asserted_by:
       - "test/integration/access/viewer_alt_linkage_test.go"
 
+  # Hand-registered for the same reason INV-PRIVACY-11 and INV-ACCESS-15 record: the orphan
+  # check walks only docs/superpowers/specs/, so a .planning/-origin spec's INV ids are never
+  # auto-caught. Allocated in INV-ACCESS rather than in a newly minted admin-flavoured scope: no
+  # such scope exists, the phase deliberately creates none, and this is an authorization-declaration
+  # invariant, which is what the INV-ACCESS boundary already covers.
+  - id: INV-ACCESS-16
+    scope: INV-ACCESS
+    origin_spec: ".planning/phases/06-admin-portal-shell-character-administration/06-01-PLAN.md"
+    summary: "An admin-portal RPC served under holomush.adminportal.v1 with no method-to-section descriptor in section.AdminDescriptors
+      is REFUSED before subject resolution, with ADMIN_SECTION_NOT_DECLARED. There is no default section and no zero value
+      meaning allow: an entry naming no section and not carrying EnumeratesAllSections is rejected at boot by validateAdminDescriptors,
+      and the descriptor table is held set-EQUAL to the served method set (AdminPortalService_ServiceDesc.Methods) in both
+      directions, so neither a served method with no declaration nor a declaration naming no served method can persist."
+    binding: bound
+    asserted_by:
+      - "internal/admin/section/descriptor_test.go"
+      - "internal/admin/section/descriptor_completeness_test.go"
+
+  - id: INV-PRIVACY-12
+    scope: INV-PRIVACY
+    origin_spec: ".planning/phases/06-admin-portal-shell-character-administration/06-01-PLAN.md"
+    summary: "An admin-section refusal returned OVER THE WIRE carries codes.PermissionDenied and a static, package-constant
+      message; no section id, no player id and no internal code string reaches the client, whichever fail-closed arm produced
+      it. The distinguishing fields go to slog.WarnContext only. This is INV-PRIVACY-11's indistinguishability property asserted
+      at the transport rather than in-process: an oops value does not survive a gRPC round trip, so the typed code is asserted
+      separately at the interceptor and the two are never collapsed into one assertion."
+    binding: bound
+    asserted_by:
+      - "test/integration/access/admin_section_gate_test.go"
+
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
   # boundary note). FIRST bare-INV-N scope: dense per-scope renumbering (legacy 28,29,53-60
