@@ -131,18 +131,30 @@ func TestAdminDescriptorEntriesAreWellFormed(t *testing.T) {
 			require.Containsf(t, []string{ActionRead, ActionWrite}, d.Action,
 				"method %q declares action %q, outside the closed ladder", method, d.Action)
 
-			// Exactly one shape, never both and never neither. "Neither" is the
-			// forgotten-field case that must not read as permissive.
-			if d.EnumeratesAllSections {
-				require.Emptyf(t, d.SectionID,
-					"method %q enumerates every section, so it MUST NOT also name one", method)
-				return
+			// EXACTLY ONE of the three shapes, never more and never none.
+			// "None" is the forgotten-field case that must not read as
+			// permissive; "more than one" is a declaration whose arms
+			// contradict each other, which the interceptor's shape switch would
+			// resolve by test order rather than by intent.
+			shapes := 0
+			if d.SectionID != "" {
+				shapes++
 			}
-			require.NotEmptyf(t, d.SectionID,
-				"method %q names no section and does not enumerate — §10.2 forbids reading that as permissive", method)
-			_, registered := Lookup(d.SectionID)
-			require.Truef(t, registered,
-				"method %q names section %q, which is not registered", method, d.SectionID)
+			if d.EnumeratesAllSections {
+				shapes++
+			}
+			if d.SectionFromRequest {
+				shapes++
+			}
+			require.Equalf(t, 1, shapes,
+				"method %q declares %d section shapes; §10.2 requires exactly one "+
+					"(a fixed SectionID, EnumeratesAllSections, or SectionFromRequest)", method, shapes)
+
+			if d.SectionID != "" {
+				_, registered := Lookup(d.SectionID)
+				require.Truef(t, registered,
+					"method %q names section %q, which is not registered", method, d.SectionID)
+			}
 		})
 	}
 
@@ -180,4 +192,32 @@ func TestValidateAtBootRejectsAMalformedMethodDescriptor(t *testing.T) {
 	// convention for the registry half (boot_test.go:42 asserts the validator's
 	// ADMIN_SECTION_DESCRIPTOR_INVALID, not the wrapper's).
 	errutil.AssertErrorCode(t, err, "ADMIN_METHOD_DESCRIPTOR_INVALID")
+}
+
+// TestADescriptorDeclaringMoreThanOneSectionShapeAbortsTheBoot covers the other
+// half of "exactly one".
+//
+// An entry setting two shapes is not merely redundant: the interceptor's shape
+// switch tests the arms in order, so such an entry is gated by whichever arm
+// happens to be tested first rather than by what the author declared. A
+// SectionFromRequest entry that also named a fixed section would be gated on the
+// fixed id while the caller acted on their own — the drift
+// ADMIN_SECTION_DESCRIPTOR_MISMATCH exists one field over to catch.
+func TestADescriptorDeclaringMoreThanOneSectionShapeAbortsTheBoot(t *testing.T) {
+	for name, planted := range map[string]MethodDescriptor{
+		"fixed section and enumerates":   {Action: ActionRead, SectionID: "characters", EnumeratesAllSections: true},
+		"fixed section and from request": {Action: ActionRead, SectionID: "characters", SectionFromRequest: true},
+		"enumerates and from request":    {Action: ActionRead, EnumeratesAllSections: true, SectionFromRequest: true},
+		"all three at once":              {Action: ActionRead, SectionID: "characters", EnumeratesAllSections: true, SectionFromRequest: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			const method = "AdminPlantedMultiShapeEntry"
+			AdminDescriptors[method] = planted
+			t.Cleanup(func() { delete(AdminDescriptors, method) })
+
+			err := validateAdminDescriptors(AdminDescriptors)
+			require.Error(t, err, "an entry declaring more than one shape MUST abort the boot")
+			errutil.AssertErrorCode(t, err, "ADMIN_METHOD_DESCRIPTOR_INVALID")
+		})
+	}
 }

@@ -10,12 +10,9 @@ import (
 
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/admin/section"
 	"github.com/holomush/holomush/internal/auth"
-	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // adminPortalServicePrefix is the gRPC FullMethod prefix this interceptor
@@ -31,17 +28,6 @@ import (
 // break-glass surface behind one descriptor table — weakening exactly the
 // property this prefix gate exists to hold.
 const adminPortalServicePrefix = "/holomush.adminportal.v1."
-
-// adminDeniedMessage is the ONE message every admin-portal refusal carries over
-// the wire, whichever arm produced it.
-//
-// It is a package constant with no formatting verb, so the arm a caller tripped
-// — no admin role, an undeclared method, a missing subject, a misconfigured
-// gate — is invisible to them. Per .claude/rules/grpc-errors.md, a
-// distinguishing field substituted into a status message reaches the client;
-// here that field IS the disclosure, so every one of them goes to
-// slog.WarnContext instead.
-const adminDeniedMessage = "admin section access denied"
 
 // adminPlayerContextKey is the unexported key the resolved player is stashed
 // under. Unexported so nothing outside this package can forge one onto a
@@ -86,6 +72,42 @@ type AdminInterceptorDeps struct {
 // denies rather than escaping the gate.
 type adminTokenCarrier interface{ GetPlayerSessionToken() string }
 
+// adminSectionIDCarrier is the typed accessor the SectionFromRequest arm reads
+// the caller-supplied section id through, mirroring [adminTokenCarrier]:
+// protoc-gen-go emits GetSectionId() on every message carrying a `section_id`
+// field.
+//
+// A request type that does NOT satisfy it is REFUSED
+// (ADMIN_SECTION_NO_SECTION_ID), never defaulted to a section — so a request
+// message that drops the field denies rather than escaping the gate.
+type adminSectionIDCarrier interface{ GetSectionId() string }
+
+// adminSectionContextKey is the unexported key the GATED section is stashed
+// under. Unexported so nothing outside this package can forge one onto a
+// context; reads go through [AdminSectionFromContext].
+type adminSectionContextKey struct{}
+
+// AdminSectionFromContext returns the registry entry the admin interceptor
+// already resolved for this request, after AssertSectionAccess permitted it.
+//
+// It exists so a handler downstream of a passed gate PROJECTS the entry rather
+// than resolving it again. A second resolution would be either a second gate
+// call (the per-handler exception D-99 abolished) or a bare registry lookup
+// (the enumeration oracle D-06 closed) — on the one RPC whose section id is
+// attacker-controlled.
+//
+// ok is false when no admin interceptor ran, or when the method's descriptor
+// resolves no single section (an EnumeratesAllSections method has none). The
+// returned Section is the zero value in that case, and a caller MUST treat it as
+// absence: a zero Section is an unauthorized entry wearing an authorized shape.
+func AdminSectionFromContext(ctx context.Context) (section.Section, bool) {
+	s, ok := ctx.Value(adminSectionContextKey{}).(section.Section)
+	if !ok || s.ID == "" {
+		return section.Section{}, false
+	}
+	return s, true
+}
+
 // NewAdminSectionInterceptor builds the admin-portal unary gate: the ONE place
 // every holomush.adminportal.v1 method is authorized (D-99).
 //
@@ -109,22 +131,31 @@ type adminTokenCarrier interface{ GetPlayerSessionToken() string }
 //  4. NO SUBJECT ACCESSOR, or an unresolvable session → ADMIN_SECTION_NO_SUBJECT.
 //     The resolver's own error is logged, never returned.
 //
-// Then the gate itself, on both descriptor shapes — THERE IS NO UNGATED ARM:
+// Then the gate itself, over the descriptor's SHAPE — THERE IS NO UNGATED ARM,
+// and the switch is exhaustive with a DENYING default:
 //
-//   - A descriptor naming a fixed section → section.AssertSectionAccess, the
-//     full check including registration, descriptor consistency and
-//     availability.
-//   - A descriptor carrying EnumeratesAllSections (AdminListSections) →
+//   - EnumeratesAllSections (AdminListSections) →
 //     section.AssertSectionAdmission against section.PortalProbeSectionID. The
 //     interceptor still chooses no SECTION — admission is the resource-TYPE
 //     answer and the probe selects no scope — but a caller with no
 //     `admin_section:` access is refused HERE, before the handler runs. That
 //     distinction is load-bearing: an AdminListSections that could not deny
 //     would turn the portal's denial proof into an assertion about an empty 200.
+//   - SectionFromRequest (AdminGetSection) → the id is read off the request
+//     through a typed GetSectionId() assertion; a missing accessor or a blank id
+//     is refused with ADMIN_SECTION_NO_SECTION_ID; otherwise
+//     section.AssertSectionAccess runs against the CALLER-SUPPLIED id and the
+//     resolved entry is stashed for the handler to project. This arm exists
+//     because falling through to the fixed-SectionID arm would gate on an EMPTY
+//     id, which gate.go refuses before evaluation — failing every such call.
+//   - A fixed SectionID → section.AssertSectionAccess, the full check including
+//     registration, descriptor consistency and availability.
+//   - ANYTHING ELSE → ADMIN_SECTION_NOT_DECLARED. A fourth shape added later
+//     denies rather than acquiring whichever arm happened to be reachable.
 //
-// Every refusal maps to codes.PermissionDenied with [adminDeniedMessage].
-// Translation happens at THIS layer only (.claude/rules/grpc-errors.md); no
-// inner error is ever formatted into the status message.
+// Every refusal is translated by [mapAdminSectionError] — at THIS layer only
+// (.claude/rules/grpc-errors.md) — and no inner error is ever formatted into the
+// status message.
 func NewAdminSectionInterceptor(deps AdminInterceptorDeps) grpc.UnaryServerInterceptor {
 	if deps.Engine == nil || deps.SessionRepo == nil {
 		return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -170,19 +201,57 @@ func NewAdminSectionInterceptor(deps AdminInterceptorDeps) grpc.UnaryServerInter
 		}
 		playerID := playerSession.PlayerID.String()
 
-		// The gate. Both shapes are gated; neither passes through.
-		var gateErr error
-		if d.EnumeratesAllSections {
+		// The gate. Every shape is gated and the default DENIES; no arm passes
+		// through ungated.
+		var (
+			gateErr  error
+			resolved section.Section
+		)
+		switch {
+		case d.EnumeratesAllSections:
 			gateErr = section.AssertSectionAdmission(ctx, deps.Engine, playerID,
 				string(section.PortalProbeSectionID), d.Action)
-		} else {
-			_, gateErr = section.AssertSectionAccess(ctx, deps.Engine, playerID, d.SectionID, d.Action)
+
+		case d.SectionFromRequest:
+			idCarrier, carriesID := req.(adminSectionIDCarrier)
+			if !carriesID {
+				return nil, adminDeny(ctx, "ADMIN_SECTION_NO_SECTION_ID",
+					"admin portal request declares a section from the request but carries no section_id accessor",
+					"method", info.FullMethod)
+			}
+			// TrimSpace decides only whether the id is BLANK. The gate is then
+			// called with the RAW value: trimming the id we authorize would be a
+			// normalization, and §10.1 matching is exact byte equality — a
+			// normalized near-miss could resolve to a neighbouring section.
+			rawID := idCarrier.GetSectionId()
+			if strings.TrimSpace(rawID) == "" {
+				return nil, adminDeny(ctx, "ADMIN_SECTION_NO_SECTION_ID",
+					"admin portal request carries a blank section_id",
+					"method", info.FullMethod)
+			}
+			resolved, gateErr = section.AssertSectionAccess(ctx, deps.Engine, playerID, rawID, d.Action)
+
+		case d.SectionID != "":
+			resolved, gateErr = section.AssertSectionAccess(ctx, deps.Engine, playerID, d.SectionID, d.Action)
+
+		default:
+			// A descriptor carrying no recognised shape. validateAdminDescriptors
+			// refuses to let one exist at boot; this arm is the second line of
+			// defence, so a FOURTH shape added later denies rather than acquiring
+			// whichever arm happened to be reachable.
+			return nil, adminDeny(ctx, "ADMIN_SECTION_NOT_DECLARED",
+				"admin portal method descriptor carries no recognised section shape",
+				"method", info.FullMethod)
 		}
 		if gateErr != nil {
 			return nil, adminGateFailure(ctx, gateErr, info.FullMethod, playerID)
 		}
 
-		return handler(context.WithValue(ctx, adminPlayerContextKey{}, playerSession), req)
+		gatedCtx := context.WithValue(ctx, adminPlayerContextKey{}, playerSession)
+		if resolved.ID != "" {
+			gatedCtx = context.WithValue(gatedCtx, adminSectionContextKey{}, resolved)
+		}
+		return handler(gatedCtx, req)
 	}
 }
 
@@ -197,67 +266,26 @@ func bareAdminMethod(fullMethod string) string {
 	return fullMethod[i+1:]
 }
 
-// adminRefusal carries BOTH halves of a refusal in one value, because the two
-// layers assert two different things about the same error and neither may be
-// sacrificed to the other:
-//
-//   - Over the WIRE it is a gRPC status: codes.PermissionDenied carrying
-//     [adminDeniedMessage] verbatim. GRPCStatus() is satisfied DIRECTLY (value
-//     receiver, no wrapper), which matters: status.FromError returns a wrapped
-//     error's status with p.Message REPLACED by the outer error's full text, so
-//     an `oops.Wrap(statusErr)` shape would silently leak the typed code into
-//     the message the client reads.
-//   - IN PROCESS it unwraps to the typed oops error, so
-//     errutil.AssertErrorCode can read the code at the interceptor — the one
-//     place an oops value still exists, since none survives a round trip.
-//
-// Error() deliberately returns the STATIC message, not the oops text: any
-// caller that does wrap this value still cannot turn the code into wire output.
-type adminRefusal struct {
-	st  *status.Status
-	err error
-}
-
-func (r adminRefusal) Error() string              { return r.st.Message() }
-func (r adminRefusal) GRPCStatus() *status.Status { return r.st }
-func (r adminRefusal) Unwrap() error              { return r.err }
-
-// adminDeny builds one refusal: the typed oops code for in-process assertion,
-// the static status message for the wire, and the distinguishing fields for the
-// log and nowhere else.
+// adminDeny builds one refusal for an arm the INTERCEPTOR itself decided: the
+// typed oops code for in-process assertion, and the distinguishing fields for
+// the log and nowhere else.
 //
 // The oops error is constructed ONCE here and is never re-wrapped. That
 // single-wrap property is asserted as unwrap-chain DEPTH rather than by code,
 // because oops's Code() resolves the DEEPEST code in a chain — under a double
 // wrap it would agree with itself and disagree with the truth.
+//
+// The wire mapping is [mapAdminSectionError]'s, not this function's: boundary
+// translation happens at exactly one layer.
 func adminDeny(ctx context.Context, code, why string, logAttrs ...any) error {
-	slog.WarnContext(ctx, "admin section refused a portal call", append([]any{"reason", why}, logAttrs...)...)
-	return adminRefusal{
-		st:  status.New(codes.PermissionDenied, adminDeniedMessage),
-		err: oops.Code(code).Errorf("%s", why),
-	}
+	return mapAdminSectionError(ctx, oops.Code(code).Errorf("%s", why),
+		append([]any{"reason", why}, logAttrs...)...)
 }
 
-// adminGateFailure maps a section-gate refusal onto the wire, preserving the
+// adminGateFailure maps a section-GATE refusal onto the wire, preserving the
 // gate's OWN typed error rather than minting a second one — so the code an
-// in-process assertion reads is the code the gate actually produced.
-//
-// An EVALUATION FAILURE is the one refusal that is NOT PermissionDenied: §8.10
-// forbids rendering an ABAC outage as an authorization answer, because an
-// operator reading "denied" would look for a policy problem that does not
-// exist. It becomes codes.Internal with its own static message.
+// in-process assertion reads is the code the gate actually produced, and the
+// §10.3 planned-section refusal keeps its own status class.
 func adminGateFailure(ctx context.Context, gateErr error, fullMethod, playerID string) error {
-	if oopsErr, isOops := oops.AsOops(gateErr); isOops {
-		if code, isString := oopsErr.Code().(string); isString && code == "ADMIN_SECTION_EVALUATION_FAILED" {
-			errutil.LogErrorContext(ctx, "admin section: gate evaluation failed", gateErr,
-				"method", fullMethod, "player_id", playerID)
-			return status.Errorf(codes.Internal, "internal error")
-		}
-	}
-	slog.WarnContext(ctx, "admin section: gate refused the caller",
-		"method", fullMethod, "player_id", playerID)
-	return adminRefusal{
-		st:  status.New(codes.PermissionDenied, adminDeniedMessage),
-		err: gateErr,
-	}
+	return mapAdminSectionError(ctx, gateErr, "method", fullMethod, "player_id", playerID)
 }

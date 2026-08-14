@@ -335,6 +335,10 @@ func (m *mockGRPCClient) AdminListSections(_ context.Context, _ *adminportalv1.A
 	return nil, nil
 }
 
+func (m *mockGRPCClient) AdminGetSection(_ context.Context, _ *adminportalv1.AdminGetSectionRequest) (*adminportalv1.AdminGetSectionResponse, error) {
+	return nil, nil
+}
+
 // mockListener implements net.Listener for testing.
 type mockListener struct {
 	acceptFunc func() (net.Conn, error)

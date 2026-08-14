@@ -42,6 +42,26 @@ type MethodDescriptor struct {
 	// caller with no admin_section: access is still refused before the handler
 	// runs; the per-section filtering is the handler's.
 	EnumeratesAllSections bool
+	// SectionFromRequest marks the one method shape whose section id is supplied
+	// by the CALLER rather than fixed here: AdminGetSection takes it as a
+	// request field.
+	//
+	// It is a third explicit flag rather than an absent SectionID for the same
+	// reason EnumeratesAllSections is: a shape spelled as a missing field cannot
+	// be told apart from a forgotten one, and the forgotten one must deny.
+	//
+	// The interceptor — not the handler — evaluates it. It extracts the id
+	// through a typed accessor, refuses a missing or blank one with
+	// ADMIN_SECTION_NO_SECTION_ID, calls [AssertSectionAccess] with the id
+	// verbatim, and stashes the resolved [Section] on the context. So the ONE
+	// RPC whose section is attacker-controlled carries no per-handler gate, which
+	// is exactly the exception D-99 abolished.
+	//
+	// It MUST NOT fall through to the fixed-SectionID arm: that arm would call
+	// AssertSectionAccess with an EMPTY id, which is refused with
+	// ADMIN_SECTION_REQUEST_MALFORMED before evaluation — failing every such call
+	// for every caller, admin or not.
+	SectionFromRequest bool
 }
 
 // AdminDescriptors is the fail-closed method→section table for every method
@@ -61,6 +81,7 @@ type MethodDescriptor struct {
 // runtime.
 var AdminDescriptors = map[string]MethodDescriptor{
 	"AdminListSections": {Action: ActionRead, EnumeratesAllSections: true},
+	"AdminGetSection":   {Action: ActionRead, SectionFromRequest: true},
 }
 
 // LookupMethodDescriptor resolves a BARE method name to its declaration.
@@ -95,19 +116,33 @@ func validateAdminDescriptors(descriptors map[string]MethodDescriptor) error {
 				Errorf("method %q declares action %q, which is outside the closed ladder", method, d.Action)
 		}
 
-		// The two shapes are mutually exclusive, and NEITHER defaults. An entry
-		// with no section and no flag is the forgotten-field case; an entry with
-		// both is a declaration that names a section it then ignores.
+		// EXACTLY ONE of the three shapes, never none and never more. "None" is
+		// the forgotten-field case, which §10.2 forbids reading as permissive;
+		// "more than one" is a declaration whose arms contradict each other, and
+		// the interceptor's shape switch would silently pick whichever it tests
+		// first. Both abort the boot rather than resolving to a default.
+		shapes := 0
+		if d.SectionID != "" {
+			shapes++
+		}
+		if d.EnumeratesAllSections {
+			shapes++
+		}
+		if d.SectionFromRequest {
+			shapes++
+		}
 		switch {
-		case d.SectionID == "" && !d.EnumeratesAllSections:
+		case shapes == 0:
 			return oops.Code("ADMIN_METHOD_DESCRIPTOR_INVALID").
 				With("method", method).
-				Errorf("method %q declares no section and does not enumerate; §10.2 forbids reading that as permissive", method)
-		case d.SectionID != "" && d.EnumeratesAllSections:
+				Errorf("method %q declares no section, does not enumerate and takes no section from the request; §10.2 forbids reading that as permissive", method)
+		case shapes > 1:
 			return oops.Code("ADMIN_METHOD_DESCRIPTOR_INVALID").
 				With("method", method).
 				With("section_id", d.SectionID).
-				Errorf("method %q both names section %q and claims to enumerate every section", method, d.SectionID)
+				With("enumerates_all_sections", d.EnumeratesAllSections).
+				With("section_from_request", d.SectionFromRequest).
+				Errorf("method %q declares %d section shapes; exactly one is required", method, shapes)
 		case d.SectionID != "":
 			if _, registered := Lookup(d.SectionID); !registered {
 				return oops.Code("ADMIN_METHOD_DESCRIPTOR_INVALID").

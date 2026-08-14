@@ -155,6 +155,7 @@ type CharacterAccessClient interface {
 // character audience's proofs.
 type AdminPortalClient interface {
 	AdminListSections(ctx context.Context, req *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error)
+	AdminGetSection(ctx context.Context, req *adminportalv1.AdminGetSectionRequest) (*adminportalv1.AdminGetSectionResponse, error)
 }
 
 // Handler implements WebServiceHandler by delegating to the core gRPC client.

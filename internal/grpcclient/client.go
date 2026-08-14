@@ -508,6 +508,22 @@ func (c *Client) AdminListSections(ctx context.Context, req *adminportalv1.Admin
 	return resp, nil
 }
 
+// AdminGetSection forwards to AdminPortalService.AdminGetSection.
+//
+// Like its AdminListSections peer it does NOT wrap the error in oops. Both of
+// this RPC's refusals carry deliberately static messages — the PermissionDenied
+// a denied caller gets and the FailedPrecondition a permitted caller gets for a
+// planned section — and status.FromError replaces a WRAPPED status's message
+// with the outer error's full text, which would substitute "RPC_FAILED: …" for
+// the opaque refusal the core built.
+func (c *Client) AdminGetSection(ctx context.Context, req *adminportalv1.AdminGetSectionRequest) (*adminportalv1.AdminGetSectionResponse, error) {
+	resp, err := c.adminPortalClient.AdminGetSection(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
 // ListScenesForViewer returns the public scene board filtered by the player's preferences.
 func (c *Client) ListScenesForViewer(ctx context.Context, req *sceneaccessv1.ListScenesForViewerRequest) (*sceneaccessv1.ListScenesForViewerResponse, error) {
 	resp, err := c.sceneAccessClient.ListScenesForViewer(ctx, req)

@@ -225,6 +225,7 @@ type GRPCClient interface {
 	// Admin-portal RPCs. A separate service behind its own core-side gate; the
 	// gateway forwards its answers and its refusals and decides neither.
 	AdminListSections(ctx context.Context, req *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error)
+	AdminGetSection(ctx context.Context, req *adminportalv1.AdminGetSectionRequest) (*adminportalv1.AdminGetSectionResponse, error)
 	Close() error
 }
 
