@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -390,4 +391,119 @@ func TestTheGateEvaluatesTheABACEngineBeforeItConsultsTheRegistry(t *testing.T) 
 		_, _ = assertSectionAccess(context.Background(), engineFor(t, adminCaller()),
 			adminPlayerID, "characters", ActionRead, poisoned)
 	})
+}
+
+// --- Admission: the policy-gate step alone (D-99, plan 06-01) ---
+
+// TestTheAdmissionProbeIDIsImmaterialToTheVerdict is what makes
+// [PortalProbeSectionID] SOUND rather than an arbitrary pick.
+//
+// seed:admin-section-access targets the resource TYPE (`resource is
+// admin_section`) with no literal id in the DSL, so for a FIXED player the
+// admission verdict cannot depend on which id is probed. This test asserts that
+// equality directly: collect the verdict for every id All() registers and
+// require the set of distinct verdicts to have exactly one member — once for an
+// admin and once for a non-admin.
+//
+// It goes RED the moment a per-section grant lands, which is precisely when a
+// concrete-id probe stops selecting no scope and the portal-admission check
+// needs a real portal grant instead.
+func TestTheAdmissionProbeIDIsImmaterialToTheVerdict(t *testing.T) {
+	all := All()
+	// Guard against vacuity BEFORE the loop: a registry that returned nothing
+	// would give a set of zero verdicts, and "zero distinct verdicts" must not
+	// be mistaken for "one".
+	require.Len(t, all, 7, "the shipped registry MUST carry seven sections; "+
+		"a shorter one would make the loop below prove nothing")
+
+	// distinctVerdicts maps a verdict — the oops code, or "" for permitted — to
+	// the ids that produced it, so a failure names the divergent section.
+	distinctVerdicts := func(t *testing.T, c caller) map[string][]string {
+		t.Helper()
+		engine := engineFor(t, c)
+		out := map[string][]string{}
+		for _, s := range all {
+			err := AssertSectionAdmission(t.Context(), engine, c.id, string(s.ID), ActionRead)
+			verdict := ""
+			if err != nil {
+				oopsErr, isOops := oops.AsOops(err)
+				require.True(t, isOops, "admission refusals MUST be typed oops errors")
+				code, isString := oopsErr.Code().(string)
+				require.True(t, isString, "an oops code MUST be a string")
+				verdict = code
+			}
+			out[verdict] = append(out[verdict], string(s.ID))
+		}
+		return out
+	}
+
+	t.Run("an admin is admitted to every section id identically", func(t *testing.T) {
+		verdicts := distinctVerdicts(t, adminCaller())
+		require.Len(t, verdicts, 1, "the admission verdict MUST NOT vary by section id: %v", verdicts)
+		_, permitted := verdicts[""]
+		require.True(t, permitted, "an admin MUST be ADMITTED, not uniformly refused: %v", verdicts)
+	})
+
+	for _, c := range nonAdmins() {
+		t.Run("a "+c.name+" is refused for every section id identically", func(t *testing.T) {
+			verdicts := distinctVerdicts(t, c)
+			require.Len(t, verdicts, 1, "the admission verdict MUST NOT vary by section id: %v", verdicts)
+			_, denied := verdicts["DENY_ADMIN_SECTION"]
+			require.True(t, denied, "a non-admin MUST be refused with the static denial: %v", verdicts)
+		})
+	}
+}
+
+// TestAdmissionPermitsAPlannedSectionThatAccessRefuses is the assertion that
+// keeps the six planned sections in the /admin nav.
+//
+// Admission is step 1 alone — the policy answer to "may this player touch the
+// admin section surface at all". Access is admission PLUS registration,
+// descriptor consistency and availability, and its availability step refuses a
+// planned section with SECTION_NOT_IMPLEMENTED. An enumeration filter written
+// against AssertSectionAccess would therefore silently drop every planned
+// section out of the nav EXT-02 and D-101 require them to appear in.
+func TestAdmissionPermitsAPlannedSectionThatAccessRefuses(t *testing.T) {
+	// Pick a genuinely planned section from the shipped registry rather than
+	// naming one, so the fixture cannot go stale against a status change.
+	var planned string
+	for _, s := range All() {
+		if s.Status == StatusPlanned {
+			planned = string(s.ID)
+			break
+		}
+	}
+	require.NotEmpty(t, planned, "the registry MUST carry at least one planned section for this test to mean anything")
+
+	engine := engineFor(t, adminCaller())
+
+	require.NoError(t,
+		AssertSectionAdmission(t.Context(), engine, adminPlayerID, planned, ActionRead),
+		"admission MUST NOT run the availability step: section %q", planned)
+
+	_, accessErr := AssertSectionAccess(t.Context(), engine, adminPlayerID, planned, ActionRead)
+	require.Error(t, accessErr, "access MUST still refuse a planned section")
+	errutil.AssertErrorCode(t, accessErr, "SECTION_NOT_IMPLEMENTED")
+}
+
+// TestAdmissionRefusesAMalformedRequestBeforeAnyEngineCall pins that the
+// extraction kept step 1's guards, not just its evaluation.
+func TestAdmissionRefusesAMalformedRequestBeforeAnyEngineCall(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		engine            PolicyEvaluator
+		playerID, section string
+		action            string
+	}{
+		{"nil engine", nil, adminPlayerID, "characters", ActionRead},
+		{"empty player id", engineFor(t, adminCaller()), "", "characters", ActionRead},
+		{"empty section id", engineFor(t, adminCaller()), adminPlayerID, "", ActionRead},
+		{"empty action", engineFor(t, adminCaller()), adminPlayerID, "characters", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := AssertSectionAdmission(t.Context(), tc.engine, tc.playerID, tc.section, tc.action)
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, "ADMIN_SECTION_REQUEST_MALFORMED")
+		})
+	}
 }
