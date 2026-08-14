@@ -1171,6 +1171,10 @@ func (s *Server) startGatedGRPCListener() {
 	lis := bufconn.Listen(gatedListenerBufSize)
 
 	srv, err := holoGRPC.NewGRPCServer(holoGRPC.GRPCServerConfig{
+		// Deliberate cleartext: this listener is an in-process bufconn with no
+		// network to protect. Stating it here rather than inheriting it from a
+		// nil TLS keeps production's nil case a build refusal.
+		AllowInsecure: true,
 		AdminInterceptor: holoGRPC.NewAdminSectionInterceptor(holoGRPC.AdminInterceptorDeps{
 			Engine:      s.accessEngine,
 			SessionRepo: s.playerSessionStore,

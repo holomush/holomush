@@ -660,10 +660,22 @@ func responseMeta(requestID string) *corev1.ResponseMeta {
 //
 //nolint:revive // named for its constructor: NewGRPCServer is the pre-existing
 type GRPCServerConfig struct {
-	// TLS supplies the server credentials. Production ALWAYS sets it; nil is a
-	// test affordance for the in-process bufconn listener, which has no network
-	// to protect.
+	// TLS supplies the server credentials. Production ALWAYS sets it, resolved
+	// from tlscerts.TLSSubsystem's panic-guarded accessor. Leaving it nil is
+	// serving cleartext, so it is only permitted together with AllowInsecure.
 	TLS *tls.Config
+	// AllowInsecure is the EXPLICIT admission that this server serves without
+	// transport credentials. It exists for the in-process bufconn listener,
+	// which has no network to protect.
+	//
+	// It is a separate field rather than an implicit consequence of a nil TLS
+	// for the same reason AdminInterceptor is required: the constructor this
+	// factory replaced fed credentials.NewTLS(nil), which failed every
+	// handshake — cleartext was unreachable by accident. Guarding only the
+	// authorization dependency and not the transport one would make a nil
+	// TLSProvider result degrade from "refuses to boot" to "serves the whole
+	// core surface in the clear", silently.
+	AllowInsecure bool
 	// AdminInterceptor is the admin-portal gate. It is REQUIRED — see
 	// [NewGRPCServer].
 	AdminInterceptor grpc.UnaryServerInterceptor
@@ -700,6 +712,11 @@ func NewGRPCServer(cfg GRPCServerConfig) (*grpc.Server, error) {
 	if cfg.AdminInterceptor == nil {
 		return nil, oops.Code("GRPC_SERVER_ADMIN_GATE_MISSING").
 			Errorf("refusing to build a gRPC server with no admin section interceptor")
+	}
+	if cfg.TLS == nil && !cfg.AllowInsecure {
+		return nil, oops.Code("GRPC_SERVER_TRANSPORT_INSECURE").
+			Errorf("refusing to build a gRPC server with no transport credentials; " +
+				"set AllowInsecure to admit cleartext deliberately")
 	}
 
 	opts := make([]grpc.ServerOption, 0, 6+len(cfg.Extra))

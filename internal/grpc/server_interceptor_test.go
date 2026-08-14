@@ -37,9 +37,33 @@ func TestTheServerFactoryBuildsAServerWhenTheGateIsSupplied(t *testing.T) {
 		return h(ctx, req)
 	}
 
-	srv, err := NewGRPCServer(GRPCServerConfig{AdminInterceptor: noop})
+	srv, err := NewGRPCServer(GRPCServerConfig{AdminInterceptor: noop, AllowInsecure: true})
 
-	require.NoError(t, err, "a TLS-less server is the bufconn test affordance and MUST build")
+	require.NoError(t, err, "a TLS-less server is the bufconn test affordance and MUST build once it says so")
 	require.NotNil(t, srv)
 	srv.Stop()
+}
+
+// TestTheServerFactoryRefusesCleartextUnlessItIsAdmitted is the transport
+// sibling of the two above, and it exists because the gate they cover was the
+// only one this factory had.
+//
+// The constructor this factory replaced passed credentials.NewTLS(nil), which
+// failed every handshake — serving in the clear was unreachable by accident.
+// Guarding the authorization dependency with an error while letting a nil TLS
+// fall through to no credentials would have converted "the TLS subsystem handed
+// us nothing" from a boot failure into the whole core surface served in
+// cleartext, with no error anywhere. Production never sets AllowInsecure, so a
+// nil TLSProvider result refuses to build.
+func TestTheServerFactoryRefusesCleartextUnlessItIsAdmitted(t *testing.T) {
+	noop := func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
+		return h(ctx, req)
+	}
+
+	srv, err := NewGRPCServer(GRPCServerConfig{AdminInterceptor: noop})
+
+	require.Error(t, err,
+		"a nil TLS without AllowInsecure MUST be refused, never defaulted to serving cleartext")
+	require.Nil(t, srv, "no server may be returned alongside the refusal")
+	errutil.AssertErrorCode(t, err, "GRPC_SERVER_TRANSPORT_INSECURE")
 }

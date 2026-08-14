@@ -100,6 +100,50 @@ func TestEveryServedAdminMethodHasADescriptor(t *testing.T) {
 			"The table has drifted from the wire contract — a rename or a stale copy.", extra)
 }
 
+// TestTheAdminPortalServiceServesNoStreamingMethods closes the one gap the
+// census above structurally cannot see.
+//
+// Both halves of "forgetting to declare a section denies you" are UNARY-ONLY.
+// NewGRPCServer chains cfg.AdminInterceptor via grpc.ChainUnaryInterceptor, which
+// never runs for a streaming RPC; and the census above iterates
+// AdminPortalService_ServiceDesc.Methods, which does not include .Streams. So a
+// single `stream` keyword in adminportal.proto would ship a cross-player admin
+// surface that no interceptor gates and no census counts — with every existing
+// gate still green. That is a fail-OPEN, and it is invisible precisely because
+// the two mechanisms that would catch it share the same blind spot.
+//
+// The service serves no streams today, so the honest guard is this one: assert
+// the precondition that makes the unary-only design sound, and fail the moment
+// it stops holding. Building a stream interceptor now would ship untested code
+// gating nothing; this fails first and forces that work at the point it is
+// actually needed.
+//
+// If you are here because this test went red: you added a streaming admin RPC.
+// Before declaring it, give NewGRPCServer a grpc.ChainStreamInterceptor arm and
+// extend the census above to compare against Methods ∪ Streams. Do not delete
+// this assertion to make the build pass — it is the only thing standing between
+// a streaming admin RPC and an ungated one.
+func TestTheAdminPortalServiceServesNoStreamingMethods(t *testing.T) {
+	// Anti-vacuity: a service that served nothing at all would satisfy an
+	// emptiness assertion without saying anything about streams. The unary set
+	// being non-empty is what makes "and no streams" a statement about shape.
+	require.NotEmpty(t, adminportalv1.AdminPortalService_ServiceDesc.Methods,
+		"the served unary method set is EMPTY — this emptiness check would pass vacuously")
+
+	streamNames := make([]string, 0, len(adminportalv1.AdminPortalService_ServiceDesc.Streams))
+	for _, s := range adminportalv1.AdminPortalService_ServiceDesc.Streams {
+		streamNames = append(streamNames, s.StreamName)
+	}
+
+	require.Emptyf(t, streamNames,
+		"AdminPortalService now serves streaming method(s): %v.\n"+
+			"NewGRPCServer gates the admin surface with grpc.ChainUnaryInterceptor ONLY, and "+
+			"TestEveryServedAdminMethodHasADescriptor compares against .Methods ONLY — so each of "+
+			"these is served WITHOUT the section gate and WITHOUT being counted as undeclared. "+
+			"Add a stream-interceptor arm and widen the census before declaring a streaming admin RPC.",
+		streamNames)
+}
+
 // setDifferences reports the members of declared absent from served, and the
 // members of served absent from declared. Both results are SORTED so a failure
 // message is reproducible and a diff between two runs is meaningful.
