@@ -23,6 +23,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	AdminPortalService_AdminListSections_FullMethodName = "/holomush.adminportal.v1.AdminPortalService/AdminListSections"
+	AdminPortalService_AdminGetSection_FullMethodName   = "/holomush.adminportal.v1.AdminPortalService/AdminGetSection"
 )
 
 // AdminPortalServiceClient is the client API for AdminPortalService service.
@@ -57,6 +58,21 @@ type AdminPortalServiceClient interface {
 	// AssertSectionAccess, so sections that are registered but not yet
 	// implemented are still listed and carry their status as data.
 	AdminListSections(ctx context.Context, in *AdminListSectionsRequest, opts ...grpc.CallOption) (*AdminListSectionsResponse, error)
+	// AdminGetSection returns ONE registry entry, named by the caller.
+	//
+	// It is the only method on this service whose section is supplied by the
+	// request rather than fixed by its descriptor, so NewAdminSectionInterceptor
+	// extracts section_id, runs section.AssertSectionAccess against it, and
+	// stashes the resolved entry on the context; AdminPortalServer.AdminGetSection
+	// then projects that entry and evaluates nothing.
+	//
+	// Because the gate runs first, a caller with no `admin_section:` access
+	// receives the same PermissionDenied for a registered id and an unregistered
+	// one — the registry is not enumerable through this parameter. A caller the
+	// gate PERMITTED who names a section that is registered but not yet
+	// implemented receives FailedPrecondition instead, carrying a static message
+	// and no body.
+	AdminGetSection(ctx context.Context, in *AdminGetSectionRequest, opts ...grpc.CallOption) (*AdminGetSectionResponse, error)
 }
 
 type adminPortalServiceClient struct {
@@ -71,6 +87,16 @@ func (c *adminPortalServiceClient) AdminListSections(ctx context.Context, in *Ad
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AdminListSectionsResponse)
 	err := c.cc.Invoke(ctx, AdminPortalService_AdminListSections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminPortalServiceClient) AdminGetSection(ctx context.Context, in *AdminGetSectionRequest, opts ...grpc.CallOption) (*AdminGetSectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminGetSectionResponse)
+	err := c.cc.Invoke(ctx, AdminPortalService_AdminGetSection_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +135,21 @@ type AdminPortalServiceServer interface {
 	// AssertSectionAccess, so sections that are registered but not yet
 	// implemented are still listed and carry their status as data.
 	AdminListSections(context.Context, *AdminListSectionsRequest) (*AdminListSectionsResponse, error)
+	// AdminGetSection returns ONE registry entry, named by the caller.
+	//
+	// It is the only method on this service whose section is supplied by the
+	// request rather than fixed by its descriptor, so NewAdminSectionInterceptor
+	// extracts section_id, runs section.AssertSectionAccess against it, and
+	// stashes the resolved entry on the context; AdminPortalServer.AdminGetSection
+	// then projects that entry and evaluates nothing.
+	//
+	// Because the gate runs first, a caller with no `admin_section:` access
+	// receives the same PermissionDenied for a registered id and an unregistered
+	// one — the registry is not enumerable through this parameter. A caller the
+	// gate PERMITTED who names a section that is registered but not yet
+	// implemented receives FailedPrecondition instead, carrying a static message
+	// and no body.
+	AdminGetSection(context.Context, *AdminGetSectionRequest) (*AdminGetSectionResponse, error)
 	mustEmbedUnimplementedAdminPortalServiceServer()
 }
 
@@ -121,6 +162,9 @@ type UnimplementedAdminPortalServiceServer struct{}
 
 func (UnimplementedAdminPortalServiceServer) AdminListSections(context.Context, *AdminListSectionsRequest) (*AdminListSectionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AdminListSections not implemented")
+}
+func (UnimplementedAdminPortalServiceServer) AdminGetSection(context.Context, *AdminGetSectionRequest) (*AdminGetSectionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminGetSection not implemented")
 }
 func (UnimplementedAdminPortalServiceServer) mustEmbedUnimplementedAdminPortalServiceServer() {}
 func (UnimplementedAdminPortalServiceServer) testEmbeddedByValue()                            {}
@@ -161,6 +205,24 @@ func _AdminPortalService_AdminListSections_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminPortalService_AdminGetSection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminGetSectionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminPortalServiceServer).AdminGetSection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminPortalService_AdminGetSection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminPortalServiceServer).AdminGetSection(ctx, req.(*AdminGetSectionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminPortalService_ServiceDesc is the grpc.ServiceDesc for AdminPortalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -171,6 +233,10 @@ var AdminPortalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AdminListSections",
 			Handler:    _AdminPortalService_AdminListSections_Handler,
+		},
+		{
+			MethodName: "AdminGetSection",
+			Handler:    _AdminPortalService_AdminGetSection_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

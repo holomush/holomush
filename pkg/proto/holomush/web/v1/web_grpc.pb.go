@@ -77,6 +77,7 @@ const (
 	WebService_WebSetDefaultCharacter_FullMethodName        = "/holomush.web.v1.WebService/WebSetDefaultCharacter"
 	WebService_WebListCharacterDirectory_FullMethodName     = "/holomush.web.v1.WebService/WebListCharacterDirectory"
 	WebService_WebAdminListSections_FullMethodName          = "/holomush.web.v1.WebService/WebAdminListSections"
+	WebService_WebAdminGetSection_FullMethodName            = "/holomush.web.v1.WebService/WebAdminGetSection"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -330,6 +331,19 @@ type WebServiceClient interface {
 	// non-admin's PermissionDenied reaches the browser unmodified rather than
 	// being turned into an empty list here.
 	WebAdminListSections(ctx context.Context, in *WebAdminListSectionsRequest, opts ...grpc.CallOption) (*WebAdminListSectionsResponse, error)
+	// WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+	// Handler.WebAdminGetSection lifts the session token from the
+	// X-Session-Token header and forwards only section_id. It makes NO
+	// authorization decision: the core interceptor gates the supplied id before
+	// the core handler runs, so both the PermissionDenied a refused caller gets
+	// and the FailedPrecondition a permitted caller gets for a planned section
+	// reach the browser unmodified.
+	//
+	// It has NO browser caller in v0.13, and that is deliberate rather than dead
+	// code: D-100 makes both registry RPCs published wire contract and census
+	// members, and the wire-level gate tests in test/integration/access are what
+	// exercise this path.
+	WebAdminGetSection(ctx context.Context, in *WebAdminGetSectionRequest, opts ...grpc.CallOption) (*WebAdminGetSectionResponse, error)
 }
 
 type webServiceClient struct {
@@ -899,6 +913,16 @@ func (c *webServiceClient) WebAdminListSections(ctx context.Context, in *WebAdmi
 	return out, nil
 }
 
+func (c *webServiceClient) WebAdminGetSection(ctx context.Context, in *WebAdminGetSectionRequest, opts ...grpc.CallOption) (*WebAdminGetSectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminGetSectionResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminGetSection_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -1150,6 +1174,19 @@ type WebServiceServer interface {
 	// non-admin's PermissionDenied reaches the browser unmodified rather than
 	// being turned into an empty list here.
 	WebAdminListSections(context.Context, *WebAdminListSectionsRequest) (*WebAdminListSectionsResponse, error)
+	// WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+	// Handler.WebAdminGetSection lifts the session token from the
+	// X-Session-Token header and forwards only section_id. It makes NO
+	// authorization decision: the core interceptor gates the supplied id before
+	// the core handler runs, so both the PermissionDenied a refused caller gets
+	// and the FailedPrecondition a permitted caller gets for a planned section
+	// reach the browser unmodified.
+	//
+	// It has NO browser caller in v0.13, and that is deliberate rather than dead
+	// code: D-100 makes both registry RPCs published wire contract and census
+	// members, and the wire-level gate tests in test/integration/access are what
+	// exercise this path.
+	WebAdminGetSection(context.Context, *WebAdminGetSectionRequest) (*WebAdminGetSectionResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -1324,6 +1361,9 @@ func (UnimplementedWebServiceServer) WebListCharacterDirectory(context.Context, 
 }
 func (UnimplementedWebServiceServer) WebAdminListSections(context.Context, *WebAdminListSectionsRequest) (*WebAdminListSectionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebAdminListSections not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminGetSection(context.Context, *WebAdminGetSectionRequest) (*WebAdminGetSectionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminGetSection not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -2329,6 +2369,24 @@ func _WebService_WebAdminListSections_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebAdminGetSection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminGetSectionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminGetSection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminGetSection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminGetSection(ctx, req.(*WebAdminGetSectionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2551,6 +2609,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebAdminListSections",
 			Handler:    _WebService_WebAdminListSections_Handler,
+		},
+		{
+			MethodName: "WebAdminGetSection",
+			Handler:    _WebService_WebAdminGetSection_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -194,6 +194,9 @@ const (
 	// WebServiceWebAdminListSectionsProcedure is the fully-qualified name of the WebService's
 	// WebAdminListSections RPC.
 	WebServiceWebAdminListSectionsProcedure = "/holomush.web.v1.WebService/WebAdminListSections"
+	// WebServiceWebAdminGetSectionProcedure is the fully-qualified name of the WebService's
+	// WebAdminGetSection RPC.
+	WebServiceWebAdminGetSectionProcedure = "/holomush.web.v1.WebService/WebAdminGetSection"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -435,6 +438,19 @@ type WebServiceClient interface {
 	// non-admin's PermissionDenied reaches the browser unmodified rather than
 	// being turned into an empty list here.
 	WebAdminListSections(context.Context, *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error)
+	// WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+	// Handler.WebAdminGetSection lifts the session token from the
+	// X-Session-Token header and forwards only section_id. It makes NO
+	// authorization decision: the core interceptor gates the supplied id before
+	// the core handler runs, so both the PermissionDenied a refused caller gets
+	// and the FailedPrecondition a permitted caller gets for a planned section
+	// reach the browser unmodified.
+	//
+	// It has NO browser caller in v0.13, and that is deliberate rather than dead
+	// code: D-100 makes both registry RPCs published wire contract and census
+	// members, and the wire-level gate tests in test/integration/access are what
+	// exercise this path.
+	WebAdminGetSection(context.Context, *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -778,6 +794,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebAdminListSections")),
 			connect.WithClientOptions(opts...),
 		),
+		webAdminGetSection: connect.NewClient[v1.WebAdminGetSectionRequest, v1.WebAdminGetSectionResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminGetSectionProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminGetSection")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -838,6 +860,7 @@ type webServiceClient struct {
 	webSetDefaultCharacter        *connect.Client[v1.WebSetDefaultCharacterRequest, v1.WebSetDefaultCharacterResponse]
 	webListCharacterDirectory     *connect.Client[v1.WebListCharacterDirectoryRequest, v1.WebListCharacterDirectoryResponse]
 	webAdminListSections          *connect.Client[v1.WebAdminListSectionsRequest, v1.WebAdminListSectionsResponse]
+	webAdminGetSection            *connect.Client[v1.WebAdminGetSectionRequest, v1.WebAdminGetSectionResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -1115,6 +1138,11 @@ func (c *webServiceClient) WebAdminListSections(ctx context.Context, req *connec
 	return c.webAdminListSections.CallUnary(ctx, req)
 }
 
+// WebAdminGetSection calls holomush.web.v1.WebService.WebAdminGetSection.
+func (c *webServiceClient) WebAdminGetSection(ctx context.Context, req *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error) {
+	return c.webAdminGetSection.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -1354,6 +1382,19 @@ type WebServiceHandler interface {
 	// non-admin's PermissionDenied reaches the browser unmodified rather than
 	// being turned into an empty list here.
 	WebAdminListSections(context.Context, *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error)
+	// WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+	// Handler.WebAdminGetSection lifts the session token from the
+	// X-Session-Token header and forwards only section_id. It makes NO
+	// authorization decision: the core interceptor gates the supplied id before
+	// the core handler runs, so both the PermissionDenied a refused caller gets
+	// and the FailedPrecondition a permitted caller gets for a planned section
+	// reach the browser unmodified.
+	//
+	// It has NO browser caller in v0.13, and that is deliberate rather than dead
+	// code: D-100 makes both registry RPCs published wire contract and census
+	// members, and the wire-level gate tests in test/integration/access are what
+	// exercise this path.
+	WebAdminGetSection(context.Context, *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1693,6 +1734,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebAdminListSections")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebAdminGetSectionHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminGetSectionProcedure,
+		svc.WebAdminGetSection,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminGetSection")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -1805,6 +1852,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebListCharacterDirectoryHandler.ServeHTTP(w, r)
 		case WebServiceWebAdminListSectionsProcedure:
 			webServiceWebAdminListSectionsHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminGetSectionProcedure:
+			webServiceWebAdminGetSectionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2032,4 +2081,8 @@ func (UnimplementedWebServiceHandler) WebListCharacterDirectory(context.Context,
 
 func (UnimplementedWebServiceHandler) WebAdminListSections(context.Context, *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminListSections is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminGetSection(context.Context, *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminGetSection is not implemented"))
 }

@@ -127,6 +127,127 @@ func (x *AdminListSectionsResponse) GetSections() []*AdminSection {
 	return nil
 }
 
+// AdminGetSectionRequest names one section and the caller asking for it. It is
+// the one admin-portal request whose section is attacker-controlled, which is
+// why the interceptor rather than the handler evaluates it.
+type AdminGetSectionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// section_id is the registry id to fetch, matched by exact lowercase-ASCII
+	// byte equality with no case folding: NewAdminSectionInterceptor reads it
+	// through the GetSectionId() accessor and passes it to
+	// section.AssertSectionAccess verbatim, so a mis-cased id resolves to no entry
+	// and is refused indistinguishably from an id the caller may not reach.
+	//
+	// The min_len annotation documents the schema contract. It is NOT what
+	// enforces it at runtime — no protovalidate interceptor is installed on any
+	// server path — so the interceptor's own blank check refuses an empty or
+	// whitespace-only value with ADMIN_SECTION_NO_SECTION_ID before the handler
+	// runs.
+	SectionId string `protobuf:"bytes,1,opt,name=section_id,json=sectionId,proto3" json:"section_id,omitempty"`
+	// player_session_token is the raw bearer token the gateway lifted from the
+	// X-Session-Token header. NewAdminSectionInterceptor resolves it to a player
+	// through auth.PlayerSessionRepository; there is deliberately no player-id
+	// field a caller could point at someone else.
+	PlayerSessionToken string `protobuf:"bytes,2,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *AdminGetSectionRequest) Reset() {
+	*x = AdminGetSectionRequest{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminGetSectionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminGetSectionRequest) ProtoMessage() {}
+
+func (x *AdminGetSectionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminGetSectionRequest.ProtoReflect.Descriptor instead.
+func (*AdminGetSectionRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *AdminGetSectionRequest) GetSectionId() string {
+	if x != nil {
+		return x.SectionId
+	}
+	return ""
+}
+
+func (x *AdminGetSectionRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+// AdminGetSectionResponse carries the single registry row the gate already
+// authorized. It is reached only on the permitted-and-available path: every
+// other outcome is a status error with no body.
+type AdminGetSectionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// section is the entry section.AssertSectionAccess resolved, projected by
+	// AdminPortalServer.AdminGetSection from the context the interceptor stashed
+	// it on. Its status is always "available" here, because the gate refuses a
+	// planned section with FailedPrecondition before this message is built.
+	Section       *AdminSection `protobuf:"bytes,1,opt,name=section,proto3" json:"section,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminGetSectionResponse) Reset() {
+	*x = AdminGetSectionResponse{}
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminGetSectionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminGetSectionResponse) ProtoMessage() {}
+
+func (x *AdminGetSectionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminGetSectionResponse.ProtoReflect.Descriptor instead.
+func (*AdminGetSectionResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AdminGetSectionResponse) GetSection() *AdminSection {
+	if x != nil {
+		return x.Section
+	}
+	return nil
+}
+
 // AdminSection is one row of the admin section registry
 // (internal/admin/section/registry.go) as the portal renders it.
 type AdminSection struct {
@@ -149,7 +270,7 @@ type AdminSection struct {
 
 func (x *AdminSection) Reset() {
 	*x = AdminSection{}
-	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[2]
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -161,7 +282,7 @@ func (x *AdminSection) String() string {
 func (*AdminSection) ProtoMessage() {}
 
 func (x *AdminSection) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[2]
+	mi := &file_holomush_adminportal_v1_adminportal_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -174,7 +295,7 @@ func (x *AdminSection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdminSection.ProtoReflect.Descriptor instead.
 func (*AdminSection) Descriptor() ([]byte, []int) {
-	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{2}
+	return file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *AdminSection) GetId() string {
@@ -206,13 +327,20 @@ const file_holomush_adminportal_v1_adminportal_proto_rawDesc = "" +
 	"\x18AdminListSectionsRequest\x129\n" +
 	"\x14player_session_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\"^\n" +
 	"\x19AdminListSectionsResponse\x12A\n" +
-	"\bsections\x18\x01 \x03(\v2%.holomush.adminportal.v1.AdminSectionR\bsections\"Y\n" +
+	"\bsections\x18\x01 \x03(\v2%.holomush.adminportal.v1.AdminSectionR\bsections\"{\n" +
+	"\x16AdminGetSectionRequest\x12&\n" +
+	"\n" +
+	"section_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsectionId\x129\n" +
+	"\x14player_session_token\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x12playerSessionToken\"Z\n" +
+	"\x17AdminGetSectionResponse\x12?\n" +
+	"\asection\x18\x01 \x01(\v2%.holomush.adminportal.v1.AdminSectionR\asection\"Y\n" +
 	"\fAdminSection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x16\n" +
-	"\x06status\x18\x03 \x01(\tR\x06status2\x90\x01\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status2\x86\x02\n" +
 	"\x12AdminPortalService\x12z\n" +
-	"\x11AdminListSections\x121.holomush.adminportal.v1.AdminListSectionsRequest\x1a2.holomush.adminportal.v1.AdminListSectionsResponseB\xfb\x01\n" +
+	"\x11AdminListSections\x121.holomush.adminportal.v1.AdminListSectionsRequest\x1a2.holomush.adminportal.v1.AdminListSectionsResponse\x12t\n" +
+	"\x0fAdminGetSection\x12/.holomush.adminportal.v1.AdminGetSectionRequest\x1a0.holomush.adminportal.v1.AdminGetSectionResponseB\xfb\x01\n" +
 	"\x1bcom.holomush.adminportal.v1B\x10AdminportalProtoP\x01ZLgithub.com/holomush/holomush/pkg/proto/holomush/adminportal/v1;adminportalv1\xa2\x02\x03HAX\xaa\x02\x17Holomush.Adminportal.V1\xca\x02\x17Holomush\\Adminportal\\V1\xe2\x02#Holomush\\Adminportal\\V1\\GPBMetadata\xea\x02\x19Holomush::Adminportal::V1b\x06proto3"
 
 var (
@@ -227,21 +355,26 @@ func file_holomush_adminportal_v1_adminportal_proto_rawDescGZIP() []byte {
 	return file_holomush_adminportal_v1_adminportal_proto_rawDescData
 }
 
-var file_holomush_adminportal_v1_adminportal_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_holomush_adminportal_v1_adminportal_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_holomush_adminportal_v1_adminportal_proto_goTypes = []any{
 	(*AdminListSectionsRequest)(nil),  // 0: holomush.adminportal.v1.AdminListSectionsRequest
 	(*AdminListSectionsResponse)(nil), // 1: holomush.adminportal.v1.AdminListSectionsResponse
-	(*AdminSection)(nil),              // 2: holomush.adminportal.v1.AdminSection
+	(*AdminGetSectionRequest)(nil),    // 2: holomush.adminportal.v1.AdminGetSectionRequest
+	(*AdminGetSectionResponse)(nil),   // 3: holomush.adminportal.v1.AdminGetSectionResponse
+	(*AdminSection)(nil),              // 4: holomush.adminportal.v1.AdminSection
 }
 var file_holomush_adminportal_v1_adminportal_proto_depIdxs = []int32{
-	2, // 0: holomush.adminportal.v1.AdminListSectionsResponse.sections:type_name -> holomush.adminportal.v1.AdminSection
-	0, // 1: holomush.adminportal.v1.AdminPortalService.AdminListSections:input_type -> holomush.adminportal.v1.AdminListSectionsRequest
-	1, // 2: holomush.adminportal.v1.AdminPortalService.AdminListSections:output_type -> holomush.adminportal.v1.AdminListSectionsResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	4, // 0: holomush.adminportal.v1.AdminListSectionsResponse.sections:type_name -> holomush.adminportal.v1.AdminSection
+	4, // 1: holomush.adminportal.v1.AdminGetSectionResponse.section:type_name -> holomush.adminportal.v1.AdminSection
+	0, // 2: holomush.adminportal.v1.AdminPortalService.AdminListSections:input_type -> holomush.adminportal.v1.AdminListSectionsRequest
+	2, // 3: holomush.adminportal.v1.AdminPortalService.AdminGetSection:input_type -> holomush.adminportal.v1.AdminGetSectionRequest
+	1, // 4: holomush.adminportal.v1.AdminPortalService.AdminListSections:output_type -> holomush.adminportal.v1.AdminListSectionsResponse
+	3, // 5: holomush.adminportal.v1.AdminPortalService.AdminGetSection:output_type -> holomush.adminportal.v1.AdminGetSectionResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_holomush_adminportal_v1_adminportal_proto_init() }
@@ -255,7 +388,7 @@ func file_holomush_adminportal_v1_adminportal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_adminportal_v1_adminportal_proto_rawDesc), len(file_holomush_adminportal_v1_adminportal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

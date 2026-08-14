@@ -112,6 +112,8 @@ title: "gRPC API Reference"
     - [AdminService](#holomush-admin-v1-AdminService)
   
 - [holomush/adminportal/v1/adminportal.proto](#holomush_adminportal_v1_adminportal-proto)
+    - [AdminGetSectionRequest](#holomush-adminportal-v1-AdminGetSectionRequest)
+    - [AdminGetSectionResponse](#holomush-adminportal-v1-AdminGetSectionResponse)
     - [AdminListSectionsRequest](#holomush-adminportal-v1-AdminListSectionsRequest)
     - [AdminListSectionsResponse](#holomush-adminportal-v1-AdminListSectionsResponse)
     - [AdminSection](#holomush-adminportal-v1-AdminSection)
@@ -535,6 +537,8 @@ title: "gRPC API Reference"
     - [SendCommandResponse](#holomush-web-v1-SendCommandResponse)
     - [StreamEventsRequest](#holomush-web-v1-StreamEventsRequest)
     - [StreamEventsResponse](#holomush-web-v1-StreamEventsResponse)
+    - [WebAdminGetSectionRequest](#holomush-web-v1-WebAdminGetSectionRequest)
+    - [WebAdminGetSectionResponse](#holomush-web-v1-WebAdminGetSectionResponse)
     - [WebAdminListSectionsRequest](#holomush-web-v1-WebAdminListSectionsRequest)
     - [WebAdminListSectionsResponse](#holomush-web-v1-WebAdminListSectionsResponse)
     - [WebAuthenticatePlayerRequest](#holomush-web-v1-WebAuthenticatePlayerRequest)
@@ -2484,6 +2488,43 @@ allowing incremental feature deployment without breaking callers.
 
 
 
+<a name="holomush-adminportal-v1-AdminGetSectionRequest"></a>
+
+### AdminGetSectionRequest
+AdminGetSectionRequest names one section and the caller asking for it. It is
+the one admin-portal request whose section is attacker-controlled, which is
+why the interceptor rather than the handler evaluates it.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| section_id | [string](#string) |  | section_id is the registry id to fetch, matched by exact lowercase-ASCII byte equality with no case folding: NewAdminSectionInterceptor reads it through the GetSectionId() accessor and passes it to section.AssertSectionAccess verbatim, so a mis-cased id resolves to no entry and is refused indistinguishably from an id the caller may not reach.
+
+The min_len annotation documents the schema contract. It is NOT what enforces it at runtime — no protovalidate interceptor is installed on any server path — so the interceptor&#39;s own blank check refuses an empty or whitespace-only value with ADMIN_SECTION_NO_SECTION_ID before the handler runs. |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header. NewAdminSectionInterceptor resolves it to a player through auth.PlayerSessionRepository; there is deliberately no player-id field a caller could point at someone else. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminGetSectionResponse"></a>
+
+### AdminGetSectionResponse
+AdminGetSectionResponse carries the single registry row the gate already
+authorized. It is reached only on the permitted-and-available path: every
+other outcome is a status error with no body.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| section | [AdminSection](#holomush-adminportal-v1-AdminSection) |  | section is the entry section.AssertSectionAccess resolved, projected by AdminPortalServer.AdminGetSection from the context the interceptor stashed it on. Its status is always &#34;available&#34; here, because the gate refuses a planned section with FailedPrecondition before this message is built. |
+
+
+
+
+
+
 <a name="holomush-adminportal-v1-AdminListSectionsRequest"></a>
 
 ### AdminListSectionsRequest
@@ -2566,6 +2607,11 @@ registered on the core gRPC server in cmd/holomush/sub_grpc.go.
 | AdminListSections | [AdminListSectionsRequest](#holomush-adminportal-v1-AdminListSectionsRequest) | [AdminListSectionsResponse](#holomush-adminportal-v1-AdminListSectionsResponse) | AdminListSections enumerates the admin sections the calling player may reach, in the shipped registry&#39;s row order.
 
 AdminPortalServer.AdminListSections runs DOWNSTREAM of the interceptor&#39;s admission check: a caller holding no `admin_section:` access is already refused with PermissionDenied and never reaches the handler, so an empty list means &#34;admitted, but nothing permitted&#34; rather than &#34;not an admin&#34;. The per-entry filter is section.AssertSectionAdmission, not AssertSectionAccess, so sections that are registered but not yet implemented are still listed and carry their status as data. |
+| AdminGetSection | [AdminGetSectionRequest](#holomush-adminportal-v1-AdminGetSectionRequest) | [AdminGetSectionResponse](#holomush-adminportal-v1-AdminGetSectionResponse) | AdminGetSection returns ONE registry entry, named by the caller.
+
+It is the only method on this service whose section is supplied by the request rather than fixed by its descriptor, so NewAdminSectionInterceptor extracts section_id, runs section.AssertSectionAccess against it, and stashes the resolved entry on the context; AdminPortalServer.AdminGetSection then projects that entry and evaluates nothing.
+
+Because the gate runs first, a caller with no `admin_section:` access receives the same PermissionDenied for a registered id and an unregistered one — the registry is not enumerable through this parameter. A caller the gate PERMITTED who names a section that is registered but not yet implemented receives FailedPrecondition instead, carrying a static message and no body. |
 
  
 
@@ -9016,6 +9062,40 @@ an in-band game event or an out-of-band control message, never both.
 
 
 
+<a name="holomush-web-v1-WebAdminGetSectionRequest"></a>
+
+### WebAdminGetSectionRequest
+WebAdminGetSectionRequest names the section to fetch and NOTHING else. It
+carries no session token on purpose: Handler.WebAdminGetSection reads the
+bearer token from the X-Session-Token header, so a browser cannot assert an
+identity the gateway did not authenticate. A token field copied from the core
+request would be a second, client-supplied identity on the same call.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| section_id | [string](#string) |  | section_id is forwarded verbatim to AdminPortalService.AdminGetSection. The gateway neither trims nor case-folds it; the core interceptor matches it exactly and refuses a miss. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminGetSectionResponse"></a>
+
+### WebAdminGetSectionResponse
+WebAdminGetSectionResponse re-exports the portal&#39;s single row verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| section | [holomush.adminportal.v1.AdminSection](#holomush-adminportal-v1-AdminSection) |  | section is the entry AdminPortalService returned, forwarded unmodified. Reusing the portal&#39;s own message type is what keeps a second, drifting web-side section shape from existing. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebAdminListSectionsRequest"></a>
 
 ### WebAdminListSectionsRequest
@@ -10957,6 +11037,9 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebSetDefaultCharacter | [WebSetDefaultCharacterRequest](#holomush-web-v1-WebSetDefaultCharacterRequest) | [WebSetDefaultCharacterResponse](#holomush-web-v1-WebSetDefaultCharacterResponse) | WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter. Handler.WebSetDefaultCharacter lifts the session token from the header and forwards only the character id; whose default is repointed follows from the token, and ownership is proven in the facade rather than here. |
 | WebListCharacterDirectory | [WebListCharacterDirectoryRequest](#holomush-web-v1-WebListCharacterDirectoryRequest) | [WebListCharacterDirectoryResponse](#holomush-web-v1-WebListCharacterDirectoryResponse) | WebListCharacterDirectory proxies CharacterAccessService.ListCharacterDirectory. Handler.WebListCharacterDirectory lifts the session token from the X-Session-Token header and forwards nothing else; a request with no cookie is the ordinary logged-out case rather than an error. The gateway neither filters nor re-sorts the listing — reachability and order are the facade&#39;s. |
 | WebAdminListSections | [WebAdminListSectionsRequest](#holomush-web-v1-WebAdminListSectionsRequest) | [WebAdminListSectionsResponse](#holomush-web-v1-WebAdminListSectionsResponse) | WebAdminListSections proxies AdminPortalService.AdminListSections. Handler.WebAdminListSections lifts the session token from the X-Session-Token header and forwards nothing else. It makes NO authorization decision of its own: the core interceptor already denied a caller with no `admin_section:` access before the core handler ran, so a non-admin&#39;s PermissionDenied reaches the browser unmodified rather than being turned into an empty list here. |
+| WebAdminGetSection | [WebAdminGetSectionRequest](#holomush-web-v1-WebAdminGetSectionRequest) | [WebAdminGetSectionResponse](#holomush-web-v1-WebAdminGetSectionResponse) | WebAdminGetSection proxies AdminPortalService.AdminGetSection. Handler.WebAdminGetSection lifts the session token from the X-Session-Token header and forwards only section_id. It makes NO authorization decision: the core interceptor gates the supplied id before the core handler runs, so both the PermissionDenied a refused caller gets and the FailedPrecondition a permitted caller gets for a planned section reach the browser unmodified.
+
+It has NO browser caller in v0.13, and that is deliberate rather than dead code: D-100 makes both registry RPCs published wire contract and census members, and the wire-level gate tests in test/integration/access are what exercise this path. |
 
  
 

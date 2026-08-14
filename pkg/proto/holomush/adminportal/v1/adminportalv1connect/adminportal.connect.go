@@ -39,6 +39,9 @@ const (
 	// AdminPortalServiceAdminListSectionsProcedure is the fully-qualified name of the
 	// AdminPortalService's AdminListSections RPC.
 	AdminPortalServiceAdminListSectionsProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminListSections"
+	// AdminPortalServiceAdminGetSectionProcedure is the fully-qualified name of the
+	// AdminPortalService's AdminGetSection RPC.
+	AdminPortalServiceAdminGetSectionProcedure = "/holomush.adminportal.v1.AdminPortalService/AdminGetSection"
 )
 
 // AdminPortalServiceClient is a client for the holomush.adminportal.v1.AdminPortalService service.
@@ -54,6 +57,21 @@ type AdminPortalServiceClient interface {
 	// AssertSectionAccess, so sections that are registered but not yet
 	// implemented are still listed and carry their status as data.
 	AdminListSections(context.Context, *connect.Request[v1.AdminListSectionsRequest]) (*connect.Response[v1.AdminListSectionsResponse], error)
+	// AdminGetSection returns ONE registry entry, named by the caller.
+	//
+	// It is the only method on this service whose section is supplied by the
+	// request rather than fixed by its descriptor, so NewAdminSectionInterceptor
+	// extracts section_id, runs section.AssertSectionAccess against it, and
+	// stashes the resolved entry on the context; AdminPortalServer.AdminGetSection
+	// then projects that entry and evaluates nothing.
+	//
+	// Because the gate runs first, a caller with no `admin_section:` access
+	// receives the same PermissionDenied for a registered id and an unregistered
+	// one — the registry is not enumerable through this parameter. A caller the
+	// gate PERMITTED who names a section that is registered but not yet
+	// implemented receives FailedPrecondition instead, carrying a static message
+	// and no body.
+	AdminGetSection(context.Context, *connect.Request[v1.AdminGetSectionRequest]) (*connect.Response[v1.AdminGetSectionResponse], error)
 }
 
 // NewAdminPortalServiceClient constructs a client for the
@@ -73,17 +91,29 @@ func NewAdminPortalServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(adminPortalServiceMethods.ByName("AdminListSections")),
 			connect.WithClientOptions(opts...),
 		),
+		adminGetSection: connect.NewClient[v1.AdminGetSectionRequest, v1.AdminGetSectionResponse](
+			httpClient,
+			baseURL+AdminPortalServiceAdminGetSectionProcedure,
+			connect.WithSchema(adminPortalServiceMethods.ByName("AdminGetSection")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // adminPortalServiceClient implements AdminPortalServiceClient.
 type adminPortalServiceClient struct {
 	adminListSections *connect.Client[v1.AdminListSectionsRequest, v1.AdminListSectionsResponse]
+	adminGetSection   *connect.Client[v1.AdminGetSectionRequest, v1.AdminGetSectionResponse]
 }
 
 // AdminListSections calls holomush.adminportal.v1.AdminPortalService.AdminListSections.
 func (c *adminPortalServiceClient) AdminListSections(ctx context.Context, req *connect.Request[v1.AdminListSectionsRequest]) (*connect.Response[v1.AdminListSectionsResponse], error) {
 	return c.adminListSections.CallUnary(ctx, req)
+}
+
+// AdminGetSection calls holomush.adminportal.v1.AdminPortalService.AdminGetSection.
+func (c *adminPortalServiceClient) AdminGetSection(ctx context.Context, req *connect.Request[v1.AdminGetSectionRequest]) (*connect.Response[v1.AdminGetSectionResponse], error) {
+	return c.adminGetSection.CallUnary(ctx, req)
 }
 
 // AdminPortalServiceHandler is an implementation of the holomush.adminportal.v1.AdminPortalService
@@ -100,6 +130,21 @@ type AdminPortalServiceHandler interface {
 	// AssertSectionAccess, so sections that are registered but not yet
 	// implemented are still listed and carry their status as data.
 	AdminListSections(context.Context, *connect.Request[v1.AdminListSectionsRequest]) (*connect.Response[v1.AdminListSectionsResponse], error)
+	// AdminGetSection returns ONE registry entry, named by the caller.
+	//
+	// It is the only method on this service whose section is supplied by the
+	// request rather than fixed by its descriptor, so NewAdminSectionInterceptor
+	// extracts section_id, runs section.AssertSectionAccess against it, and
+	// stashes the resolved entry on the context; AdminPortalServer.AdminGetSection
+	// then projects that entry and evaluates nothing.
+	//
+	// Because the gate runs first, a caller with no `admin_section:` access
+	// receives the same PermissionDenied for a registered id and an unregistered
+	// one — the registry is not enumerable through this parameter. A caller the
+	// gate PERMITTED who names a section that is registered but not yet
+	// implemented receives FailedPrecondition instead, carrying a static message
+	// and no body.
+	AdminGetSection(context.Context, *connect.Request[v1.AdminGetSectionRequest]) (*connect.Response[v1.AdminGetSectionResponse], error)
 }
 
 // NewAdminPortalServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -115,10 +160,18 @@ func NewAdminPortalServiceHandler(svc AdminPortalServiceHandler, opts ...connect
 		connect.WithSchema(adminPortalServiceMethods.ByName("AdminListSections")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminPortalServiceAdminGetSectionHandler := connect.NewUnaryHandler(
+		AdminPortalServiceAdminGetSectionProcedure,
+		svc.AdminGetSection,
+		connect.WithSchema(adminPortalServiceMethods.ByName("AdminGetSection")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.adminportal.v1.AdminPortalService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminPortalServiceAdminListSectionsProcedure:
 			adminPortalServiceAdminListSectionsHandler.ServeHTTP(w, r)
+		case AdminPortalServiceAdminGetSectionProcedure:
+			adminPortalServiceAdminGetSectionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -130,4 +183,8 @@ type UnimplementedAdminPortalServiceHandler struct{}
 
 func (UnimplementedAdminPortalServiceHandler) AdminListSections(context.Context, *connect.Request[v1.AdminListSectionsRequest]) (*connect.Response[v1.AdminListSectionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminListSections is not implemented"))
+}
+
+func (UnimplementedAdminPortalServiceHandler) AdminGetSection(context.Context, *connect.Request[v1.AdminGetSectionRequest]) (*connect.Response[v1.AdminGetSectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.adminportal.v1.AdminPortalService.AdminGetSection is not implemented"))
 }

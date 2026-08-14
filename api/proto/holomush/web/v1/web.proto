@@ -402,6 +402,19 @@ service WebService {
   // non-admin's PermissionDenied reaches the browser unmodified rather than
   // being turned into an empty list here.
   rpc WebAdminListSections(WebAdminListSectionsRequest) returns (WebAdminListSectionsResponse);
+  // WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+  // Handler.WebAdminGetSection lifts the session token from the
+  // X-Session-Token header and forwards only section_id. It makes NO
+  // authorization decision: the core interceptor gates the supplied id before
+  // the core handler runs, so both the PermissionDenied a refused caller gets
+  // and the FailedPrecondition a permitted caller gets for a planned section
+  // reach the browser unmodified.
+  //
+  // It has NO browser caller in v0.13, and that is deliberate rather than dead
+  // code: D-100 makes both registry RPCs published wire contract and census
+  // members, and the wire-level gate tests in test/integration/access are what
+  // exercise this path.
+  rpc WebAdminGetSection(WebAdminGetSectionRequest) returns (WebAdminGetSectionResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -1722,4 +1735,24 @@ message WebAdminListSectionsResponse {
   // portal's own message type is what keeps a second, drifting web-side
   // section shape from existing.
   repeated holomush.adminportal.v1.AdminSection sections = 1;
+}
+
+// WebAdminGetSectionRequest names the section to fetch and NOTHING else. It
+// carries no session token on purpose: Handler.WebAdminGetSection reads the
+// bearer token from the X-Session-Token header, so a browser cannot assert an
+// identity the gateway did not authenticate. A token field copied from the core
+// request would be a second, client-supplied identity on the same call.
+message WebAdminGetSectionRequest {
+  // section_id is forwarded verbatim to AdminPortalService.AdminGetSection. The
+  // gateway neither trims nor case-folds it; the core interceptor matches it
+  // exactly and refuses a miss.
+  string section_id = 1;
+}
+
+// WebAdminGetSectionResponse re-exports the portal's single row verbatim.
+message WebAdminGetSectionResponse {
+  // section is the entry AdminPortalService returned, forwarded unmodified.
+  // Reusing the portal's own message type is what keeps a second, drifting
+  // web-side section shape from existing.
+  holomush.adminportal.v1.AdminSection section = 1;
 }

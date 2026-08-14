@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/adminportal/v1/adminportal.proto.
  */
 export const file_holomush_adminportal_v1_adminportal: GenFile = /*@__PURE__*/
-  fileDesc("Cilob2xvbXVzaC9hZG1pbnBvcnRhbC92MS9hZG1pbnBvcnRhbC5wcm90bxIXaG9sb211c2guYWRtaW5wb3J0YWwudjEiQQoYQWRtaW5MaXN0U2VjdGlvbnNSZXF1ZXN0EiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJQge6SARyAhABIlQKGUFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2USNwoIc2VjdGlvbnMYASADKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iQAoMQWRtaW5TZWN0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIOCgZzdGF0dXMYAyABKAkykAEKEkFkbWluUG9ydGFsU2VydmljZRJ6ChFBZG1pbkxpc3RTZWN0aW9ucxIxLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdFNlY3Rpb25zUmVxdWVzdBoyLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2VCTlpMZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvYWRtaW5wb3J0YWwvdjE7YWRtaW5wb3J0YWx2MWIGcHJvdG8z", [file_buf_validate_validate]);
+  fileDesc("Cilob2xvbXVzaC9hZG1pbnBvcnRhbC92MS9hZG1pbnBvcnRhbC5wcm90bxIXaG9sb211c2guYWRtaW5wb3J0YWwudjEiQQoYQWRtaW5MaXN0U2VjdGlvbnNSZXF1ZXN0EiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJQge6SARyAhABIlQKGUFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2USNwoIc2VjdGlvbnMYASADKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iXAoWQWRtaW5HZXRTZWN0aW9uUmVxdWVzdBIbCgpzZWN0aW9uX2lkGAEgASgJQge6SARyAhABEiUKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJQge6SARyAhABIlEKF0FkbWluR2V0U2VjdGlvblJlc3BvbnNlEjYKB3NlY3Rpb24YASABKAsyJS5ob2xvbXVzaC5hZG1pbnBvcnRhbC52MS5BZG1pblNlY3Rpb24iQAoMQWRtaW5TZWN0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIOCgZzdGF0dXMYAyABKAkyhgIKEkFkbWluUG9ydGFsU2VydmljZRJ6ChFBZG1pbkxpc3RTZWN0aW9ucxIxLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdFNlY3Rpb25zUmVxdWVzdBoyLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluTGlzdFNlY3Rpb25zUmVzcG9uc2USdAoPQWRtaW5HZXRTZWN0aW9uEi8uaG9sb211c2guYWRtaW5wb3J0YWwudjEuQWRtaW5HZXRTZWN0aW9uUmVxdWVzdBowLmhvbG9tdXNoLmFkbWlucG9ydGFsLnYxLkFkbWluR2V0U2VjdGlvblJlc3BvbnNlQk5aTGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2FkbWlucG9ydGFsL3YxO2FkbWlucG9ydGFsdjFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * AdminListSectionsRequest carries only the caller's bearer token, because
@@ -69,6 +69,75 @@ export const AdminListSectionsResponseSchema: GenMessage<AdminListSectionsRespon
   messageDesc(file_holomush_adminportal_v1_adminportal, 1);
 
 /**
+ * AdminGetSectionRequest names one section and the caller asking for it. It is
+ * the one admin-portal request whose section is attacker-controlled, which is
+ * why the interceptor rather than the handler evaluates it.
+ *
+ * @generated from message holomush.adminportal.v1.AdminGetSectionRequest
+ */
+export type AdminGetSectionRequest = Message<"holomush.adminportal.v1.AdminGetSectionRequest"> & {
+  /**
+   * section_id is the registry id to fetch, matched by exact lowercase-ASCII
+   * byte equality with no case folding: NewAdminSectionInterceptor reads it
+   * through the GetSectionId() accessor and passes it to
+   * section.AssertSectionAccess verbatim, so a mis-cased id resolves to no entry
+   * and is refused indistinguishably from an id the caller may not reach.
+   *
+   * The min_len annotation documents the schema contract. It is NOT what
+   * enforces it at runtime — no protovalidate interceptor is installed on any
+   * server path — so the interceptor's own blank check refuses an empty or
+   * whitespace-only value with ADMIN_SECTION_NO_SECTION_ID before the handler
+   * runs.
+   *
+   * @generated from field: string section_id = 1;
+   */
+  sectionId: string;
+
+  /**
+   * player_session_token is the raw bearer token the gateway lifted from the
+   * X-Session-Token header. NewAdminSectionInterceptor resolves it to a player
+   * through auth.PlayerSessionRepository; there is deliberately no player-id
+   * field a caller could point at someone else.
+   *
+   * @generated from field: string player_session_token = 2;
+   */
+  playerSessionToken: string;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminGetSectionRequest.
+ * Use `create(AdminGetSectionRequestSchema)` to create a new message.
+ */
+export const AdminGetSectionRequestSchema: GenMessage<AdminGetSectionRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 2);
+
+/**
+ * AdminGetSectionResponse carries the single registry row the gate already
+ * authorized. It is reached only on the permitted-and-available path: every
+ * other outcome is a status error with no body.
+ *
+ * @generated from message holomush.adminportal.v1.AdminGetSectionResponse
+ */
+export type AdminGetSectionResponse = Message<"holomush.adminportal.v1.AdminGetSectionResponse"> & {
+  /**
+   * section is the entry section.AssertSectionAccess resolved, projected by
+   * AdminPortalServer.AdminGetSection from the context the interceptor stashed
+   * it on. Its status is always "available" here, because the gate refuses a
+   * planned section with FailedPrecondition before this message is built.
+   *
+   * @generated from field: holomush.adminportal.v1.AdminSection section = 1;
+   */
+  section?: AdminSection | undefined;
+};
+
+/**
+ * Describes the message holomush.adminportal.v1.AdminGetSectionResponse.
+ * Use `create(AdminGetSectionResponseSchema)` to create a new message.
+ */
+export const AdminGetSectionResponseSchema: GenMessage<AdminGetSectionResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_adminportal_v1_adminportal, 3);
+
+/**
  * AdminSection is one row of the admin section registry
  * (internal/admin/section/registry.go) as the portal renders it.
  *
@@ -108,7 +177,7 @@ export type AdminSection = Message<"holomush.adminportal.v1.AdminSection"> & {
  * Use `create(AdminSectionSchema)` to create a new message.
  */
 export const AdminSectionSchema: GenMessage<AdminSection> = /*@__PURE__*/
-  messageDesc(file_holomush_adminportal_v1_adminportal, 2);
+  messageDesc(file_holomush_adminportal_v1_adminportal, 4);
 
 /**
  * AdminPortalService is the PLAYER-SESSION admin portal surface: the RPCs the
@@ -149,6 +218,29 @@ export const AdminPortalService: GenService<{
     methodKind: "unary";
     input: typeof AdminListSectionsRequestSchema;
     output: typeof AdminListSectionsResponseSchema;
+  },
+  /**
+   * AdminGetSection returns ONE registry entry, named by the caller.
+   *
+   * It is the only method on this service whose section is supplied by the
+   * request rather than fixed by its descriptor, so NewAdminSectionInterceptor
+   * extracts section_id, runs section.AssertSectionAccess against it, and
+   * stashes the resolved entry on the context; AdminPortalServer.AdminGetSection
+   * then projects that entry and evaluates nothing.
+   *
+   * Because the gate runs first, a caller with no `admin_section:` access
+   * receives the same PermissionDenied for a registered id and an unregistered
+   * one — the registry is not enumerable through this parameter. A caller the
+   * gate PERMITTED who names a section that is registered but not yet
+   * implemented receives FailedPrecondition instead, carrying a static message
+   * and no body.
+   *
+   * @generated from rpc holomush.adminportal.v1.AdminPortalService.AdminGetSection
+   */
+  adminGetSection: {
+    methodKind: "unary";
+    input: typeof AdminGetSectionRequestSchema;
+    output: typeof AdminGetSectionResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_adminportal_v1_adminportal, 0);
