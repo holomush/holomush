@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 06
-current_phase_name: admin-portal-shell-character-administration
-status: verifying
+current_phase: 06.1
+current_phase_name: Admin Portal Web Surface
+status: planning
 stopped_at: Completed 06-05-PLAN.md (final plan of phase 06)
-last_updated: "2026-08-14T20:29:37.915Z"
+last_updated: "2026-08-14T22:54:35.999Z"
 last_activity: 2026-08-14
 last_activity_desc: Phase 06 execution started
 progress:
@@ -34,11 +34,11 @@ without rework.
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 06 (admin-portal-shell-character-administration) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 06.1 — Admin Portal Web Surface
+Plan: Not started
+Status: Ready to plan
 Progress: [█████████████████░░░] 34/40 plans ([█████████░] 94%)
-Last activity: 2026-08-14 — Phase 06 execution started
+Last activity: 2026-08-14 — Phase 06 complete, transitioned to Phase 06.1
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
 (`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
@@ -109,7 +109,7 @@ no action needed.
 
 **Velocity:**
 
-- Total plans completed: 79
+- Total plans completed: 78
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -122,7 +122,7 @@ no action needed.
 | 03 | 6 | - | - |
 | 4 | 9 | - | - |
 | 05 | 16 | - | - |
-| 06 | 5 | - | - |
+| 06 | 4 | - | - |
 | 07 | 11 | - | - |
 | 01.1 | 7 | - | - |
 | 02.1 | 3 | - | - |

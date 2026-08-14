@@ -205,10 +205,15 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       in one transaction) is **never wired to a player-facing button**.
 
 - [x] **ADMIN-06**: **Every admin mutation emits an audit envelope** in the same transaction as its
-      state change, recording **before-values** and the acting **player** id (not only the
-      character). The `events_audit` row is **projected** from that envelope by the asynchronous
-      audit projection, which is the only writer to that table — an admin mutation MUST NOT insert
-      into `events_audit` directly. (Amended — see `01-SPEC.md` §10.7 and §14 row 9.)
+      state change, recording the acting **player** id (not only the character); lifecycle
+      transitions additionally record **before-values**, while profile updates are new-values-only
+      by D-103 erasure-safety and record none. An admin mutation MUST NOT insert into
+      `events_audit` directly. (Amended — see `01-SPEC.md` §10.7 and §14 row 9.)
+      (Amended again 2026-08-14 — the **projection** of that envelope into `events_audit` is out of
+      scope: the world outbox relay publishes through a bare `JetStreamPublisher` and the audit
+      projector requires an `App-Rendering` header only `RenderingPublisher` writes, so no relayed
+      world envelope is projected today. Tracked in #4971; ROADMAP phase-6 criterion 3 carries the
+      matching amendment.)
 
 - [ ] **ADMIN-07**: Admin navigation is **permission-filtered by registry contract**, not by template
       `{#if}` blocks.

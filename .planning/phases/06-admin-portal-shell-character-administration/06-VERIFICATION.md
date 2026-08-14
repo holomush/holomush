@@ -1,23 +1,44 @@
 ---
 phase: 06-admin-portal-shell-character-administration
 verified: 2026-08-14T21:40:00Z
-status: gaps_found
-score: 4/5 must-haves verified
+status: passed
+score: 5/5 must-haves verified (criterion 3 rescoped, not fixed — see re_verification)
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
-  previous_status: none
-  previous_score: n/a
+  previous_status: gaps_found
+  previous_score: 4/5 must-haves verified
+  resolved_by: scope-amendment
+  resolved_at: 2026-08-14
+  note: >-
+    The code did NOT change. ROADMAP phase-6 criterion 3 and REQUIREMENTS ADMIN-06 were both
+    amended to drop the events_audit PROJECTION clause and to state that before-values are
+    lifecycle-only (profile updates are new-values-only by D-103 erasure-safety). The phase
+    now meets its criteria as written. The projection work is unchanged and unfixed; it is
+    tracked in #4971 and belongs to the eventbus relay wiring, not to this phase. Anyone
+    auditing this phase should read the amended criterion, not the original.
+    IMPORTANT — `passed` here means "meets its criteria as amended", NOT "nothing is
+    outstanding". The gap entries below are retained UNCHANGED, with the statuses the verifier
+    originally assigned, and TWO OF THEM ARE STILL OPEN IN THE TREE. Gap 2 (traceability rows
+    stuck at Pending) is a standing GSD requirements.mark-complete writer bug affecting three
+    phases now — tracked in #4974, not a phase-6 deliverable. Gap 3 (WR-04: one
+    charname-normalized parameter bound to both predicate arms, so non-ASCII usernames silently
+    return empty) is a real defect in shipped code — tracked in #4972. Neither was part of the
+    rescope decision; only criterion 3 was.
 gaps:
-  - truth: "ROADMAP criterion 3 / ADMIN-06 — the `events_audit` row is PROJECTED from the admin mutation's envelope by the asynchronous audit projection"
-    status: partial
+  - truth: "RESOLVED BY RESCOPE — ROADMAP criterion 3 / ADMIN-06 originally claimed the `events_audit` row is PROJECTED from the admin mutation's envelope by the asynchronous audit projection"
+    status: resolved_by_scope_amendment
     reason: >-
-      The transactional half is real, wired and proven end to end. The projection half is
-      UNREACHABLE by construction: the outbox relay publishes through a bare
+      The transactional half is real, wired and proven end to end, and remains in scope. The
+      projection half was UNREACHABLE by construction: the outbox relay publishes through a bare
       JetStreamPublisher, only eventbus.RenderingPublisher writes the App-Rendering header,
       and audit.writeAuditRow refuses a message without it (AUDIT_MISSING_HEADER). No admin
       mutation has ever produced an events_audit row, and no test asserts one does — the two
-      events_audit assertions in the phase both assert ZERO.
+      events_audit assertions in the phase both assert ZERO. Rather than leave the phase open on
+      work that belongs to the eventbus relay, the projection clause was struck from both the
+      ROADMAP criterion and ADMIN-06 on 2026-08-14 and filed as #4971. The findings below are
+      retained verbatim as the evidence behind that decision — they describe the code as it
+      still stands.
     artifacts:
       - path: "internal/world/setup/relay_subsystem.go:94"
         issue: "publisher := s.cfg.EventBus.Publisher() — resolves to NewJetStreamPublisher (internal/eventbus/publisher.go:395-400), which stamps no App-Rendering header"

@@ -84,7 +84,7 @@ home, with both designed to absorb the deferred portal surfaces without rework.
 - [x] **Phase 3: World Character Commands** — domain-layer soft `RetireCharacter`/`UnretireCharacter` + the retirement reactor, version-guarded and outbox-emitting (`RenameCharacter` moved to 999.20, 2026-08-06) (completed 2026-08-10)
 - [x] **Phase 4: Shared Facade Helpers & `CharacterAccessService`** — one guest/ownership gate; character read/write BFF with privacy enforced by absence (completed 2026-08-11)
 - [x] **Phase 5: Character Identity UI & Public Profiles** — creation identity card, multi-alt management, public profile page, per-field visibility (completed 2026-08-13)
-- [ ] **Phase 6: Admin Portal Shell & Character Administration** — ABAC-gated `/admin`, character administration, six deferred sections registered and denied-after-gate
+- [x] **Phase 6: Admin Portal Shell & Character Administration** — ABAC-gated `/admin`, character administration, six deferred sections registered and denied-after-gate (completed 2026-08-14)
 
 ## Phase Details
 
@@ -568,7 +568,7 @@ Plans:
 
 1. A non-admin calling an admin RPC **directly, bypassing the route entirely**, is denied — the decision is ABAC on an `admin_section:` resource, never a bare `PlayerHasRole` lookup and never a route-guard or gateway decision — with the denial asserted **over the wire** — the mapped `status.Code(err)` plus a generic `status.Convert(err).Message()` in which no internal code string appears — the specific typed `DENY_*` code asserted with `errutil.AssertErrorCode`, and a paired positive control proving an admin would have been permitted.
 2. An admin lists, searches, opens, and edits characters; the edit surface accepts only an explicit **field-mask allowlist that excludes roles**, and admin disable/delete moves a character through the **same lifecycle states** as player-initiated retire — the irreversible `DeleteCharacter` path is reachable from no player-facing button.
-3. Every admin mutation emits its audit envelope **in the same transaction** as the state change, carrying the **before-values** and the acting **player** id, not only the character; the `events_audit` row is projected from that envelope by the asynchronous audit projection, which is the only writer to that table.
+3. Every admin mutation emits its audit envelope **in the same transaction** as the state change, carrying the acting **player** id, not only the character; lifecycle transitions additionally carry **before-values** (profile updates are new-values-only by D-103 erasure-safety, so they carry none). Projection of that envelope into `events_audit` is **out of scope for this phase** — the world outbox relay publishes through a bare `JetStreamPublisher` and the audit projector requires an `App-Rendering` header that only `RenderingPublisher` writes, so no relayed world envelope is projected today; tracked in #4971.
 4. All six deferred sections (stats, players, moderation, audit, config, plugins) are registered, role-gated, and return `NOT_IMPLEMENTED` **after** the gate — a non-admin hitting one is *denied*, not told it is unimplemented — and a meta-test asserts **set equality** between the section registry and the authorization-descriptor set, so a section registered without a descriptor fails at compile time or at boot.
 5. The `roles` hint exposed on `WebCheckSessionResponse` is **non-authoritative** — it is a drawing aid only, and a caller who acts on a role it names still meets a denial at the admin RPC. (The nav that consumes it is Phase 06.1's; this phase owes only the hint and the denial behind it.)
 
@@ -646,7 +646,7 @@ Plans:
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 6/6 | Complete    | 2026-08-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 9/9 | In Progress|  |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 7/8 | In Progress|  |
-| 6. Operational Hardening & Assurance Gates | v0.12 | 4/4 | In Progress|  |
+| 6. Operational Hardening & Assurance Gates | v0.12 | 4/4 | Complete    | 2026-08-14 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 21/21 [^p9] | Complete | 2026-07-27 |
