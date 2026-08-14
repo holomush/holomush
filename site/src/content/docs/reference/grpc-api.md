@@ -807,6 +807,13 @@ safety contract documented in internal/auth (session ownership).
 | is_guest | [bool](#bool) |  | is_guest is true when the session belongs to an ephemeral guest player. |
 | characters | [CharacterSummary](#holomush-core-v1-CharacterSummary) | repeated | characters is the player&#39;s roster (enriched with session status). |
 | default_character_id | [string](#string) |  | default_character_id is players.default_character_id, forwarded by CoreServer.CheckPlayerSession from the player row it already loaded. It is EMPTY when the player has set no default, which is the state a fresh account is in — an empty value is &#34;no preference&#34;, never &#34;the first character&#34;. It matches the field of the same name on AuthenticatePlayerResponse; a session-restoring client needs it for the same reason a logging-in one does, and reading it here costs no extra round trip. |
+| roles | [string](#string) | repeated | roles are the role names this PLAYER holds, as store.PostgresRoleStore.PlayerRoles returns them: the deduplicated, sorted union across all of the player&#39;s characters. CoreServer.CheckPlayerSession reads them through the optional WithPlayerRoleLookup seam.
+
+It is a NAV HINT and never an authorization boundary. Every admin RPC evaluates ABAC on an `admin_section:` resource and denies independently of what this field said, so a client that lies about it on the way back gains nothing.
+
+It is player-scoped and SINGULAR — never a per-character map — so it cannot leak which characters belong to one player (§10.5.1.1).
+
+A CoreServer with no lookup wired, and a lookup that fails, both yield an EMPTY list and never an error: this field decides what is DRAWN and must not be able to break session restore. Empty is fail-closed, because an empty list draws no admin entrance. On the wire absence and empty are the same answer — a zero-element repeated scalar is omitted from the serialized bytes — and no client may distinguish them. |
 
 
 
@@ -9241,6 +9248,13 @@ CodeUnauthenticated error instead of this message.
 | is_guest | [bool](#bool) |  | is_guest is true when the session belongs to an ephemeral guest player. |
 | characters | [CharacterSummary](#holomush-web-v1-CharacterSummary) | repeated | characters is the player&#39;s character roster, returned so the client can restore character-selection state on reload. |
 | default_character_id | [string](#string) |  | default_character_id is the core response&#39;s field of the same name, forwarded verbatim by Handler.WebCheckSession. The web client&#39;s authed layout reads it to mark which roster card is the default without a second round trip; OwnCharacter carries no is-default flag, so this is the only server-side source for that marker. Empty means the player has set no default. |
+| roles | [string](#string) | repeated | roles are the core response&#39;s roles, forwarded verbatim by Handler.WebCheckSession. The gateway neither looks them up nor derives them: it reads the field and copies it.
+
+It exists so the section rail can decide whether to draw the `/admin` entrance without a WebAdminListSections round trip on every authed layout load. It is player-scoped and SINGULAR, never a per-character map.
+
+It is NEVER the authorization boundary. Every admin RPC still evaluates ABAC on an `admin_section:` resource and denies independently of what this field said, so a browser holding &#34;admin&#34; here can still be refused — and a browser that forges it gains nothing, because identity is resolved server-side from the hashed session token and no admin request message carries a roles field. Drawing a link the viewer may not use is a cosmetic error; treating this field as permission is a security one.
+
+A player holding no roles receives a zero-length list. On the wire absence and empty are the SAME answer — a zero-element repeated scalar is omitted from the serialized bytes — and no client may distinguish them. (D-102 / ADMIN-08 / §10.5.1.1.) |
 
 
 

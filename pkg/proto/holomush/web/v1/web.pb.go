@@ -2311,8 +2311,29 @@ type WebCheckSessionResponse struct {
 	// server-side source for that marker. Empty means the player has set no
 	// default.
 	DefaultCharacterId string `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// roles are the core response's roles, forwarded verbatim by
+	// Handler.WebCheckSession. The gateway neither looks them up nor derives
+	// them: it reads the field and copies it.
+	//
+	// It exists so the section rail can decide whether to draw the `/admin`
+	// entrance without a WebAdminListSections round trip on every authed layout
+	// load. It is player-scoped and SINGULAR, never a per-character map.
+	//
+	// It is NEVER the authorization boundary. Every admin RPC still evaluates
+	// ABAC on an `admin_section:` resource and denies independently of what this
+	// field said, so a browser holding "admin" here can still be refused — and a
+	// browser that forges it gains nothing, because identity is resolved
+	// server-side from the hashed session token and no admin request message
+	// carries a roles field. Drawing a link the viewer may not use is a cosmetic
+	// error; treating this field as permission is a security one.
+	//
+	// A player holding no roles receives a zero-length list. On the wire absence
+	// and empty are the SAME answer — a zero-element repeated scalar is omitted
+	// from the serialized bytes — and no client may distinguish them.
+	// (D-102 / ADMIN-08 / §10.5.1.1.)
+	Roles         []string `protobuf:"bytes,6,rep,name=roles,proto3" json:"roles,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WebCheckSessionResponse) Reset() {
@@ -2378,6 +2399,13 @@ func (x *WebCheckSessionResponse) GetDefaultCharacterId() string {
 		return x.DefaultCharacterId
 	}
 	return ""
+}
+
+func (x *WebCheckSessionResponse) GetRoles() []string {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
 }
 
 // WebGetContentRequest selects one content-store item by exact key. Served by
@@ -7676,7 +7704,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x1fWebConfirmPasswordResetResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x18\n" +
-	"\x16WebCheckSessionRequest\"\xe7\x01\n" +
+	"\x16WebCheckSessionRequest\"\xfd\x01\n" +
 	"\x17WebCheckSessionResponse\x12\x1f\n" +
 	"\vplayer_name\x18\x01 \x01(\tR\n" +
 	"playerName\x12\x1b\n" +
@@ -7685,7 +7713,8 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\n" +
 	"characters\x18\x04 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
 	"characters\x120\n" +
-	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\"(\n" +
+	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\x12\x14\n" +
+	"\x05roles\x18\x06 \x03(\tR\x05roles\"(\n" +
 	"\x14WebGetContentRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"L\n" +
 	"\x15WebGetContentResponse\x123\n" +

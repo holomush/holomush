@@ -988,6 +988,27 @@ message CheckPlayerSessionResponse {
   // same reason a logging-in one does, and reading it here costs no extra
   // round trip.
   string default_character_id = 5;
+
+  // roles are the role names this PLAYER holds, as
+  // store.PostgresRoleStore.PlayerRoles returns them: the deduplicated, sorted
+  // union across all of the player's characters. CoreServer.CheckPlayerSession
+  // reads them through the optional WithPlayerRoleLookup seam.
+  //
+  // It is a NAV HINT and never an authorization boundary. Every admin RPC
+  // evaluates ABAC on an `admin_section:` resource and denies independently of
+  // what this field said, so a client that lies about it on the way back gains
+  // nothing.
+  //
+  // It is player-scoped and SINGULAR — never a per-character map — so it cannot
+  // leak which characters belong to one player (§10.5.1.1).
+  //
+  // A CoreServer with no lookup wired, and a lookup that fails, both yield an
+  // EMPTY list and never an error: this field decides what is DRAWN and must not
+  // be able to break session restore. Empty is fail-closed, because an empty
+  // list draws no admin entrance. On the wire absence and empty are the same
+  // answer — a zero-element repeated scalar is omitted from the serialized
+  // bytes — and no client may distinguish them.
+  repeated string roles = 6;
 }
 
 // ListPlayerSessionsRequest asks for the caller's own active PlayerSessions.
