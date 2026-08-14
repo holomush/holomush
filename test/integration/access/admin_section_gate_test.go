@@ -13,9 +13,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/admin/section"
 	"github.com/holomush/holomush/internal/testsupport/integrationtest"
 	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // TestANonAdminCallingTheAdminPortalDirectlyOverGRPCIsDeniedAtTheWire is
@@ -230,4 +232,59 @@ func TestADeniedCallerGetsByteIdenticalRefusalsForRegisteredAndUnregisteredIDsAt
 		status.Convert(registeredErr).Message(),
 		status.Convert(unregisteredErr).Message(),
 		"the registry MUST NOT be enumerable through this parameter")
+}
+
+// TestARolesHintSayingAdminDoesNotSurviveAnABACDenial is ADMIN-08's boundary
+// assertion: the `roles` field changes only what is DRAWN.
+//
+// The two halves are made to DISAGREE on purpose. The role lookup is real — the
+// harness wires store.PostgresRoleStore.PlayerRoles into the CoreServer exactly
+// as cmd/holomush does — so a player granted the admin role reports
+// roles == ["admin"]. The ABAC engine is DenyAllEngine, so the same player is
+// refused by AdminGetSection. A handler that ever short-circuited on `roles`
+// would turn this green.
+//
+// # Its first assertion is a setup precondition, and that is load-bearing
+//
+// require.Contains on the roles list must run BEFORE the denial, because the
+// denial path never consults `roles` at all — that is the whole point. Without
+// the precondition this test would never touch the field, and removing the
+// harness's WithPlayerRoleLookup wiring would leave it green: it would be a
+// demonstration of nothing. The precondition is what makes that wiring
+// load-bearing.
+//
+// It reads the field off CoreServer.CheckPlayerSession rather than
+// WebCheckSession because Handler.WebCheckSession forwards it verbatim — the
+// core response is the only source, so asserting here asserts the same value the
+// browser would receive.
+func TestARolesHintSayingAdminDoesNotSurviveAnABACDenial(t *testing.T) {
+	ctx := context.Background()
+
+	srv := integrationtest.Start(
+		t,
+		integrationtest.WithPolicyEngine(policytest.DenyAllEngine()),
+		integrationtest.WithGatedGRPCListener(),
+	)
+	defer srv.Stop()
+
+	claimsAdmin := srv.ConnectAuthedWithRoles(ctx, "Rolesbound", []string{"admin"})
+
+	// PRECONDITION — read the field, before anything else.
+	checked, checkErr := srv.CoreServer().CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: claimsAdmin.PlayerSessionToken(),
+	})
+	require.NoError(t, checkErr)
+	require.Contains(t, checked.GetRoles(), "admin",
+		"precondition: the nav hint MUST report admin, or the denial below proves nothing about it")
+
+	// The same caller, the same role, denied anyway.
+	client := adminportalv1.NewAdminPortalServiceClient(srv.GatedGRPCConn())
+	_, err := client.AdminGetSection(ctx, &adminportalv1.AdminGetSectionRequest{
+		SectionId:          "characters",
+		PlayerSessionToken: claimsAdmin.PlayerSessionToken(),
+	})
+
+	require.Error(t, err, "roles is a nav hint; the RPC MUST still evaluate ABAC and deny")
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, "admin section access denied", status.Convert(err).Message())
 }

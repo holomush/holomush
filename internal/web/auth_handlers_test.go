@@ -823,6 +823,53 @@ func TestWebCheckSessionForwardsPlayerIDIsGuestAndCharacters(t *testing.T) {
 	assert.Equal(t, "01KQ2Y5ETW03KJ0HKCQ07ASYF2", resp.Msg.GetCharacters()[0].GetCharacterId())
 }
 
+// TestWebCheckSessionForwardsRolesVerbatim pins that the gateway PROXIES the
+// nav hint and never computes it.
+//
+// The core response is the only source. Per .claude/rules/gateway-boundary.md
+// internal/web/ is protocol-translation-only, and a role decision made here
+// would live in the wrong process AND be bypassable by any caller who speaks
+// gRPC to core directly — which is exactly why the admin gate is core-side.
+func TestWebCheckSessionForwardsRolesVerbatim(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{
+			PlayerName: "Wren Halloway",
+			Roles:      []string{"admin"},
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCheckSessionRequest{})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebCheckSession(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"admin"}, resp.Msg.GetRoles())
+}
+
+// TestWebCheckSessionReturnsAnEmptyRolesListForARoleLessPlayer asserts Len == 0
+// and deliberately NOT require.NotNil: a zero-element repeated scalar is omitted
+// from the serialized bytes and the generated getter presents nil and empty
+// storage identically, so NotNil would assert implementation memory rather than
+// a wire contract. Absence and empty are the same answer, and that contract is
+// stated in the proto doc comment.
+func TestWebCheckSessionReturnsAnEmptyRolesListForARoleLessPlayer(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{
+			PlayerName: "Wren Halloway",
+			Roles:      []string{},
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCheckSessionRequest{})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebCheckSession(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetRoles(), 0)
+}
+
 func TestWebCheckSessionFailureContractUnchanged(t *testing.T) {
 	client := &mockCoreClient{
 		checkSessionErr: oops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("expired"),
