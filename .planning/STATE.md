@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 06
 current_phase_name: admin-portal-shell-character-administration
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-08-14T14:30:53.783Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-08-14T15:14:54.805Z"
 last_activity: 2026-08-14
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 65
-  completed_plans: 59
+  completed_plans: 60
   percent: 80
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 06 (admin-portal-shell-character-administration) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([█████████░] 91%)
+Progress: [█████████████████░░░] 34/40 plans ([█████████░] 92%)
 Last activity: 2026-08-14 — Phase 06 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -276,6 +276,7 @@ no action needed.
 | Phase 05 P08 | 58min | 4 tasks | 9 files |
 | Phase 06 P01 | 33min | 2 tasks tasks | 36 files files |
 | Phase 06 P02 | 30min | 3 tasks | 35 files |
+| Phase 06 P04 | 33 min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -632,6 +633,9 @@ the next milestone yet.
 - [Phase ?]: 06-02: the blank section_id refusal comes from the interceptor's TrimSpace check, NOT buf.validate — no protovalidate interceptor exists on any server path, so the shipped annotations are inert at RPC runtime
 - [Phase ?]: 06-02: roles reuses the SHARED attribute.PlayerRoleLookup seam (RoleStore interface NOT widened) and fails quiet — nil or failing lookup yields an initialised empty slice, never an error, because a nav hint must not break session restore
 - [Phase ?]: 06-02: the WIRE differential cannot observe the gate-before-registry ordering — mapAdminSectionError collapses DENY_ADMIN_SECTION and DENY_ADMIN_SECTION_UNREGISTERED onto one status by design — so the ordering is asserted in-process on the typed code instead (criterion defect reported, not repaired)
+- [Phase ?]: 06-04: the detail read is a bounded trusted projection — PropertyRepository.ListByParent filtered by updateCharacterProfileMaskablePaths membership (12 names), NOT world.Service.ListPropertiesByParent, which returns an EMPTY slice for a player-flavoured caller (verified: zero player-principal property permits in the seed corpus)
+- [Phase ?]: 06-04: player_id is unsortable STRUCTURALLY — no enum value exists to express it — while remaining an equality filter; the illegal request is inexpressible rather than rejected at runtime
+- [Phase ?]: 06-04: admin list/page types live in internal/world, not internal/world/postgres, so internal/grpc can name them on its narrow reader interfaces without importing a storage driver
 
 ### Pending Todos
 
@@ -656,6 +660,7 @@ None yet.
 - The two-replica resilience suite is fully red on the nightly lane (4 pre-existing failures; natstest.Conn dials a scoped NATS env without credentials) — filed as holomush/holomush#4953, not fixed in 03-03
 - [Phase 3] AR-03-04: the TWO-REPLICA retire-concurrency proof (test/integration/resilience/retire_concurrency_test.go) is gated on quarantinetest.Enabled(), so it does not run in the required Integration Test lane — and it is currently RED where it does run. Ruled SCHEDULED-not-accepted at UAT: holomush/holomush#4953 must close for the resilience suite to rejoin the gating lane. The single-process guarantee IS covered in CI; only the two-replica case is unwatched.
 - [Phase 3] IDENT-04 traceability gap: the requirement is marked Complete and traced to Phase 3 ONLY, but its admin-reachable half is ADMIN-05 (Phase 6) — world.Service.RetireCharacter has zero non-test callers today. If ADMIN-05 slips or is rescoped, nothing flags that a Complete requirement has no user-reachable path. The GSD traceability writer cannot add the row (phase.complete reported 'no matching row found' for IDENT-04/IDENT-10 despite REQUIREMENTS.md:372 existing) — same standing writer gap as AUTHZ-01 in Phase 02.1.
+- 06-04: /holomush-dev:review-abac (T-06-29's mitigation of record, high-rated ABAC-bypass-in-shape) did NOT run — the Task tool is disabled in the executor session. Substantive claims verified manually at source; the adversarial gate is outstanding and should run before the phase ships. Logged in .planning/WINDOWS.md.
 
 ### Quick Tasks Completed
 
@@ -695,7 +700,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-14T14:30:43.254Z
+Last session: 2026-08-14T15:14:54.790Z
 Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
 by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
 carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
@@ -706,7 +711,7 @@ short-circuit was declined a second consecutive phase — closing 59/59 threats,
 holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
 Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
 in the same commit. Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 06-02-PLAN.md
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z

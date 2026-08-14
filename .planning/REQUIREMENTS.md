@@ -194,7 +194,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [x] **ADMIN-02**: **Every admin RPC re-asserts its own authorization gate** through one shared helper
       called first at every entry point, with typed `DENY_*` codes.
 
-- [ ] **ADMIN-03**: An admin can **list and search characters**, view character detail, and edit
+- [x] **ADMIN-03**: An admin can **list and search characters**, view character detail, and edit
       character fields.
 
 - [ ] **ADMIN-04**: The admin character-edit surface uses an explicit **field-mask allowlist that
