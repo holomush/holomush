@@ -9,6 +9,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
+import "holomush/adminportal/v1/adminportal.proto";
 import "holomush/characteraccess/v1/characteraccess.proto";
 import "holomush/scene/v1/scene.proto";
 
@@ -393,6 +394,14 @@ service WebService {
   // is the ordinary logged-out case rather than an error. The gateway neither
   // filters nor re-sorts the listing — reachability and order are the facade's.
   rpc WebListCharacterDirectory(WebListCharacterDirectoryRequest) returns (WebListCharacterDirectoryResponse);
+  // WebAdminListSections proxies AdminPortalService.AdminListSections.
+  // Handler.WebAdminListSections lifts the session token from the
+  // X-Session-Token header and forwards nothing else. It makes NO
+  // authorization decision of its own: the core interceptor already denied a
+  // caller with no `admin_section:` access before the core handler ran, so a
+  // non-admin's PermissionDenied reaches the browser unmodified rather than
+  // being turned into an empty list here.
+  rpc WebAdminListSections(WebAdminListSectionsRequest) returns (WebAdminListSectionsResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -1698,4 +1707,19 @@ message WebListCharacterDirectoryResponse {
   // characters is the reachable identity rows the facade projected, in the order
   // it produced them; the gateway forwards them unmodified.
   repeated holomush.characteraccess.v1.PublicCharacterSummary characters = 1;
+}
+
+// WebAdminListSectionsRequest carries NO fields, and the emptiness is the
+// point: Handler.WebAdminListSections reads the bearer token from the
+// X-Session-Token header, so a browser cannot assert an identity the gateway
+// did not authenticate.
+message WebAdminListSectionsRequest {}
+
+// WebAdminListSectionsResponse re-exports the portal's projection verbatim.
+message WebAdminListSectionsResponse {
+  // sections is the server-filtered section list AdminPortalService returned,
+  // in its order; the gateway neither filters nor re-sorts it. Reusing the
+  // portal's own message type is what keeps a second, drifting web-side
+  // section shape from existing.
+  repeated holomush.adminportal.v1.AdminSection sections = 1;
 }

@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.adminportal.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1;adminportalv1";
+
+// AdminPortalService is the PLAYER-SESSION admin portal surface: the RPCs the
+// browser's /admin routes reach, gated by `admin_section:` ABAC over the
+// network. Its identity is resolved server-side from the request's
+// player_session_token, and NewAdminSectionInterceptor
+// (internal/grpc/admin_interceptor.go) authorizes every method under this
+// package prefix from a fail-closed method-to-section descriptor table before
+// any handler runs.
+//
+// It is deliberately a DIFFERENT package and a DIFFERENT trust boundary from
+// holomush.admin.v1.AdminService, the break-glass operator control plane. That
+// service is served over a UNIX domain socket by internal/admin/socket/ under
+// AssertOperatorAdmin, never over the core gRPC server, and no RPC declared
+// here is reachable from it or it from here.
+//
+// Implemented by AdminPortalServer in internal/grpc/admin_service.go and
+// registered on the core gRPC server in cmd/holomush/sub_grpc.go.
+service AdminPortalService {
+  // AdminListSections enumerates the admin sections the calling player may
+  // reach, in the shipped registry's row order.
+  //
+  // AdminPortalServer.AdminListSections runs DOWNSTREAM of the interceptor's
+  // admission check: a caller holding no `admin_section:` access is already
+  // refused with PermissionDenied and never reaches the handler, so an empty
+  // list means "admitted, but nothing permitted" rather than "not an admin".
+  // The per-entry filter is section.AssertSectionAdmission, not
+  // AssertSectionAccess, so sections that are registered but not yet
+  // implemented are still listed and carry their status as data.
+  rpc AdminListSections(AdminListSectionsRequest) returns (AdminListSectionsResponse);
+}
+
+// AdminListSectionsRequest carries only the caller's bearer token, because
+// which sections are listed follows entirely from who is asking.
+message AdminListSectionsRequest {
+  // player_session_token is the raw bearer token the gateway lifted from the
+  // X-Session-Token header. NewAdminSectionInterceptor reads it through the
+  // GetPlayerSessionToken() accessor protoc-gen-go emits for this field and
+  // resolves the player through auth.PlayerSessionRepository; there is
+  // deliberately no player-id field a caller could point at someone else.
+  string player_session_token = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// AdminListSectionsResponse is the server-filtered projection the /admin nav
+// renders from. It is the only source for that nav — there is no client-side
+// section registry to drift from it.
+message AdminListSectionsResponse {
+  // sections are the entries section.AssertSectionAdmission permitted, in
+  // section.All()'s row order. An entry the gate refused is absent; its absence
+  // is the only signal, so a refused section cannot be distinguished from one
+  // that does not exist.
+  repeated AdminSection sections = 1;
+}
+
+// AdminSection is one row of the admin section registry
+// (internal/admin/section/registry.go) as the portal renders it.
+message AdminSection {
+  // id is the registry entry's section id, verbatim — the same lowercase-ASCII
+  // token section.Lookup matches and access.AdminSectionResource derives the
+  // `admin_section:` reference from. Matching is exact; there is no case
+  // folding anywhere on this path.
+  string id = 1;
+  // display_name is the human label the nav draws for this section.
+  string display_name = 2;
+  // status is section.Status as a string: exactly "available" or "planned" and
+  // nothing else. It is carried as DATA so the nav can render a planned
+  // section in its own treatment; it is not an authorization signal, and the
+  // handler does not filter on it.
+  string status = 3;
+}

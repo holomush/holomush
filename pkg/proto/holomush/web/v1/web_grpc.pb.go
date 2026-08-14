@@ -76,6 +76,7 @@ const (
 	WebService_WebUpdateCharacterDescription_FullMethodName = "/holomush.web.v1.WebService/WebUpdateCharacterDescription"
 	WebService_WebSetDefaultCharacter_FullMethodName        = "/holomush.web.v1.WebService/WebSetDefaultCharacter"
 	WebService_WebListCharacterDirectory_FullMethodName     = "/holomush.web.v1.WebService/WebListCharacterDirectory"
+	WebService_WebAdminListSections_FullMethodName          = "/holomush.web.v1.WebService/WebAdminListSections"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -321,6 +322,14 @@ type WebServiceClient interface {
 	// is the ordinary logged-out case rather than an error. The gateway neither
 	// filters nor re-sorts the listing — reachability and order are the facade's.
 	WebListCharacterDirectory(ctx context.Context, in *WebListCharacterDirectoryRequest, opts ...grpc.CallOption) (*WebListCharacterDirectoryResponse, error)
+	// WebAdminListSections proxies AdminPortalService.AdminListSections.
+	// Handler.WebAdminListSections lifts the session token from the
+	// X-Session-Token header and forwards nothing else. It makes NO
+	// authorization decision of its own: the core interceptor already denied a
+	// caller with no `admin_section:` access before the core handler ran, so a
+	// non-admin's PermissionDenied reaches the browser unmodified rather than
+	// being turned into an empty list here.
+	WebAdminListSections(ctx context.Context, in *WebAdminListSectionsRequest, opts ...grpc.CallOption) (*WebAdminListSectionsResponse, error)
 }
 
 type webServiceClient struct {
@@ -880,6 +889,16 @@ func (c *webServiceClient) WebListCharacterDirectory(ctx context.Context, in *We
 	return out, nil
 }
 
+func (c *webServiceClient) WebAdminListSections(ctx context.Context, in *WebAdminListSectionsRequest, opts ...grpc.CallOption) (*WebAdminListSectionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminListSectionsResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminListSections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -1123,6 +1142,14 @@ type WebServiceServer interface {
 	// is the ordinary logged-out case rather than an error. The gateway neither
 	// filters nor re-sorts the listing — reachability and order are the facade's.
 	WebListCharacterDirectory(context.Context, *WebListCharacterDirectoryRequest) (*WebListCharacterDirectoryResponse, error)
+	// WebAdminListSections proxies AdminPortalService.AdminListSections.
+	// Handler.WebAdminListSections lifts the session token from the
+	// X-Session-Token header and forwards nothing else. It makes NO
+	// authorization decision of its own: the core interceptor already denied a
+	// caller with no `admin_section:` access before the core handler ran, so a
+	// non-admin's PermissionDenied reaches the browser unmodified rather than
+	// being turned into an empty list here.
+	WebAdminListSections(context.Context, *WebAdminListSectionsRequest) (*WebAdminListSectionsResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -1294,6 +1321,9 @@ func (UnimplementedWebServiceServer) WebSetDefaultCharacter(context.Context, *We
 }
 func (UnimplementedWebServiceServer) WebListCharacterDirectory(context.Context, *WebListCharacterDirectoryRequest) (*WebListCharacterDirectoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebListCharacterDirectory not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminListSections(context.Context, *WebAdminListSectionsRequest) (*WebAdminListSectionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminListSections not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -2281,6 +2311,24 @@ func _WebService_WebListCharacterDirectory_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebAdminListSections_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminListSectionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminListSections(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminListSections_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminListSections(ctx, req.(*WebAdminListSectionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2499,6 +2547,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebListCharacterDirectory",
 			Handler:    _WebService_WebListCharacterDirectory_Handler,
+		},
+		{
+			MethodName: "WebAdminListSections",
+			Handler:    _WebService_WebAdminListSections_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

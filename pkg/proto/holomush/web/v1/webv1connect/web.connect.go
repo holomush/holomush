@@ -191,6 +191,9 @@ const (
 	// WebServiceWebListCharacterDirectoryProcedure is the fully-qualified name of the WebService's
 	// WebListCharacterDirectory RPC.
 	WebServiceWebListCharacterDirectoryProcedure = "/holomush.web.v1.WebService/WebListCharacterDirectory"
+	// WebServiceWebAdminListSectionsProcedure is the fully-qualified name of the WebService's
+	// WebAdminListSections RPC.
+	WebServiceWebAdminListSectionsProcedure = "/holomush.web.v1.WebService/WebAdminListSections"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -424,6 +427,14 @@ type WebServiceClient interface {
 	// is the ordinary logged-out case rather than an error. The gateway neither
 	// filters nor re-sorts the listing — reachability and order are the facade's.
 	WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error)
+	// WebAdminListSections proxies AdminPortalService.AdminListSections.
+	// Handler.WebAdminListSections lifts the session token from the
+	// X-Session-Token header and forwards nothing else. It makes NO
+	// authorization decision of its own: the core interceptor already denied a
+	// caller with no `admin_section:` access before the core handler ran, so a
+	// non-admin's PermissionDenied reaches the browser unmodified rather than
+	// being turned into an empty list here.
+	WebAdminListSections(context.Context, *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -761,6 +772,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebListCharacterDirectory")),
 			connect.WithClientOptions(opts...),
 		),
+		webAdminListSections: connect.NewClient[v1.WebAdminListSectionsRequest, v1.WebAdminListSectionsResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminListSectionsProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminListSections")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -820,6 +837,7 @@ type webServiceClient struct {
 	webUpdateCharacterDescription *connect.Client[v1.WebUpdateCharacterDescriptionRequest, v1.WebUpdateCharacterDescriptionResponse]
 	webSetDefaultCharacter        *connect.Client[v1.WebSetDefaultCharacterRequest, v1.WebSetDefaultCharacterResponse]
 	webListCharacterDirectory     *connect.Client[v1.WebListCharacterDirectoryRequest, v1.WebListCharacterDirectoryResponse]
+	webAdminListSections          *connect.Client[v1.WebAdminListSectionsRequest, v1.WebAdminListSectionsResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -1092,6 +1110,11 @@ func (c *webServiceClient) WebListCharacterDirectory(ctx context.Context, req *c
 	return c.webListCharacterDirectory.CallUnary(ctx, req)
 }
 
+// WebAdminListSections calls holomush.web.v1.WebService.WebAdminListSections.
+func (c *webServiceClient) WebAdminListSections(ctx context.Context, req *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error) {
+	return c.webAdminListSections.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -1323,6 +1346,14 @@ type WebServiceHandler interface {
 	// is the ordinary logged-out case rather than an error. The gateway neither
 	// filters nor re-sorts the listing — reachability and order are the facade's.
 	WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error)
+	// WebAdminListSections proxies AdminPortalService.AdminListSections.
+	// Handler.WebAdminListSections lifts the session token from the
+	// X-Session-Token header and forwards nothing else. It makes NO
+	// authorization decision of its own: the core interceptor already denied a
+	// caller with no `admin_section:` access before the core handler ran, so a
+	// non-admin's PermissionDenied reaches the browser unmodified rather than
+	// being turned into an empty list here.
+	WebAdminListSections(context.Context, *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1656,6 +1687,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebListCharacterDirectory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebAdminListSectionsHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminListSectionsProcedure,
+		svc.WebAdminListSections,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminListSections")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -1766,6 +1803,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebSetDefaultCharacterHandler.ServeHTTP(w, r)
 		case WebServiceWebListCharacterDirectoryProcedure:
 			webServiceWebListCharacterDirectoryHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminListSectionsProcedure:
+			webServiceWebAdminListSectionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1989,4 +2028,8 @@ func (UnimplementedWebServiceHandler) WebSetDefaultCharacter(context.Context, *c
 
 func (UnimplementedWebServiceHandler) WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListCharacterDirectory is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminListSections(context.Context, *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminListSections is not implemented"))
 }
