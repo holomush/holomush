@@ -101,8 +101,16 @@ func TestAdminListCharactersSortsNeverActiveLastInBothDirections(t *testing.T) {
 	// two active rows. The seeded names are randomized for corpus uniqueness, so
 	// the tiebreak expectation is derived from the STORED normal form rather
 	// than assumed from the literal.
-	neverA := adminSeed(ctx, t, playerID, charFixtureName("aaa never"), 0)
+	// INSERTION ORDER IS THE REVERSE OF NAME ORDER, DELIBERATELY. Without the
+	// trailing `c.normalized_name ASC` tiebreak the order among rows tying on
+	// the primary key is UNSPECIFIED — which in practice means physical/heap
+	// order, i.e. insertion order. Seeding "zzz" first and "aaa" second makes
+	// those two orders DISAGREE, so deleting the tiebreak turns this test red
+	// instead of leaving it green by luck. Seeded the other way round the two
+	// orders coincide and the clause is unobservable, which is coverage in
+	// appearance only.
 	neverB := adminSeed(ctx, t, playerID, charFixtureName("zzz never"), 0)
+	neverA := adminSeed(ctx, t, playerID, charFixtureName("aaa never"), 0)
 	low := adminSeed(ctx, t, playerID, charFixtureName("low active"), 100)
 	high := adminSeed(ctx, t, playerID, charFixtureName("high active"), 5000)
 
@@ -111,18 +119,24 @@ func TestAdminListCharactersSortsNeverActiveLastInBothDirections(t *testing.T) {
 		first, second = neverB, neverA
 	}
 
+	// ONE case table carrying BOTH directions. `direction` is the SQL keyword the
+	// case exercises; it is carried on the case rather than derived at the
+	// assertion so the table itself states which orderings this one run covers.
 	tests := []struct {
 		name       string
+		direction  string
 		descending bool
 		wantOrder  []string
 	}{
 		{
 			name:       "ascending puts the never-active sentinel last, after the largest real value",
+			direction:  "ASC",
 			descending: false,
 			wantOrder:  []string{low.ID.String(), high.ID.String(), first.ID.String(), second.ID.String()},
 		},
 		{
 			name:       "descending puts the never-active sentinel last, after the smallest real value",
+			direction:  "DESC",
 			descending: true,
 			wantOrder:  []string{high.ID.String(), low.ID.String(), first.ID.String(), second.ID.String()},
 		},
@@ -138,7 +152,7 @@ func TestAdminListCharactersSortsNeverActiveLastInBothDirections(t *testing.T) {
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantOrder, adminRowIDs(page),
-				"the ordering is (last_active_at = 0), last_active_at %s, normalized_name ASC", map[bool]string{true: "DESC", false: "ASC"}[tt.descending])
+				"the ordering is (last_active_at = 0), last_active_at %s, normalized_name ASC", tt.direction)
 		})
 	}
 }
@@ -282,41 +296,76 @@ func TestAdminSearchCharactersMatchesTheStoredNormalFormNotTheDisplayName(t *tes
 
 // TestAdminSearchCharactersTreatsLikeMetacharactersLiterally is the correctness
 // half of T-06-21. Parameter binding already closes injection; charname.Normalize
-// passes %, _ and \ through untouched (none is in category Cf), so without an
-// escape step a typed `a_b` silently matches `axb`.
+// folds case and strips format runes but passes %, _ and \ through untouched —
+// none of them is in category Cf — so without an escape step a typed `a_b`
+// silently matches `axb`.
+//
+// # The fixtures are USERNAMES, not character names, and that is forced
+//
+// charname's admission gate refuses a character name containing anything but
+// letters and spaces (NAME_INVALID_SYNTAX, gate.go:155), so no metacharacter can
+// ever reach characters.normalized_name. players.username is under no such gate:
+// it is inserted verbatim, so it is the arm where a stored metacharacter is
+// reachable — and the TERM can carry one on either arm regardless, because the
+// operator types it and Normalize passes it through. Each case therefore seeds a
+// matching username and a DECOY username that only an unescaped pattern would
+// also match.
+//
+// Scoping is by the random suffix rather than by PlayerID, because each fixture
+// needs its own player to carry its own username, and the decoy must be able to
+// appear in the result set for the assertion to discriminate.
 func TestAdminSearchCharactersTreatsLikeMetacharactersLiterally(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewCharacterRepository(testPool)
-	playerID := createTestPlayer(ctx, t)
 
-	suffix := randomFixtureLetters(8)
-	underscore := adminSeed(ctx, t, playerID, "a_b "+suffix, 0)
-	adminSeed(ctx, t, playerID, "axb "+suffix, 0)
-	percent := adminSeed(ctx, t, playerID, "100% "+suffix, 0)
-	adminSeed(ctx, t, playerID, "1000 "+suffix, 0)
-	backslash := adminSeed(ctx, t, playerID, `c\d `+suffix, 0)
+	suffix := randomFixtureLetters(10)
+
+	seedUnder := func(t *testing.T, username string) *world.Character {
+		t.Helper()
+		p := adminPlayerWithUsername(ctx, t, username)
+		return adminSeed(ctx, t, p, charFixtureName("meta"), 0)
+	}
+
+	underscore := seedUnder(t, "a_b"+suffix)
+	underscoreDecoy := seedUnder(t, "axb"+suffix)
+	percent := seedUnder(t, "100%"+suffix)
+	percentDecoy := seedUnder(t, "1000"+suffix)
+	backslash := seedUnder(t, `c\d`+suffix)
+	backslashDecoy := seedUnder(t, "cd"+suffix)
 
 	search := func(t *testing.T, term string) []string {
 		t.Helper()
-		page, err := repo.AdminSearchCharacters(ctx, term, world.AdminCharacterListOptions{
-			SortField: world.AdminSortName,
-			PlayerID:  &playerID,
+		normalized, err := charname.Normalize(term)
+		require.NoError(t, err, "Normalize does not reject a metacharacter; only the admission gate does")
+		page, err := repo.AdminSearchCharacters(ctx, normalized.Key, world.AdminCharacterListOptions{
+			SortField: world.AdminSortPlayerUsername,
 			Limit:     50,
 		})
 		require.NoError(t, err)
 		return adminRowIDs(page)
 	}
 
+	// Each decoy is asserted reachable first: a decoy the predicate could never
+	// return under ANY escaping would make its case pass vacuously.
+	t.Run("every decoy is reachable by a plain substring of the shared suffix", func(t *testing.T) {
+		got := search(t, suffix)
+		assert.ElementsMatch(t, []string{
+			underscore.ID.String(), underscoreDecoy.ID.String(),
+			percent.ID.String(), percentDecoy.ID.String(),
+			backslash.ID.String(), backslashDecoy.ID.String(),
+		}, got)
+	})
+
 	t.Run("an underscore matches literally and does not match any single character", func(t *testing.T) {
-		assert.Equal(t, []string{underscore.ID.String()}, search(t, "a_b"))
+		assert.Equal(t, []string{underscore.ID.String()}, search(t, "a_b"+suffix))
 	})
 
 	t.Run("a percent matches literally and does not match every row", func(t *testing.T) {
-		assert.Equal(t, []string{percent.ID.String()}, search(t, "100%"))
+		assert.Equal(t, []string{percent.ID.String()}, search(t, "100%"+suffix))
 	})
 
 	t.Run("a backslash matches literally", func(t *testing.T) {
-		assert.Equal(t, []string{backslash.ID.String()}, search(t, `c\d`))
+		assert.Equal(t, []string{backslash.ID.String()}, search(t, `c\d`+suffix))
 	})
 }
 
