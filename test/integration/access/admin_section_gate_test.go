@@ -3,10 +3,27 @@
 
 //go:build integration
 
+// Package access_test's admin-section specs assert the /admin trust boundary at
+// the WIRE, over a real gRPC connection to a server built by the production
+// factory.
+//
+// # SECTION_NOT_IMPLEMENTED is only ever visible to a PERMITTED caller
+//
+// section.AssertSectionAccess evaluates the ABAC gate (step 1) BEFORE it
+// consults the registry (step 2) and before it reads a section's availability
+// (step 4). A DENIED caller therefore receives DENY_ADMIN_SECTION for every one
+// of the seven sections — the six planned ones included — and never learns that
+// a section exists, let alone that it is unbuilt. The FailedPrecondition a
+// planned section produces is reachable only after the gate said yes, so it
+// discloses nothing a permitted caller could not read off AdminListSections.
+//
+// That ordering IS the property (INV-PRIVACY-11), and reordering the two steps
+// is what the differential case below turns red.
 package access_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -125,20 +142,42 @@ func TestAnAdminCallingTheAdminPortalDirectlyOverGRPCReceivesEverySection(t *tes
 	require.Contains(t, ids, "characters")
 }
 
-// TestEverySectionIsReachableGatedAndRefusingAfterTheGateAtTheWire is ROADMAP
-// Success Criterion 4, asserted over a real gRPC connection for ALL SEVEN
-// sections through ONE RPC.
+// TestTheAdminSectionGateHoldsForEverySectionAtTheWire is ROADMAP Success
+// Criterion 4: ONE table that walks section.All() once and puts every entry
+// through FOUR cases over a real gRPC connection.
 //
-// The ids come from section.All(), never a hand-written list: a registry that
-// grew or lost a section changes what this test covers rather than leaving the
-// new one unproven. Every denial is paired with a positive control on the SAME
-// section through the SAME RPC, and the counts are asserted at the end so a
-// loop that silently iterated nothing fails loudly instead of passing vacuously.
+//  1. a NON-ADMIN naming the section              → PermissionDenied, static message
+//  2. an ADMIN naming the same section            → the row, or FailedPrecondition if planned
+//  3. an ADMIN naming a MIS-CASED variant         → PermissionDenied, byte-identical to (1)
+//  4. a NON-ADMIN naming an UNREGISTERED variant  → PermissionDenied, byte-identical to (1)
 //
-// Wire assertions here carry NO oops code: an oops value does not survive a
-// gRPC round trip. The typed internal codes are asserted in-process in
-// internal/grpc/admin_sections_test.go.
-func TestEverySectionIsReachableGatedAndRefusingAfterTheGateAtTheWire(t *testing.T) {
+// Case 2 is the paired positive control: without it, case 1 cannot distinguish
+// "denied for lack of the admin role" from "the RPC is broken" or "the listener
+// was never wired".
+//
+// Cases 3 and 4 are the two halves of the opacity contract, and they lean
+// opposite ways on purpose. Case 4 is INV-PRIVACY-11's differential: a DENIED
+// caller must not be able to tell a registered section from one that does not
+// exist, which holds only because the gate is evaluated before the registry is
+// consulted. Case 3 is its permitted-caller counterpart: an admin who mis-cases
+// an id receives DENY_ADMIN_SECTION_UNREGISTERED, which maps to the SAME static
+// refusal — so even a permitted caller gets no near-miss oracle, and matching
+// stays exact byte equality with no case folding anywhere on this path.
+//
+// # The counts are the anti-vacuity guard
+//
+// A loop that silently iterated nothing would satisfy every assertion inside it.
+// The denial and positive-control counts are asserted >= 7, and the outcome
+// counts by EXACT equality — a registry that lost a planned section, or promoted
+// one to available without the rest of this phase noticing, fails here.
+//
+// Wire assertions carry NO oops code: an oops value does not survive a gRPC
+// round trip, so an assertion that appeared to pass on one here would be reading
+// something else. The typed internal codes are asserted in-process in
+// internal/grpc/admin_sections_test.go and admin_interceptor_test.go.
+//
+// Verifies: INV-PRIVACY-11
+func TestTheAdminSectionGateHoldsForEverySectionAtTheWire(t *testing.T) {
 	ctx := context.Background()
 
 	srv := integrationtest.Start(
@@ -159,79 +198,64 @@ func TestEverySectionIsReachableGatedAndRefusingAfterTheGateAtTheWire(t *testing
 		})
 	}
 
-	denied, permitted, notImplemented, available := 0, 0, 0, 0
+	// The one static refusal every denied answer must carry, spelled once.
+	const staticRefusal = "admin section access denied"
+
+	deniedCount, permittedCount, notImplementedCount, availableCount := 0, 0, 0, 0
 
 	for _, entry := range section.All() {
-		t.Run(string(entry.ID), func(t *testing.T) {
-			_, denyErr := get(nonAdmin.PlayerSessionToken(), string(entry.ID))
+		id := string(entry.ID)
+		t.Run(id, func(t *testing.T) {
+			// --- case 1: the non-admin denial ---
+			_, denyErr := get(nonAdmin.PlayerSessionToken(), id)
 			require.Error(t, denyErr, "a non-admin MUST be refused for every section")
 			require.Equal(t, codes.PermissionDenied, status.Code(denyErr))
-			require.Equal(t, "admin section access denied", status.Convert(denyErr).Message(),
+			denyMsg := status.Convert(denyErr).Message()
+			require.Equal(t, staticRefusal, denyMsg,
 				"the refusal MUST be the same static message for every section")
-			denied++
+			deniedCount++
 
-			resp, adminErr := get(admin.PlayerSessionToken(), string(entry.ID))
+			// --- case 2: the paired positive control ---
+			resp, adminErr := get(admin.PlayerSessionToken(), id)
 			switch entry.Status {
 			case section.StatusAvailable:
 				require.NoError(t, adminErr, "positive control: an admin MUST reach an available section")
-				require.Equal(t, string(entry.ID), resp.GetSection().GetId())
-				available++
+				require.Equal(t, id, resp.GetSection().GetId())
+				availableCount++
 			case section.StatusPlanned:
 				require.Error(t, adminErr)
 				require.Equal(t, codes.FailedPrecondition, status.Code(adminErr),
-					"a PERMITTED caller MUST get past the gate and be refused for a different reason")
-				notImplemented++
+					"a PERMITTED caller MUST get past the gate and be refused for a DIFFERENT reason")
+				notImplementedCount++
 			default:
-				t.Fatalf("section %q carries status %q, outside the closed vocabulary", entry.ID, entry.Status)
+				t.Fatalf("section %q carries status %q, outside the closed vocabulary", id, entry.Status)
 			}
-			permitted++
+			permittedCount++
+
+			// --- case 3: a PERMITTED caller mis-cases the id ---
+			_, misCasedErr := get(admin.PlayerSessionToken(), strings.ToUpper(id))
+			require.Error(t, misCasedErr, "matching is exact byte equality; a mis-cased id MUST NOT resolve")
+			require.Equal(t, codes.PermissionDenied, status.Code(misCasedErr))
+			require.Equal(t, denyMsg, status.Convert(misCasedErr).Message(),
+				"even a permitted caller MUST NOT be told their id was a near-miss")
+
+			// --- case 4: the INV-PRIVACY-11 differential ---
+			//
+			// require.Equal on the EXACT strings, never Contains: a substring
+			// match would pass for two messages differing in a suffix, which is
+			// precisely the distinguishing field the contract forbids.
+			_, unregisteredErr := get(nonAdmin.PlayerSessionToken(), id+"-no-such-01JQ")
+			require.Error(t, unregisteredErr)
+			require.Equal(t, status.Code(denyErr), status.Code(unregisteredErr))
+			require.Equal(t, denyMsg, status.Convert(unregisteredErr).Message(),
+				"a denied caller MUST NOT be able to tell a registered section from one that does not exist")
 		})
 	}
 
-	require.GreaterOrEqual(t, denied, 7, "a loop that iterated zero sections MUST fail")
-	require.GreaterOrEqual(t, permitted, 7, "every denial MUST be paired with a positive control")
-	require.Equal(t, 6, notImplemented, "all six deferred sections MUST refuse AFTER the gate")
-	require.Equal(t, 1, available)
-}
-
-// TestADeniedCallerGetsByteIdenticalRefusalsForRegisteredAndUnregisteredIDsAtTheWire
-// is the INV-PRIVACY-11 differential asserted where it matters — on the wire,
-// for the ONE RPC whose section id is attacker-controlled.
-//
-// The comparison is require.Equal on the exact strings, not Contains: a
-// substring match would pass for two messages that differ in a suffix, which is
-// precisely the distinguishing field the contract forbids.
-func TestADeniedCallerGetsByteIdenticalRefusalsForRegisteredAndUnregisteredIDsAtTheWire(t *testing.T) {
-	ctx := context.Background()
-
-	srv := integrationtest.Start(
-		t,
-		integrationtest.WithRealABAC(),
-		integrationtest.WithGatedGRPCListener(),
-	)
-	defer srv.Stop()
-
-	client := adminportalv1.NewAdminPortalServiceClient(srv.GatedGRPCConn())
-	nonAdmin := srv.ConnectAuthed(ctx, "Plaindiff")
-
-	call := func(id string) error {
-		_, err := client.AdminGetSection(ctx, &adminportalv1.AdminGetSectionRequest{
-			SectionId:          id,
-			PlayerSessionToken: nonAdmin.PlayerSessionToken(),
-		})
-		return err
-	}
-
-	registeredErr := call("characters")
-	unregisteredErr := call("no-such-section-01JQ")
-
-	require.Error(t, registeredErr)
-	require.Error(t, unregisteredErr)
-	require.Equal(t, status.Code(registeredErr), status.Code(unregisteredErr))
-	require.Equal(t,
-		status.Convert(registeredErr).Message(),
-		status.Convert(unregisteredErr).Message(),
-		"the registry MUST NOT be enumerable through this parameter")
+	require.GreaterOrEqual(t, deniedCount, 7, "a loop that iterated zero sections MUST fail loudly")
+	require.GreaterOrEqual(t, permittedCount, 7, "every denial MUST be paired with a positive control")
+	require.Equal(t, 6, notImplementedCount, "all six deferred sections MUST refuse AFTER the gate")
+	require.Equal(t, 1, availableCount, "exactly one section is implemented in this phase")
 }
 
 // TestARolesHintSayingAdminDoesNotSurviveAnABACDenial is ADMIN-08's boundary

@@ -156,12 +156,28 @@ func TestANonAdminIsDeniedIdenticallyForEverySection(t *testing.T) {
 }
 
 // TestADeniedCallerCannotTellARegisteredSectionFromAnUnregisteredOne is the
-// INV-PRIVACY-11 differential: for the SAME denied caller, a registered id and
-// an id that does not exist produce byte-identical answers.
+// INV-PRIVACY-11 differential, asserted at BOTH layers that can see it — and the
+// two layers see different things, which is why both assertions are here.
 //
-// Reordering section.AssertSectionAccess's step 1 (the gate) and step 2 (the
-// registry lookup) makes this fail — which is the point: the ordering IS the
-// property, and nothing else in the suite observes it.
+// # The wire layer alone cannot observe the ORDERING
+//
+// The status half (identical code, identical message) is defended by TWO
+// independent mechanisms: the gate runs before the registry lookup, AND
+// mapAdminSectionError maps DENY_ADMIN_SECTION and
+// DENY_ADMIN_SECTION_UNREGISTERED onto the same static PermissionDenied. Break
+// either one and the other still holds the wire answer identical — so a purely
+// wire-level differential goes GREEN even with the gate and the registry lookup
+// swapped. That is not a flaw in the mapping (collapsing the two codes is
+// exactly the opacity T-06-09 requires); it means the ordering must be asserted
+// where the codes are still distinguishable.
+//
+// # So the TYPED code is asserted too
+//
+// A denied caller naming an UNREGISTERED id must receive DENY_ADMIN_SECTION, not
+// DENY_ADMIN_SECTION_UNREGISTERED — the latter is the operator diagnostic D-06
+// reserves for a caller the gate PERMITTED. Swapping step 1 and step 2 of
+// section.AssertSectionAccess makes this assertion fail; without it, nothing in
+// this plan's own suite observes the ordering.
 func TestADeniedCallerCannotTellARegisteredSectionFromAnUnregisteredOne(t *testing.T) {
 	registered := callGetSection(t, nonAdminPlayerULID(), nil, "characters")
 	unregistered := callGetSection(t, nonAdminPlayerULID(), nil, "no-such-section-01JQ")
@@ -173,6 +189,12 @@ func TestADeniedCallerCannotTellARegisteredSectionFromAnUnregisteredOne(t *testi
 		status.Convert(registered.err).Message(),
 		status.Convert(unregistered.err).Message(),
 		"a denied caller MUST NOT be able to distinguish a registered section from one that does not exist")
+
+	errutil.AssertErrorCode(t, registered.err, "DENY_ADMIN_SECTION")
+	// An unregistered id MUST reach a DENIED caller as an ordinary denial.
+	// DENY_ADMIN_SECTION_UNREGISTERED here would mean the registry was consulted
+	// BEFORE the gate — the enumeration oracle D-06 closes.
+	errutil.AssertErrorCode(t, unregistered.err, "DENY_ADMIN_SECTION")
 }
 
 // TestAMisCasedSectionIDBehavesExactlyLikeAnUnregisteredOne pins that matching

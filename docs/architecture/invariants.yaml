@@ -2201,6 +2201,7 @@ invariants:
     binding: bound
     asserted_by:
       - "internal/admin/section/gate_test.go"
+      - "test/integration/access/admin_section_gate_test.go"
 
   # -- INV-ACCESS -- migrated from INV-RA-N (family RA, real-ABAC harness) (holomush-hz0v4.14.10).
   # Origin: docs/superpowers/specs/2026-05-26-harness-real-abac-design.md. binding: pending — backfill .11.
