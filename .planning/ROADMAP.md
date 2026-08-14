@@ -563,7 +563,7 @@ Plans:
 
 **Goal**: Stand up `/admin` as an ABAC-gated trust boundary with character administration as its working section, six deferred sections registered / gated / refusing **after** the gate, and audit emission with before-values on every admin mutation.
 **Depends on**: Phase 2 (`admin_section:` vocabulary + `seed:admin-section-access`), Phase 4 (shared facade helpers). The authorization gate is the **first thing built in this phase**, before any section, so every subsequent section inherits it.
-**Requirements**: ADMIN-01, ADMIN-02, ADMIN-03, ADMIN-04, ADMIN-05, ADMIN-06, ADMIN-07, ADMIN-08, EXT-01, EXT-02, EXT-03, EXT-04
+**Requirements**: ADMIN-01, ADMIN-02, ADMIN-03, ADMIN-04, ADMIN-05, ADMIN-06, ADMIN-08, EXT-01, EXT-02, EXT-03, EXT-04
 **Success Criteria** (what must be TRUE):
 
 1. A non-admin calling an admin RPC **directly, bypassing the route entirely**, is denied — the decision is ABAC on an `admin_section:` resource, never a bare `PlayerHasRole` lookup and never a route-guard or gateway decision — with the denial asserted **over the wire** — the mapped `status.Code(err)` plus a generic `status.Convert(err).Message()` in which no internal code string appears — the specific typed `DENY_*` code asserted with `errutil.AssertErrorCode`, and a paired positive control proving an admin would have been permitted.
@@ -572,7 +572,7 @@ Plans:
 4. All six deferred sections (stats, players, moderation, audit, config, plugins) are registered, role-gated, and return `NOT_IMPLEMENTED` **after** the gate — a non-admin hitting one is *denied*, not told it is unimplemented — and a meta-test asserts **set equality** between the section registry and the authorization-descriptor set, so a section registered without a descriptor fails at compile time or at boot.
 5. Admin navigation is filtered from the **registry contract**, not template `{#if}` blocks; the roles exposed on `WebCheckSessionResponse` change only what is drawn, and drawing a link the viewer may not use still results in a denial at the RPC.
 
-**Plans**: 8 plans
+**Plans**: 4 plans
 **UI hint**: yes
 **Research flag**: `--research-phase` recommended — there is no in-repo precedent for the web gateway making an admin decision (`internal/web/` has zero `RoleAdmin` references); `AssertOperatorAdmin`'s shape must be transposed across a different auth model, and the reserved-section descriptor mechanism needs a concrete fail-at-boot design.
 
@@ -581,37 +581,56 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Tracer: the fail-closed admin section gate, end-to-end from proto to screen
+- [ ] 06-01-PLAN.md — Tracer: the fail-closed admin section gate, end-to-end from proto to handler
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [ ] 06-02-PLAN.md — `AdminGetSection`, the six planned sections refusing after the gate, and the non-authoritative `roles` hint
-- [ ] 06-03-PLAN.md — Eleven shadcn components, the single root `+error.svelte` with its count meta-test, and the nine owed amendments
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [ ] 06-04-PLAN.md — Admin character reads: `pg_trgm` migration 000057, the `players` join, both-direction ordering, three read RPCs
-- [ ] 06-06-PLAN.md — The `@container vp` admin shell, the server-projected nav, and the planned-section state
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [ ] 06-05-PLAN.md — Admin character writes and same-transaction audit emission with before-status
-- [ ] 06-07-PLAN.md — The character table: click-header sort, one status filter, coarse `Last active`, four list states
 
-**Wave 5** *(blocked on Wave 4 completion)*
+### Phase 06.1: Admin Portal Web Surface (INSERTED)
 
-- [ ] 06-08-PLAN.md — The edit Sheet, the D-110 mutation loop, the retire confirm, and the phone-band + indistinguishability E2E proofs
+**Goal**: Ship the operator-facing web surface for the admin portal — the shadcn component set and the single root error boundary, the admin shell with its permission-filtered nav, the character table, and the edit Sheet with its mutation loop — against the gate and RPCs Phase 6 delivers.
+**Depends on**: Phase 6 (the `holomush.adminportal.v1` wire contract, the fail-closed section gate, and the character read/write RPCs). Split out of Phase 6 on 2026-08-13 after three cross-AI convergence cycles showed the combined phase regressing at the seams between its backend and web halves; the four web plans moved here unchanged, carrying their review dispositions.
+**Requirements**: ADMIN-03, ADMIN-07
+**Success Criteria** (what must be TRUE):
 
-### Phase 06.1: Admin portal web surface — shadcn components and the single root error boundary, the admin shell with permission-filtered nav, the character table, and the edit Sheet with its mutation loop (INSERTED)
+1. Admin navigation is filtered from the **registry contract** returned by `AdminListSections`, not from template `{#if}` blocks; the roles on `WebCheckSessionResponse` change only what is drawn, and drawing a link the viewer may not use still ends in a denial at the RPC.
+2. Exactly **one** `+error.svelte` exists under `web/src/routes/`, and `/admin`'s not-found is the *ordinary* one — a second boundary would kill per-viewer indistinguishability with nothing failing.
+3. An admin lists, searches, sorts and opens characters in the table, and edits them through the Sheet; the Sheet's field set is the server's field-mask allowlist, and a denied or absent character renders the ordinary not-found.
+4. The responsive treatment uses the **same viewport mechanism** as the shipped rail (`@media (max-width: 767px)`), so the rail's collapse and the admin shell's collapse fire at the same moment by construction rather than by coincidence.
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 6
-**Plans:** 0 plans
+**Plans**: 4 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 06.1 to break down)
+- [ ] 06.1-01-PLAN.md — Eleven shadcn components, the single root `+error.svelte` with its count meta-test, and the owed upstream amendments
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 06.1-02-PLAN.md — The admin shell, the server-projected permission-filtered nav, and the planned-section state
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 06.1-03-PLAN.md — The character table: click-header sort, one status filter, coarse `Last active`, four list states
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 06.1-04-PLAN.md — The edit Sheet, the D-110 mutation loop, the retire confirm, and the phone-band + indistinguishability E2E proofs
+
+> **Review provenance.** These four plans were reviewed as `06-03`, `06-06`, `06-07` and `06-08` across
+> three cross-AI cycles; `06-REVIEWS.md` in Phase 6 records those cycles under the **old** names and is
+> deliberately left unrewritten, because rewriting it would misattribute what reviewers actually said.
+> Mapping: `06-03`→`06.1-01`, `06-06`→`06.1-02`, `06-07`→`06.1-03`, `06-08`→`06.1-04`.
+> Outstanding at split time: 7 HIGH and ~30 actionable findings from cycle 3, dispositioned per plan.
 
 ## Progress
 

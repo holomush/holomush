@@ -351,7 +351,8 @@ Which phases cover which requirements. Filled during roadmap creation.
 | 3 | World Character Commands | 2 (IDENT-04, IDENT-10) — IDENT-03 deferred to 999.20 on 2026-08-06 |
 | 4 | Shared Facade Helpers & `CharacterAccessService` | 7 (IDENT-02, IDENT-02a, PROFILE-03/04/05/10, EXT-06) |
 | 5 | Character Identity UI & Public Profiles | 12 (IDENT-01, IDENT-05, PROFILE-01/02/06/07/08/09/10a/12, EXT-05, EXT-08) |
-| 6 | Admin Portal Shell & Character Administration | 12 (ADMIN-01..08, EXT-01..04) |
+| 6 | Admin Portal Shell & Character Administration | 10 (ADMIN-01, 02, 04, 05, 06, 08, EXT-01..04) |
+| 6.1 | Admin Portal Web Surface | 2 (ADMIN-03, ADMIN-07) |
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -391,11 +392,11 @@ Which phases cover which requirements. Filled during roadmap creation.
 | PROFILE-12 | Phase 5 | Pending |
 | ADMIN-01 | Phase 6 | Pending |
 | ADMIN-02 | Phase 6 | Pending |
-| ADMIN-03 | Phase 6 | Pending |
+| ADMIN-03 | Phase 6.1 | Pending |
 | ADMIN-04 | Phase 6 | Pending |
 | ADMIN-05 | Phase 6 | Pending |
 | ADMIN-06 | Phase 6 | Pending |
-| ADMIN-07 | Phase 6 | Pending |
+| ADMIN-07 | Phase 6.1 | Pending |
 | ADMIN-08 | Phase 6 | Pending |
 | EXT-01 | Phase 6 | Pending |
 | EXT-02 | Phase 6 | Pending |
