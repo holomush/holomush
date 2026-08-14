@@ -213,7 +213,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 - [ ] **ADMIN-07**: Admin navigation is **permission-filtered by registry contract**, not by template
       `{#if}` blocks.
 
-- [ ] **ADMIN-08**: `WebCheckSessionResponse` exposes roles for **nav hiding only** — never as the
+- [x] **ADMIN-08**: `WebCheckSessionResponse` exposes roles for **nav hiding only** — never as the
       authorization boundary.
 
 ### Extensibility headroom (EXT)
@@ -224,7 +224,7 @@ cannot be dropped as "nice to have" during planning.
 - [x] **EXT-01**: The admin section registry ships **seven entries** — `characters` available, and six
       **`planned`**: stats, players, moderation, audit, config, plugins.
 
-- [ ] **EXT-02**: The six deferred sections ship **registered, role-gated, and returning
+- [x] **EXT-02**: The six deferred sections ship **registered, role-gated, and returning
       `NOT_IMPLEMENTED` *after* the gate**, so wiring one later replaces a handler body rather than
       requiring someone to remember to add a check.
 
