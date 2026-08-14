@@ -21,7 +21,7 @@ import (
 // `.sql`, so registered Go migrations (000055) are absent from this number
 // while being present in migrate_integration_test.go's
 // expectedAppliedMigrationRows, which counts what goose actually applied.
-const expectedMigrationCount = 46
+const expectedMigrationCount = 47
 
 // TestMigrationsFSContainsSingleFileGooseMigrationsWithBothAnnotations pins the
 // post-goose corpus shape. goose parses one file per version carrying both
