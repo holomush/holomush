@@ -1013,10 +1013,25 @@ func SeedPolicies() []SeedPolicy {
 		// guarantee hold at the POLICY layer: a player-principal admin is denied
 		// `delete` on a character by the ENGINE, not only by the absence of a
 		// button — which an RPC-level omission alone could be quietly undone by.
+		// `read` IS ALSO DELIBERATELY ABSENT, for a different reason than
+		// `delete`: it was a DEAD GRANT. The admin portal's reads do not traverse
+		// world policy at all — they go through AdminGetCharacterRow
+		// (internal/world/postgres/character_repo_admin.go), a bounded repository
+		// projection that evaluates no checkAccess. The only world method a `read`
+		// permit would unlock for a player principal is world.Service.GetCharacter,
+		// whose projection returns PlayerId and LocationId for any character — the
+		// very fields D-75 narrowed away — and no production caller reaches it with
+		// a player-flavoured subject: GetCharacter's callers stamp character, job or
+		// plugin subjects, and command dispatch is character-flavoured throughout.
+		// Carrying `read` therefore granted nothing today while pre-authorising that
+		// full projection for the first player-flavoured read caller to be added
+		// later, with no test able to catch the drift. Adjudicated by abac-reviewer
+		// over the finished Phase 6 surface; the three actions below are exactly
+		// those AdminCharacterWriter exposes.
 		{
 			Name:        "seed:admin-character-administration",
-			Description: "Admin players may read, write and move the lifecycle of any character, scoped to the character resource type (ADMIN-03/04/05, §10.4). Not delete.",
-			DSLText:     `permit(principal is player, action in ["read", "write", "retire", "unretire"], resource is character) when { "admin" in principal.player.roles };`,
+			Description: "Admin players may write and move the lifecycle of any character, scoped to the character resource type (ADMIN-03/04/05, §10.4). Not delete, and not read — admin reads use a bounded repository projection that evaluates no policy.",
+			DSLText:     `permit(principal is player, action in ["write", "retire", "unretire"], resource is character) when { "admin" in principal.player.roles };`,
 			SeedVersion: 1,
 		},
 	}

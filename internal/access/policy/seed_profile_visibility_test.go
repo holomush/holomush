@@ -792,17 +792,22 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	//     `character:<id>`, which every reused world method runs. Without it the
 	//     admin write path is default-denied one layer down.
 	//   - `delete` IS ABSENT, deliberately, and its own test asserts both that
-	//     the action list has exactly four members and that a real engine denies
+	//     the action list has exactly three members and that a real engine denies
 	//     a player-admin `delete` on a character. world.Service.DeleteCharacter
 	//     is irreversible and cascades entity_properties (§4.4), so the RPC-level
 	//     absence of AdminDeleteCharacter is backed at the policy layer too.
 	//
-	// It DOES carry `read`, which the paragraphs above name as the widening that
-	// matters — and unlike the two `read_description` entries, `read` here does
-	// reach world.Service.GetCharacter and therefore characterToProto's PlayerId
-	// and LocationId. What bounds it is the principal: an admin operator, not a
-	// guest. The action list is pinned in wantShapes below, so narrowing or
-	// widening it turns this RED by shape even though the name set is unchanged.
+	// It does NOT carry `read`, and an earlier revision of this comment was wrong
+	// about why it might: it claimed `read` "does reach world.Service.GetCharacter"
+	// for this principal. It does not. Every production caller of GetCharacter
+	// stamps a character, job or plugin subject, and the admin portal's own reads
+	// bypass world policy entirely via AdminGetCharacterRow, a bounded repository
+	// projection. The arm was a dead grant that pre-authorised GetCharacter's full
+	// projection — PlayerId and LocationId, the fields D-75 narrowed away — for
+	// whichever player-flavoured read caller landed next. Removed on abac-reviewer's
+	// adjudication over the finished Phase 6 surface. The action list is pinned in
+	// wantShapes below, so re-adding it turns this RED by shape even though the name
+	// set is unchanged.
 	want := []string{
 		"seed:admin-character-administration",
 		"seed:character-description-read",
@@ -816,7 +821,7 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 	// The compiled target shape of every member, so a widening of an EXISTING
 	// member is caught even though the name set is unchanged.
 	wantShapes := map[string]characterSeedTargetShape{
-		"seed:admin-character-administration":    {principal: "player", actions: []string{"read", "write", "retire", "unretire"}},
+		"seed:admin-character-administration":    {principal: "player", actions: []string{"write", "retire", "unretire"}},
 		"seed:character-description-read":        {principal: "character", actions: []string{"read_description"}},
 		"seed:job-fixture-instance-scoped":       {principal: "job", actions: []string{"write"}},
 		"seed:job-retirement-instance-scoped":    {principal: "job", actions: []string{"read", "write"}},
@@ -1003,7 +1008,7 @@ func TestSeedAdminCharacterAdministrationIsCharacterScopedAndExcludesDelete(t *t
 
 	s := requireSeedPolicy(t, "seed:admin-character-administration")
 
-	const want = `permit(principal is player, action in ["read", "write", "retire", "unretire"], resource is character) ` +
+	const want = `permit(principal is player, action in ["write", "retire", "unretire"], resource is character) ` +
 		`when { "admin" in principal.player.roles };`
 	assert.Equal(t, want, s.DSLText)
 
@@ -1022,11 +1027,17 @@ func TestSeedAdminCharacterAdministrationIsCharacterScopedAndExcludesDelete(t *t
 	assert.Nil(t, compiled.Target.ResourceExact,
 		"scoped by resource TYPE, like its admin_section sibling")
 
-	require.Len(t, compiled.Target.ActionList, 4,
-		"exactly the four actions the admin RPCs traverse, and no more")
-	assert.Equal(t, []string{"read", "write", "retire", "unretire"}, compiled.Target.ActionList)
+	require.Len(t, compiled.Target.ActionList, 3,
+		"exactly the three actions AdminCharacterWriter traverses, and no more")
+	assert.Equal(t, []string{"write", "retire", "unretire"}, compiled.Target.ActionList)
 	assert.NotContains(t, compiled.Target.ActionList, "delete",
 		"world.Service.DeleteCharacter MUST stay unreachable from the admin boundary at the POLICY layer too")
+	assert.NotContains(t, compiled.Target.ActionList, "read",
+		"admin reads use AdminGetCharacterRow, a bounded repository projection that evaluates no policy. "+
+			"A `read` arm here grants nothing today and pre-authorises world.Service.GetCharacter's full "+
+			"projection — PlayerId and LocationId, the fields D-75 narrowed away — for the first "+
+			"player-flavoured read caller added later. It was carried as a dead grant until abac-reviewer "+
+			"adjudicated it over the finished Phase 6 surface; re-adding it needs that same adjudication")
 }
 
 // --- Attribute-reference coverage ---
