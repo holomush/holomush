@@ -602,6 +602,17 @@ Plans:
 
 - [ ] 06-08-PLAN.md — The edit Sheet, the D-110 mutation loop, the retire confirm, and the phone-band + indistinguishability E2E proofs
 
+### Phase 06.1: Admin portal web surface — shadcn components and the single root error boundary, the admin shell with permission-filtered nav, the character table, and the edit Sheet with its mutation loop (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 06.1 to break down)
+
 ## Progress
 
 > **Reading this table.** Phase numbers **restart at 1 per milestone as of v0.13**; v0.11 and v0.12 used the
