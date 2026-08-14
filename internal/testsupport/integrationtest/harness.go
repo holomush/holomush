@@ -860,6 +860,13 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		// without the operational complexity of seeded ABAC policies.
 		holoGRPC.WithAccessEngine(pe),
 		holoGRPC.WithVerbRegistry(verbRegistry),
+		// The ADMIN-08 nav hint, wired from the REAL role store exactly as
+		// cmd/holomush does. This half is LOAD-BEARING, not a convenience: the
+		// boundary spec that proves `roles` is non-authoritative reads the field
+		// as a setup precondition before exercising the denial, so without this
+		// line the precondition fails — and if the spec were written without it,
+		// the whole test would pass while asserting nothing about the field.
+		holoGRPC.WithPlayerRoleLookup(store.NewPostgresRoleStore(pool).PlayerRoles),
 	}
 	// Under WithPluginCrypto, enable the Phase 3b crypto identity path so
 	// QueryStreamHistory builds a typed CHARACTER SessionIdentity (binding_id
@@ -1185,6 +1192,27 @@ func (s *Server) startGatedGRPCListener() {
 		srv.Stop()
 		_ = lis.Close()
 	})
+}
+
+// CoreServer returns the harness's in-process CoreServer, for specs that must
+// read a CoreService response DIRECTLY rather than through a Session helper.
+//
+// # What it provides that the existing accessors do not
+//
+// The gated listener (WithGatedGRPCListener) mounts only AdminPortalService, and
+// the Session helpers drive game sessions rather than the auth surface — so
+// before this there was no way to read CheckPlayerSession's answer at all. The
+// ADMIN-08 boundary spec needs exactly that: it asserts the `roles` nav hint
+// says "admin" as a PRECONDITION, then watches the admin RPC deny that same
+// caller anyway.
+//
+// It is a READ of the harness's own composition, never a second one: this is the
+// same CoreServer Start built, with the same WithPlayerRoleLookup wiring
+// cmd/holomush uses — which is what makes an assertion on its answer meaningful.
+func (s *Server) CoreServer() *holoGRPC.CoreServer {
+	s.t.Helper()
+	require.NotNil(s.t, s.coreServer, "integrationtest: the harness has no CoreServer")
+	return s.coreServer
 }
 
 // GatedGRPCConn returns the client end of the bufconn server

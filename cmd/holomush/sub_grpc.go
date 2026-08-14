@@ -677,6 +677,12 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		holoGRPC.WithCryptoActive(cryptoActiveFor(s.cfg)),
 		holoGRPC.WithStreamContributor(pluginManager),
 		holoGRPC.WithAccessEngine(policyEngine),
+		// The ADMIN-08 nav hint on CheckPlayerSession. PlayerRoles is
+		// deliberately not on the store.RoleStore interface, so this crosses the
+		// gap the same way internal/access/setup does: a shared func field, not a
+		// widened interface. Unwired it would report no roles and draw no /admin
+		// entrance — which is why the harness wires it too.
+		holoGRPC.WithPlayerRoleLookup(store.NewPostgresRoleStore(pool).PlayerRoles),
 		holoGRPC.WithCommandQuerier(s.cfg.Plugins.CommandQuerier()),
 		holoGRPC.WithSubscriber(subscriber),
 		holoGRPC.WithHistoryReader(historyReader),

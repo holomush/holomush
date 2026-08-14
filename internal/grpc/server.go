@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/access/policy/attribute"
 	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
@@ -159,8 +160,12 @@ type CoreServer struct {
 	characterService  CharacterServiceProvider
 	playerSessionRepo auth.PlayerSessionRepository
 	playerRepo        auth.PlayerRepository
-	charRepo          auth.CharacterRepository
-	guestService      *auth.GuestService
+	// playerRoleLookup answers the ADMIN-08 nav hint on CheckPlayerSession. It
+	// is OPTIONAL: nil yields an empty roles list, never an error. See
+	// [WithPlayerRoleLookup].
+	playerRoleLookup attribute.PlayerRoleLookup
+	charRepo         auth.CharacterRepository
+	guestService     *auth.GuestService
 
 	// Binding repository for current-binding lookup in Subscribe /
 	// QueryStreamHistory (Current). Character-creation binding is owned by the
@@ -352,6 +357,31 @@ func WithGameID(p GameIDProvider) CoreServerOption {
 // badge is delivered.
 func WithSceneMuteChecker(c SceneMuteChecker) CoreServerOption {
 	return func(s *CoreServer) { s.sceneMute = c }
+}
+
+// WithPlayerRoleLookup wires the per-player role read CheckPlayerSession
+// answers the ADMIN-08 nav hint from.
+//
+// # It reuses the SHARED seam type, and does not widen an interface
+//
+// attribute.PlayerRoleLookup is the same func type internal/access/setup
+// already threads as ABACConfig.PlayerRoleLookup, backed in production by
+// store.PostgresRoleStore.PlayerRoles. Declaring a second identical func type
+// here would be a second name for one contract; and PlayerRoles stays OFF the
+// store.RoleStore interface deliberately (role_store.go:95-107, pinned by
+// TestRoleStoreInterfaceMethodSetIsUnchangedByPlayerRoles) because that
+// interface is faked in several places and only the concrete type can answer.
+// A func field is how this codebase already crosses that gap.
+//
+// # Unset is a supported state, not a broken one
+//
+// Leaving it nil makes CheckPlayerSession report an EMPTY roles list and never
+// an error. A mis-wired composition root therefore hides no admin and grants
+// none: the field decides what is DRAWN, and an empty list draws no admin
+// entrance. Failing the session check instead would let a nav hint break
+// session restore.
+func WithPlayerRoleLookup(fn attribute.PlayerRoleLookup) CoreServerOption {
+	return func(s *CoreServer) { s.playerRoleLookup = fn }
 }
 
 // NewCoreServer creates a new Core gRPC server.

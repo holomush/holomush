@@ -302,6 +302,11 @@ func (h *Handler) WebCheckSession(ctx context.Context, req *connect.Request[webv
 		IsGuest:            coreResp.GetIsGuest(),
 		Characters:         translateCharacterSummaries(coreResp.GetCharacters()),
 		DefaultCharacterId: coreResp.GetDefaultCharacterId(),
+		// Read the field, copy the field. The gateway MUST NOT look roles up
+		// itself and MUST NOT derive them: internal/web/ is
+		// protocol-translation-only, and a role decision made here would be in
+		// the wrong process and bypassable by anyone speaking gRPC to core.
+		Roles: coreResp.GetRoles(),
 	}), nil
 }
 
