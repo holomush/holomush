@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 17
+open_count: 18
 waived_count: 0
 fixed_count: 8
-total_count: 25
-last_updated: 2026-08-14T13:52:58.101Z
+total_count: 26
+last_updated: 2026-08-14T13:53:24.587Z
 ---
 
 # Broken Windows Ledger
@@ -40,6 +40,7 @@ last_updated: 2026-08-14T13:52:58.101Z
 | 23 | 06 | deviation | internal/grpc/server.go |  | 06-01 criterion defect: 'rg otelgrpc internal/grpc/server.go returns zero' is unsatisfiable (red at HEAD on a pre-existing comment; the plan's own action mandates adding another). Comment-filtered form exits 1 — no live reference. Not repaired. | open |  | 2026-08-14T13:52:50.673Z |  |
 | 24 | 06 | deviation | docs/superpowers/plans/2026-03-31-observability-and-telemetry.md | 499 | 06-01 criterion defect: 'rg NewGRPCServerInsecure . returns zero' — one match survives in this HISTORICAL plan doc naming the now-deleted symbol. Absent from all code (-g '!docs/**' exits 1). Not repaired: editing a retired doc to pass a grep is the repair-introduces-defect pattern. | open |  | 2026-08-14T13:52:58.021Z |  |
 | 25 | 06 | deviation | .planning/REQUIREMENTS.md |  | 06-01: requirements.mark-complete could not match the traceability-table rows for ADMIN-01/02, EXT-01/03/04 (table_unmatched, write_set_complete=false). Checkboxes were already [x] at HEAD; the 'Pending' traceability rows were left untouched rather than hand-edited. | open |  | 2026-08-14T13:52:58.101Z |  |
+| 26 | 06 | deviation | .planning/REQUIREMENTS.md |  | 06-01 CORRECTION to the prior ledger row: the CHECKBOXES for ADMIN-01/02, EXT-01/03/04 WERE written by requirements.mark-complete (they were [ ] at HEAD, not [x]). Only the traceability-table rows are unmatched and still read 'Pending'. Those rows were left untouched rather than hand-edited (planning-artifacts rule: tool-owned file). | open |  | 2026-08-14T13:53:24.587Z |  |
 
 ````json
 [
@@ -341,6 +342,18 @@ last_updated: 2026-08-14T13:52:58.101Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-14T13:52:58.101Z",
+    "resolved_at": null
+  },
+  {
+    "id": 26,
+    "kind": "deviation",
+    "phase": "06",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "06-01 CORRECTION to the prior ledger row: the CHECKBOXES for ADMIN-01/02, EXT-01/03/04 WERE written by requirements.mark-complete (they were [ ] at HEAD, not [x]). Only the traceability-table rows are unmatched and still read 'Pending'. Those rows were left untouched rather than hand-edited (planning-artifacts rule: tool-owned file).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-14T13:53:24.587Z",
     "resolved_at": null
   }
 ]

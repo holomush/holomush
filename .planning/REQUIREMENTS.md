@@ -188,10 +188,10 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 
 ### Admin portal shell & character administration (ADMIN)
 
-- [ ] **ADMIN-01**: `/admin` exists, is **`RoleAdmin`-gated via ABAC** (`admin_section:` resource + seed
+- [x] **ADMIN-01**: `/admin` exists, is **`RoleAdmin`-gated via ABAC** (`admin_section:` resource + seed
       policy) — never a bare `PlayerHasRole` lookup, and never a route-guard or gateway decision.
 
-- [ ] **ADMIN-02**: **Every admin RPC re-asserts its own authorization gate** through one shared helper
+- [x] **ADMIN-02**: **Every admin RPC re-asserts its own authorization gate** through one shared helper
       called first at every entry point, with typed `DENY_*` codes.
 
 - [ ] **ADMIN-03**: An admin can **list and search characters**, view character detail, and edit
@@ -221,17 +221,17 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 The milestone's defining constraint, made structural. These are separate REQ-IDs specifically so they
 cannot be dropped as "nice to have" during planning.
 
-- [ ] **EXT-01**: The admin section registry ships **seven entries** — `characters` available, and six
+- [x] **EXT-01**: The admin section registry ships **seven entries** — `characters` available, and six
       **`planned`**: stats, players, moderation, audit, config, plugins.
 
 - [ ] **EXT-02**: The six deferred sections ship **registered, role-gated, and returning
       `NOT_IMPLEMENTED` *after* the gate**, so wiring one later replaces a handler body rather than
       requiring someone to remember to add a check.
 
-- [ ] **EXT-03**: A registry entry requires an **authorization descriptor with no default and no zero
+- [x] **EXT-03**: A registry entry requires an **authorization descriptor with no default and no zero
       value meaning allow**; a section registered without one fails at compile time or at boot.
 
-- [ ] **EXT-04**: A **meta-test asserts set equality** between the section registry and the descriptor
+- [x] **EXT-04**: A **meta-test asserts set equality** between the section registry and the descriptor
       set, so the extensibility guarantee is non-vacuous from day one.
 
 - [x] **EXT-05**: The media model is proven by **inserting 1 primary + 10 gallery property rows through
