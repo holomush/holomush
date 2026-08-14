@@ -1143,6 +1143,8 @@ func TestBuildCharacterLifecyclePayloadRefusesAnEqualValuedTransition(t *testing
 // AdminUpdateCharacter into an emitted envelope, asserted with NotContains over
 // the serialized bytes — lives at the layer where values actually flow
 // (06-05 Task 2 Test 6b and Task 3 Test 5).
+//
+// Verifies: INV-PRIVACY-13
 func TestCharacterProfileUpdatePayloadExposesNoValueBearingField(t *testing.T) {
 	id := ulid.Make()
 

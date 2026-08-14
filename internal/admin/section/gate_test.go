@@ -274,16 +274,32 @@ func TestTheDescriptorResourceMustAgreeWithTheResourceTheGateEvaluated(t *testin
 func TestACallerAskingForMoreThanTheSectionDeclaresIsRefused(t *testing.T) {
 	t.Run("the declared action succeeds", func(t *testing.T) {
 		entry := requireAdminEntry(t)
-		assert.Equal(t, ActionRead, entry.Descriptor.Action)
+		// `characters` declares WRITE as of v0.13 phase-06 plan 05, so read — a
+		// LOWER rank — is admitted by the same ladder.
+		assert.Equal(t, ActionWrite, entry.Descriptor.Action)
 	})
 
-	t.Run("an undeclared action is refused on the SAME entry", func(t *testing.T) {
-		// Paired on the same section with the declared action succeeding, so the
-		// refusal cannot pass because the gate refuses everything.
-		requireAdminEntry(t)
-
+	t.Run("the write a write-declaring section offers is admitted", func(t *testing.T) {
 		_, err := AssertSectionAccess(t.Context(), engineFor(t, adminCaller()),
 			adminPlayerID, "characters", ActionWrite)
+		require.NoError(t, err,
+			"positive control: the section that DOES declare write must admit it, or the refusal "+
+				"below could pass because the gate refuses every write")
+	})
+
+	t.Run("an undeclared action is refused on a READ-declaring section", func(t *testing.T) {
+		// PAIRED with the control above on a DIFFERENT section, because
+		// `characters` no longer declares read as its maximum. `stats` does, and
+		// step 3's action check runs BEFORE step 4's availability check — so a
+		// planned section still yields ADMIN_SECTION_ACTION_NOT_DECLARED here
+		// rather than SECTION_NOT_IMPLEMENTED, which is itself the ordering this
+		// assertion depends on.
+		_, readErr := AssertSectionAccess(t.Context(), engineFor(t, adminCaller()),
+			adminPlayerID, "stats", ActionRead)
+		errutil.AssertErrorCode(t, readErr, "SECTION_NOT_IMPLEMENTED")
+
+		_, err := AssertSectionAccess(t.Context(), engineFor(t, adminCaller()),
+			adminPlayerID, "stats", ActionWrite)
 
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "ADMIN_SECTION_ACTION_NOT_DECLARED")

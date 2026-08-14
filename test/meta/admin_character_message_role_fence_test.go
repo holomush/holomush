@@ -84,7 +84,12 @@ func collectDescriptorFieldNames(md protoreflect.MessageDescriptor, visited map[
 // TestAdminCharacterMessagesCarryNoRoleBearingField is §10.6's designated
 // schema-level fence.
 //
-// Verifies: INV-PRIVACY-13
+// It carries NO `// Verifies:` annotation, deliberately. The property it proves —
+// no role-bearing FIELD on the admin character messages — is an elevation-of-
+// privilege fence, not INV-PRIVACY-13's prose-and-alt-linkage retention property,
+// and annotating it with an invariant it does not assert would be a false-green.
+// It is invariant-shaped and probably wants an id of its own; that is recorded in
+// 06-05-SUMMARY.md rather than minted here unplanned.
 func TestAdminCharacterMessagesCarryNoRoleBearingField(t *testing.T) {
 	visited := map[protoreflect.FullName]bool{}
 	var names []string

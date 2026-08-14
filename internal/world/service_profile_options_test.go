@@ -45,6 +45,11 @@ func profileUpdateEnvelope(t *testing.T, outbox *profileTxOutbox) world.Characte
 // TestUpdateCharacterProfileAttributesWithDescriptionIsOneWrite pins the R-28
 // combined write: a mask naming `description` alongside a `profile.*` path is
 // ONE domain write, ONE version bump, ONE transaction and ONE envelope.
+//
+// Its prose-absence assertions over the marshalled payload bytes are the
+// domain-layer half of the D-103 guarantee.
+//
+// Verifies: INV-PRIVACY-13
 func TestUpdateCharacterProfileAttributesWithDescriptionIsOneWrite(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()

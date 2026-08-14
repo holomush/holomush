@@ -254,7 +254,7 @@ func (s *AdminPortalServer) AdminUpdateCharacter(
 	ctx context.Context,
 	req *adminportalv1.AdminUpdateCharacterRequest,
 ) (*adminportalv1.AdminUpdateCharacterResponse, error) {
-	player, charID, err := s.adminWritePrecondition(ctx, req.GetCharacterId(), req.GetExpectedVersion())
+	player, charID, currentVersion, err := s.adminWritePrecondition(ctx, req.GetCharacterId(), req.GetExpectedVersion())
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +293,24 @@ func (s *AdminPortalServer) AdminUpdateCharacter(
 	}
 
 	if len(paths) == 0 {
-		// The §9.5 rule 4 no-op, reached only AFTER the guards above.
+		// THE STALE-VERSION GUARD FOR THE NO-OP PATH, and it has to live here
+		// because this branch reaches NO domain command — so the authoritative
+		// CAS that answers every other stale caller never runs.
+		//
+		// This is the ONE clause where the admin path diverges from the player
+		// facade (see this method's doc block): that path answers a stale
+		// empty-mask caller with SUCCESS, deliberately. Here the caller is
+		// editing SOMEONE ELSE'S character on an audited surface, so a stale
+		// guard means the request was composed against a view that has since
+		// changed, and refusing is what makes the operator re-read.
+		//
+		// The comparison is against the row read in the precondition. That is
+		// outside any transaction and therefore weaker than a CAS — but only in
+		// the direction that costs nothing, because this branch writes nothing.
+		if int(req.GetExpectedVersion()) != currentVersion {
+			return nil, status.Errorf(codes.Aborted, adminCharacterConcurrentMessage)
+		}
+		// The §9.5 rule 4 no-op, reached only AFTER every guard above.
 		return s.adminCharacterWriteResponseUpdate(ctx, charID)
 	}
 
@@ -342,7 +359,7 @@ func (s *AdminPortalServer) AdminRetireCharacter(
 	ctx context.Context,
 	req *adminportalv1.AdminRetireCharacterRequest,
 ) (*adminportalv1.AdminRetireCharacterResponse, error) {
-	player, charID, err := s.adminWritePrecondition(ctx, req.GetCharacterId(), req.GetExpectedVersion())
+	player, charID, _, err := s.adminWritePrecondition(ctx, req.GetCharacterId(), req.GetExpectedVersion())
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +390,7 @@ func (s *AdminPortalServer) AdminUnretireCharacter(
 	ctx context.Context,
 	req *adminportalv1.AdminUnretireCharacterRequest,
 ) (*adminportalv1.AdminUnretireCharacterResponse, error) {
-	player, charID, err := s.adminWritePrecondition(ctx, req.GetCharacterId(), req.GetExpectedVersion())
+	player, charID, _, err := s.adminWritePrecondition(ctx, req.GetCharacterId(), req.GetExpectedVersion())
 	if err != nil {
 		return nil, err
 	}
@@ -404,34 +421,35 @@ func (s *AdminPortalServer) adminWritePrecondition(
 	ctx context.Context,
 	characterID string,
 	expectedVersion int32,
-) (playerID, charID ulid.ULID, err error) {
+) (playerID, charID ulid.ULID, currentVersion int, err error) {
 	playerSession, ok := AdminPlayerFromContext(ctx)
 	if !ok {
 		// Unreachable through the gated server: the interceptor stashes the
 		// player before it calls any handler. Reached only by a composition that
 		// mounted this service WITHOUT the gate, which must fail closed.
 		errutil.LogErrorContext(ctx, "admin portal: no resolved player on context", nil)
-		return ulid.ULID{}, ulid.ULID{}, status.Errorf(codes.Internal, adminCharacterWriterNotConfigStr)
+		return ulid.ULID{}, ulid.ULID{}, 0, status.Errorf(codes.Internal, adminCharacterWriterNotConfigStr)
 	}
 	if versionErr := requireAdminGuardedVersion(ctx, expectedVersion); versionErr != nil {
-		return ulid.ULID{}, ulid.ULID{}, versionErr
+		return ulid.ULID{}, ulid.ULID{}, 0, versionErr
 	}
 	id, parseErr := ulid.Parse(characterID)
 	if parseErr != nil {
 		// An unparseable id and an absent row answer IDENTICALLY, exactly as the
 		// read path answers them, so neither is an existence oracle.
-		return ulid.ULID{}, ulid.ULID{}, status.Errorf(codes.NotFound, adminCharacterNotFoundMessage)
+		return ulid.ULID{}, ulid.ULID{}, 0, status.Errorf(codes.NotFound, adminCharacterNotFoundMessage)
 	}
 	if s.characters == nil {
-		return ulid.ULID{}, ulid.ULID{}, adminCharacterReaderMissing(ctx, "character")
+		return ulid.ULID{}, ulid.ULID{}, 0, adminCharacterReaderMissing(ctx, "character")
 	}
-	if _, err := s.characters.AdminGetCharacterRow(ctx, id); err != nil {
-		if errors.Is(err, world.ErrNotFound) {
-			return ulid.ULID{}, ulid.ULID{}, status.Errorf(codes.NotFound, adminCharacterNotFoundMessage)
+	row, readErr := s.characters.AdminGetCharacterRow(ctx, id)
+	if readErr != nil {
+		if errors.Is(readErr, world.ErrNotFound) {
+			return ulid.ULID{}, ulid.ULID{}, 0, status.Errorf(codes.NotFound, adminCharacterNotFoundMessage)
 		}
-		return ulid.ULID{}, ulid.ULID{}, mapAdminCharacterError(ctx, err, "operation", "admin_character_write_precondition")
+		return ulid.ULID{}, ulid.ULID{}, 0, mapAdminCharacterError(ctx, readErr, "operation", "admin_character_write_precondition")
 	}
-	return playerSession.PlayerID, id, nil
+	return playerSession.PlayerID, id, row.Version, nil
 }
 
 // adminCharacterRowAfterWrite re-reads the row so the response carries the

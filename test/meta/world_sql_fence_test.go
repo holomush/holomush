@@ -566,3 +566,259 @@ func TestAdminSearchPredicatesNameOnlyTheTwoSearchableColumns(t *testing.T) {
 			"Either the admin search moved out of this package or its predicates are no "+
 			"longer Go string literals; either way this fence must be repointed, not deleted", scanned)
 }
+
+// --- 06-05 Task 3: the events_audit SINGLE-WRITER fence ---
+//
+// 01-SPEC §14 row 9 is explicit that NO transactional write path into
+// events_audit exists, and that building one would bypass the codec / dek_ref /
+// dedup contract writeAuditRow maintains. An admin mutation's audit envelope
+// therefore commits with its state change through the world outbox, and the
+// events_audit row is PROJECTED from that envelope asynchronously — by exactly
+// one writer.
+//
+// # The property is about PRODUCTION writers, and the scoping is not cosmetic
+//
+// Stated naively — "no INSERT INTO events_audit anywhere outside projection.go"
+// — this fence is FALSE against the tree at HEAD, and always was. Verified:
+//
+//	rg -n 'INSERT INTO events_audit' --glob '*.go' -g '!*_test.go'
+//	  internal/eventbus/audit/projection.go:376
+//	  internal/testsupport/holomushtest/server.go:560
+//	  internal/testsupport/holomushtest/server.go:782
+//
+// Note WHICH mechanism excludes the two extras, because it is not the one a
+// reader would guess: their filenames do NOT end in _test.go, so the filename
+// filter alone leaves them in. They are excluded because worldFenceSkipDir skips
+// internal/testsupport. Both mechanisms are applied below; only the second
+// actually does this work.
+//
+// # The allowlist is TWO files, and the second one is not what the plan expected
+//
+// The search above misses a fourth site, because it is PUBLIC-QUALIFIED:
+//
+//	rg -ni 'INSERT\s+INTO\s+(public\.)?events_audit\b' --glob '*.go' -g '!*_test.go'
+//	  internal/eventbus/audit/projection.go:376            INSERT INTO events_audit
+//	  internal/eventbus/audit/retention_partitions.go:546  INSERT INTO public.events_audit
+//	  internal/testsupport/holomushtest/server.go:560,782  (skipped: internal/testsupport)
+//
+// retention_partitions.go's insert is REAL and it is Go, not migration SQL: it is
+// the one-time boot-gate backfill that copies pre-existing rows out of
+// events_audit_unpartitioned into the partitioned table (000052). It is
+// allowlisted here rather than fenced, because §14 row 9's property is about a
+// TRANSACTIONAL write path from a mutation — a request that changes state and
+// writes its own audit row in the same transaction, bypassing the codec /
+// dek_ref / dedup contract. A boot-gate migration of rows the projection ALREADY
+// wrote is neither: it carries every column forward verbatim, including codec,
+// dek_ref and dek_version, and it is ON CONFLICT DO NOTHING on the same
+// ULID-derived composite key the projection dedups on.
+//
+// Both entries carry an insert, so neither is dead configuration reading to a
+// later author as permission — and the inspected-set assertion below fails if
+// either ever stops being reached by the walk.
+
+// eventsAuditTable is the retained audit table this fence protects.
+const eventsAuditTable = "events_audit"
+
+// eventsAuditWriterFile is the ASYNCHRONOUS PROJECTION — writeAuditRow, the sole
+// writer of audit rows derived from live events.
+//
+// The allowlist is spelled as FILES rather than the directory (unlike
+// isWriterBoundaryPath's internal/world/postgres, pinned at
+// test/meta/world_sql_fence_test.go:333), because the sibling files in
+// internal/eventbus/audit — the DLQ capturer, the per-plugin consumer, the replay
+// path — are deliberately NOT writers to this table and must stay fenced from it.
+const eventsAuditWriterFile = "internal/eventbus/audit/projection.go"
+
+// eventsAuditBackfillFile is the one-time partition backfill described above.
+const eventsAuditBackfillFile = "internal/eventbus/audit/retention_partitions.go"
+
+// eventsAuditAllowedWriters is the closed allowlist, each entry carrying the
+// reason it is not a transactional write path.
+var eventsAuditAllowedWriters = map[string]string{
+	eventsAuditWriterFile:   "the asynchronous projection — the ONLY writer of rows derived from live events",
+	eventsAuditBackfillFile: "the one-time boot-gate backfill out of events_audit_unpartitioned; copies existing rows verbatim, ON CONFLICT DO NOTHING",
+}
+
+// eventsAuditInsertRegexp matches an INSERT targeting events_audit, optionally
+// public-qualified. It is word-boundary anchored so it does not fire on a longer
+// identifier such as events_audit_dlq.
+func eventsAuditInsertRegexp() *regexp.Regexp {
+	return regexp.MustCompile(`(?i)\binsert\s+into\s+(?:public\.)?(` + eventsAuditTable + `)\b`)
+}
+
+// isEventsAuditWriterPath reports whether a repo-relative path is on the closed
+// allowlist above.
+func isEventsAuditWriterPath(rel string) bool {
+	_, ok := eventsAuditAllowedWriters[filepath.ToSlash(rel)]
+	return ok
+}
+
+// TestOnlyTheAuditProjectionInsertsIntoEventsAudit is the single-writer fence.
+//
+// It reuses the shipped allowlist helpers rather than re-spelling a walker:
+// worldFenceSkipDir (pinned at test/meta/world_sql_fence_test.go:325-328) for the
+// directory exclusions and the same go/ast string-literal scan the world fence
+// uses, so comments and identifiers never false-positive.
+//
+// Verifies: INV-WORLD-9
+func TestOnlyTheAuditProjectionInsertsIntoEventsAudit(t *testing.T) {
+	root := findRepoRoot(t)
+	re := eventsAuditInsertRegexp()
+
+	var (
+		inspected  []string
+		violations []string
+	)
+	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		if d.IsDir() {
+			if rel == "." {
+				return nil
+			}
+			if worldFenceSkipDir(rel, d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// TEST FILES ARE OUT OF SCOPE, deliberately and not accidentally. A
+		// fixture that seeds events_audit to exercise a READ path writes nothing
+		// a production request can reach, and about a dozen do exactly that.
+		// TestEventsAuditFenceDoesNotFireOnATestFile below is what makes this a
+		// scoped decision rather than a hole.
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		//nolint:gosec // G122: this meta-test walks the trusted in-repo source tree; path is repo-derived, not untrusted input.
+		src, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if isGeneratedGo(src) {
+			return nil
+		}
+		inspected = append(inspected, filepath.ToSlash(rel))
+		if isEventsAuditWriterPath(rel) {
+			return nil // the ONE allowlisted writer
+		}
+		for range scanGoStringLiteralsForEventsAuditInsert(t, path, src, re) {
+			violations = append(violations, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	require.NoError(t, walkErr)
+
+	require.NotEmpty(t, inspected,
+		"a walk that inspected no file would satisfy the emptiness assertion below vacuously")
+	for file, why := range eventsAuditAllowedWriters {
+		assert.Contains(t, inspected, file,
+			"the allowlisted writer %s (%s) must be INSIDE the inspected set — if a skip rule ever "+
+				"excluded it, the fence would still be green while covering nothing that matters, and "+
+				"the entry would have quietly become dead configuration", file, why)
+	}
+
+	assert.Empty(t, violations,
+		"01-SPEC §14 row 9: %s stays the ONLY production writer to %s. A second writer bypasses the "+
+			"codec / dek_ref / dedup contract writeAuditRow maintains. An admin mutation's audit row is "+
+			"PROJECTED from its outbox envelope, never inserted transactionally.",
+		eventsAuditWriterFile, eventsAuditTable)
+}
+
+// scanGoStringLiteralsForEventsAuditInsert is the events_audit twin of
+// scanGoStringLiteralsForWorldWriteSQL: it parses Go source and returns the
+// matches found in STRING LITERALS ONLY, so a doc comment naming the statement —
+// like the one on this very fence — never false-positives.
+func scanGoStringLiteralsForEventsAuditInsert(t *testing.T, filename string, src []byte, re *regexp.Regexp) []string {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filename, src, 0)
+	require.NoError(t, err, "parse %s", filename)
+
+	var hits []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		val, uErr := strconv.Unquote(lit.Value)
+		if uErr != nil {
+			val = lit.Value
+		}
+		if m := re.FindStringSubmatch(val); m != nil {
+			hits = append(hits, strings.ToLower(m[1]))
+		}
+		return true
+	})
+	return hits
+}
+
+// TestEventsAuditFenceFlagsAProductionInsert is the NEGATIVE fixture: the scanner
+// MUST flag an events_audit insert in a synthetic production file.
+func TestEventsAuditFenceFlagsAProductionInsert(t *testing.T) {
+	re := eventsAuditInsertRegexp()
+	src := []byte(`package fixture
+
+func write() {
+	q := "INSERT INTO events_audit (id, event_ms) VALUES ($1, $2)"
+	_ = q
+}
+`)
+	hits := scanGoStringLiteralsForEventsAuditInsert(t, "fixture.go", src, re)
+	assert.ElementsMatch(t, []string{"events_audit"}, hits,
+		"a transactional insert into the retained audit table must be flagged")
+
+	assert.False(t, isEventsAuditWriterPath("internal/eventbus/audit/dlq.go"),
+		"the allowlist names two FILES; a predicate that admitted the whole audit package "+
+			"would satisfy the fence just as well and cover nothing")
+	assert.True(t, isEventsAuditWriterPath(eventsAuditWriterFile))
+	assert.True(t, isEventsAuditWriterPath(eventsAuditBackfillFile))
+	assert.Len(t, eventsAuditAllowedWriters, 2,
+		"the allowlist is exactly two entries; a third needs its own argument for why it is not a "+
+			"transactional write path")
+}
+
+// TestEventsAuditFenceIgnoresReadsCommentsAndTheDLQTable proves the three ways
+// the scanner must NOT fire: a SELECT, a comment, and the neighbouring
+// events_audit_dlq table whose name shares this one's prefix.
+func TestEventsAuditFenceIgnoresReadsCommentsAndTheDLQTable(t *testing.T) {
+	re := eventsAuditInsertRegexp()
+	src := []byte(`package fixture
+
+// INSERT INTO events_audit would be a violation if this scan were a grep.
+func read() {
+	q := "SELECT id FROM events_audit WHERE id = $1"
+	dlq := "INSERT INTO events_audit_dlq (id) VALUES ($1)"
+	_, _ = q, dlq
+}
+`)
+	assert.Empty(t, scanGoStringLiteralsForEventsAuditInsert(t, "fixture.go", src, re),
+		"reads, comments and the events_audit_dlq table are all outside this fence")
+}
+
+// TestEventsAuditFenceDoesNotFireOnATestFile proves the _test.go exclusion is a
+// SCOPED DECISION rather than an accidental hole.
+//
+// About a dozen test fixtures insert into events_audit to exercise read paths.
+// The fence's property is about PRODUCTION writers, and this test is what records
+// that as a choice — without it, a later author widening the scan to test files
+// would find a dozen failures and no statement of why they were ever excluded.
+func TestEventsAuditFenceDoesNotFireOnATestFile(t *testing.T) {
+	root := findRepoRoot(t)
+	re := eventsAuditInsertRegexp()
+
+	// The real in-tree fixture, so this is an assertion about the corpus rather
+	// than about a synthetic string.
+	fixture := filepath.Join(root, "internal", "store", "events_audit_test.go")
+	src, err := os.ReadFile(fixture)
+	require.NoError(t, err, "the fixture this exclusion exists for must still be present")
+	require.NotEmpty(t, scanGoStringLiteralsForEventsAuditInsert(t, fixture, src, re),
+		"the chosen fixture must actually CONTAIN an events_audit insert, or this test proves nothing")
+
+	assert.True(t, strings.HasSuffix(fixture, "_test.go"),
+		"and it is excluded by the _test.go filter — not by accident, and not because it lacks the insert")
+}

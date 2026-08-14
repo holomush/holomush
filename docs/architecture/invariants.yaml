@@ -2452,6 +2452,26 @@ invariants:
     asserted_by:
       - "test/integration/access/admin_section_gate_test.go"
 
+  - id: INV-PRIVACY-13
+    scope: INV-PRIVACY
+    origin_spec: ".planning/phases/06-admin-portal-shell-character-administration/06-05-PLAN.md"
+    summary: "An admin mutation's audit payload carries changed attribute NAMES and lifecycle ENUM values only. No player-authored
+      profile prose -- not the value before the edit and not the value after it -- and no acting-character id reaches the
+      payload, and therefore neither reaches the retained events_audit. The two halves are split by field KIND on purpose
+      (D-103): a lifecycle status is a closed enum the server assigns, so recording the value a transition left copies nothing
+      a player wrote, while profile prose is player-authored personal content and events_audit is retained, so its values
+      are absent and only the names of the changed fields are recorded. Encrypting the prose instead was considered and rejected
+      -- retained-is-still-retained, encryption is not erasure, and crypto-shredding is a separate mechanism this milestone
+      does not ship. `description` therefore appears in changed_attributes as a NAME when an admin edits it, and the admin
+      write never routes through world.Service.UpdateCharacterDescription, whose kindCharacterUpdated payload declares a `description`
+      STRING. The acting character is omitted for the same retention reason (D-104): the envelope Actor is player:<id> carried
+      verbatim from Caller.subject, so no durable player-to-alt linkage is written."
+    binding: bound
+    asserted_by:
+      - "internal/world/payloads_test.go"
+      - "internal/world/service_profile_options_test.go"
+      - "test/integration/access/admin_characters_write_test.go"
+
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
   # boundary note). FIRST bare-INV-N scope: dense per-scope renumbering (legacy 28,29,53-60
@@ -5304,3 +5324,24 @@ invariants:
     asserted_by:
       - "test/meta/world_caller_census_test.go"
       - "internal/world/caller_test.go"
+
+  - id: INV-WORLD-9
+    scope: INV-WORLD
+    origin_spec: ".planning/phases/06-admin-portal-shell-character-administration/06-05-PLAN.md"
+    summary: "An admin mutation's audit envelope commits or rolls back WITH its state change, in ONE transaction through the
+      buildIntent -> mutator seam: a forced failure of that transaction leaves zero outbox rows AND zero events_audit rows
+      for the mutation, so a committed envelope for an uncommitted state change -- and a committed state change with no envelope
+      -- are both unreachable. There is NO transactional write path into events_audit (01-SPEC 14 row 9): within non-test
+      production Go source, the only files carrying an INSERT INTO events_audit are internal/eventbus/audit/projection.go,
+      the asynchronous projection that writes rows derived from live events, and internal/eventbus/audit/retention_partitions.go,
+      the one-time boot-gate backfill out of events_audit_unpartitioned which copies existing rows verbatim under ON CONFLICT
+      DO NOTHING. Building a second writer would bypass the codec / dek_ref / dedup contract writeAuditRow maintains. The
+      summary deliberately does NOT claim that a world-outbox envelope is projected INTO events_audit: it is not, today --
+      the relay publishes through a bare JetStreamPublisher, only eventbus.RenderingPublisher writes the App-Rendering header,
+      and audit.writeAuditRow rejects a message without it. That gap is pinned by TestARelayedWorldEnvelopeCarriesNoRenderingMetadata
+      and reported in 06-05-SUMMARY.md; this invariant claims only the transactional property and the single-writer property,
+      which are both proven."
+    binding: bound
+    asserted_by:
+      - "test/integration/access/admin_characters_write_test.go"
+      - "test/meta/world_sql_fence_test.go"

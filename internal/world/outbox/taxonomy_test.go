@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -203,4 +204,58 @@ func TestNoAdminOnlyCharacterKindWasMinted(t *testing.T) {
 		assert.NotContains(t, strings.ToLower(kind), "admin",
 			"the admin write reuses the shipped character kinds; %q looks like a minted admin kind", kind)
 	}
+}
+
+// TestARelayedWorldEnvelopeCarriesNoRenderingMetadata pins the CURRENT boundary
+// between the world outbox and the host audit projection — a boundary this
+// phase's D-105 reasoning assumes is closed and which is not.
+//
+// # What is true
+//
+// An admin mutation's audit envelope commits or rolls back WITH its state change.
+// That is proven end to end in test/integration/access/admin_characters_write_test.go
+// and it is the half of ROADMAP criterion 3 that holds.
+//
+// # What is NOT true today
+//
+// The second half — "the events_audit row is PROJECTED from that envelope" — does
+// not happen for a world-outbox envelope, because the two ends do not meet:
+//
+//   - EnvelopeToEvent (wire.go) constructs the eventbus.Event with no Rendering,
+//     asserted below.
+//   - The relay publishes through EventBus.Publisher() — a bare
+//     JetStreamPublisher. Only eventbus.RenderingPublisher writes the
+//     App-Rendering header, and it is not in the relay's path. (It could not be:
+//     its Lookup resolves the wire type against plugin verbs[].type and
+//     hard-fails EMIT_UNKNOWN_VERB on a world-change kind like character_retired.)
+//   - audit.writeAuditRow REQUIRES App-Rendering and returns AUDIT_MISSING_HEADER
+//     without it (projection.go, the renderingJSON == "" arm).
+//
+// So a world envelope reaching the projection is rejected rather than persisted.
+// This test asserts the first bullet — the one fact that lives in this package —
+// so the boundary is recorded as a pinned property rather than as a comment. If a
+// future change gives relayed world events rendering metadata, this test goes RED
+// and whoever does it is pointed at the audit-projection contract that change
+// would newly satisfy.
+func TestARelayedWorldEnvelopeCarriesNoRenderingMetadata(t *testing.T) {
+	env := wmodel.Envelope{
+		EventID:       ulid.Make(),
+		GameID:        "main",
+		Kind:          outbox.KindCharacterRetired,
+		SchemaVersion: 2,
+		Actor:         "player:" + ulid.Make().String(),
+		AggregateType: wmodel.AggregateCharacter,
+		AggregateID:   ulid.Make(),
+		Payload:       []byte(`{"character_id":"x","status":"retired","before_status":"active","section":"characters","action":"write"}`),
+	}
+
+	ev, err := outbox.EnvelopeToEvent(env)
+	require.NoError(t, err)
+	require.NotEmpty(t, ev.Payload, "control: the adapter really did build an event")
+	assert.Nil(t, ev.Rendering,
+		"a relayed world envelope carries NO rendering metadata, so the host audit projection "+
+			"(which requires the App-Rendering header) cannot persist it — see this test's doc comment")
+	assert.NotContains(t, ev.Headers, "App-Rendering",
+		"and the header is absent too: only eventbus.RenderingPublisher writes it, and the relay "+
+			"does not route through it")
 }

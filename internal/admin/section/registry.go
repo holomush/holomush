@@ -100,13 +100,28 @@ type Section struct {
 // same change — TestTheRegistryIDSetEqualsTheSevenIDsSpec101Enumerates is RED
 // otherwise, in both directions.
 var all = []Section{
-	entry("characters", StatusAvailable),
-	entry("stats", StatusPlanned),
-	entry("players", StatusPlanned),
-	entry("moderation", StatusPlanned),
-	entry("audit", StatusPlanned),
-	entry("config", StatusPlanned),
-	entry("plugins", StatusPlanned),
+	// `characters` is the ONE section declaring ActionWrite, and it declares it
+	// because v0.13 phase-06 ships three write RPCs under it (§10.4, §10.6).
+	//
+	// A section's Descriptor.Action is its declared MAXIMUM, and
+	// assertSectionAccess step 3 refuses a request whose rank exceeds it — so a
+	// write RPC under a read-declaring section is refused with
+	// ADMIN_SECTION_ACTION_NOT_DECLARED no matter what its METHOD descriptor
+	// says and no matter what policy permits. The two declarations are
+	// independent gates and BOTH must admit write: AdminDescriptors names the
+	// action a METHOD asks for, this names the maximum a SECTION offers.
+	//
+	// The six planned sections stay at ActionRead deliberately. Widening one
+	// before it has a write surface would declare an operation class nothing
+	// implements, and the declared maximum is what a future reviewer reads as
+	// the section's intended blast radius.
+	writeEntry("characters", StatusAvailable),
+	entry("stats"),
+	entry("players"),
+	entry("moderation"),
+	entry("audit"),
+	entry("config"),
+	entry("plugins"),
 }
 
 // entry builds a registry row, DERIVING the descriptor's resource from the id
@@ -115,12 +130,32 @@ var all = []Section{
 //
 // [validateEntries] re-derives and compares it anyway: a future hand-written
 // literal is CAUGHT rather than trusted.
-func entry(id ID, status Status) Section {
+// entry builds a PLANNED, read-only registry row.
+//
+// It takes no status parameter because every remaining caller is a planned
+// section: `characters` is the one available row and it goes through writeEntry.
+// A status parameter that only ever receives StatusPlanned reads as a choice
+// nobody is making.
+func entry(id ID) Section {
+	return sectionEntry(id, StatusPlanned, ActionRead)
+}
+
+// writeEntry builds a registry row whose declared MAXIMUM action is write.
+//
+// It is a separate constructor rather than a parameter on entry so the six
+// read-only rows above cannot acquire write by a one-character edit, and so the
+// single write-declaring section is visible at the call site rather than in a
+// trailing argument.
+func writeEntry(id ID, status Status) Section {
+	return sectionEntry(id, status, ActionWrite)
+}
+
+func sectionEntry(id ID, status Status, action string) Section {
 	return Section{
 		ID:     id,
 		Status: status,
 		Descriptor: Descriptor{
-			Action:   ActionRead,
+			Action:   action,
 			Resource: access.AdminSectionResource(string(id)),
 		},
 	}
