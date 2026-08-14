@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 14
+open_count: 17
 waived_count: 0
 fixed_count: 8
-total_count: 22
-last_updated: 2026-08-13T00:02:39.627Z
+total_count: 25
+last_updated: 2026-08-14T13:52:58.101Z
 ---
 
 # Broken Windows Ledger
@@ -37,6 +37,9 @@ last_updated: 2026-08-13T00:02:39.627Z
 | 20 | 05 | unrun-verify | web/src/routes/(authed)/characters/+page.svelte |  | 05-07 Task 3 human-check unrun: the sectioned roster, the collapse chip, the retired suppression and both echo sites need a live grid | open |  | 2026-08-12T23:40:42.116Z |  |
 | 21 | 05 | deviation | web/e2e/public-profile.spec.ts |  | 05-08 could not build the plan's [unreachable character] not-found parity case: seed:profile-reachable and seed:viewer-character-description-read (internal/access/policy/seed.go:710,951) both clear anonymous\|guest\|player, so v0.13 seeds no below-floor character. Shipped [nonexistent ULID] vs [malformed id] instead. The unreachable-vs-nonexistent parity has no E2E coverage until a game raises a floor. | open |  | 2026-08-13T00:02:39.552Z |  |
 | 22 | 05 | deviation | internal/store/character_repo.go |  | charRepo.ListByPlayer still has no ORDER BY, so roster ordering is not provably deterministic; 05-08 deliberately asserts no ordering rather than pinning an implementation accident. Fix is one ORDER BY server-side. | open |  | 2026-08-13T00:02:39.627Z |  |
+| 23 | 06 | deviation | internal/grpc/server.go |  | 06-01 criterion defect: 'rg otelgrpc internal/grpc/server.go returns zero' is unsatisfiable (red at HEAD on a pre-existing comment; the plan's own action mandates adding another). Comment-filtered form exits 1 — no live reference. Not repaired. | open |  | 2026-08-14T13:52:50.673Z |  |
+| 24 | 06 | deviation | docs/superpowers/plans/2026-03-31-observability-and-telemetry.md | 499 | 06-01 criterion defect: 'rg NewGRPCServerInsecure . returns zero' — one match survives in this HISTORICAL plan doc naming the now-deleted symbol. Absent from all code (-g '!docs/**' exits 1). Not repaired: editing a retired doc to pass a grep is the repair-introduces-defect pattern. | open |  | 2026-08-14T13:52:58.021Z |  |
+| 25 | 06 | deviation | .planning/REQUIREMENTS.md |  | 06-01: requirements.mark-complete could not match the traceability-table rows for ADMIN-01/02, EXT-01/03/04 (table_unmatched, write_set_complete=false). Checkboxes were already [x] at HEAD; the 'Pending' traceability rows were left untouched rather than hand-edited. | open |  | 2026-08-14T13:52:58.101Z |  |
 
 ````json
 [
@@ -302,6 +305,42 @@ last_updated: 2026-08-13T00:02:39.627Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-13T00:02:39.627Z",
+    "resolved_at": null
+  },
+  {
+    "id": 23,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "internal/grpc/server.go",
+    "line": null,
+    "description": "06-01 criterion defect: 'rg otelgrpc internal/grpc/server.go returns zero' is unsatisfiable (red at HEAD on a pre-existing comment; the plan's own action mandates adding another). Comment-filtered form exits 1 — no live reference. Not repaired.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-14T13:52:50.673Z",
+    "resolved_at": null
+  },
+  {
+    "id": 24,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "docs/superpowers/plans/2026-03-31-observability-and-telemetry.md",
+    "line": 499,
+    "description": "06-01 criterion defect: 'rg NewGRPCServerInsecure . returns zero' — one match survives in this HISTORICAL plan doc naming the now-deleted symbol. Absent from all code (-g '!docs/**' exits 1). Not repaired: editing a retired doc to pass a grep is the repair-introduces-defect pattern.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-14T13:52:58.021Z",
+    "resolved_at": null
+  },
+  {
+    "id": 25,
+    "kind": "deviation",
+    "phase": "06",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "06-01: requirements.mark-complete could not match the traceability-table rows for ADMIN-01/02, EXT-01/03/04 (table_unmatched, write_set_complete=false). Checkboxes were already [x] at HEAD; the 'Pending' traceability rows were left untouched rather than hand-edited.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-14T13:52:58.101Z",
     "resolved_at": null
   }
 ]

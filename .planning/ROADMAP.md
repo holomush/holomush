@@ -572,7 +572,7 @@ Plans:
 4. All six deferred sections (stats, players, moderation, audit, config, plugins) are registered, role-gated, and return `NOT_IMPLEMENTED` **after** the gate — a non-admin hitting one is *denied*, not told it is unimplemented — and a meta-test asserts **set equality** between the section registry and the authorization-descriptor set, so a section registered without a descriptor fails at compile time or at boot.
 5. The `roles` hint exposed on `WebCheckSessionResponse` is **non-authoritative** — it is a drawing aid only, and a caller who acts on a role it names still meets a denial at the admin RPC. (The nav that consumes it is Phase 06.1's; this phase owes only the hint and the denial behind it.)
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 **UI hint**: no — the web surface moved to Phase 06.1 on 2026-08-13; this phase is proto, gate, RPC, SQL and audit only.
 **Research flag**: `--research-phase` recommended — there is no in-repo precedent for the web gateway making an admin decision (`internal/web/` has zero `RoleAdmin` references); `AssertOperatorAdmin`'s shape must be transposed across a different auth model, and the reserved-section descriptor mechanism needs a concrete fail-at-boot design.
 
@@ -581,7 +581,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Tracer: the fail-closed admin section gate, end-to-end from proto to handler
+- [x] 06-01-PLAN.md — Tracer: the fail-closed admin section gate, end-to-end from proto to handler
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -646,7 +646,7 @@ Plans:
 | 3. Platform Hardening & Deployment Scaling | v0.11 | 6/6 | Complete    | 2026-08-10 |
 | 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 9/9 | In Progress|  |
 | 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 7/8 | In Progress|  |
-| 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
+| 6. Operational Hardening & Assurance Gates | v0.12 | 1/4 | In Progress|  |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 21/21 [^p9] | Complete | 2026-07-27 |
