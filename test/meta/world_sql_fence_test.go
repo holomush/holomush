@@ -398,3 +398,171 @@ func TestWorldSQLFenceIsNotADepguardRule(t *testing.T) {
 	assert.NotContains(t, cfg, "world_feed_counter",
 		"no world-table SQL depguard rule belongs in .golangci.yaml (depguard matches packages, not SQL)")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE SEARCH-COLUMN FENCE (01-SPEC §11.1 / §11.3, D-106).
+//
+// A SEPARATE assertion from the mutation fence above, sharing its
+// parse-Go-not-grep machinery. The two have genuinely different subjects and
+// opposite directions:
+//
+//   - The mutation fence asserts that world-table INSERT/UPDATE/DELETE lives
+//     ONLY INSIDE internal/world/postgres. It says nothing about reads.
+//   - This one asserts a property of a read INSIDE that boundary: which COLUMNS
+//     an ILIKE/LIKE/~ predicate in the character repository may name.
+//
+// So the mutation fence could not carry it — a search predicate over
+// characters.description is not a mutation, targets a permitted table, and
+// lives at a permitted path, so every one of its checks passes on the exact
+// code this fence exists to refuse.
+//
+// # Why username is admissible and description is not
+//
+// players.username is an OOC IDENTITY column the `admin` audience already sees
+// on every row of the admin list. characters.description and the twelve §7.2
+// `profile.*` names are privacy-bearing PROSE, and a substring predicate over
+// them is a content search over player-authored text wearing the name of a
+// lookup. §11.1 forbids it and 06-CONTEXT's D-106 defers it explicitly.
+//
+// The forbidden set is spelled as an EXPLICIT LITERAL rather than matched by a
+// `profile.` prefix heuristic: a prefix test would silently admit a future
+// prose column that did not happen to be named `profile.*`, and — more to the
+// point — `description` is not prefixed at all, yet it is the load-bearing
+// member, because it is the one that is actually a COLUMN on `characters` and
+// therefore the one a predicate could reach.
+
+// forbiddenSearchColumns is §10.6's thirteen writable paths: `description` PLUS
+// twelve `profile.*` names. It is thirteen PATHS, not thirteen `profile.*`
+// columns — a miscount that invites either inventing a thirteenth profile name
+// that does not exist or dropping `description`, which is the only one a SQL
+// predicate can actually name.
+var forbiddenSearchColumns = []string{
+	"description",
+	"profile.pronouns",
+	"profile.concept",
+	"profile.species",
+	"profile.age",
+	"profile.faction",
+	"profile.appearance",
+	"profile.personality",
+	"profile.biography",
+	"profile.rumors",
+	"profile.currently",
+	"profile.rp_preferences",
+	"profile.timezone",
+}
+
+// searchPredicateRegexp matches a substring-search predicate and captures the
+// column it names. It covers all three spellings Postgres offers: ILIKE, LIKE
+// and the POSIX regex operators (~, ~*, !~, !~*).
+func searchPredicateRegexp() *regexp.Regexp {
+	return regexp.MustCompile(`(?i)([A-Za-z_][A-Za-z0-9_.]*)\s*(?:I?LIKE|!?~\*?)\s`)
+}
+
+// scanGoStringLiteralsForSearchPredicates returns every column named on the
+// left of a substring-search predicate in a Go source file's STRING LITERALS.
+//
+// It reuses the mutation fence's parse-Go-not-grep property: comments and
+// identifiers are never inspected, so the doc comment on AdminSearchCharacters
+// — which names `description` precisely to explain why it is forbidden —
+// cannot make this fence fire on a correct implementation.
+func scanGoStringLiteralsForSearchPredicates(t *testing.T, filename string, src []byte) []string {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filename, src, 0)
+	require.NoError(t, err, "parse %s", filename)
+
+	re := searchPredicateRegexp()
+	var columns []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		val, uErr := strconv.Unquote(lit.Value)
+		if uErr != nil {
+			val = lit.Value
+		}
+		for _, m := range re.FindAllStringSubmatch(val, -1) {
+			columns = append(columns, strings.ToLower(m[1]))
+		}
+		return true
+	})
+	return columns
+}
+
+// bareColumnName drops a table alias qualifier, so `c.description` and
+// `description` are judged as the same column.
+func bareColumnName(col string) string {
+	if i := strings.LastIndex(col, "."); i >= 0 && !strings.HasPrefix(col, "profile.") {
+		return col[i+1:]
+	}
+	return col
+}
+
+// TestAdminSearchPredicatesNameOnlyTheTwoSearchableColumns is the criterion
+// that can FAIL, replacing a deleted grep that could not: an
+// `rg 'description' character_repo.go` always prints matches, because Get
+// selects that column at :48, so "shows no profile-prose column in any search
+// predicate" reduced to human judgment over the output.
+//
+// Proven RED by planting `OR c.description ILIKE '%' || $1 || '%'` in the
+// search predicate.
+func TestAdminSearchPredicatesNameOnlyTheTwoSearchableColumns(t *testing.T) {
+	const scanned = "internal/world/postgres"
+
+	root := findRepoRoot(t)
+	allowed := map[string]struct{}{
+		"normalized_name": {},
+		"username":        {},
+	}
+	forbidden := map[string]struct{}{}
+	for _, col := range forbiddenSearchColumns {
+		forbidden[bareColumnName(col)] = struct{}{}
+	}
+
+	inspected := 0
+	walkErr := filepath.WalkDir(filepath.Join(root, scanned), func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		src, readErr := os.ReadFile(path) //nolint:gosec // path comes from WalkDir over a repo-relative directory
+		if readErr != nil {
+			return readErr
+		}
+		if isGeneratedGo(src) {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			rel = path
+		}
+		for _, col := range scanGoStringLiteralsForSearchPredicates(t, path, src) {
+			inspected++
+			bare := bareColumnName(col)
+			_, isForbidden := forbidden[bare]
+			assert.False(t, isForbidden,
+				"%s: a substring-search predicate names %q, a §10.6 privacy-bearing prose column. "+
+					"§11.1 forbids prose search; the only two searchable columns are normalized_name and username",
+				rel, col)
+			if _, ok := allowed[bare]; !ok && !isForbidden {
+				t.Errorf("%s: a substring-search predicate names %q, which is on neither the allowed "+
+					"nor the forbidden list. Decide deliberately: add it to the allowed set with a "+
+					"reason, or to forbiddenSearchColumns", rel, col)
+			}
+		}
+		return nil
+	})
+	require.NoError(t, walkErr)
+
+	// A parse that found NOTHING would pass every assertion above vacuously.
+	// This is what makes the fence fail when the predicates move, are renamed,
+	// or stop being string literals, rather than quietly covering nothing.
+	require.NotEmpty(t, inspected,
+		"the fence inspected ZERO search predicates under %s — it is asserting nothing. "+
+			"Either the admin search moved out of this package or its predicates are no "+
+			"longer Go string literals; either way this fence must be repointed, not deleted", scanned)
+}

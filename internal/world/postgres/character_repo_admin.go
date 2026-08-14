@@ -94,7 +94,7 @@ func (r *CharacterRepository) AdminListCharacters(
 // property names are privacy-bearing prose, and a substring predicate over them
 // is a content search over player-authored text wearing the name of a lookup.
 // §11.1 forbids it, `06-CONTEXT.md`'s D-106 defers it explicitly, and
-// TestAdminSearchPredicatesNameOnlySearchableColumns in test/meta fences it by
+// TestAdminSearchPredicatesNameOnlyTheTwoSearchableColumns in test/meta fences it by
 // parsing the predicates in this package rather than by trusting this comment.
 func (r *CharacterRepository) AdminSearchCharacters(
 	ctx context.Context,
