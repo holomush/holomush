@@ -45,6 +45,14 @@ const tokenBreakpointPrefix = "theme(--breakpoint-"
 // written as, and HOW MANY TIMES that exact rule text appears in that file. The
 // slice below is the checked-in census of every such rule under webSrcDir.
 //
+// "EVERY" IS ASSERTED, not merely claimed. The completeness equality in
+// TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral compares the
+// band-relevant lines the walk reaches against the sum of the counts here plus
+// the allowlist hits, so a banded rule added to any file without an entry in
+// this slice fails. It used to be a floor, under which such a rule passed
+// silently and then received neither the occurrence check below nor the
+// @reference check.
+//
 // count exists because containment cannot count. A file carrying the same rule
 // text twice used to be listed twice, and the second entry re-ran the first
 // assertion verbatim — deleting one of the two rules left the census green. The
@@ -416,8 +424,9 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 	sort.Strings(unclassified)
 
 	// Reported FIRST, because an unclassified file means the corpus measurement
-	// below is incomplete — the floor and the offender list are both statements
-	// about a walk that provably did not reach everything it passed.
+	// below is incomplete — the completeness equality and the offender list are
+	// both statements about a walk that provably did not reach everything it
+	// passed.
 	require.Empty(t, unclassified,
 		"file(s) under %s carry an extension this census neither scans nor skips:\n  %s\n\n"+
 			"Classify each one. If it can hold an authored viewport rule (a .tsx, .scss, .js, "+
@@ -425,60 +434,6 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 			"skippedExtensions. Doing neither is how a whole language leaves coverage in "+
 			"silence, which is the fail-open shape the old allow-set had.",
 		webSrcDir, strings.Join(unclassified, "\n  "))
-
-	// ANTI-VACUITY FLOOR, derived from this census's own checked-in claims.
-	//
-	// It is a SUM over count, not len(bandedViewportRules), because the census is
-	// occurrence-counted: one entry with count 2 claims two rules in the corpus,
-	// so the corpus size the census asserts is the sum of its counts.
-	//
-	// The tally is over BAND-RELEVANT lines — a viewport-deciding line carrying a
-	// forbidden width or a breakpoint token — and not over every media line. The
-	// old floor counted `prefers-reduced-motion` and `prefers-color-scheme` rules
-	// and every `matchMedia(` call site, none of which can ever hold a band
-	// literal. It sat at 15 while the band-relevant corpus was 18: the walk could
-	// have stopped reaching more than half this tree and still reported success.
-	// (Measured: with lib/components excluded the screened count is 18 — still
-	// over the old floor — while the band-relevant count falls to 8.)
-	//
-	// Two things a future reader will be tempted to "improve", and must not:
-	//
-	//  1. Allowlisted lines DO count here. The tally is over every band-relevant
-	//     line the walk REACHED, and an exempted line is still a line it reached.
-	//     Filtering the allowlist out would be a different measurement wearing this
-	//     one's name. At the time of writing: 16 token lines + 2 allowlisted symbol
-	//     lines = 18, against a claimed sum of 16.
-	//
-	//  2. The floor is INTENDED to sit close to the tally, and would still be
-	//     correct at exactly zero headroom. It is an anti-vacuity floor, not a
-	//     budget — its job is to fail when the walk stops reaching the corpus, and
-	//     it does that best when it tracks the corpus. Do NOT tune it away by
-	//     subtracting a margin, by filtering the tally, or by loosening the
-	//     comparison; that is relaxing a guard rather than repairing it.
-	//
-	//     Which guard catches what, precisely — the two are NOT redundant.
-	//     Deleting one banded rule leaves this comparison PASSING on either path:
-	//     accidentally (the rule vanishes from source, the census `count` here is
-	//     left behind) gives 17 >= 16; deliberately (both dropped together, as the
-	//     sibling's own failure message instructs) gives 17 >= 15. The accidental
-	//     path is the one that matters, and this floor does not catch it. The two
-	//     lines of headroom are exactly the two allowlisted symbol lines counted
-	//     in (1), and they do not shrink when a rule is deleted. A deletion is
-	//     caught by the occurrence assertion in the sibling test, which compares
-	//     per-rule counts by equality. This floor catches a different failure: the
-	//     walk ceasing to REACH the corpus at all.
-	ruleCensusOccurrences := 0
-	for _, r := range bandedViewportRules {
-		ruleCensusOccurrences += r.count
-	}
-	require.GreaterOrEqual(t, bandRelevant, ruleCensusOccurrences,
-		"the walk reached %d band-relevant viewport line(s) under %s but this census claims "+
-			"%d rule occurrence(s) live there, so the walk is not reaching its own corpus — a "+
-			"moved walk root, a directory added to skipDirs, or a predicate that stopped "+
-			"matching. (%d viewport-deciding line(s) were screened in total; that wider number "+
-			"is context, not the floor, because most media rules can never carry a band "+
-			"literal.)",
-		bandRelevant, webSrcDir, ruleCensusOccurrences, scanned)
 
 	// The allowlist must not widen silently. An entry that no longer names a real
 	// file, or that names one carrying no forbidden literal, is a standing
@@ -518,6 +473,83 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 				"spelling-scoped.) Exemption: %s",
 			path, ex.symbol, ex.reason)
 	}
+
+	// Ordered AFTER the allowlist staleness loop: allowlistLines is one side of
+	// the equality, so a stale or moved allowlist entry would otherwise fail this
+	// comparison with an arithmetic message that hides the real cause.
+	// CORPUS-COMPLETENESS EQUALITY, derived from this census's own checked-in claims.
+	//
+	// It is a SUM over count, not len(bandedViewportRules), because the census is
+	// occurrence-counted: one entry with count 2 claims two rules in the corpus,
+	// so the corpus size the census asserts is the sum of its counts.
+	//
+	// The tally is over BAND-RELEVANT lines — a viewport-deciding line carrying a
+	// forbidden width or a breakpoint token — and not over every media line. The
+	// old floor counted `prefers-reduced-motion` and `prefers-color-scheme` rules
+	// and every `matchMedia(` call site, none of which can ever hold a band
+	// literal. It sat at 15 while the band-relevant corpus was 18: the walk could
+	// have stopped reaching more than half this tree and still reported success.
+	// (Measured: with lib/components excluded the screened count is 18 — still
+	// over the old floor — while the band-relevant count falls to 8.)
+	//
+	// WHY EQUALITY AND NOT A FLOOR. This was `bandRelevant >= claimed`, and a
+	// floor cannot support the claim bandedViewportRules makes about itself:
+	// "the checked-in census of EVERY such rule under webSrcDir". A seventeenth
+	// banded rule added to any file WITHOUT a census entry raised bandRelevant to
+	// 19 against a claim of 16 and passed. Measured: injecting
+	// `@media (width >= theme(--breakpoint-md))` into AdminNav.svelte with no
+	// entry here left both census tests green.
+	//
+	// The consequence was not cosmetic. The sibling
+	// TestEveryBandedViewportRuleDerivesItsWidthFromTheTailwindToken iterates the
+	// ENUMERATED set only, so an unlisted rule received neither the occurrence-
+	// equality check nor the @reference check — and its later deletion was caught
+	// by nothing at all. Completeness is the one property that makes the
+	// occurrence check total, and it was the one property unasserted.
+	//
+	// Two things a future reader will be tempted to "improve", and must not:
+	//
+	//  1. Allowlisted lines DO count here, which is why they are added to the
+	//     expected side rather than filtered off the measured side. The tally is
+	//     over every band-relevant line the walk REACHED, and an exempted line is
+	//     still a line it reached. At the time of writing: 16 token lines + 2
+	//     allowlisted symbol lines = 18, against 16 claimed occurrences + 2
+	//     allowlist hits = 18.
+	//
+	//  2. Do NOT loosen this back to a floor, subtract a margin, or filter the
+	//     tally. Each is relaxing a guard rather than repairing it. If this fails
+	//     because a rule was legitimately added, add its census entry — that is
+	//     the one-line decision the equality exists to force.
+	//
+	// Which guard catches what, now that both are equalities — they are still NOT
+	// redundant. This one fails when the CORPUS and the census disagree in either
+	// direction: a rule added without an entry, an entry left behind after a rule
+	// was deleted, or the walk ceasing to reach the tree at all (a moved root, a
+	// directory added to skipDirs, a predicate that stopped matching). The sibling
+	// fails when a NAMED rule's per-file occurrence count is wrong, which is what
+	// attributes a discrepancy to a specific file.
+	ruleCensusOccurrences := 0
+	for _, r := range bandedViewportRules {
+		ruleCensusOccurrences += r.count
+	}
+	allowlistLines := 0
+	for _, n := range allowlistHits {
+		allowlistLines += n
+	}
+	require.Equal(t, ruleCensusOccurrences+allowlistLines, bandRelevant,
+		"the walk reached %d band-relevant viewport line(s) under %s, but this census claims %d "+
+			"rule occurrence(s) plus %d allowlisted symbol line(s) = %d.\n\n"+
+			"MORE reached than claimed: a banded rule exists that is NOT enumerated in "+
+			"bandedViewportRules. It is covered by nothing — not the per-file occurrence check, "+
+			"not the @reference check — and its later deletion would be caught by nothing at "+
+			"all. Enumerate it.\n\n"+
+			"FEWER reached than claimed: either a rule was deleted without dropping its census "+
+			"entry, or the walk is no longer reaching its own corpus (a moved walk root, a "+
+			"directory added to skipDirs, a predicate that stopped matching).\n\n"+
+			"(%d viewport-deciding line(s) were screened in total; that wider number is context, "+
+			"not the comparison, because most media rules can never carry a band literal.)",
+		bandRelevant, webSrcDir, ruleCensusOccurrences, allowlistLines,
+		ruleCensusOccurrences+allowlistLines, scanned)
 
 	require.Empty(t, offenders,
 		"viewport-deciding line(s) carry a hand-written breakpoint width:\n  %s\n\n"+
