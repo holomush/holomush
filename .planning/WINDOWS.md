@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 24
+open_count: 25
 waived_count: 0
 fixed_count: 9
-total_count: 33
-last_updated: 2026-08-15T16:54:05.430Z
+total_count: 34
+last_updated: 2026-08-15T18:57:16.013Z
 ---
 
 # Broken Windows Ledger
@@ -48,6 +48,7 @@ last_updated: 2026-08-15T16:54:05.430Z
 | 31 | 06.1 | stub | web/src/routes/(authed)/admin/characters/+page.svelte |  | the selected {id,intent} seam is written by both row affordances and read by nothing until plan 06.1-04 lands the edit Sheet and lifecycle confirm | fixed |  | 2026-08-15T02:33:40.551Z | 2026-08-15T03:27:18.118Z |
 | 32 | 06.1 | deviation | web/src/lib/components/admin/EditCharacterSheet.svelte |  | the conflict alert's Reload reseeds loaded and working from the server, discarding the operator's draft — the authored copy promises exactly that ('reload to see the current values, then re-apply'), but it is the same tension ledger entry 18 records for ProfileSection's reload | open |  | 2026-08-15T03:27:33.319Z |  |
 | 33 | 06.1 | unrun-verify | web/e2e/admin-portal.spec.ts | 293 | Pre-existing flake: 'closes on Escape, on the close control and on Cancel' (375px phone band, plan 06.1-04) intermittently fails under the FULL task test:e2e suite — elementFromPoint over td.cell-status returns HEADER instead of BUTTON, a scroll/settle race in tapRowOutsideNameCell. Reproduced with plan 05's new describe block skipped, so it is independent of this plan. Scoped runs (task test:e2e -- admin-portal.spec.ts) are 14/14 green. | open |  | 2026-08-15T16:54:05.430Z |  |
+| 34 | 06.1 | deviation | test/meta/web_phone_band_breakpoint_census_test.go |  | nolint:gosec removed (nolintlint: unused directive); no guard weakened | open |  | 2026-08-15T18:57:16.013Z |  |
 
 ````json
 [
@@ -445,6 +446,18 @@ last_updated: 2026-08-15T16:54:05.430Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-15T16:54:05.430Z",
+    "resolved_at": null
+  },
+  {
+    "id": 34,
+    "kind": "deviation",
+    "phase": "06.1",
+    "file": "test/meta/web_phone_band_breakpoint_census_test.go",
+    "line": null,
+    "description": "nolint:gosec removed (nolintlint: unused directive); no guard weakened",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-15T18:57:16.013Z",
     "resolved_at": null
   }
 ]

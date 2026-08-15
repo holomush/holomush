@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 06.1
 current_phase_name: admin-portal-web-surface-shadcn-components-and-the-single-ro
 status: executing
-stopped_at: Completed 06.1-06-PLAN.md
-last_updated: "2026-08-15T18:33:12.292Z"
+stopped_at: Completed 06.1-07-PLAN.md
+last_updated: "2026-08-15T18:57:11.629Z"
 last_activity: 2026-08-15
 last_activity_desc: Phase 06.1 execution started
 progress:
   total_phases: 10
-  completed_phases: 10
+  completed_phases: 9
   total_plans: 71
-  completed_plans: 67
+  completed_plans: 68
   percent: 90
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 06.1 (admin-portal-web-surface-shadcn-components-and-the-single-ro) — EXECUTING
-Plan: 6 of 6
+Plan: 2 of 10
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 96%)
 Last activity: 2026-08-15 — Phase 06.1 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -284,6 +284,7 @@ no action needed.
 | Phase 06.1 P04 | 51min | 3 tasks | 12 files |
 | Phase 06.1 P05 | 34min | 4 tasks | 19 files |
 | Phase 06.1 P06 | 24min | 2 tasks | 4 files |
+| Phase 06.1 P07 | 1h05m | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -665,6 +666,9 @@ the next milestone yet.
 - [Phase ?]: 06.1-05: all sixteen authored viewport rules under web/src derive from theme(--breakpoint-md|-lg); a Svelte scoped style block using theme() MUST carry an @reference computed from its depth below web/src (three distinct depths in this tree) or the build fails loudly
 - [Phase ?]: The admin Sheet/server parity guard lives in package grpc, not test/meta — the allowlist is unexported, so only there is it a live symbol and only one side needs parsing
 - [Phase ?]: A parsing guard chosen over codegen or a shared schema for thirteen strings and two integers that change roughly never
+- [Phase ?]: Both halves of the phone band expressed in rem (48rem), so the CSS @media rules and DESKTOP_MEDIA_QUERY resolve against one reference — the browser's initial font size
+- [Phase ?]: Breakpoint census exemptions are keyed to the SYMBOL (DESKTOP_MEDIA_QUERY), never to a file or a spelling, so the guard survives a neighbouring constant and accepts its own repair
+- [Phase ?]: New Playwright project chromium-large-font runs at a 20px root font size and asserts that root font size in-page before any complement assertion, so the harness fails closed
 
 ### Pending Todos
 
@@ -729,7 +733,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-15T17:11:24.654Z
+Last session: 2026-08-15T18:57:05.487Z
 Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
 by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
 carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
@@ -740,7 +744,7 @@ short-circuit was declined a second consecutive phase — closing 59/59 threats,
 holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
 Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
 in the same commit. Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 06.1-06-PLAN.md
+Stopped at: Completed 06.1-07-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
