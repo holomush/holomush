@@ -20,10 +20,13 @@ const webRoutesDir = "web/src/routes"
 // errorBoundaryFileName is the SvelteKit filename that DECLARES an error
 // boundary. Membership is decided by base-name EQUALITY against this constant.
 //
-// Equality, not a prefix relation: `web/src/routes/+error.svelte.test.ts` is the
-// boundary's own component test and shares the boundary's name as a leading
-// substring. A prefix predicate would count it as a second boundary and turn
-// this census red against its own correct implementation.
+// Equality, not a leading-substring relation. Any sibling file whose name starts
+// with the boundary's — a companion test, a snapshot, a backup — would be
+// counted as a second boundary by a looser predicate, and this census would then
+// be red against its own correct implementation. SvelteKit's own reserved-name
+// rule keeps most such siblings out of the route tree (it refuses to build when
+// a `+`-prefixed file is not a route file it recognizes), but that rule is a
+// property of the framework version, not of this test.
 const errorBoundaryFileName = "+error.svelte"
 
 // TestExactlyOneSvelteKitErrorBoundaryExistsUnderWebRoutes asserts that the
@@ -48,8 +51,9 @@ const errorBoundaryFileName = "+error.svelte"
 // which viewer tier its destination list reflects, or whether two viewers see
 // the same bytes. A boundary that is unique and also leaks is green here.
 // Uniqueness is a PRECONDITION for per-viewer indistinguishability, not a proof
-// of it; the rendered half is asserted by web/src/routes/+error.svelte.test.ts
-// and at the page level by this phase's later plans.
+// of it; the rendered half is asserted by
+// web/src/routes/error-boundary.svelte.test.ts and at the page level by this
+// phase's later plans.
 //
 // Verifies: INV-PRIVACY-14
 func TestExactlyOneSvelteKitErrorBoundaryExistsUnderWebRoutes(t *testing.T) {

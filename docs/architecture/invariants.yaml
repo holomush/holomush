@@ -2472,6 +2472,20 @@ invariants:
       - "internal/world/service_profile_options_test.go"
       - "test/integration/access/admin_characters_write_test.go"
 
+  # Hand-registered for the same reason INV-PRIVACY-11 records: the orphan check walks only
+  # docs/superpowers/specs/, and this invariant is born in a GSD milestone plan under
+  # .planning/phases/**, which is outside that walk root.
+  - id: INV-PRIVACY-14
+    scope: INV-PRIVACY
+    origin_spec: ".planning/phases/06.1-admin-portal-web-surface-shadcn-components-and-the-single-ro/06.1-01-PLAN.md"
+    summary: "The SvelteKit error-boundary resolution point under web/src/routes/ is unique: exactly one +error.svelte exists,
+      at the root. Uniqueness is a precondition for per-viewer indistinguishability of routing misses, not a proof of it --
+      the census reads the filesystem and can see neither what the boundary renders nor whether two viewers receive the same
+      bytes."
+    binding: bound
+    asserted_by:
+      - "test/meta/web_error_boundary_census_test.go"
+
   # -- INV-CLUSTER -- migrated from bare INV-N (cross-replica coordination) (holomush-hz0v4.14.11).
   # Origin: docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md (master crypto spec; these bare invariants are CLUSTER-scoped per the
   # boundary note). FIRST bare-INV-N scope: dense per-scope renumbering (legacy 28,29,53-60

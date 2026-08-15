@@ -1,6 +1,13 @@
-// web/src/routes/+error.svelte.test.ts
+// web/src/routes/error-boundary.svelte.test.ts
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
+//
+// The `.svelte.test.ts` spelling is load-bearing: web/vite.config.ts routes only
+// that glob to the client Vitest project, whose resolve.conditions ['browser'] is
+// what makes `mount` work. The `error-boundary` stem is also load-bearing, in the
+// other direction: SvelteKit refuses to build when src/routes/ holds a
+// `+`-prefixed file it does not recognize as a route file, so the boundary's test
+// cannot be named after the boundary.
 import { afterEach, describe, expect, it } from 'vitest';
 import { mount, unmount } from 'svelte';
 import ErrorBoundary from './+error.svelte';
