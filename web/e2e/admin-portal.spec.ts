@@ -332,24 +332,75 @@ test.describe('admin portal — the band boundaries', () => {
   // Sign in at a desktop width and resize inside each test.
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  // Both measured columns carry `transition: width 180ms ease` —
-  // SectionRail.svelte and admin/+layout.svelte. Measuring before that settles
-  // reads mid-animation widths, which already invalidated one UAT pass.
-  const BAND_SETTLE_MS = 300;
+  // `:not(.is-drawer)` is load-bearing: the drawer carries the same test id
+  // and is full-width when open.
+  const RAIL = '[data-testid="rail"]:not(.is-drawer)';
+  const NAV_COL = '.adminnav-col';
 
+  /**
+   * Read BOTH column widths in ONE evaluate.
+   *
+   * One evaluate, not two, because every assertion below compares the two
+   * columns to each other (`Math.abs(nav - rail) <= 1`, `full.nav > full.rail`).
+   * Two separate reads can land in two different animation frames, at which
+   * point the comparison is between two different moments and a passing layout
+   * can read as a divergence.
+   *
+   * A missing element reports -1 rather than throwing, so its absence fails the
+   * assertion that names the column instead of the measurement helper.
+   */
+  async function readColumns(page: Page) {
+    return page.evaluate(
+      ([railSel, navSel]) => {
+        const width = (sel: string) => {
+          const el = document.querySelector(sel);
+          return el === null ? -1 : el.getBoundingClientRect().width;
+        };
+        return { rail: width(railSel), nav: width(navSel) };
+      },
+      [RAIL, NAV_COL] as const,
+    );
+  }
+
+  /**
+   * Set the viewport and return both column widths, sampled once they have
+   * stopped moving.
+   *
+   * Both measured columns carry `transition: width 180ms ease`
+   * (SectionRail.svelte, admin/+layout.svelte:119). This used to wait a fixed
+   * 300ms — a wall-clock guess with 120ms of headroom over a 180ms animation,
+   * which under CI load reads mid-animation and fails looking exactly like a
+   * real divergence. It already invalidated one UAT pass.
+   *
+   * Settling is now OBSERVED: poll the pair until two consecutive samples are
+   * identical, then take one final paired sample. The poll decides only WHEN to
+   * measure, never WHAT the answer should be — the expectations below still do
+   * all the judging, so a slower transition costs time rather than correctness
+   * and a genuinely wrong width still fails.
+   */
   async function columnsAt(page: Page, width: number) {
     await page.setViewportSize({ width, height: 900 });
-    await page.waitForTimeout(BAND_SETTLE_MS);
-    // `:not(.is-drawer)` is load-bearing: the drawer carries the same test id
-    // and is full-width when open.
-    const rail = await page
-      .locator('[data-testid="rail"]:not(.is-drawer)')
-      .first()
-      .evaluate((el) => el.getBoundingClientRect().width);
-    const nav = await page
-      .locator('.adminnav-col')
-      .evaluate((el) => el.getBoundingClientRect().width);
-    return { rail, nav };
+
+    let previous = '';
+    await expect
+      .poll(
+        async () => {
+          const current = JSON.stringify(await readColumns(page));
+          const stable = previous !== '' && current === previous;
+          previous = current;
+          return stable;
+        },
+        {
+          message:
+            `the rail and admin nav column widths never stopped changing at ${width}px — ` +
+            'a transition that never completes, or a layout thrashing between two states',
+          intervals: [50, 50, 100, 100, 250],
+          timeout: 10_000,
+        },
+      )
+      .toBe(true);
+
+    return readColumns(page);
   }
 
   test('collapses both columns at 767 and restores both at 768, and the Sheet flips with them', async ({
