@@ -229,6 +229,9 @@
    * figure of its own from what came back — the two would disagree on the last
    * page and on any request the core clamped.
    */
+  /** The filter bar instance, for cancelling its debounce from `clearFilters`. */
+  let filterBar = $state<ReturnType<typeof CharacterFilterBar> | null>(null);
+
   const noRows = $derived(rows[0] === undefined);
   const filtered = $derived(term.trim() !== '' || status !== 'all' || playerId !== '');
   const searching = $derived(term.trim() !== '');
@@ -315,6 +318,11 @@
   }
 
   function clearFilters() {
+    // Cancel the filter bar's in-flight debounce FIRST. Without it a keystroke
+    // typed moments earlier fires after this returns, sets `term` back to the
+    // stale raw string and issues another read — the list ends up filtered
+    // again with the input repopulated, undoing the instruction that ran it.
+    filterBar?.reset();
     term = '';
     status = 'all';
     playerId = '';
@@ -326,7 +334,7 @@
 <nav class="crumb" aria-label="Breadcrumb">Admin › Characters</nav>
 <h1 class="sectiontitle">Characters</h1>
 
-<CharacterFilterBar {term} bind:status {onsearch} {onstatus} />
+<CharacterFilterBar bind:this={filterBar} {term} bind:status {onsearch} {onstatus} />
 
 {#if loading}
   <CharacterTable

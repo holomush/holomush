@@ -64,6 +64,26 @@
    */
   onDestroy(() => clearTimeout(timer));
 
+  /**
+   * Cancels an in-flight debounce without reporting anything.
+   *
+   * The next keystroke and unmount are not the only things that can end the
+   * window: the page's own `Clear filters` resets term, status and playerId and
+   * reloads, and a timer started moments earlier still outlives it. It then
+   * fires with the stale raw string, `onsearch` sets `term` back, and the list
+   * is filtered again with the input repopulated — after the operator asked for
+   * the opposite.
+   *
+   * Exposed as a method rather than driven from a `$effect` on `term`: the box
+   * is deliberately UNCONTROLLED between keystrokes (`term` seeds its value and
+   * is not bound), so an effect keyed on `term` would also fire for the page's
+   * own settle and cancel windows this component has no reason to cancel.
+   * Cancelling is a caller's instruction, so the caller says so.
+   */
+  export function reset() {
+    clearTimeout(timer);
+  }
+
   function onValueChange(value: string) {
     status = value as CharacterStatusFilter;
     onstatus?.(status);

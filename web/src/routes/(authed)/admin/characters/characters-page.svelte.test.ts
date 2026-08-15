@@ -250,6 +250,61 @@ describe('/admin/characters — the four list states', () => {
     expect((target.querySelector('input[name="q"]') as HTMLInputElement).value).toBe('');
     unmount(component);
   });
+
+  /**
+   * CLEARING CANCELS THE IN-FLIGHT DEBOUNCE.
+   *
+   * `clearFilters` resets term, status, playerId and reloads, but the filter
+   * bar's own 250ms timer is a separate thing that outlives it. Type, then
+   * clear inside the window, and the timer fires afterwards with the stale raw
+   * string: `onsearch` sets `term` back and issues another read, so the list
+   * ends up filtered again with the input repopulated — after the operator
+   * asked for the opposite. Narrow and self-correcting, but it un-does an
+   * explicit instruction.
+   *
+   * Asserted on the CALL LOG rather than on the rendered rows: a stale search
+   * that re-fired and then resolved to the same fixture is invisible on screen
+   * and is exactly the case worth pinning.
+   */
+  it('cancels an in-flight debounce so clearing filters is not undone by the pending keystroke', async () => {
+    const { target, component } = render({ rows: [], totalCount: 0n, loadFailed: false });
+
+    // A filter has to be APPLIED before `Clear filters` is on screen at all, so
+    // the reachable shape is: search settles, the operator keeps typing, and
+    // clears inside the new window.
+    await typeSearch(target, 'zzz');
+    const settledCalls = impl.calls.length;
+
+    const input = target.querySelector('input[name="q"]') as HTMLInputElement;
+    input.value = 'zzzq';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(100);
+    flushSync();
+
+    const clear = [...target.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Clear filters',
+    ) as HTMLButtonElement;
+    clear.click();
+    flushSync();
+    await Promise.resolve();
+    flushSync();
+    const afterClear = impl.calls.length;
+
+    // Now run past what would have been the pending timer's deadline.
+    await vi.advanceTimersByTimeAsync(500);
+    flushSync();
+    await Promise.resolve();
+    flushSync();
+
+    expect(
+      impl.calls.slice(afterClear),
+      'a read fired AFTER Clear filters — the filter bar timer survived the clear and re-applied ' +
+        'the stale term, so the list ends up filtered again with the input repopulated',
+    ).toEqual([]);
+    expect(impl.calls.slice(settledCalls, afterClear).map((c) => c.kind)).toEqual(['list']);
+    expect((target.querySelector('input[name="q"]') as HTMLInputElement).value).toBe('');
+    unmount(component);
+  });
 });
 
 describe('/admin/characters — pagination boundaries', () => {
