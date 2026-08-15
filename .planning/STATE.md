@@ -5,15 +5,15 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 06.1
 current_phase_name: admin-portal-web-surface-shadcn-components-and-the-single-ro
 status: executing
-stopped_at: Completed 06.1-02-PLAN.md
-last_updated: "2026-08-15T01:58:16.182Z"
+stopped_at: Completed 06.1-03-PLAN.md
+last_updated: "2026-08-15T02:33:48.351Z"
 last_activity: 2026-08-14
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 65
-  completed_plans: 62
+  completed_plans: 64
   percent: 90
 ---
 
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 06.1 (admin-portal-web-surface-shadcn-components-and-the-single-ro) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 95%)
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 98%)
 Last activity: 2026-08-14 — Phase 06.1 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -280,6 +280,7 @@ no action needed.
 | Phase 06 P05 | 3h | 3 tasks | 44 files |
 | Phase 06.1 P01 | 74min | 3 tasks | 93 files |
 | Phase 06.1 P02 | 42min | 3 tasks | 29 files |
+| Phase 06.1 P03 | 41min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -650,6 +651,9 @@ the next milestone yet.
 - [Phase ?]: classifyAdminFailure defaults every unrecognised gRPC code to the denial class, which renders the ordinary not-found; only Unavailable, DeadlineExceeded and a non-ConnectError throw are infrastructure. The default is fail-safe: a retry state for a genuine refusal would itself disclose that something is there.
 - [Phase ?]: The <768px drawer's Admin group crosses the layout boundary through adminNavStore, a module singleton SectionRail reads itself — the same crossing mobileNavStore already makes — so (authed)/+layout.svelte's diff stays exactly the roles prop.
 - [Phase ?]: Route-adjacent test files must not carry a + prefix (#4979); load tests are <route>.test.ts and component tests <route>.svelte.test.ts. task web:build is the only gate that catches a violation.
+- [Phase ?]: 06.1-03: the /admin/characters initial page resolves in a +page.ts load, because the concrete route shadows [section] and a denial must be a route decision — throwing from a component renders nothing and navigating would make the refusal distinguishable
+- [Phase ?]: 06.1-03: a CSS property that exists only inside a media query is asserted on the stylesheet TEXT, never on computed style — jsdom applies no media query and has no layout engine, so a computed read fails a correct implementation
+- [Phase ?]: 06.1-03: the status control is counted by the spelling shadcn-svelte generated — bits-ui's Select.Trigger is a button with aria-haspopup=listbox and exposes no role=combobox, so the plan's getAllByRole('combobox') criterion was unsatisfiable
 
 ### Pending Todos
 
@@ -714,7 +718,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-15T01:58:16.164Z
+Last session: 2026-08-15T02:33:48.335Z
 Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
 by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
 carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
@@ -725,7 +729,7 @@ short-circuit was declined a second consecutive phase — closing 59/59 threats,
 holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
 Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
 in the same commit. Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 06.1-02-PLAN.md
+Stopped at: Completed 06.1-03-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
