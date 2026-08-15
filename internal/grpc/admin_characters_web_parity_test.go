@@ -30,7 +30,15 @@ var (
 	adminSheetShortCapRe = regexp.MustCompile(`(?m)^\s*const SHORT = (\d+);`)
 	adminSheetLongCapRe  = regexp.MustCompile(`(?m)^\s*const LONG = (\d+);`)
 	adminSheetFieldsRe   = regexp.MustCompile(`(?s)export const ADMIN_EDITABLE_FIELDS: EditableField\[\] = \[(.*?)\n\s*\];`)
-	adminSheetEntryRe    = regexp.MustCompile(`(?m)^\s*(line|prose)\('([^']+)',`)
+	// Whitespace-tolerant on PURPOSE. A line-anchored form (`(?m)^\s*(line|prose)\('`)
+	// stops matching the moment prettier reflows one entry across lines, and the
+	// drop does NOT surface as a parse failure — the other twelve still match, so
+	// require.NotEmpty passes and the loss lands one assertion later as "the
+	// server accepts a writable path the Sheet offers no control for … an ADMIN-04
+	// scope loss". That report buys a real investigation for a reformat. The
+	// entry-count assertion below is what turns a future unparsed entry into a
+	// message that says so.
+	adminSheetEntryRe = regexp.MustCompile(`\b(line|prose)\(\s*'([^']+)'\s*,`)
 	// Each single-expression arrow constructor, name and body. The body is
 	// what makes the cap a LINK rather than an assumption: reading the cap off
 	// the constructor's NAME re-derives what the Sheet was assumed to emit,
@@ -193,6 +201,25 @@ func TestAdminEditableFieldsInTheWebSheetMatchTheServerMaskAllowlist(t *testing.
 	require.NotEmpty(t, entries,
 		"no line()/prose() entry parsed out of ADMIN_EDITABLE_FIELDS — the declaration was "+
 			"reformatted and this guard is comparing an empty set")
+
+	// The COUNT is the anti-vacuity assertion that require.NotEmpty cannot be.
+	// NotEmpty only sees the all-or-nothing case; a PARTIAL parse — twelve of
+	// thirteen entries — passes it, and the missing one is then reported by the
+	// path-set comparison below as an admin-reachable field with no control, which
+	// reads as a scope loss rather than as a reformat. Counting the constructor
+	// call sites in the same block and requiring one parsed entry each is what
+	// makes an unparsed entry say what it is.
+	//
+	// The count is taken over body[1] — the ADMIN_EDITABLE_FIELDS array body only,
+	// which carries call sites and nothing else. The constructor DECLARATIONS
+	// (`const line = (path: string, …`) sit outside it and are not counted.
+	callSites := strings.Count(body[1], "line(") + strings.Count(body[1], "prose(")
+	require.Equal(t, callSites, len(entries),
+		"ADMIN_EDITABLE_FIELDS holds %d line()/prose() call site(s) but only %d parsed. This is a "+
+			"REFORMAT, not a scope change: fix adminSheetEntryRe rather than the declaration. "+
+			"Without this assertion the unparsed entry is reported below as a path the server "+
+			"accepts and the Sheet offers no control for — an ADMIN-04 scope loss — for a "+
+			"whitespace edit.", callSites, len(entries))
 
 	shortMatch := adminSheetShortCapRe.FindStringSubmatch(src)
 	require.Len(t, shortMatch, 2, "the Sheet's SHORT cap declaration was not found")
