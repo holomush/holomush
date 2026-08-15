@@ -278,10 +278,12 @@ describe('EditCharacterSheet — the two groups and the header metadata', () => 
     const managed = content().querySelector('[data-group="managed-elsewhere"]') as HTMLDetailsElement;
     managed.open = true;
     flushSync();
-    expect(managed.textContent).toContain(
+    // Whitespace-normalized: the copy is byte-exact, the source line wraps.
+    const text = (managed.textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain(
       'Names go through the normalization pipeline and a uniqueness check, so they are not editable from this form.',
     );
-    expect(managed.textContent).toContain(
+    expect(text).toContain(
       'Use the lifecycle control below — it sends the transition, not a status value.',
     );
     unmount(component);

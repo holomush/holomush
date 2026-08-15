@@ -3,20 +3,22 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
+  import { byteCount } from '$lib/text/byteCount';
+
   /**
    * The per-field remaining-budget counter, measured in BYTES because the
    * server's cap is in bytes.
    *
-   * It measures with TextEncoder, never with the string's own UTF-16 code-unit
-   * count. The facade compares `len(value) > maxBytes` on a Go string
-   * (internal/grpc/characteraccess_write.go:213-224), which counts UTF-8 bytes;
-   * a UTF-16 code-unit count agrees with that on ASCII and disagrees on
-   * everything else, so the naive spelling produces a counter that is right in
-   * testing and wrong for any player who writes a non-Latin script.
+   * The arithmetic lives in $lib/text/byteCount and is imported rather than
+   * restated: the admin edit Sheet is a SECOND editor for the same fields
+   * against the same server caps, and two copies of a security-adjacent
+   * counting expression are two things that can start disagreeing. That
+   * module's own doc block carries the reasoning about why the measure is
+   * bytes and not the string's own UTF-16 code-unit count.
    *
-   * (The wording above states the forbidden spelling rather than writing it, so
-   * the acceptance gate that scans this whole file for it cannot be tripped by
-   * a comment. A gate that has to be suppressed to stay green stops being a
+   * (Both files word the forbidden spelling rather than writing it, so the
+   * acceptance gate that scans this whole file for it cannot be tripped by a
+   * comment. A gate that has to be suppressed to stay green stops being a
    * gate — the same reason PublicProfile.svelte words its own header that way.)
    *
    * TWO SEPARATE RULES, deliberately not one. `shown` is the DISPLAY rule —
@@ -31,7 +33,7 @@
    */
   let { value, maxBytes }: { value: string; maxBytes: number } = $props();
 
-  const bytes = $derived(new TextEncoder().encode(value).length);
+  const bytes = $derived(byteCount(value));
   const over = $derived(bytes > maxBytes);
   const shown = $derived(bytes >= maxBytes * 0.8);
 </script>

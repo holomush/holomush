@@ -160,6 +160,28 @@ export async function searchAdminCharacters(
 }
 
 /**
+ * What the edit surface needs from a single-character read, stated
+ * STRUCTURALLY rather than as the generated message type.
+ *
+ * `AdminCharacterDetail` satisfies this by construction, so `getAdminCharacter`
+ * is assignable to a prop of this shape — but a test fixture can be written as
+ * a plain object without the `$typeName` discriminator a full message literal
+ * would demand, and the Sheet's contract says exactly which three things it
+ * reads and no more.
+ *
+ * `character.version` is here because a version conflict is answered with a
+ * fresh single-character read: the alert names the server's current version,
+ * which is a NUMBER the client learned, never a string the server sent.
+ */
+export interface CharacterDetail {
+  character?: { version: number };
+  /** characters.description — the in-world `look` text. */
+  description: string;
+  /** The twelve governed profile values, keyed by their §7.2 path. */
+  profile: Record<string, string>;
+}
+
+/**
  * The single-character detail read behind the edit surface. It is a separate
  * call rather than a seed from a list row because the list projection carries
  * no profile prose at all — a bulk cross-player projection of player-authored
