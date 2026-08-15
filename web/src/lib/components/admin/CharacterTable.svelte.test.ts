@@ -2,7 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, unmount } from 'svelte';
 import CharacterTable from './CharacterTable.svelte';
@@ -236,8 +236,10 @@ describe('CharacterTable — the phone-band row target', () => {
    * prove it.
    */
   it('declares position: relative on the row, and on no cell, inside the phone media block', () => {
+    // Read from the repo path rather than import.meta.url: under Vite the
+    // module URL is an http one, not a file one.
     const src = readFileSync(
-      fileURLToPath(new URL('./CharacterTable.svelte', import.meta.url)),
+      resolve(process.cwd(), 'src/lib/components/admin/CharacterTable.svelte'),
       'utf8',
     );
     const start = src.indexOf('@media (max-width: 767px)');
@@ -252,7 +254,10 @@ describe('CharacterTable — the phone-band row target', () => {
       else if (src[i] === '}') depth--;
       i++;
     } while (depth > 0 && i < src.length);
-    const block = src.slice(from, i);
+    // Comments are stripped before matching: a rule's explanatory comment is
+    // captured by the selector group otherwise, and a comment explaining the
+    // prohibition would trip the assertion enforcing it.
+    const block = src.slice(from, i).replace(/\/\*[\s\S]*?\*\//g, '');
 
     const relativeRules = [...block.matchAll(/([^{}]+)\{[^{}]*position:\s*relative/g)].map((m) =>
       m[1].replace(/\s+/g, ' ').trim(),
