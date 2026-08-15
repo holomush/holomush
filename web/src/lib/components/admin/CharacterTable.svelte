@@ -360,6 +360,16 @@
      given different widths. Four columns here: the last two are gone, and the
      version is NOT relocated. */
   @media (width < theme(--breakpoint-md)) {
+    /* phone-band-overlay:start — CharacterTable.svelte.test.ts slices the source
+       between this marker and its closing counterpart at the bottom of this
+       block, and asserts what it finds. Not decoration: move or delete either
+       marker and that test fails by name. The pair replaced an indexOf bind on a
+       verbatim copy of the media condition above, which broke on a reformat and
+       retargeted onto any sub-md block added ahead of this one.
+
+       Neither marker comment may spell the OTHER marker's token: the test finds
+       each by first occurrence, so a mention inside this comment would be found
+       ahead of the real one and the slice would invert. */
     :global(.chartable .cell-created),
     :global(.chartable .cell-ver) {
       display: none;
@@ -385,5 +395,10 @@
       position: absolute;
       inset: 0;
     }
+    /* phone-band-overlay:end — the closing counterpart of the opening marker at
+       the top of this block; read its note first. A rule added BELOW this
+       marker is outside the slice and therefore outside the "position: relative
+       on the row and on no cell" assertion, so keep the containing-block
+       declarations between the two. */
   }
 </style>

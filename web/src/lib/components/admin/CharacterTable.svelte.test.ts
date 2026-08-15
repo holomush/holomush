@@ -225,15 +225,28 @@ describe('CharacterTable — the phone-band row target', () => {
   /**
    * THE OVERLAY'S CONTAINING BLOCK IS THE ROW, asserted on the STYLESHEET.
    *
-   * A computed-style assertion cannot exist here: the rule lives inside
-   * `@media (width < theme(--breakpoint-md))`, both Vitest projects run jsdom
-   * (web/vite.config.ts:9) which has no sub-1024px viewport and no layout
-   * engine, so getComputedStyle(tr).position reads `static` whether the CSS is
-   * right or wrong — it would fail a correct implementation. The repo already
-   * stubs matchMedia to `matches: false` for the same reason
+   * A computed-style assertion cannot exist here: the rule lives inside the
+   * phone media block, both Vitest projects run jsdom (web/vite.config.ts:9)
+   * which has no sub-1024px viewport and no layout engine, so
+   * getComputedStyle(tr).position reads `static` whether the CSS is right or
+   * wrong — it would fail a correct implementation. The repo already stubs
+   * matchMedia to `matches: false` for the same reason
    * (SectionRail.svelte.test.ts:21-30). The browser-level span proof is plan
    * 06.1-04's 375px tap on a NON-Name cell, the only environment that can
    * prove it.
+   *
+   * WHY IT SLICES ON MARKERS AND NOT ON THE RULE TEXT.
+   *
+   * This used to locate its target with `indexOf` on a verbatim copy of
+   * the media condition, then walk braces from the first match — a fourth
+   * textual copy of a form that has already been rewritten once. Two failure
+   * modes: a benign reformat of the condition failed the test with nothing to
+   * say that only the spelling had moved, and a second sub-md block added ABOVE
+   * this one silently retargeted the walk onto the wrong rules. The markers cost
+   * two CSS comments and remove both. The exact spelling of the media condition
+   * is owned by the census in
+   * test/meta/web_phone_band_breakpoint_census_test.go, which asserts the rule
+   * text by occurrence count; this test deliberately no longer knows it.
    */
   it('declares position: relative on the row, and on no cell, inside the phone media block', () => {
     // Read from the repo path rather than import.meta.url: under Vite the
@@ -242,22 +255,48 @@ describe('CharacterTable — the phone-band row target', () => {
       resolve(process.cwd(), 'src/lib/components/admin/CharacterTable.svelte'),
       'utf8',
     );
-    const start = src.indexOf('@media (width < theme(--breakpoint-md))');
-    expect(start).toBeGreaterThan(-1);
 
-    // Take the media block by brace balance from its opening brace.
-    let depth = 0;
-    let i = src.indexOf('{', start);
-    const from = i;
-    do {
-      if (src[i] === '{') depth++;
-      else if (src[i] === '}') depth--;
-      i++;
-    } while (depth > 0 && i < src.length);
-    // Comments are stripped before matching: a rule's explanatory comment is
-    // captured by the selector group otherwise, and a comment explaining the
-    // prohibition would trip the assertion enforcing it.
-    const block = src.slice(from, i).replace(/\/\*[\s\S]*?\*\//g, '');
+    const startMarker = 'phone-band-overlay:start';
+    const endMarker = 'phone-band-overlay:end';
+    const from = src.indexOf(startMarker);
+    const to = src.indexOf(endMarker);
+
+    // Both markers, and their ORDER, are asserted before the slice is taken. A
+    // missing or reordered marker yields an empty (or reversed) slice, and every
+    // assertion below it — each of which looks for the ABSENCE of something, or
+    // iterates a list — would pass over nothing at all. This must fail loudly
+    // instead.
+    expect(
+      from,
+      `${startMarker} is missing from CharacterTable.svelte — this test slices between the two ` +
+        'phone-band-overlay markers, and without the opening one it would scan nothing and pass vacuously',
+    ).toBeGreaterThan(-1);
+    expect(
+      to,
+      `${endMarker} is missing from CharacterTable.svelte — this test slices between the two ` +
+        'phone-band-overlay markers, and without the closing one it would scan nothing and pass vacuously',
+    ).toBeGreaterThan(-1);
+    expect(
+      to,
+      `${endMarker} appears BEFORE ${startMarker} in CharacterTable.svelte — the markers have been ` +
+        'reordered, so the slice between them is empty',
+    ).toBeGreaterThan(from);
+
+    // The slice runs between the two marker COMMENTS, not between the two
+    // marker strings: it starts after the opening comment closes and ends where
+    // the closing comment opens. That keeps the markers' own prose out of the
+    // scanned text, so a future edit to their wording can never be captured as
+    // part of a selector.
+    const sliceFrom = src.indexOf('*/', from);
+    const sliceTo = src.lastIndexOf('/*', to);
+    expect(sliceFrom, `the ${startMarker} comment is never closed`).toBeGreaterThan(-1);
+    expect(sliceTo, `the ${endMarker} comment has no opening delimiter`).toBeGreaterThan(sliceFrom);
+
+    // Comments are stripped AFTER the slice is taken, and for the reason they
+    // always were: a rule's explanatory comment is otherwise captured by the
+    // selector group, and a comment explaining the prohibition would trip the
+    // assertion enforcing it.
+    const block = src.slice(sliceFrom + 2, sliceTo).replace(/\/\*[\s\S]*?\*\//g, '');
 
     const relativeRules = [...block.matchAll(/([^{}]+)\{[^{}]*position:\s*relative/g)].map((m) =>
       m[1].replace(/\s+/g, ' ').trim(),
