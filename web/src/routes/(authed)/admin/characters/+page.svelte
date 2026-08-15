@@ -142,10 +142,17 @@
     try {
       const updated = await updateAdminCharacter({ characterId: id, ...args });
       selected = null;
+      // NO CONFIRMED POST-WRITE ROW, NO RECEIPT. The wrapper is typed
+      // `CharacterRow | undefined` and `applyRow` guards for exactly that, so
+      // the receipt has to guard for it on the same terms — interpolating the
+      // absent value printed a literal `vundefined` beside a row that had not
+      // changed, which is a receipt asserting a mutation the page could not
+      // confirm.
+      if (!updated) return;
       applyRow(updated);
       toast(
         `AdminUpdateCharacter · update_mask: ${args.paths.length} paths · ` +
-          `v${args.expectedVersion} → v${updated?.version}`,
+          `v${args.expectedVersion} → v${updated.version}`,
         { duration: TOAST_MS },
       );
     } finally {
@@ -166,10 +173,12 @@
           ? await retireAdminCharacter(id, expectedVersion)
           : await unretireAdminCharacter(id, expectedVersion);
       selected = null;
+      // Same guard as saveEdit, on the same grounds.
+      if (!updated) return;
       applyRow(updated);
       const rpc = intent === 'retire' ? 'AdminRetireCharacter' : 'AdminUnretireCharacter';
-      const message = `${rpc} · ${updated?.name} · v${expectedVersion} → v${updated?.version}`;
-      if (intent === 'retire' && updated) {
+      const message = `${rpc} · ${updated.name} · v${expectedVersion} → v${updated.version}`;
+      if (intent === 'retire') {
         const undoAt = updated.version;
         const undoId = updated.id;
         toast(message, {

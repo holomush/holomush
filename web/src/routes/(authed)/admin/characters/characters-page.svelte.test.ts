@@ -545,6 +545,48 @@ describe('/admin/characters — D-110: the Aborted path', () => {
   });
 });
 
+describe('/admin/characters — a response the page cannot confirm', () => {
+  /**
+   * All three mutation wrappers are typed `Promise<CharacterRow | undefined>`,
+   * and `applyRow` already guards for exactly that. The receipts did not: a
+   * body-less success printed `AdminRetireCharacter · undefined · v1 →
+   * vundefined` beside a row that had not changed — a receipt asserting a
+   * mutation the page could not confirm.
+   */
+  it('writes no receipt for a body-less edit response', async () => {
+    impl.update = async () => undefined;
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Edit');
+    await settle();
+    typeInSheet('concept', 'Archivist');
+    (sheet()!.querySelector('form') as HTMLFormElement).requestSubmit();
+    await settle();
+
+    for (const t of impl.toasts) expect(t.message).not.toContain('undefined');
+    expect(impl.toasts).toEqual([]);
+    // The row is untouched, so nothing on screen claims otherwise either.
+    const tr = target.querySelector('[data-row-id="c0"]') as HTMLElement;
+    expect(tr.textContent).toContain('1');
+    expect(tr.getAttribute('aria-busy')).toBeNull();
+    unmount(component);
+  });
+
+  it('writes no receipt for a body-less lifecycle response', async () => {
+    impl.retire = async () => undefined;
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Retire…');
+    await settle();
+    (confirm()!.querySelector('[data-testid="lifecycle-confirm"]') as HTMLButtonElement).click();
+    await settle();
+
+    for (const t of impl.toasts) expect(t.message).not.toContain('undefined');
+    expect(impl.toasts).toEqual([]);
+    const tr = target.querySelector('[data-row-id="c0"]') as HTMLElement;
+    expect(tr.textContent).toContain('active');
+    unmount(component);
+  });
+});
+
 describe('/admin/characters — the lifecycle transitions', () => {
   it('routes the row action to the confirm and sends no RPC until it is confirmed', async () => {
     const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
