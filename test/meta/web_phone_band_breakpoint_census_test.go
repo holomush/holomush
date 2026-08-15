@@ -36,36 +36,49 @@ const (
 	ruleBelowLg    = "@media (width < theme(--breakpoint-lg))"
 )
 
-// bandedViewportRule names one authored viewport rule and the token form it is
-// written as. The slice below is the checked-in census of every such rule under
-// webSrcDir; a file carrying two rules contributes two entries.
+// tokenBreakpointPrefix is the opening of the Tailwind theme lookup every
+// converted rule reads its width from. A line carrying it is BAND-RELEVANT: it
+// decides the md or lg band even though it holds no width literal at all.
+const tokenBreakpointPrefix = "theme(--breakpoint-"
+
+// bandedViewportRule names one authored viewport rule, the token form it is
+// written as, and HOW MANY TIMES that exact rule text appears in that file. The
+// slice below is the checked-in census of every such rule under webSrcDir.
+//
+// count exists because containment cannot count. A file carrying the same rule
+// text twice used to be listed twice, and the second entry re-ran the first
+// assertion verbatim — deleting one of the two rules left the census green. The
+// count field is what turns "this text appears" into "this text appears exactly
+// n times", which is the property the duplicate entry was pretending to assert.
 type bandedViewportRule struct {
-	path string
-	rule string
+	path  string
+	rule  string
+	count int
 }
 
 // bandedViewportRules is the enumerated set. It is checked in rather than
 // derived, because the property under test is that a KNOWN rule still reads the
 // token — a derived set would go quiet the moment a rule was deleted.
 var bandedViewportRules = []bandedViewportRule{
-	{"web/src/lib/components/shell/SectionRail.svelte", ruleBelowMd},
-	{"web/src/lib/components/shell/SectionRail.svelte", ruleBelowLg},
-	{"web/src/routes/(authed)/admin/+layout.svelte", ruleBelowLg},
-	{"web/src/routes/(authed)/admin/+layout.svelte", ruleBelowMd},
-	{"web/src/lib/components/admin/AdminNav.svelte", ruleBelowLg},
-	{"web/src/lib/components/admin/CharacterTable.svelte", ruleBelowMd},
-	{"web/src/lib/components/admin/CharacterFilterBar.svelte", ruleBelowMd},
-	{"web/src/lib/components/admin/EditCharacterSheet.svelte", ruleBelowMd},
-	{"web/src/lib/components/sidebar/Sidebar.svelte", ruleBelowMd},
-	{"web/src/routes/c/[id]/+page.svelte", ruleAtOrAboveM},
-	{"web/src/routes/(authed)/characters/[id]/+page.svelte", ruleAtOrAboveM},
-	{"web/src/routes/(authed)/characters/new/+page.svelte", ruleAtOrAboveM},
-	{"web/src/routes/(authed)/characters/+page.svelte", ruleAtOrAboveM},
-	{"web/src/lib/components/characters/CharacterRoster.svelte", ruleAtOrAboveM},
+	{"web/src/lib/components/shell/SectionRail.svelte", ruleBelowMd, 1},
+	{"web/src/lib/components/shell/SectionRail.svelte", ruleBelowLg, 1},
+	{"web/src/routes/(authed)/admin/+layout.svelte", ruleBelowLg, 1},
+	{"web/src/routes/(authed)/admin/+layout.svelte", ruleBelowMd, 1},
+	{"web/src/lib/components/admin/AdminNav.svelte", ruleBelowLg, 1},
+	{"web/src/lib/components/admin/CharacterTable.svelte", ruleBelowMd, 1},
+	{"web/src/lib/components/admin/CharacterFilterBar.svelte", ruleBelowMd, 1},
+	{"web/src/lib/components/admin/EditCharacterSheet.svelte", ruleBelowMd, 1},
+	{"web/src/lib/components/sidebar/Sidebar.svelte", ruleBelowMd, 1},
+	{"web/src/routes/c/[id]/+page.svelte", ruleAtOrAboveM, 1},
+	{"web/src/routes/(authed)/characters/[id]/+page.svelte", ruleAtOrAboveM, 1},
+	{"web/src/routes/(authed)/characters/new/+page.svelte", ruleAtOrAboveM, 1},
+	{"web/src/routes/(authed)/characters/+page.svelte", ruleAtOrAboveM, 1},
+	{"web/src/lib/components/characters/CharacterRoster.svelte", ruleAtOrAboveM, 1},
 	// TopBar carries TWO rules in ONE style block — the kbd-hint reveal and the
-	// mobile-only hide — so its pair repeats.
-	{"web/src/lib/components/TopBar.svelte", ruleAtOrAboveM},
-	{"web/src/lib/components/TopBar.svelte", ruleAtOrAboveM},
+	// mobile-only hide — written with identical text. ONE entry with count 2,
+	// not two entries: the pair used to repeat, and because the assertion was a
+	// substring test the second entry asserted nothing the first had not.
+	{"web/src/lib/components/TopBar.svelte", ruleAtOrAboveM, 2},
 }
 
 // forbiddenViewportWidths are the strings a hand-written md or lg breakpoint
@@ -131,12 +144,34 @@ var breakpointLiteralAllowlist = map[string]breakpointExemption{
 
 // isViewportDecidingLine reports whether a source line DECIDES a viewport band.
 //
-// Three clauses, and the third is load-bearing rather than redundant. Without
-// it the scan reaches only CSS rules and a `matchMedia(` call, and a media
-// condition STRING in a .ts file — precisely the form the JS half of this
-// bridge takes — is invisible. With it, a hand-written '(min-width: 768px)'
-// anywhere under web/src is caught, which is also what makes the allowlist an
-// enumerated decision rather than an accident of what the predicate misses.
+// Five clauses. The third is load-bearing rather than redundant: without it the
+// scan reaches only CSS rules and a `matchMedia(` call, and a media condition
+// STRING in a .ts file — precisely the form the JS half of this bridge takes —
+// is invisible. With it, a hand-written '(min-width: 768px)' anywhere under
+// web/src is caught, which is also what makes the allowlist an enumerated
+// decision rather than an accident of what the predicate misses.
+//
+// The fourth and fifth clauses close two shapes that decide the same band while
+// satisfying none of the first three:
+//
+//   - `min-[` / `max-[` — a Tailwind v4 arbitrary variant, `class="min-[768px]:flex"`.
+//     It is a media query written in the class attribute, with no `@media` and no
+//     parenthesised feature name. No such class exists under web/src today, so
+//     this clause is prospective coverage rather than a live escape being closed.
+//
+//   - `window.innerWidth` / `window.outerWidth` — a JS width comparison branching
+//     on the same boundary without a media query. Unlike the arbitrary variant,
+//     this shape DOES occur today: four lines (three in
+//     lib/components/terminal/Composer.svelte, one in lib/sentry.ts). All four are
+//     positioning or telemetry arithmetic and none carries a band width, so they
+//     add to the screened tally and to no offender list.
+//
+// That last case is the predicate working as designed, not a false positive.
+// This is a SCREEN, deliberately wider than the property: a line reaches the
+// offender list only if it also carries a forbidden width, and reaches the
+// band-relevant tally only if it carries a forbidden width or a breakpoint
+// token. Widening the screen costs nothing and narrowing it is how a shape
+// escapes, so do not "tighten" a clause to exclude arithmetic.
 func isViewportDecidingLine(line string) bool {
 	if strings.HasPrefix(strings.TrimSpace(line), "@media") {
 		return true
@@ -144,7 +179,13 @@ func isViewportDecidingLine(line string) bool {
 	if strings.Contains(line, "matchMedia(") {
 		return true
 	}
-	return strings.Contains(line, "(min-width:") || strings.Contains(line, "(max-width:")
+	if strings.Contains(line, "(min-width:") || strings.Contains(line, "(max-width:") {
+		return true
+	}
+	if strings.Contains(line, "min-[") || strings.Contains(line, "max-[") {
+		return true
+	}
+	return strings.Contains(line, "window.innerWidth") || strings.Contains(line, "window.outerWidth")
 }
 
 // lineCarriesForbiddenWidth reports whether a line contains any forbidden width
@@ -169,13 +210,64 @@ func lineCarriesForbiddenWidth(line string) bool {
 // The path is depth-derived and NOT uniform: this tree has files two, three and
 // four directories below web/src, so a single constant would be wrong for
 // TopBar.svelte and for the two nested characters/ route files.
+//
+// filepath.Dir renders a file sitting DIRECTLY under web/src as ".", for which
+// `strings.Count(".", "/") + 1` is 1 — one parent segment too many, pointing at
+// web/app.css. No such file carries a banded rule today, so the fix is not a
+// repair of a live failure; it is why one can be added later without a puzzling
+// build error that names a path nobody wrote.
 func referenceDirectiveFor(t *testing.T, repoRelPath string) string {
 	t.Helper()
 	rel, err := filepath.Rel(webSrcDir, repoRelPath)
 	require.NoError(t, err, "path %q must sit under %s", repoRelPath, webSrcDir)
 	dir := filepath.ToSlash(filepath.Dir(rel))
-	depth := strings.Count(dir, "/") + 1
+	depth := 0
+	if dir != "." {
+		depth = strings.Count(dir, "/") + 1
+	}
 	return `@reference "` + strings.Repeat("../", depth) + `app.css";`
+}
+
+// TestReferenceDirectiveForYieldsOneParentSegmentPerDirectoryBelowWebSrc pins
+// the depth arithmetic at every level this tree uses, including the depth-0 case
+// that has no file yet. A helper whose contract is only ever exercised through
+// the files that happen to exist cannot tell a reader which answer is correct
+// for the file they are about to add.
+func TestReferenceDirectiveForYieldsOneParentSegmentPerDirectoryBelowWebSrc(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+		want string
+	}{
+		{
+			name: "a file directly under web/src references app.css as a sibling, with no parent segment",
+			path: "web/src/app.css",
+			want: `@reference "app.css";`,
+		},
+		{
+			name: "a file one directory below web/src climbs one level",
+			path: "web/src/lib/probe.svelte",
+			want: `@reference "../app.css";`,
+		},
+		{
+			name: "a file two directories below web/src climbs two levels",
+			path: "web/src/lib/components/TopBar.svelte",
+			want: `@reference "../../app.css";`,
+		},
+		{
+			name: "a file four directories below web/src climbs four levels",
+			path: "web/src/routes/(authed)/characters/[id]/+page.svelte",
+			want: `@reference "../../../../app.css";`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, referenceDirectiveFor(t, tc.path),
+				"%s sits %d directories below %s", tc.path,
+				strings.Count(tc.want, "../"), webSrcDir)
+		})
+	}
 }
 
 // TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral asserts that no
@@ -221,10 +313,25 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 	require.DirExists(t, walkRoot,
 		"the authored web source tree is the walk root; if it moved, repoint webSrcDir")
 
+	// The extension filter is INVERTED: every extension is classified, as either
+	// scanned or deliberately skipped, and one in neither set fails the test.
+	//
+	// The previous allow-set failed OPEN. A `.tsx`, `.scss`, `.js` or `.postcss`
+	// file added under web/src later simply did not match, so it was skipped with
+	// no signal at all — and the hand-picked floor this walk used to carry was far
+	// too loose to notice a whole language dropping out of coverage. Failing on an
+	// unrecognised extension converts that silence into a one-line decision for
+	// whoever adds the file: scan it, or say why not.
 	scannedExtensions := map[string]struct{}{".svelte": {}, ".css": {}, ".ts": {}}
+	skippedExtensions := map[string]struct{}{
+		".json": {}, ".html": {}, ".svg": {}, ".png": {}, ".ico": {}, ".webp": {},
+		".avif": {}, ".woff": {}, ".woff2": {}, ".map": {}, ".md": {}, ".snap": {},
+	}
 
 	var offenders []string
+	var unclassified []string
 	scanned := 0
+	bandRelevant := 0
 	allowlistHits := map[string]int{}
 
 	err := filepath.WalkDir(walkRoot, func(path string, d fs.DirEntry, walkErr error) error {
@@ -237,14 +344,26 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 			}
 			return nil
 		}
-		if _, ok := scannedExtensions[filepath.Ext(d.Name())]; !ok {
-			return nil
-		}
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {
 			return relErr
 		}
 		relSlash := filepath.ToSlash(rel)
+
+		ext := filepath.Ext(d.Name())
+		if ext == "" {
+			// An extensionless file (a LICENSE, a dotfile) carries no authored
+			// stylesheet or module and needs no classification decision.
+			return nil
+		}
+		if _, skip := skippedExtensions[ext]; skip {
+			return nil
+		}
+		if _, scan := scannedExtensions[ext]; !scan {
+			unclassified = append(unclassified, relSlash+"  (extension "+ext+")")
+			return nil
+		}
+
 		content, readErr := os.ReadFile(path) //nolint:gosec // walk-derived path under the repo root
 		if readErr != nil {
 			return readErr
@@ -254,7 +373,11 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 				continue
 			}
 			scanned++
-			if !lineCarriesForbiddenWidth(line) {
+			forbidden := lineCarriesForbiddenWidth(line)
+			if forbidden || strings.Contains(line, tokenBreakpointPrefix) {
+				bandRelevant++
+			}
+			if !forbidden {
 				continue
 			}
 			// Symbol-scoped, not file-scoped: a forbidden width on a line that
@@ -272,12 +395,63 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 	})
 	require.NoError(t, err, "walk %s", webSrcDir)
 	sort.Strings(offenders)
+	sort.Strings(unclassified)
 
-	require.Greater(t, scanned, 15,
-		"only %d viewport-deciding lines were scanned under %s — a bad walk root, a "+
-			"renamed extension set or a predicate that stopped matching all yield zero "+
-			"offenders, and without this floor the census reports success for having "+
-			"looked at nothing", scanned, webSrcDir)
+	// Reported FIRST, because an unclassified file means the corpus measurement
+	// below is incomplete — the floor and the offender list are both statements
+	// about a walk that provably did not reach everything it passed.
+	require.Empty(t, unclassified,
+		"file(s) under %s carry an extension this census neither scans nor skips:\n  %s\n\n"+
+			"Classify each one. If it can hold an authored viewport rule (a .tsx, .scss, .js, "+
+			".postcss), add its extension to scannedExtensions; if it cannot, add it to "+
+			"skippedExtensions. Doing neither is how a whole language leaves coverage in "+
+			"silence, which is the fail-open shape the old allow-set had.",
+		webSrcDir, strings.Join(unclassified, "\n  "))
+
+	// ANTI-VACUITY FLOOR, derived from this census's own checked-in claims.
+	//
+	// It is a SUM over count, not len(bandedViewportRules), because the census is
+	// occurrence-counted: one entry with count 2 claims two rules in the corpus,
+	// so the corpus size the census asserts is the sum of its counts.
+	//
+	// The tally is over BAND-RELEVANT lines — a viewport-deciding line carrying a
+	// forbidden width or a breakpoint token — and not over every media line. The
+	// old floor counted `prefers-reduced-motion` and `prefers-color-scheme` rules
+	// and every `matchMedia(` call site, none of which can ever hold a band
+	// literal. It sat at 15 while the band-relevant corpus was 18: the walk could
+	// have stopped reaching more than half this tree and still reported success.
+	// (Measured: with lib/components excluded the screened count is 18 — still
+	// over the old floor — while the band-relevant count falls to 8.)
+	//
+	// Two things a future reader will be tempted to "improve", and must not:
+	//
+	//  1. Allowlisted lines DO count here. The tally is over every band-relevant
+	//     line the walk REACHED, and an exempted line is still a line it reached.
+	//     Filtering the allowlist out would be a different measurement wearing this
+	//     one's name. At the time of writing: 16 token lines + 2 allowlisted symbol
+	//     lines = 18, against a claimed sum of 16.
+	//
+	//  2. The floor is INTENDED to sit close to the tally, and would still be
+	//     correct at exactly zero headroom. It is an anti-vacuity floor, not a
+	//     budget — its job is to fail when the walk stops reaching the corpus, and
+	//     it does that best when it tracks the corpus. Deleting a rule therefore
+	//     fails BOTH this floor and the occurrence assertion in the sibling test,
+	//     producing two messages about one deletion. That redundancy is correct and
+	//     deliberate. Do NOT tune it away by subtracting a margin, by filtering the
+	//     tally, or by loosening the comparison; that is relaxing a guard rather
+	//     than repairing it.
+	ruleCensusOccurrences := 0
+	for _, r := range bandedViewportRules {
+		ruleCensusOccurrences += r.count
+	}
+	require.GreaterOrEqual(t, bandRelevant, ruleCensusOccurrences,
+		"the walk reached %d band-relevant viewport line(s) under %s but this census claims "+
+			"%d rule occurrence(s) live there, so the walk is not reaching its own corpus — a "+
+			"moved walk root, a directory added to skipDirs, or a predicate that stopped "+
+			"matching. (%d viewport-deciding line(s) were screened in total; that wider number "+
+			"is context, not the floor, because most media rules can never carry a band "+
+			"literal.)",
+		bandRelevant, webSrcDir, ruleCensusOccurrences, scanned)
 
 	// The allowlist must not widen silently. An entry that no longer names a real
 	// file, or that names one carrying no forbidden literal, is a standing
@@ -347,13 +521,30 @@ func TestEveryBandedViewportRuleDerivesItsWidthFromTheTailwindToken(t *testing.T
 		// A moved file must FAIL rather than silently drop out of coverage.
 		require.FileExists(t, abs, "enumerated viewport rule lives in %s", r.path)
 
+		// A zero-count entry asserts nothing: strings.Count would have to equal 0,
+		// which every file that does not carry the rule satisfies. Such an entry
+		// would sit in the census looking like coverage while being a no-op, so it
+		// is rejected outright rather than allowed to pass.
+		require.Positive(t, r.count,
+			"census entry %s / %q claims %d occurrence(s); an entry must claim at least one, "+
+				"or it asserts nothing while appearing to", r.path, r.rule, r.count)
+
 		content, err := os.ReadFile(abs)
 		require.NoError(t, err, "read %s", r.path)
 		src := string(content)
 
-		require.Contains(t, src, r.rule,
-			"%s must carry the token-derived rule %q — a hand-written width is a copy of a "+
-				"Tailwind default that nothing keeps in step", r.path, r.rule)
+		// Occurrence EQUALITY, not containment. Containment cannot tell one
+		// occurrence from two: when TopBar's two identical rules were listed as two
+		// entries, deleting either of them left both assertions green because the
+		// surviving one still satisfied both. Counting is what makes the second
+		// rule genuinely covered.
+		require.Equal(t, r.count, strings.Count(src, r.rule),
+			"%s carries the token-derived rule %q %d time(s); this census claims %d. A "+
+				"substring test cannot tell one occurrence from two, so the count is the "+
+				"assertion: if a rule was deliberately removed, drop the count here in the same "+
+				"change; if it was removed by accident, this is the accident. (A hand-written "+
+				"width is a copy of a Tailwind default that nothing keeps in step.)",
+			r.path, r.rule, strings.Count(src, r.rule), r.count)
 
 		directive := referenceDirectiveFor(t, r.path)
 		require.Contains(t, src, directive,
