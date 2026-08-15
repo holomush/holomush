@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 06.1
-current_phase_name: admin-portal-web-surface-shadcn-components-and-the-single-ro
-status: executing
+current_phase: 2
+current_phase_name: ABAC & Schema Vocabulary
+status: planning
 stopped_at: Completed 06.1-10-PLAN.md
-last_updated: "2026-08-15T20:31:47.669Z"
+last_updated: "2026-08-15T20:56:00.324Z"
 last_activity: 2026-08-15
 last_activity_desc: Phase 06.1 execution started
 progress:
@@ -34,11 +34,11 @@ without rework.
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 06.1 (admin-portal-web-surface-shadcn-components-and-the-single-ro) — EXECUTING
-Plan: 5 of 10
-Status: Ready to execute
+Phase: 2 — ABAC & Schema Vocabulary
+Plan: Not started
+Status: Ready to plan
 Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
-Last activity: 2026-08-15 — Phase 06.1 execution started
+Last activity: 2026-08-15 — Phase 06.1 complete, transitioned to Phase 2
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
 (`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
@@ -109,7 +109,7 @@ no action needed.
 
 **Velocity:**
 
-- Total plans completed: 78
+- Total plans completed: 88
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -127,6 +127,7 @@ no action needed.
 | 01.1 | 7 | - | - |
 | 02.1 | 3 | - | - |
 | 02.2 | 5 | - | - |
+| 06.1 | 10 | - | - |
 
 **Recent Trend:**
 
