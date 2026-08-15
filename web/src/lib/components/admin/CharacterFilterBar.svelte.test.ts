@@ -2,7 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mount, unmount } from 'svelte';
+import { mount, unmount, flushSync } from 'svelte';
 import CharacterFilterBar from './CharacterFilterBar.svelte';
 import { ADMIN_STATUS_FILTERS, type CharacterStatusFilter } from '$lib/admin/client';
 
@@ -136,6 +136,27 @@ describe('CharacterFilterBar — the debounce', () => {
     expect(seen).toEqual([raw]);
     expect(seen[0]).toBe(raw);
     unmount(component);
+  });
+
+  it('cancels a pending search on teardown', () => {
+    // The timer was cleared only by the NEXT keystroke, so one that outlived
+    // the component still called onsearch — which on the characters page runs
+    // reload() and issues a WebAdminSearchCharacters RPC for a surface that is
+    // gone. Navigating away mid-typing is the ordinary way to reach it. The
+    // sibling MediaQueryList listener in the Sheet is torn down and has a test;
+    // this mirrors it.
+    const seen: string[] = [];
+    const { target, component } = render({ onsearch: (t) => seen.push(t) });
+    // The component's own effects have to have run before its teardown can be
+    // observed — which is the state any mounted page is already in.
+    flushSync();
+    type(target.querySelector('input[name="q"]') as HTMLInputElement, 'mir');
+
+    unmount(component);
+    flushSync();
+    vi.advanceTimersByTime(250);
+
+    expect(seen).toEqual([]);
   });
 
   it('reports an emptied box as the empty string rather than swallowing it', () => {

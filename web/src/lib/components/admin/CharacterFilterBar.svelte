@@ -3,6 +3,7 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import * as Select from '$lib/components/ui/select';
   import { ADMIN_STATUS_FILTERS, type CharacterStatusFilter } from '$lib/admin/client';
 
@@ -54,6 +55,14 @@
     clearTimeout(timer);
     timer = setTimeout(() => onsearch?.(raw), debounceMs);
   }
+
+  /**
+   * The next keystroke is not the only thing that can end the window. A timer
+   * that outlives this component still calls `onsearch`, which on the
+   * characters page runs a reload and issues a search RPC for a surface that is
+   * gone — and navigating away mid-typing is the ordinary way to reach that.
+   */
+  onDestroy(() => clearTimeout(timer));
 
   function onValueChange(value: string) {
     status = value as CharacterStatusFilter;
