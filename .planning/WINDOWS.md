@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 23
 waived_count: 0
-fixed_count: 8
-total_count: 31
-last_updated: 2026-08-15T02:33:40.551Z
+fixed_count: 9
+total_count: 32
+last_updated: 2026-08-15T03:27:33.319Z
 ---
 
 # Broken Windows Ledger
@@ -45,7 +45,8 @@ last_updated: 2026-08-15T02:33:40.551Z
 | 28 | 06 | unrun-verify | .planning/phases/06-admin-portal-shell-character-administration/06-05-PLAN.md |  | 06-05 Task 3: /holomush-dev:review-abac was not run by the executor (Task tool disabled in this session); the orchestrator holds the Agent tool and will run it over the phase diff | open |  | 2026-08-14T20:26:05.931Z |  |
 | 29 | 06 | unrun-verify | test/integration/charname/name_uniqueness_test.go |  | 8 of 24 charname integration specs RED at HEAD from migration 000057 (plan 06-04); see phase deferred-items.md | open |  | 2026-08-14T20:26:06.012Z |  |
 | 30 | 06.1 | deviation | web/src/routes/error-boundary.svelte.test.ts |  | Plan mandated web/src/routes/+error.svelte.test.ts; SvelteKit refuses to build a +-prefixed non-route file under src/routes/. Renamed; plans 06.1-02/03 name the same shape (#4979). | open |  | 2026-08-15T01:27:46.184Z |  |
-| 31 | 06.1 | stub | web/src/routes/(authed)/admin/characters/+page.svelte |  | the selected {id,intent} seam is written by both row affordances and read by nothing until plan 06.1-04 lands the edit Sheet and lifecycle confirm | open |  | 2026-08-15T02:33:40.551Z |  |
+| 31 | 06.1 | stub | web/src/routes/(authed)/admin/characters/+page.svelte |  | the selected {id,intent} seam is written by both row affordances and read by nothing until plan 06.1-04 lands the edit Sheet and lifecycle confirm | fixed |  | 2026-08-15T02:33:40.551Z | 2026-08-15T03:27:18.118Z |
+| 32 | 06.1 | deviation | web/src/lib/components/admin/EditCharacterSheet.svelte |  | the conflict alert's Reload reseeds loaded and working from the server, discarding the operator's draft — the authored copy promises exactly that ('reload to see the current values, then re-apply'), but it is the same tension ledger entry 18 records for ProfileSection's reload | open |  | 2026-08-15T03:27:33.319Z |  |
 
 ````json
 [
@@ -416,9 +417,21 @@ last_updated: 2026-08-15T02:33:40.551Z
     "file": "web/src/routes/(authed)/admin/characters/+page.svelte",
     "line": null,
     "description": "the selected {id,intent} seam is written by both row affordances and read by nothing until plan 06.1-04 lands the edit Sheet and lifecycle confirm",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-15T02:33:40.551Z",
+    "resolved_at": "2026-08-15T03:27:18.118Z"
+  },
+  {
+    "id": 32,
+    "kind": "deviation",
+    "phase": "06.1",
+    "file": "web/src/lib/components/admin/EditCharacterSheet.svelte",
+    "line": null,
+    "description": "the conflict alert's Reload reseeds loaded and working from the server, discarding the operator's draft — the authored copy promises exactly that ('reload to see the current values, then re-apply'), but it is the same tension ledger entry 18 records for ProfileSection's reload",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-15T03:27:33.319Z",
     "resolved_at": null
   }
 ]
