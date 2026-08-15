@@ -25,7 +25,8 @@
    * types (.claude/rules/gateway-boundary.md).
    *
    * The column matches the roster's — same max width, same heading treatment,
-   * one breakpoint at 768px — so the two owner surfaces read as one family.
+   * one breakpoint, Tailwind's --breakpoint-md token, which the roster's rule
+   * reads too — so the two owner surfaces read as one family.
    * A media query rather than a container query: this phase ships no shell, so
    * the content box and the viewport are the same thing.
    */
@@ -39,6 +40,10 @@
 </div>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../../app.css";
+
   .page {
     display: flex;
     justify-content: center;
@@ -59,7 +64,7 @@
     font-weight: 600;
     line-height: 1.2;
   }
-  @media (min-width: 768px) {
+  @media (width >= theme(--breakpoint-md)) {
     .page {
       padding: 48px;
     }

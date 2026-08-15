@@ -301,6 +301,10 @@
 </div>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../../app.css";
+
   .page {
     display: flex;
     flex-direction: column;
@@ -311,7 +315,7 @@
     margin: 0 auto;
     padding: 32px 16px;
   }
-  @media (min-width: 768px) {
+  @media (width >= theme(--breakpoint-md)) {
     .page {
       padding: 32px 48px;
     }

@@ -121,6 +121,10 @@
 </div>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   /* The page body is UNPADDED at the block level: the card and each section
      carry their own margin, so sections grow BELOW the card rather than sharing
      a document flow with it. That layering is the structural mechanism by which
@@ -131,7 +135,7 @@
     margin: 0 auto;
     padding: 32px 16px;
   }
-  @media (min-width: 768px) {
+  @media (width >= theme(--breakpoint-md)) {
     .page {
       padding: 32px 48px;
     }

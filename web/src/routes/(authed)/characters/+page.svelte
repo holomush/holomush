@@ -216,6 +216,10 @@
 </div>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   .page {
     display: flex;
     align-items: flex-start;
@@ -227,7 +231,7 @@
      both go 16px → 48px at this band. Without it this route sat at a flat 24px,
      off the 4px scale, and the gutter visibly jumped when navigating between
      the three. */
-  @media (min-width: 768px) {
+  @media (width >= theme(--breakpoint-md)) {
     .page {
       padding: 32px 48px;
     }

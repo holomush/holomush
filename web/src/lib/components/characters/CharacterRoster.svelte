@@ -154,6 +154,10 @@
 {/if}
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   .section {
     margin-top: 32px;
   }
@@ -262,7 +266,7 @@
     line-height: 1.4;
     color: var(--color-status-text);
   }
-  @media (min-width: 768px) {
+  @media (width >= theme(--breakpoint-md)) {
     .grid {
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     }
