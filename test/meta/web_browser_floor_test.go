@@ -23,19 +23,37 @@ const webPackageJSON = "web/package.json"
 //
 // # What it guards, and why the property exists at all
 //
-// All sixteen authored viewport rules under web/src ship as CSS media query
-// RANGE syntax (`@media (width >= theme(--breakpoint-md))` and its `width <`
-// complement). A media query containing a feature the browser cannot parse
-// evaluates to `unknown` and never matches — it does not degrade, it dies. On
-// a browser below the range-syntax boundary the persistent rail never
-// collapses on a phone, `.mobile-only` never hides on a desktop, and the admin
-// nav never narrows. The pre-conversion `min-width`/`max-width` forms worked
-// everywhere, and the diff that converted them named no trade.
+// The shipped stylesheet is full of CSS media query RANGE syntax. A media query
+// containing a feature the browser cannot parse evaluates to `unknown` and never
+// matches — it does not degrade, it dies. On a browser below the range-syntax
+// boundary the persistent rail never collapses on a phone, `.mobile-only` never
+// hides on a desktop, and the admin nav never narrows.
 //
-// That made the supported browser floor a DERIVED value — an unnamed
-// consequence of whichever CSS spelling the last conversion happened to pick.
-// The `browserslist` key makes it CHOSEN. This test keeps it chosen: the floor
-// cannot quietly disappear the way it quietly appeared.
+// WHERE THAT RANGE SYNTAX COMES FROM, which is NOT what an earlier version of
+// this comment said. It said the sixteen authored viewport rules under web/src
+// made the floor "a DERIVED value — an unnamed consequence of whichever CSS
+// spelling the last conversion happened to pick". That is false, and the wrong
+// reason had a wrong ACTION attached to it: a reader hitting an old-browser bug
+// report would revert those sixteen rules to `min-width`/`max-width`, conclude
+// the floor was a consequence of that spelling, and lower `browserslist`.
+//
+// Tailwind v4 emits range syntax for EVERY responsive utility, independently of
+// anything this phase authored. Measured in the shipped build
+// (web/build/_app/immutable/assets/*.css): `width>=28rem` ×4, `width>=40rem` ×2,
+// `width>=48rem` ×15, `width>=64rem` ×4, `width>=80rem` ×1, `width>=96rem` ×1.
+// The 40/80/96rem widths are Tailwind's own `sm`/`xl`/`2xl` and `.container`
+// breakpoints — `rg '40rem|80rem|96rem' web/src` is EMPTY, and the 40rem block
+// contains `.sm\:block`. Nine `md:`/`lg:` utilities under web/src compile the
+// same way. Tailwind v4 independently documents Chrome 111 / Safari 16.4 /
+// Firefox 128 as its own required floor, the same triple this file re-derives
+// below from Vite's baseline plus `@property`.
+//
+// So: REVERTING THE SIXTEEN AUTHORED RULES WOULD NOT LOWER THIS FLOOR. Every
+// responsive Tailwind utility in the app still requires it. The declared
+// numbers were always right; only the attribution was wrong.
+//
+// What the `browserslist` key buys is that the floor is CHOSEN rather than
+// implicit in the toolchain. This test keeps it chosen and keeps it declared.
 //
 // Gap G-06.1-6 in
 // .planning/phases/06.1-admin-portal-web-surface-shadcn-components-and-the-single-ro/06.1-VERIFICATION.md.
@@ -156,12 +174,13 @@ func TestWebPackageDeclaresAnExplicitBrowserFloorForRangeSyntaxMediaQueries(t *t
 	}
 	require.NoError(t, json.Unmarshal(raw, &pkg), "parsing %s as JSON", webPackageJSON)
 
-	const why = "The sixteen banded viewport rules under web/src ship as CSS media query " +
-		"RANGE syntax. A browser that cannot parse a range condition evaluates the query " +
+	const why = "The shipped stylesheet is full of CSS media query RANGE syntax, emitted by " +
+		"Tailwind v4 for every responsive utility — not only by the sixteen authored viewport " +
+		"rules under web/src. A browser that cannot parse a range condition evaluates the query " +
 		"to `unknown` and NEVER matches it, so the responsive layout is dead rather than " +
 		"degraded — the rail does not collapse on a phone and the admin nav does not " +
-		"narrow. The floor those rules require must therefore be a declared decision, not " +
-		"an unnamed consequence of a CSS spelling. See 06.1-VERIFICATION.md gap G-06.1-6."
+		"narrow. Reverting those sixteen authored rules would NOT lower this floor; every " +
+		"md:/lg:/sm: utility in the app still requires it. See 06.1-VERIFICATION.md gap G-06.1-6."
 
 	require.NotNil(t, pkg.Browserslist,
 		"%s declares no `browserslist` key.\n%s", webPackageJSON, why)
