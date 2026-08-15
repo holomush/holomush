@@ -182,6 +182,10 @@
 </div>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   /* Cells are Dense 12/400; headers Label 12/600. The status word is muted
      TEXT and never a badge, a dot or a colour: this table is lifecycle, the
      shipped session badge is session state, and the two vocabularies collide
@@ -351,10 +355,11 @@
     }
   }
 
-  /* The phone band, at the shipped rail's own literal so the column drop and
-     the rail collapse fire together. Four columns here: the last two are gone,
-     and the version is NOT relocated. */
-  @media (max-width: 767px) {
+  /* The phone band, reading the same Tailwind --breakpoint-md token the
+     shipped rail reads, so the column drop and the rail collapse cannot be
+     given different widths. Four columns here: the last two are gone, and the
+     version is NOT relocated. */
+  @media (width < theme(--breakpoint-md)) {
     :global(.chartable .cell-created),
     :global(.chartable .cell-ver) {
       display: none;

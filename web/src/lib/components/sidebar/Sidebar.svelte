@@ -37,6 +37,10 @@
 </aside>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   .sidebar {
     height: 100%;
     background: var(--color-sidebar-background);
@@ -47,7 +51,7 @@
     overflow: hidden;
   }
   .sidebar.is-hidden { width: 0; border-left-width: 0; }
-  @media (max-width: 767px) {
+  @media (width < theme(--breakpoint-md)) {
     .sidebar { width: 0; border-left-width: 0; }
   }
   .sidebar-content {

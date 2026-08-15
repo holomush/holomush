@@ -226,7 +226,7 @@ describe('CharacterTable — the phone-band row target', () => {
    * THE OVERLAY'S CONTAINING BLOCK IS THE ROW, asserted on the STYLESHEET.
    *
    * A computed-style assertion cannot exist here: the rule lives inside
-   * `@media (max-width: 767px)`, both Vitest projects run jsdom
+   * `@media (width < theme(--breakpoint-md))`, both Vitest projects run jsdom
    * (web/vite.config.ts:9) which has no sub-1024px viewport and no layout
    * engine, so getComputedStyle(tr).position reads `static` whether the CSS is
    * right or wrong — it would fail a correct implementation. The repo already
@@ -242,7 +242,7 @@ describe('CharacterTable — the phone-band row target', () => {
       resolve(process.cwd(), 'src/lib/components/admin/CharacterTable.svelte'),
       'utf8',
     );
-    const start = src.indexOf('@media (max-width: 767px)');
+    const start = src.indexOf('@media (width < theme(--breakpoint-md))');
     expect(start).toBeGreaterThan(-1);
 
     // Take the media block by brace balance from its opening brace.

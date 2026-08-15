@@ -96,6 +96,10 @@
 </div>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   .filterbar {
     display: flex;
     align-items: center;
@@ -128,10 +132,12 @@
     min-height: 44px;
   }
 
-  /* The phone band, at the shipped rail's own literal. 16px is a platform
+  /* The phone band, reading the same Tailwind --breakpoint-md token the
+     shipped rail reads, so this band and the rail collapse cannot be given
+     different widths. 16px is a platform
      constraint, not a style preference: any focused input below it triggers
      iOS Safari's zoom-on-focus, which does not unzoom on blur. */
-  @media (max-width: 767px) {
+  @media (width < theme(--breakpoint-md)) {
     .filterbar {
       flex-wrap: wrap;
     }

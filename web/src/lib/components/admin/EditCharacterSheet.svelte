@@ -527,6 +527,10 @@
 </Sheet.Root>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   .meta {
     font-size: 12px;
     line-height: 1.4;
@@ -680,9 +684,13 @@
 
   /*
     THE ONLY VIEWPORT RULE IN THIS FILE, and it carries exactly the two things
-    CSS can actually discharge. The 767px literal is byte-identical to the one
-    the matchMedia derivation above reads, through the same viewport mechanism,
-    in the same file — so the two halves cannot fire at different widths.
+    CSS can actually discharge. This rule and the `side` derivation above are
+    COMPLEMENTS OF THE SAME BOUNDARY through two mechanisms: this half reads
+    Tailwind's --breakpoint-md token, the derivation reads the shared hook's
+    DESKTOP_MEDIA_QUERY. Neither half carries a number of its own, and the
+    boundary block in web/e2e/admin-portal.spec.ts is what proves they still
+    agree — jsdom applies no media query and computes no layout, so it can
+    prove neither half.
 
     The height is `vh`, not `%`: a percentage resolves against the containing
     block and would make the E2E's "≈84% of the viewport" an argument about
@@ -701,7 +709,7 @@
     rule was measured at 14px in a real browser before the second class was
     added, which is precisely the failure a jsdom test cannot see.
   */
-  @media (max-width: 767px) {
+  @media (width < theme(--breakpoint-md)) {
     :global(.editsheet.editsheet[data-side='bottom']) {
       height: 84vh;
     }
