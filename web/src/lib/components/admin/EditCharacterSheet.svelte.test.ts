@@ -161,28 +161,51 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('EditCharacterSheet — the thirteen editable paths', () => {
-  it('declares exactly thirteen writable paths, split across the two server caps', () => {
-    expect(ADMIN_EDITABLE_FIELDS).toHaveLength(13);
-    // world.MaxNameLength = 100 on the seven short single-line paths;
-    // world.MaxDescriptionLength = 4000 on description plus the five long ones.
-    expect(ADMIN_EDITABLE_FIELDS.filter((f) => f.maxBytes === 100)).toHaveLength(7);
-    expect(ADMIN_EDITABLE_FIELDS.filter((f) => f.maxBytes === 4000)).toHaveLength(6);
-    expect(ADMIN_EDITABLE_FIELDS.map((f) => f.path)).toEqual([
-      'description',
-      'profile.pronouns',
-      'profile.concept',
-      'profile.species',
-      'profile.age',
-      'profile.faction',
-      'profile.currently',
-      'profile.timezone',
-      'profile.appearance',
-      'profile.personality',
-      'profile.biography',
-      'profile.rumors',
-      'profile.rp_preferences',
-    ]);
+// AGREEMENT WITH THE SERVER IS NOT ASSERTED HERE, AND DELIBERATELY SO. The path
+// set, the two cap VALUES and the path-to-cap mapping are pinned by
+// TestAdminEditableFieldsInTheWebSheetMatchTheServerMaskAllowlist in
+// internal/grpc, which holds `adminProfileMaskablePaths`, `world.MaxNameLength`
+// and `world.MaxDescriptionLength` as live symbols and reads this declaration as
+// parsed text. Only a test with the Go symbols in scope can assert that; a
+// TypeScript test can only restate this module back at itself, which tracks the
+// transcription rather than the property and is blind to Go-side drift entirely.
+//
+// What remains below are properties this file can genuinely check WITHOUT a copy
+// of the module: invariants of the declaration's shape, not of its contents.
+describe('EditCharacterSheet — the editable-path declaration is internally consistent', () => {
+  it('declares at least one path, so the properties below are not vacuous', () => {
+    expect(ADMIN_EDITABLE_FIELDS.length).toBeGreaterThan(0);
+  });
+
+  it('gives every path exactly one entry', () => {
+    const paths = ADMIN_EDITABLE_FIELDS.map((f) => f.path);
+    expect(new Set(paths).size).toBe(paths.length);
+  });
+
+  it('derives a unique, non-empty, flat wire name for every path', () => {
+    const names = ADMIN_EDITABLE_FIELDS.map((f) => f.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) {
+      expect(name).not.toBe('');
+      // The wire field is flat by construction — `adminWireField` strips the
+      // leading `profile.` segment — so a surviving dot means that flattening
+      // stopped happening and the form's `name` no longer matches the request.
+      expect(name).not.toContain('.');
+    }
+  });
+
+  it('partitions the paths across exactly two caps, one per kind, line strictly smaller', () => {
+    const lineCaps = new Set(
+      ADMIN_EDITABLE_FIELDS.filter((f) => f.kind === 'line').map((f) => f.maxBytes),
+    );
+    const proseCaps = new Set(
+      ADMIN_EDITABLE_FIELDS.filter((f) => f.kind === 'prose').map((f) => f.maxBytes),
+    );
+    expect(lineCaps.size).toBe(1);
+    expect(proseCaps.size).toBe(1);
+    const [lineCap] = [...lineCaps];
+    const [proseCap] = [...proseCaps];
+    expect(lineCap).toBeLessThan(proseCap);
   });
 });
 
