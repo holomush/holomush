@@ -9,6 +9,7 @@ import {
 	isInvalidArgumentError,
 	isNotFoundError,
 	isUnimplementedError,
+	classifyAdminFailure,
 } from './errors';
 
 describe('isUnimplementedError', () => {
@@ -73,5 +74,45 @@ describe('the phase 5 ConnectError classifiers', () => {
 	it('classifies exactly one code each — no two predicates share a code', () => {
 		const codes = classifiers.map((c) => c.code);
 		expect(new Set(codes).size).toBe(classifiers.length);
+	});
+});
+
+// classifyAdminFailure is TOTAL: every code lands in exactly one class, and
+// the residue defaults to the conservative branch rather than the retry one.
+describe('classifyAdminFailure', () => {
+	const denialCodes: [string, Code][] = [
+		['PermissionDenied', Code.PermissionDenied],
+		['Unauthenticated', Code.Unauthenticated],
+		['NotFound', Code.NotFound],
+		['Internal', Code.Internal],
+		['Unknown', Code.Unknown],
+		['FailedPrecondition', Code.FailedPrecondition],
+	];
+
+	for (const [name, code] of denialCodes) {
+		it(`classifies ${name} as denial, so the ordinary not-found renders`, () => {
+			expect(classifyAdminFailure(new ConnectError('refused', code))).toBe('denial');
+		});
+	}
+
+	it('classifies Unavailable as infrastructure', () => {
+		expect(classifyAdminFailure(new ConnectError('down', Code.Unavailable))).toBe('infrastructure');
+	});
+
+	it('classifies DeadlineExceeded as infrastructure', () => {
+		expect(classifyAdminFailure(new ConnectError('slow', Code.DeadlineExceeded))).toBe(
+			'infrastructure',
+		);
+	});
+
+	it('classifies a plain transport throw as infrastructure', () => {
+		expect(classifyAdminFailure(new Error('network down'))).toBe('infrastructure');
+		expect(classifyAdminFailure('boom')).toBe('infrastructure');
+	});
+
+	it('defaults an unenumerated code to denial — the fail-safe direction', () => {
+		// ResourceExhausted appears in no branch of the classifier. It must land
+		// on the conservative screen, not on one implying something to retry.
+		expect(classifyAdminFailure(new ConnectError('quota', Code.ResourceExhausted))).toBe('denial');
 	});
 });
