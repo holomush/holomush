@@ -3,10 +3,14 @@
 //
 // WHAT THIS BUYS THAT NOTHING ELSE DOES.
 //
-// The phone band has two halves: sixteen authored `@media` rules that read
+// The phone band has two halves: THIRTEEN authored `@media` rules that read
 // `theme(--breakpoint-md)`, and one JS media query, DESKTOP_MEDIA_QUERY, that
 // every consumer reaches through `isDesktop()`. Both are now written in rem, so
 // they resolve against the SAME reference — the browser's initial font size.
+//
+// Thirteen, not sixteen. Sixteen counts the three `theme(--breakpoint-lg)`
+// rules too — a different boundary, with no JS half — which is why the census
+// quotes sixteen for both tokens together. This spec proves the md pairing only.
 //
 // That reference is the one axis along which the two halves can disagree, and
 // every other proof in this tree is blind to it: `admin-portal.spec.ts`'s

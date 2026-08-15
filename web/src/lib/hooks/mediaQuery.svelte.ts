@@ -3,8 +3,15 @@
 
 /**
  * Tailwind `md` breakpoint — the desktop/mobile divide for the workspace shell,
- * and the JS half of a bridge whose other half is sixteen authored `@media`
+ * and the JS half of a bridge whose other half is THIRTEEN authored `@media`
  * rules reading `theme(--breakpoint-md)`.
+ *
+ * Thirteen, not sixteen. Sixteen is the md AND lg total, which is the figure
+ * the census in test/meta/web_phone_band_breakpoint_census_test.go correctly
+ * quotes for BOTH tokens. Three further rules read `theme(--breakpoint-lg)`
+ * (SectionRail.svelte, admin/+layout.svelte, AdminNav.svelte) and that is a
+ * DIFFERENT boundary with no JS half at all — this constant is not their
+ * complement, and a consumer added for the lg band needs its own.
  *
  * THE UNIT IS THE POINT. Tailwind compiles that token to 48rem, so this query
  * is written in rem too: both halves then resolve against the same reference —
