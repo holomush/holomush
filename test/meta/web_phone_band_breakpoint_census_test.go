@@ -216,6 +216,17 @@ func lineCarriesForbiddenWidth(line string) bool {
 // web/app.css. No such file carries a banded rule today, so the fix is not a
 // repair of a live failure; it is why one can be added later without a puzzling
 // build error that names a path nobody wrote.
+//
+// The depth-0 answer is the BARE specifier `app.css`, and that is not a second
+// off-by-one. It was checked against a real build rather than reasoned about:
+// a probe component at web/src/probe-tmp.svelte carrying `@reference "app.css";`
+// and one `@media (width < theme(--breakpoint-md))` rule, imported so Vite
+// compiled it, built clean and emitted `@media not all and (width>=48rem)` —
+// theme() resolved, so @tailwindcss/vite resolved the bare specifier relative to
+// the importing file. `./app.css` builds identically. The reasonable-sounding
+// worry that a bare specifier must be package-resolved out of node_modules (as
+// app.css:1's own `@import "tailwindcss"` is) does NOT hold for this directive;
+// do not "fix" this to `./` on that argument without re-running the probe.
 func referenceDirectiveFor(t *testing.T, repoRelPath string) string {
 	t.Helper()
 	rel, err := filepath.Rel(webSrcDir, repoRelPath)
@@ -240,8 +251,15 @@ func TestReferenceDirectiveForYieldsOneParentSegmentPerDirectoryBelowWebSrc(t *t
 		want string
 	}{
 		{
+			// The path is a PLAUSIBLE depth-0 component, not app.css itself. Pinning
+			// this case with `web/src/app.css` pinned app.css referencing ITSELF — a
+			// case no build can ever produce, so the expected value could never be
+			// checked against one. `web/src/probe-tmp.svelte` is the exact path the
+			// build probe recorded in referenceDirectiveFor's comment used, and that
+			// probe is what establishes this answer as correct rather than merely
+			// consistent with the arithmetic.
 			name: "a file directly under web/src references app.css as a sibling, with no parent segment",
-			path: "web/src/app.css",
+			path: "web/src/probe-tmp.svelte",
 			want: `@reference "app.css";`,
 		},
 		{
