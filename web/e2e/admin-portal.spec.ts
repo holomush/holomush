@@ -19,59 +19,14 @@
 //   3. the row updating from the mutation response with no table re-read.
 //   4. that a non-admin's /admin/* miss is the ordinary not-found.
 
-import { test, expect, db, registerPlayer, createCharacter } from './helpers/fixtures';
+import { test, expect, registerPlayer, createCharacter } from './helpers/fixtures';
+// signInAsAdmin, gotoAdminCharacters, rowFor and sheet were local to this file
+// until admin-band-root-font.spec.ts — a second spec, in its own Playwright
+// project — needed them. They now live in ./helpers/admin verbatim.
+import { signInAsAdmin, gotoAdminCharacters, rowFor, sheet } from './helpers/admin';
 import type { Page, BrowserContext } from '@playwright/test';
 
-/**
- * Register a player, give them a character, grant that character the admin
- * role, and land on /admin/characters.
- *
- * The role reaches the browser as the ADMIN-08 nav hint on the next
- * WebCheckSession, which the (authed) layout load issues — so a navigation
- * after the grant is all that is needed; no terminal round trip.
- */
-async function signInAsAdmin(page: Page, prefix: string) {
-  // The prefix stays SHORT and letters-only. `uniqueSceneUser` builds
-  // `e2e_sc_{prefix}_{13-digit ms}_{4}` = 26 + prefix characters against a
-  // 30-character username limit, so a five-character prefix silently fails
-  // registration and the failure surfaces as "still on /register".
-  expect(prefix).toMatch(/^[a-z]{2,4}$/);
-  const creds = await registerPlayer(page, prefix);
-  await createCharacter(page, creds.charName);
-  const player = await db.getPlayerByUsername(creds.username);
-  expect(player).not.toBeNull();
-  const chars = await db.getCharactersByPlayerId(player!.id);
-  expect(chars.length).toBeGreaterThan(0);
-  await db.grantAdminRole(chars[0].id);
-  const admin = { ...creds, characterId: chars[0].id, playerId: player!.id };
-  await gotoAdminCharacters(page, admin.charName);
-  return admin;
-}
-
-/**
- * Land on /admin/characters with the list narrowed to one character.
- *
- * The narrowing is not decoration: the admin list is every character in the
- * database, page size 50, and the E2E database is shared with nineteen other
- * specs. Without it a row this file created can sit on page 3.
- */
-async function gotoAdminCharacters(page: Page, charName: string) {
-  await page.goto('/admin/characters');
-  await expect(page.getByRole('heading', { name: 'Characters' })).toBeVisible({ timeout: 15000 });
-  // The random letters-only tail of the generated name: unique, ASCII, and a
-  // substring of the stored normal form whatever the folding turns out to be.
-  const term = charName.split(' ').pop() ?? charName;
-  await page.locator('input[name="q"]').fill(term);
-  await expect(rowFor(page, charName)).toHaveCount(1, { timeout: 15000 });
-}
-
-const sheet = (page: Page) => page.locator('[data-slot="sheet-content"]');
 const overlay = (page: Page) => page.locator('[data-slot="sheet-overlay"]');
-
-/** The row for a character, by its rendered name. */
-function rowFor(page: Page, name: string) {
-  return page.locator('tr.charrow', { hasText: name });
-}
 
 /**
  * Tap the row from a cell that is NOT the primary one, and prove the tap

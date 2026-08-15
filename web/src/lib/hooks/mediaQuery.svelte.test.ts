@@ -102,7 +102,7 @@ describe('mediaQuery', () => {
       expect(d.current).toBe(true);
     });
     cleanup();
-    expect(DESKTOP_MEDIA_QUERY).toBe('(min-width: 768px)');
+    expect(DESKTOP_MEDIA_QUERY).toBe('(min-width: 48rem)');
     expect(queries).toContain(DESKTOP_MEDIA_QUERY);
   });
 });

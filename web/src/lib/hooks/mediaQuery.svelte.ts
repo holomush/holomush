@@ -1,8 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-/** Tailwind `md` breakpoint — the desktop/mobile divide for the workspace shell. */
-export const DESKTOP_MEDIA_QUERY = '(min-width: 768px)';
+/**
+ * Tailwind `md` breakpoint — the desktop/mobile divide for the workspace shell,
+ * and the JS half of a bridge whose other half is sixteen authored `@media`
+ * rules reading `theme(--breakpoint-md)`.
+ *
+ * THE UNIT IS THE POINT. Tailwind compiles that token to 48rem, so this query
+ * is written in rem too: both halves then resolve against the same reference —
+ * the browser's INITIAL font size, which is what rem in a media query resolves
+ * against — and move together when a reader raises their default font size.
+ * The retired px spelling was a complement only at exactly 16px; at a 20px
+ * default the CSS boundary sits at 960px while a px query stayed at 768px, and
+ * anywhere in that band the shell collapsed to its phone shape while this hook
+ * still reported desktop.
+ *
+ * `web/e2e/admin-band-root-font.spec.ts` is what enforces it: a Playwright
+ * project launched at a 20px root font size that reads `--breakpoint-md` off
+ * `:root` at runtime and asserts the two halves are exact complements at every
+ * probed width. `test/meta/web_phone_band_breakpoint_census_test.go` is what
+ * keeps this the only authored copy.
+ */
+export const DESKTOP_MEDIA_QUERY = '(min-width: 48rem)';
 
 /**
  * Reactive `matchMedia` wrapper. The returned object's `current` getter is a
