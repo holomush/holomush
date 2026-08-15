@@ -141,14 +141,22 @@
     pendingRowId = id;
     try {
       const updated = await updateAdminCharacter({ characterId: id, ...args });
-      selected = null;
-      // NO CONFIRMED POST-WRITE ROW, NO RECEIPT. The wrapper is typed
-      // `CharacterRow | undefined` and `applyRow` guards for exactly that, so
-      // the receipt has to guard for it on the same terms — interpolating the
+      // NO CONFIRMED POST-WRITE ROW IS A FAILURE, NOT A QUIET RETURN. The
+      // wrapper is typed `CharacterRow | undefined` (client.ts — `res.character`
+      // is an optional proto message) and `applyRow` guards for exactly that, so
+      // the receipt has to guard for it on the same terms: interpolating the
       // absent value printed a literal `vundefined` beside a row that had not
-      // changed, which is a receipt asserting a mutation the page could not
-      // confirm.
-      if (!updated) return;
+      // changed, a receipt asserting a mutation the page could not confirm.
+      //
+      // Suppressing the receipt was only half of it. Closing the Sheet first and
+      // returning second left the operator watching their form disappear with
+      // the row unchanged and NOTHING said — and silence asserts "it worked" to
+      // a human exactly as a false receipt does. Throwing instead keeps the
+      // Sheet open and hands it to the same `catch` that renders GENERIC_COPY,
+      // which is authored copy this surface already owns. Nothing is thrown
+      // past the Sheet, so no new failure vocabulary is needed here.
+      if (!updated) throw new Error('no post-write row');
+      selected = null;
       applyRow(updated);
       toast(
         `AdminUpdateCharacter · update_mask: ${args.paths.length} paths · ` +
@@ -172,9 +180,14 @@
         intent === 'retire'
           ? await retireAdminCharacter(id, expectedVersion)
           : await unretireAdminCharacter(id, expectedVersion);
+      // Same guard as saveEdit, on the same grounds, and sharper here: a retire
+      // that closed its confirmation, left the row reading `active` and fired no
+      // receipt gives the operator no Undo and no statement of what happened.
+      // The confirmation renders FAILURE_COPY for a rejection, and the retire
+      // receipt's `Undo` — the other caller of this function — already catches
+      // and fires UNDO_FAILED.
+      if (!updated) throw new Error('no post-write row');
       selected = null;
-      // Same guard as saveEdit, on the same grounds.
-      if (!updated) return;
       applyRow(updated);
       const rpc = intent === 'retire' ? 'AdminRetireCharacter' : 'AdminUnretireCharacter';
       const message = `${rpc} · ${updated.name} · v${expectedVersion} → v${updated.version}`;

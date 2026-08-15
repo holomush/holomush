@@ -552,8 +552,17 @@ describe('/admin/characters — a response the page cannot confirm', () => {
    * body-less success printed `AdminRetireCharacter · undefined · v1 →
    * vundefined` beside a row that had not changed — a receipt asserting a
    * mutation the page could not confirm.
+   *
+   * SUPPRESSING THE RECEIPT WAS ONLY HALF OF IT. The overlay closed first and
+   * the guard returned second, so the operator watched their form disappear
+   * with the row unchanged and nothing said at all — which reads as "it
+   * worked" for something the page could not confirm. Silence asserts the same
+   * thing to a human that a false receipt does. So a body-less response is now
+   * treated as a FAILURE: the overlay stays open and renders its own authored
+   * copy, and each case below asserts both halves — no receipt AND a refusal
+   * the operator can see.
    */
-  it('writes no receipt for a body-less edit response', async () => {
+  it('keeps the Sheet open with its failure copy and writes no receipt for a body-less edit response', async () => {
     impl.update = async () => undefined;
     const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
     clickRowAction(target, 'c0', 'Edit');
@@ -564,6 +573,16 @@ describe('/admin/characters — a response the page cannot confirm', () => {
 
     for (const t of impl.toasts) expect(t.message).not.toContain('undefined');
     expect(impl.toasts).toEqual([]);
+    // The Sheet is still open, still holds the typing, and SAYS something.
+    expect(
+      sheet(),
+      'a body-less response closed the Sheet, leaving the row unchanged and nothing on screen — ' +
+        'which an operator reads as success',
+    ).not.toBeNull();
+    expect(sheetField('concept').value).toBe('Archivist');
+    expect((sheet()!.querySelector('[role="alert"]') as HTMLElement | null)?.textContent).toContain(
+      "Couldn't save.",
+    );
     // The row is untouched, so nothing on screen claims otherwise either.
     const tr = target.querySelector('[data-row-id="c0"]') as HTMLElement;
     expect(tr.textContent).toContain('1');
@@ -571,7 +590,7 @@ describe('/admin/characters — a response the page cannot confirm', () => {
     unmount(component);
   });
 
-  it('writes no receipt for a body-less lifecycle response', async () => {
+  it('keeps the confirmation open with its failure copy and writes no receipt for a body-less lifecycle response', async () => {
     impl.retire = async () => undefined;
     const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
     clickRowAction(target, 'c0', 'Retire…');
@@ -581,6 +600,17 @@ describe('/admin/characters — a response the page cannot confirm', () => {
 
     for (const t of impl.toasts) expect(t.message).not.toContain('undefined');
     expect(impl.toasts).toEqual([]);
+    // Sharper here than for an edit: without this the retire closes its
+    // confirmation, leaves the row reading `active`, and fires no receipt — so
+    // there is no Undo and no statement of what happened.
+    expect(
+      confirm(),
+      'a body-less retire response closed the confirmation with the row still active and no ' +
+        'receipt — no Undo, and no statement of what happened',
+    ).not.toBeNull();
+    expect(
+      (confirm()!.querySelector('[role="alert"]') as HTMLElement | null)?.textContent,
+    ).toContain("Couldn't change this character's lifecycle.");
     const tr = target.querySelector('[data-row-id="c0"]') as HTMLElement;
     expect(tr.textContent).toContain('active');
     unmount(component);
