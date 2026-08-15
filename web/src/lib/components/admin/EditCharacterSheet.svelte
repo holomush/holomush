@@ -3,6 +3,8 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts" module>
+  import { adminWireField } from '$lib/admin/client';
+
   /**
    * One editable path: its mask path, the flat request field the wire carries
    * it in, and the server's own byte cap for it.
@@ -26,9 +28,10 @@
     /** The update_mask path, compared by exact string server-side. */
     path: string;
     /**
-     * The flat field on WebAdminUpdateCharacterRequest. It is the mask path
-     * minus its `profile.` prefix — ONE rule rather than a second table, so
-     * there is nothing here to drift out of step with the wire.
+     * The flat field on WebAdminUpdateCharacterRequest, which is also this
+     * control's `name` attribute. It comes from `adminWireField` — the same
+     * one-line rule the request builder uses — so the form and the wire cannot
+     * disagree about what a path is called.
      */
     name: string;
     label: string;
@@ -39,12 +42,9 @@
   const SHORT = 100; // world.MaxNameLength
   const LONG = 4000; // world.MaxDescriptionLength
 
-  const wireName = (path: string) =>
-    path.startsWith('profile.') ? path.slice('profile.'.length) : path;
-
   const line = (path: string, label: string): EditableField => ({
     path,
-    name: wireName(path),
+    name: adminWireField(path),
     label,
     kind: 'line',
     maxBytes: SHORT,
@@ -52,7 +52,7 @@
 
   const prose = (path: string, label: string): EditableField => ({
     path,
-    name: wireName(path),
+    name: adminWireField(path),
     label,
     kind: 'prose',
     maxBytes: LONG,

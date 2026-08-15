@@ -4,14 +4,20 @@
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { toast } from 'svelte-sonner';
   import * as Empty from '$lib/components/ui/empty';
   import * as Pagination from '$lib/components/ui/pagination';
   import CharacterFilterBar from '$lib/components/admin/CharacterFilterBar.svelte';
   import CharacterTable from '$lib/components/admin/CharacterTable.svelte';
+  import EditCharacterSheet from '$lib/components/admin/EditCharacterSheet.svelte';
+  import LifecycleConfirmDialog from '$lib/components/admin/LifecycleConfirmDialog.svelte';
   import {
     ADMIN_PAGE_SIZE,
     listAdminCharacters,
     searchAdminCharacters,
+    updateAdminCharacter,
+    retireAdminCharacter,
+    unretireAdminCharacter,
     type CharacterRow,
     type CharacterSortField,
     type CharacterStatusFilter,
@@ -49,29 +55,131 @@
   let descending = $state(false);
   let pageNum = $state(1);
 
-  /**
-   * The one row whose mutation is in flight. Nothing on this page writes yet —
-   * the edit Sheet and the lifecycle confirm are plan 06.1-04's — so it stays
-   * empty here and the table's per-row pending idiom is already wired for it.
-   */
+  /** The one row whose mutation is in flight; the rest stay interactive. */
   let pendingRowId = $state('');
+  /** The row that just changed, for the shipped arrival flash. */
+  let flashRowId = $state('');
   /**
    * The character the operator reached for, and through which entry point.
-   *
-   * Both row affordances resolve here and no further IN THIS PLAN: the edit
-   * Sheet and the lifecycle confirm are plan 06.1-04's artifacts and do not
-   * exist yet, so activating a row records the intent and renders nothing. The
-   * seam is deliberate — 06.1-04 adds the overlay and reads this — and it is
-   * recorded as a known stub rather than left to be discovered.
+   * `edit` opens the Sheet; `lifecycle` opens the confirmation. The Sheet's own
+   * transition picker also resolves here, so BOTH entrances reach one confirm
+   * and one RPC.
    */
   let selected = $state<{ id: string; intent: 'edit' | 'lifecycle' } | null>(null);
+  /** Which direction the open confirmation is confirming. */
+  let transition = $state<'retire' | 'unretire'>('retire');
+
+  const selectedRow = $derived(
+    selected ? (rows.find((r) => r.id === selected!.id) ?? null) : null,
+  );
 
   function onedit(id: string) {
     selected = { id, intent: 'edit' };
   }
 
   function onlifecycle(row: CharacterRow) {
+    transition = row.status === 'retired' ? 'unretire' : 'retire';
     selected = { id: row.id, intent: 'lifecycle' };
+  }
+
+  /** The Sheet's picker routes here: it selects a direction, never applies one. */
+  function onsheetlifecycle(intent: 'retire' | 'unretire') {
+    if (!selected) return;
+    transition = intent;
+    selected = { id: selected.id, intent: 'lifecycle' };
+  }
+
+  /**
+   * Six seconds rather than the four-second default: this is a receipt, and the
+   * `Undo` on a retire needs a window an operator can actually reach. It is
+   * never the sole carrier of the outcome — the row already changed in place.
+   */
+  const TOAST_MS = 6000;
+
+  /**
+   * The row updates IN PLACE from the response and the table is never re-read.
+   * The mutation answered with the post-write row, so a second request could
+   * only disagree with it — and would cost the operator their place in a sorted,
+   * filtered, paginated list to learn something it already knows.
+   */
+  function applyRow(updated: CharacterRow | undefined) {
+    if (!updated) return;
+    rows = rows.map((r) => (r.id === updated.id ? updated : r));
+    flashRowId = updated.id;
+  }
+
+  /**
+   * D-110's binding sequence for an edit. The Sheet has already disabled its
+   * submit and marked it busy; this marks the row pending, awaits the write,
+   * closes the Sheet, updates the row from the response and fires the receipt.
+   *
+   * IT DOES NOT CATCH. A refusal belongs to the Sheet, which is still open and
+   * still holds the operator's typing: an `Aborted` renders the conflict there
+   * and NO toast fires, because a toast is the receipt for something that
+   * finished.
+   */
+  async function saveEdit(args: {
+    paths: string[];
+    values: Record<string, string>;
+    expectedVersion: number;
+  }) {
+    const id = selected?.id;
+    if (!id) return;
+    pendingRowId = id;
+    try {
+      const updated = await updateAdminCharacter({ characterId: id, ...args });
+      selected = null;
+      applyRow(updated);
+      toast(
+        `AdminUpdateCharacter · update_mask: ${args.paths.length} paths · ` +
+          `v${args.expectedVersion} → v${updated?.version}`,
+        { duration: TOAST_MS },
+      );
+    } finally {
+      pendingRowId = '';
+    }
+  }
+
+  /**
+   * The one lifecycle code path. The confirmation's button, and the retire
+   * receipt's `Undo`, both come through here — so `Undo` is the same RPC, with
+   * the same guard, as the transition picker's, and never a status value.
+   */
+  async function applyLifecycle(id: string, intent: 'retire' | 'unretire', expectedVersion: number) {
+    pendingRowId = id;
+    try {
+      const updated =
+        intent === 'retire'
+          ? await retireAdminCharacter(id, expectedVersion)
+          : await unretireAdminCharacter(id, expectedVersion);
+      selected = null;
+      applyRow(updated);
+      const rpc = intent === 'retire' ? 'AdminRetireCharacter' : 'AdminUnretireCharacter';
+      const message = `${rpc} · ${updated?.name} · v${expectedVersion} → v${updated?.version}`;
+      if (intent === 'retire' && updated) {
+        const undoAt = updated.version;
+        const undoId = updated.id;
+        toast(message, {
+          duration: TOAST_MS,
+          action: {
+            label: 'Undo',
+            // The NEW version from the retire response: the row moved, and the
+            // guard has to be composed against where it moved to.
+            onClick: () => void applyLifecycle(undoId, 'unretire', undoAt),
+          },
+        });
+      } else {
+        toast(message, { duration: TOAST_MS });
+      }
+    } finally {
+      pendingRowId = '';
+    }
+  }
+
+  async function confirmLifecycle() {
+    const row = selectedRow;
+    if (!row) return;
+    await applyLifecycle(row.id, transition, row.version);
   }
 
   /**
@@ -92,6 +200,7 @@
 
   async function reload() {
     loading = true;
+    flashRowId = '';
     const query = { sortField, descending, status, playerId, page: pageNum };
     const wanted = term;
     try {
@@ -218,6 +327,7 @@
     {sortField}
     {descending}
     {pendingRowId}
+    {flashRowId}
     {onsort}
     {onedit}
     {onlifecycle}
@@ -248,6 +358,32 @@
       {/snippet}
     </Pagination.Root>
   {/if}
+{/if}
+
+<!--
+  The two overlays. Both entrances to a lifecycle transition — the table's row
+  action and the Sheet's own picker — resolve into ONE confirmation and ONE
+  RPC; the Sheet never sends a transition itself.
+
+  Keyed on the character id so switching rows rebuilds the form rather than
+  carrying one character's draft onto another.
+-->
+{#if selectedRow && selected?.intent === 'edit'}
+  {#key selectedRow.id}
+    <EditCharacterSheet
+      row={selectedRow}
+      save={saveEdit}
+      onlifecycle={onsheetlifecycle}
+      onclose={() => (selected = null)}
+    />
+  {/key}
+{:else if selectedRow && selected?.intent === 'lifecycle'}
+  <LifecycleConfirmDialog
+    name={selectedRow.name}
+    intent={transition}
+    onconfirm={confirmLifecycle}
+    oncancel={() => (selected = null)}
+  />
 {/if}
 
 <style>

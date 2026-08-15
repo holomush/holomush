@@ -139,15 +139,32 @@ describe('LifecycleConfirmDialog — ADMIN-05: retire is not framed as a takedow
 });
 
 describe('LifecycleConfirmDialog — it requires a decision', () => {
-  it('does not close on a backdrop interaction', async () => {
+  it('is an alertdialog, which is what makes a backdrop tap not a dismissal', async () => {
+    /*
+     * THE ROLE IS THE ASSERTION, and the synthetic interaction below is NOT.
+     *
+     * Driving a backdrop dismissal in jsdom cannot discriminate: setting
+     * `interactOutsideBehavior="close"` on the content — the one-token change
+     * that genuinely makes this dialog dismissible — leaves every case in this
+     * file green, verified by running it. bits-ui's outside-interaction
+     * detection does not fire for a synthetic MouseEvent named 'pointerdown',
+     * so a test that only clicked the overlay would pass identically before
+     * and after the defect. The browser-level proof is the Playwright block in
+     * web/e2e/admin-portal.spec.ts, where the pointer events are real.
+     *
+     * `role="alertdialog"` DOES discriminate — the plain `dialog` primitive
+     * renders `role="dialog"` — and it is the property an assistive technology
+     * reads as "this needs a decision".
+     */
     const cancels: number[] = [];
     const { component } = render({ oncancel: () => void cancels.push(1) });
+    expect(content().getAttribute('role')).toBe('alertdialog');
+    expect(content().getAttribute('aria-modal')).toBe('true');
     const overlay = document.body.querySelector(
       '[data-slot="alert-dialog-overlay"]',
     ) as HTMLElement;
     expect(overlay).not.toBeNull();
     overlay.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-    overlay.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await settle();
     expect(document.body.querySelector('[data-slot="alert-dialog-content"]')).not.toBeNull();

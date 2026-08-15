@@ -7,6 +7,7 @@
   import AdminNav from '$lib/components/admin/AdminNav.svelte';
   import * as Avatar from '$lib/components/ui/avatar';
   import * as Breadcrumb from '$lib/components/ui/breadcrumb';
+  import { Toaster } from '$lib/components/ui/sonner';
   import { authState } from '$lib/stores/authStore';
   import { setAdminSections, clearAdminSections } from '$lib/stores/adminNavStore';
 
@@ -36,6 +37,11 @@
     return () => clearAdminSections();
   });
 </script>
+
+<!-- THE ONE TOASTER, mounted once for the whole admin portal. A second mount
+     anywhere under /admin would double every receipt. It sits outside the
+     frame so a mutation's receipt is not tied to which branch rendered. -->
+<Toaster />
 
 {#if data.loadFailed}
   <!-- One shared state, byte-identical for every caller. It names nothing

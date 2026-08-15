@@ -193,3 +193,66 @@ export async function getAdminCharacter(
   const res = await client.webAdminGetCharacter({ characterId });
   return res.character;
 }
+
+/**
+ * The flat request field a mask path travels in: the path minus its `profile.`
+ * prefix, which is the server's own naming rule
+ * (adminProfileMaskablePaths -> WebAdminUpdateCharacterRequest fields 4-16).
+ *
+ * ONE RULE, not a second lookup table. A table would be a client-side copy of
+ * a mapping the wire already fixes, and copies drift.
+ */
+export const adminWireField = (path: string): string =>
+  path.startsWith('profile.') ? path.slice('profile.'.length) : path;
+
+/**
+ * One partial edit against the optimistic-concurrency guard.
+ *
+ * `paths` IS the update mask, and it carries only what changed. The server
+ * compares paths by EXACT string against its closed thirteen-path allowlist —
+ * no prefix, no wildcard, no dotted-subtree expansion — and an unlisted path is
+ * rejected rather than ignored, so nothing here needs to police the set.
+ *
+ * `expectedVersion` is never defaulted and never clamped on this side. The core
+ * refuses an absent, zero or negative value before any domain call, and answers
+ * a stale one with Aborted; a client that filled it in would be turning the
+ * guard off exactly when it matters.
+ */
+export async function updateAdminCharacter(args: {
+  characterId: string;
+  expectedVersion: number;
+  paths: string[];
+  values: Record<string, string>;
+}): Promise<CharacterRow | undefined> {
+  const req: Record<string, unknown> = {
+    characterId: args.characterId,
+    expectedVersion: args.expectedVersion,
+    updateMask: { paths: args.paths },
+  };
+  for (const p of args.paths) req[adminWireField(p)] = args.values[p] ?? '';
+  const res = await client.webAdminUpdateCharacter(req);
+  return res.character;
+}
+
+/**
+ * The retire transition. It sends a character id and a version and NOTHING
+ * else: §9.3 keeps the lifecycle vocabulary off the wire so `idle` stays
+ * unreachable, and there is no field on this request that could carry a status
+ * value even if a caller wanted to.
+ */
+export async function retireAdminCharacter(
+  characterId: string,
+  expectedVersion: number,
+): Promise<CharacterRow | undefined> {
+  const res = await client.webAdminRetireCharacter({ characterId, expectedVersion });
+  return res.character;
+}
+
+/** The un-retire transition, under the same guard rules and the same shape. */
+export async function unretireAdminCharacter(
+  characterId: string,
+  expectedVersion: number,
+): Promise<CharacterRow | undefined> {
+  const res = await client.webAdminUnretireCharacter({ characterId, expectedVersion });
+  return res.character;
+}
