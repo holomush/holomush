@@ -193,10 +193,22 @@
    * and the input font live in the stylesheet below.
    *
    * The query is the SHARED hook's, not one authored here: this file no longer
-   * carries a viewport number of its own. That query is the exact complement of
-   * this file's viewport rule at EVERY width — including a fractional one such
-   * as 767.5px, reachable under browser zoom and fractional DPI scaling, where
-   * a hand-written one-below-the-boundary form would match neither branch.
+   * carries a viewport number of its own. Both halves are expressed in rem and
+   * therefore resolve against the SAME reference — the browser's initial font
+   * size — which is what makes them complements at every width AND at every
+   * root font size. That second clause is the one that was missing: the retired
+   * px form was a complement only at a 16px default, and at a 20px default this
+   * Sheet stayed on its desktop side across a 190px band in which the shell had
+   * already collapsed to its phone shape.
+   *
+   * Complementary at every width covers the fractional case too — 767.5px,
+   * reachable under browser zoom and fractional DPI scaling — where a
+   * hand-written one-below-the-boundary form would match neither branch.
+   *
+   * `web/e2e/admin-band-root-font.spec.ts` is what enforces this: a Playwright
+   * project running at a 20px root font size, asserting in a real browser that
+   * the hook's query and the token read off `:root` agree at every probed width
+   * and that this Sheet's side agrees with the shell's columns.
    *
    * The `true` argument is the fallback when there is no `matchMedia` to ask
    * (SSR, and this jsdom): the DESKTOP shape, because flickering through a
