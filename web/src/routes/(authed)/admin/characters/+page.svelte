@@ -217,7 +217,22 @@
   /** The end is clamped to the total, not to a full page width. */
   const rangeEnd = $derived(Math.min(pageNum * ADMIN_PAGE_SIZE, total));
 
+  /**
+   * ONLY THE NEWEST READ MAY COMMIT. The 250ms debounce bounds a keystroke
+   * burst but not the network, and a sort click, a status change or a page turn
+   * fires with no debounce at all — so two reads in flight is ordinary, and
+   * nothing makes the older one answer first. A stale answer that committed
+   * would render one request's rows beneath another request's term, status,
+   * player filter, sort and page number; a stale REFUSAL that committed would
+   * flip a good page into the load-failure screen. Both are silent.
+   *
+   * `loading` is stamped the same way, or the first response to arrive would
+   * clear it while a newer read is still outstanding.
+   */
+  let readSeq = 0;
+
   async function reload() {
+    const seq = ++readSeq;
     loading = true;
     flashRowId = '';
     const query = { sortField, descending, status, playerId, page: pageNum };
@@ -226,6 +241,7 @@
       const page = wanted.trim() === ''
         ? await listAdminCharacters(query)
         : await searchAdminCharacters(query, wanted);
+      if (seq !== readSeq) return;
       rows = page.rows;
       totalCount = page.totalCount;
       failure = '';
@@ -233,11 +249,12 @@
       // The caught value is deliberately not bound: there is nothing this page
       // may learn from it and nothing it may show. A search that fails and a
       // list that fails are the two states an operator can act on.
+      if (seq !== readSeq) return;
       rows = [];
       totalCount = 0n;
       failure = wanted.trim() === '' ? 'load' : 'search';
     } finally {
-      loading = false;
+      if (seq === readSeq) loading = false;
     }
   }
 

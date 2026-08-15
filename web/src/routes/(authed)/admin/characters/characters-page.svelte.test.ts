@@ -321,6 +321,90 @@ describe('/admin/characters — the search wire', () => {
   });
 });
 
+describe('/admin/characters — request sequencing', () => {
+  /**
+   * Every interactive re-read calls the same `reload`, and two are easy to
+   * have in flight at once: the 250ms debounce bounds a keystroke burst but
+   * not the NETWORK, and a sort click or a status change fires with no
+   * debounce at all. These hold the deferred settlers so the older read can be
+   * made to answer second — the ordering the page has no control over.
+   */
+  function deferredSearch() {
+    const pending: {
+      resolve: (page: CharacterPage) => void;
+      reject: (reason: unknown) => void;
+    }[] = [];
+    impl.search = () =>
+      new Promise<CharacterPage>((resolve, reject) => {
+        pending.push({ resolve, reject });
+      });
+    return pending;
+  }
+
+  it('discards a stale page that resolves after a newer read already answered', async () => {
+    const pending = deferredSearch();
+    const { target, component } = render({ rows: rows(2), totalCount: 2n, loadFailed: false });
+
+    await typeSearch(target, 'mir'); // read A
+    await typeSearch(target, 'miren'); // read B
+    expect(pending).toHaveLength(2);
+
+    // B — the read the search box, the term and the pager all describe.
+    pending[1].resolve({ rows: [row(9)], totalCount: 1n });
+    await settle();
+    expect(target.querySelectorAll('tbody tr')).toHaveLength(1);
+
+    // A answers late. Its page describes a term the operator has moved past,
+    // so committing it would render one request's rows under another's state.
+    pending[0].resolve({ rows: rows(3), totalCount: 3n });
+    await settle();
+    expect(target.querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(text(target)).toContain('Name 9');
+    unmount(component);
+  });
+
+  it('discards a stale failure rather than flipping a good page into the failure screen', async () => {
+    const pending = deferredSearch();
+    const { target, component } = render({ rows: rows(2), totalCount: 2n, loadFailed: false });
+
+    await typeSearch(target, 'mir'); // read A
+    await typeSearch(target, 'miren'); // read B
+    expect(pending).toHaveLength(2);
+
+    pending[1].resolve({ rows: rows(2), totalCount: 2n });
+    await settle();
+    expect(target.querySelectorAll('tbody tr')).toHaveLength(2);
+
+    pending[0].reject(new Error('boom'));
+    await settle();
+    // The newer read succeeded; an older refusal is not news about it.
+    expect(text(target)).not.toContain("Couldn't run that search. Try again.");
+    expect(text(target)).not.toContain("Couldn't load characters. Try again.");
+    expect(target.querySelectorAll('tbody tr')).toHaveLength(2);
+    unmount(component);
+  });
+
+  it('keeps the surface in its loading state until the newest read answers', async () => {
+    // `loading` is written by the same unconditional path: the FIRST response
+    // to arrive would otherwise clear it while a newer read is outstanding.
+    const pending = deferredSearch();
+    const { target, component } = render({ rows: rows(2), totalCount: 2n, loadFailed: false });
+
+    await typeSearch(target, 'mir'); // read A
+    await typeSearch(target, 'miren'); // read B
+
+    pending[0].resolve({ rows: rows(3), totalCount: 3n }); // A answers first
+    await settle();
+    expect(target.querySelector('[role="status"]')).not.toBeNull();
+
+    pending[1].resolve({ rows: [row(9)], totalCount: 1n });
+    await settle();
+    expect(target.querySelector('[role="status"]')).toBeNull();
+    expect(target.querySelectorAll('tbody tr')).toHaveLength(1);
+    unmount(component);
+  });
+});
+
 /**
  * D-110's binding sequence, driven through the real Sheet and the real confirm.
  *
