@@ -201,7 +201,32 @@ func TestWebPackageDeclaresAnExplicitBrowserFloorForRangeSyntaxMediaQueries(t *t
 			"%s: browserslist entry %q carries no version number after `>=`.\n%s",
 			webPackageJSON, entry, why)
 
-		declared[strings.ToLower(name)] = version
+		// A REPEATED browser is rejected outright rather than overwritten.
+		//
+		// browserslist evaluates its array as a UNION, so the effective floor for
+		// a browser declared twice is the LOWER of the two, not the last one
+		// written. Measured: `browserslist "safari >= 15, safari >= 16.4"`
+		// resolves down to safari 15, while `browserslist "safari >= 16.4"` stops
+		// at 16.4. A plain last-wins map therefore fails OPEN in one of the two
+		// orderings — append `safari >= 15` ABOVE the 16.4 line, which is what a
+		// tidy alphabetical or append-at-top edit produces, and the map reads
+		// "16.4", versionAtLeast passes, and this guard reports success over a
+		// support contract the shipped stylesheet cannot honour. That is the
+		// defect class the whole file exists to prevent.
+		//
+		// Taking the MINIMUM instead of failing would also be sound arithmetic,
+		// but it would leave the manifest saying two different things about one
+		// browser. One entry per browser is the property worth holding.
+		key := strings.ToLower(name)
+		if prior, dup := declared[key]; dup {
+			require.Failf(t, "duplicate browserslist floor",
+				"%s declares a floor for %q twice (%s and %s).\nbrowserslist UNIONS its queries, "+
+					"so the EFFECTIVE floor is the LOWER of the two — and which one this guard "+
+					"would have read depends on the order they happen to be written in, so a "+
+					"lowered floor can pass green. Declare exactly one entry per browser.\n%s",
+				webPackageJSON, name, prior, version, why)
+		}
+		declared[key] = version
 	}
 
 	// The floor may be RAISED freely; it may not sit below what the shipped
