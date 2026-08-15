@@ -129,8 +129,8 @@ export const client = createClient(WebService, transport);
  * refused, and the refusal resolves to the ordinary not-found.
  */
 export async function listAdminSections() {
-	const res = await client.webAdminListSections({});
-	return res.sections;
+  const res = await client.webAdminListSections({});
+  return res.sections;
 }
 
 /** One page of the admin character list, in the server's own order. */
