@@ -197,7 +197,7 @@ describe('/admin/characters — the four list states', () => {
 });
 
 describe('/admin/characters — pagination boundaries', () => {
-  const pager = (target: HTMLElement) => target.querySelector('nav[aria-label="pagination"]');
+  const pager = (target: HTMLElement) => target.querySelector('[aria-label="pagination"]');
 
   it('renders no pagination control at all for zero rows', () => {
     const { target, component } = render({ rows: [], totalCount: 0n, loadFailed: false });

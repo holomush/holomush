@@ -143,7 +143,9 @@ export async function listAdminCharacters(q: CharacterQuery): Promise<CharacterP
  * The same page, narrowed by a substring term.
  *
  * `term` IS THE RAW STRING THE OPERATOR TYPED, forwarded byte for byte. It is
- * not trimmed, lower-cased, NFKC-folded or length-gated here. Search equality
+ * not trimmed, lower-cased, compatibility-folded or length-gated here. (The
+ * exact folding is deliberately not named: which form applies is the server's
+ * business, and naming it here would start a second record of it.) Search equality
  * is defined SERVER-SIDE and nowhere else: the core normalizes the term through
  * the single charname pipeline that produced the stored normal form. A second
  * definition of which strings are equal — living in TypeScript, drifting on its
