@@ -607,12 +607,12 @@ Plans:
 3. An admin lists, searches, sorts and opens characters in the table, and edits them through the Sheet; the Sheet's field set is the server's field-mask allowlist, and a denied or absent character renders the ordinary not-found.
 4. The responsive treatment uses the **same viewport mechanism** as the shipped rail (`@media (max-width: 767px)`), so the rail's collapse and the admin shell's collapse fire at the same moment by construction rather than by coincidence.
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 06.1-01-PLAN.md — Eleven shadcn components, the single root `+error.svelte` with its count meta-test, and the owed upstream amendments
+- [x] 06.1-01-PLAN.md — Eleven shadcn components, the single root `+error.svelte` with its count meta-test, and the owed upstream amendments
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 21
+open_count: 22
 waived_count: 0
 fixed_count: 8
-total_count: 29
-last_updated: 2026-08-14T20:26:06.012Z
+total_count: 30
+last_updated: 2026-08-15T01:27:46.184Z
 ---
 
 # Broken Windows Ledger
@@ -44,6 +44,7 @@ last_updated: 2026-08-14T20:26:06.012Z
 | 27 | 06 | unrun-verify | .planning/phases/06-admin-portal-shell-character-administration/06-04-PLAN.md |  | 06-04 Task 3: /holomush-dev:review-abac (T-06-29's mitigation of record) could NOT be run — the Task tool is disabled in the executor session, so abac-reviewer cannot be dispatched. Its substantive claims were verified manually at source; the adversarial gate itself is outstanding. | open |  | 2026-08-14T15:13:03.920Z |  |
 | 28 | 06 | unrun-verify | .planning/phases/06-admin-portal-shell-character-administration/06-05-PLAN.md |  | 06-05 Task 3: /holomush-dev:review-abac was not run by the executor (Task tool disabled in this session); the orchestrator holds the Agent tool and will run it over the phase diff | open |  | 2026-08-14T20:26:05.931Z |  |
 | 29 | 06 | unrun-verify | test/integration/charname/name_uniqueness_test.go |  | 8 of 24 charname integration specs RED at HEAD from migration 000057 (plan 06-04); see phase deferred-items.md | open |  | 2026-08-14T20:26:06.012Z |  |
+| 30 | 06.1 | deviation | web/src/routes/error-boundary.svelte.test.ts |  | Plan mandated web/src/routes/+error.svelte.test.ts; SvelteKit refuses to build a +-prefixed non-route file under src/routes/. Renamed; plans 06.1-02/03 name the same shape (#4979). | open |  | 2026-08-15T01:27:46.184Z |  |
 
 ````json
 [
@@ -393,6 +394,18 @@ last_updated: 2026-08-14T20:26:06.012Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-14T20:26:06.012Z",
+    "resolved_at": null
+  },
+  {
+    "id": 30,
+    "kind": "deviation",
+    "phase": "06.1",
+    "file": "web/src/routes/error-boundary.svelte.test.ts",
+    "line": null,
+    "description": "Plan mandated web/src/routes/+error.svelte.test.ts; SvelteKit refuses to build a +-prefixed non-route file under src/routes/. Renamed; plans 06.1-02/03 name the same shape (#4979).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-15T01:27:46.184Z",
     "resolved_at": null
   }
 ]
