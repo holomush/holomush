@@ -97,6 +97,19 @@
   const TOAST_MS = 6000;
 
   /**
+   * The receipt's `Undo` is the one entrance to a mutation that no overlay
+   * wraps — the confirmation catches for its own button, but a toast action is
+   * dismissed the moment it is clicked, and svelte-sonner ignores a returned
+   * promise. So a refusal here has to carry its own surface or it has none at
+   * all, and the operator reads the dismissal as success.
+   *
+   * AUTHORED, like every other failure on this page: the wire value selects
+   * nothing and appears nowhere. It also says what is still true of the row,
+   * because the row itself did not move.
+   */
+  const UNDO_FAILED = "Couldn't undo that. The character is still retired.";
+
+  /**
    * The row updates IN PLACE from the response and the table is never re-read.
    * The mutation answered with the post-write row, so a second request could
    * only disagree with it — and would cost the operator their place in a sorted,
@@ -164,8 +177,14 @@
           action: {
             label: 'Undo',
             // The NEW version from the retire response: the row moved, and the
-            // guard has to be composed against where it moved to.
-            onClick: () => void applyLifecycle(undoId, 'unretire', undoAt),
+            // guard has to be composed against where it moved to — which is
+            // also why this can be refused, since a second operator may have
+            // moved it again since.
+            onClick: () => {
+              void applyLifecycle(undoId, 'unretire', undoAt).catch(() => {
+                toast(UNDO_FAILED, { duration: TOAST_MS });
+              });
+            },
           },
         });
       } else {

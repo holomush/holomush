@@ -529,6 +529,41 @@ describe('/admin/characters — the lifecycle transitions', () => {
     unmount(component);
   });
 
+  it('renders an authored failure receipt when the Undo itself is refused', async () => {
+    // The toast action is the OTHER caller of applyLifecycle, and unlike the
+    // confirm dialog it has no wrapper that catches. A refused un-retire — an
+    // Aborted is the likeliest, since `Undo` is composed against a version a
+    // second operator may already have moved — dismisses the toast on click and
+    // leaves the row reading `retired`, so without a surface of its own the
+    // operator is told an operation succeeded that did not.
+    impl.retire = async () => ({ ...row(0), status: 'retired', version: 8 });
+    impl.unretire = async () => {
+      throw new ConnectError('stale', Code.Aborted);
+    };
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Retire…');
+    await settle();
+    (confirm()!.querySelector('[data-testid="lifecycle-confirm"]') as HTMLButtonElement).click();
+    await settle();
+
+    expect(impl.undo).not.toBeNull();
+    impl.undo!();
+    await settle();
+
+    // The row did NOT move: the un-retire was refused.
+    const tr = target.querySelector('[data-row-id="c0"]') as HTMLElement;
+    expect(tr.textContent).toContain('retired');
+    expect(tr.getAttribute('aria-busy')).toBeNull();
+
+    // …and the refusal reached the operator, in this page's own words.
+    expect(impl.toasts).toHaveLength(2);
+    expect(impl.toasts[1].message).toBe("Couldn't undo that. The character is still retired.");
+    // Authored, not relayed: no ConnectError text and no `[code]` prefix.
+    expect(impl.toasts[1].message).not.toContain('stale');
+    expect(impl.toasts[1].message).not.toMatch(/\[[a-z_]+\]/);
+    unmount(component);
+  });
+
   it('offers no Undo on the un-retire receipt', async () => {
     impl.unretire = async () => ({ ...row(0), status: 'active', version: 8 });
     const { target, component } = render({
