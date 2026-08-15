@@ -52,3 +52,39 @@ export function isAlreadyExistsError(e: unknown): boolean {
 export function isInvalidArgumentError(e: unknown): boolean {
 	return e instanceof ConnectError && e.code === Code.InvalidArgument;
 }
+
+/** Which screen an admin-portal refusal resolves to. */
+export type AdminFailureClass = 'denial' | 'infrastructure';
+
+/**
+ * Classifies an admin-portal refusal into the one of two screens it resolves
+ * to. It reads the gRPC code and NOTHING else.
+ *
+ * Splitting refusal-from-outage is a DIFFERENT AXIS from splitting on which
+ * refusal arrived. The first is safe: a viewer who may not use this surface and
+ * one who may see the same retry screen during an outage, so the split does not
+ * correlate with what the caller is allowed to do. The second would reconstruct
+ * the enumeration oracle the whole surface is built to close, which is why no
+ * authored source here reads or renders a refusal code string.
+ *
+ * The function is TOTAL, and its residue is deliberate. Unavailable,
+ * DeadlineExceeded and a non-ConnectError transport throw are infrastructure.
+ * EVERYTHING else — including Unauthenticated, Internal, Unknown, an
+ * unexpected FailedPrecondition, and any code added later — falls to 'denial'.
+ *
+ * That default is FAIL-SAFE, not fail-open: the denial branch renders the
+ * ordinary not-found, which is the most conservative thing this surface can
+ * show and exactly what an unauthorised viewer already sees. Defaulting the
+ * other way would render a retry state for a genuine refusal, telling the
+ * viewer something is here to retry — which is itself the disclosure.
+ */
+export function classifyAdminFailure(e: unknown): AdminFailureClass {
+	if (e instanceof ConnectError) {
+		if (e.code === Code.Unavailable || e.code === Code.DeadlineExceeded) {
+			return 'infrastructure';
+		}
+		return 'denial';
+	}
+	// A throw that never reached a server carries no answer about the caller.
+	return 'infrastructure';
+}

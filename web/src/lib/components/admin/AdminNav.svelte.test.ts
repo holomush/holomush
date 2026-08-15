@@ -68,12 +68,26 @@ describe('AdminNav', () => {
     unmount(component);
   });
 
-  it('renders the server-supplied display name and no refusal code', () => {
+  // Asserted as an exhaustive equality rather than a negative match on a
+  // refusal-code substring: naming that token here would put it in the very
+  // tree the scoped absence-grep scans, and equality is the stronger property
+  // anyway — ANY extra token the component invented would fail it, not just
+  // the one shape a negative regex happened to anticipate.
+  it('renders the monogram, the server-supplied name and the badge — and nothing else', () => {
     const { target, component } = render({
       sections: [{ id: 'x', displayName: 'Something Long', status: 'planned' }],
     });
-    expect(target.textContent).toContain('Something Long');
-    expect(target.innerHTML).not.toMatch(/DENY_/);
+    const item = target.querySelector('a.navitem') as HTMLElement;
+    expect(item.textContent?.replace(/\s+/g, ' ').trim()).toBe('S Something Long planned');
+    unmount(component);
+  });
+
+  it('renders an available entry as the monogram and the name alone', () => {
+    const { target, component } = render({
+      sections: [{ id: 'x', displayName: 'Something Long', status: 'available' }],
+    });
+    const item = target.querySelector('a.navitem') as HTMLElement;
+    expect(item.textContent?.replace(/\s+/g, ' ').trim()).toBe('S Something Long');
     unmount(component);
   });
 });
