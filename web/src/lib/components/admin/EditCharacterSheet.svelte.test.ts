@@ -225,6 +225,44 @@ describe('EditCharacterSheet — the detail fetch is real and its loading state 
     unmount(component);
   });
 
+  it('keeps the draft when the page hands down a fresh row object for the same character', async () => {
+    /*
+     * REGRESSION. The page re-reads the list on every search, sort and page
+     * turn and hands down a NEW row object each time. Keying the fetch on the
+     * PROP rather than on the character meant each of those re-ran it, flipped
+     * the form back to `loading` — disabling Save mid-edit — and then reseeded
+     * `working` from the server, discarding the operator's typing. Caught in a
+     * real browser as a permanently disabled Save with a draft still on screen.
+     */
+    let fetches = 0;
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    const props = $state({
+      row: { ...ROW },
+      fetchDetail: async () => {
+        fetches += 1;
+        return DETAIL;
+      },
+    });
+    const component = mount(EditCharacterSheet, { target, props });
+    flushSync();
+    await settle();
+    expect(fetches).toBe(1);
+
+    type(field('concept'), 'a draft mid-edit');
+    expect(saveButton().disabled).toBe(false);
+
+    // Same character, different object — exactly what a settled search does.
+    props.row = { ...ROW };
+    flushSync();
+    await settle();
+
+    expect(fetches).toBe(1);
+    expect(field('concept').value).toBe('a draft mid-edit');
+    expect(saveButton().disabled).toBe(false);
+    unmount(component);
+  });
+
   it('renders no server-supplied string on a failed fetch', async () => {
     const { component } = render({
       fetchDetail: async () => {

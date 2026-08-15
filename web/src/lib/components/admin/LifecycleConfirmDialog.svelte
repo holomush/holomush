@@ -56,14 +56,19 @@
   let cancelEl = $state<HTMLElement | null>(null);
 
   /*
-   * Initial focus lands on Cancel, never on the destructive confirm. Set here
-   * rather than left to the primitive's default so the property is a decision
-   * this file makes and a test can observe, instead of a behaviour inherited
-   * from a dependency that could change it.
+   * Initial focus lands on Cancel, never on the destructive confirm.
+   *
+   * It goes through the primitive's own open-autofocus hook rather than a bare
+   * effect: bits-ui focuses the content element itself when the dialog opens,
+   * and it does so AFTER a mount effect would have run — so an effect alone
+   * passes in jsdom (which has no such ordering to lose) and loses the focus in
+   * a real browser. Measured: `toBeFocused()` on Cancel read "inactive" in
+   * Chromium under the effect-only version.
    */
-  $effect(() => {
+  function focusCancel(e: Event) {
+    e.preventDefault();
     cancelEl?.focus();
-  });
+  }
 
   async function confirm() {
     if (busy) return;
@@ -88,7 +93,7 @@
 </script>
 
 <AlertDialog.Root open={true} {onOpenChange}>
-  <AlertDialog.Content>
+  <AlertDialog.Content onOpenAutoFocus={focusCancel}>
     <AlertDialog.Header>
       <AlertDialog.Title>{title}</AlertDialog.Title>
       <AlertDialog.Description>

@@ -223,9 +223,29 @@
     }
   }
 
+  /**
+   * THE FETCH IS KEYED ON THE CHARACTER, NOT ON THE PROP'S IDENTITY.
+   *
+   * `row` is a prop, and the page hands down a fresh object every time the list
+   * is re-read — a search settling, a sort, a page turn. Reading `row.id` in an
+   * effect subscribes to the PROP, so each of those re-ran this fetch, flipped
+   * the form back to `loading` (disabling Save mid-edit) and then reseeded
+   * `working` from the server, silently discarding whatever the operator had
+   * typed. Found in a real browser: a Save that had been enabled went
+   * permanently disabled while a draft sat in the form.
+   *
+   * This is ProfileSection.svelte:70-83's hazard one level up, and it is
+   * answered the same way: the snapshot is taken once per character.
+   */
+  let fetchedFor = $state('');
+
   $effect(() => {
     const id = row.id;
-    untrack(() => void loadDetail(id));
+    if (untrack(() => fetchedFor) === id) return;
+    untrack(() => {
+      fetchedFor = id;
+      void loadDetail(id);
+    });
   });
 
   const dirtyPaths = $derived(
@@ -613,11 +633,20 @@
   .counter[data-over='true'] {
     color: var(--color-destructive);
   }
+  /* Sticky, because thirteen fields are taller than any viewport and a Save
+     that scrolls off the bottom of its own form is unreachable exactly when the
+     operator is done. Measured in a real browser: Playwright reported the
+     submit "outside of the viewport" after scrolling. */
   .foot {
+    position: sticky;
+    bottom: 0;
     display: flex;
     align-items: center;
     gap: 8px;
     flex-direction: row;
+    padding: 12px 0 0;
+    background: var(--color-popover, var(--color-card));
+    border-top: 1px solid var(--color-border);
   }
   .maskcount {
     font-size: 12px;
@@ -667,17 +696,22 @@
     in a FOCUSED input triggers iOS Safari's zoom-on-focus, which does not
     unzoom on blur.
 
-    The doubled class raises specificity above the generated
-    `data-[side=bottom]:h-auto` utility deterministically, rather than relying
-    on which stylesheet the bundler emitted last.
+    The doubled class is load-bearing on BOTH rules and is not stylistic. It
+    raises specificity to (0,2,0) and (0,2,1), which beats two different things
+    deterministically: the generated `data-[side=bottom]:h-auto` utility at
+    (0,2,0) by source order, and — for the font — Svelte's own scoping, which
+    compiles `.control` into `.control.svelte-xxxx` at (0,2,0) and would
+    otherwise win over a plain `:global(.editsheet input)` at (0,1,1). The 16px
+    rule was measured at 14px in a real browser before the second class was
+    added, which is precisely the failure a jsdom test cannot see.
   */
   @media (max-width: 767px) {
     :global(.editsheet.editsheet[data-side='bottom']) {
       height: 84vh;
     }
-    :global(.editsheet input),
-    :global(.editsheet textarea),
-    :global(.editsheet select) {
+    :global(.editsheet.editsheet input),
+    :global(.editsheet.editsheet textarea),
+    :global(.editsheet.editsheet select) {
       font-size: 16px;
     }
   }
