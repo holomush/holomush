@@ -2,6 +2,13 @@
   "name": "holomush-web",
   "version": "0.0.1",
   "private": true,
+  "browserslist": [
+    "chrome >= 111",
+    "edge >= 111",
+    "firefox >= 128",
+    "safari >= 16.4",
+    "ios_saf >= 16.4"
+  ],
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
