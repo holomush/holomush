@@ -4,17 +4,17 @@ milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 06.1
 current_phase_name: admin-portal-web-surface-shadcn-components-and-the-single-ro
-status: executing
-stopped_at: Completed 06.1-05-PLAN.md
-last_updated: "2026-08-15T16:56:28.129Z"
+status: verifying
+stopped_at: Completed 06.1-06-PLAN.md
+last_updated: "2026-08-15T17:11:24.678Z"
 last_activity: 2026-08-15
 last_activity_desc: Phase 06.1 execution started
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 67
-  completed_plans: 66
-  percent: 90
+  completed_plans: 67
+  percent: 100
 ---
 
 # Project State
@@ -36,8 +36,8 @@ without rework.
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 06.1 (admin-portal-web-surface-shadcn-components-and-the-single-ro) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 99%)
+Status: Phase complete — ready for verification
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
 Last activity: 2026-08-15 — Phase 06.1 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -283,6 +283,7 @@ no action needed.
 | Phase 06.1 P03 | 41min | 3 tasks | 11 files |
 | Phase 06.1 P04 | 51min | 3 tasks | 12 files |
 | Phase 06.1 P05 | 34min | 4 tasks | 19 files |
+| Phase 06.1 P06 | 24min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -662,6 +663,8 @@ the next milestone yet.
 - [Phase ?]: Admin-mutation accountability in v0.13 is a UI receipt naming the RPC, not a durable audit row: #4971 is open and no criterion may assert an events_audit write
 - [Phase ?]: 06.1-05: the breakpoint census allowlist is keyed by PATH, not path:line — a stale line key fails OPEN, silently exempting whichever line inherited the number
 - [Phase ?]: 06.1-05: all sixteen authored viewport rules under web/src derive from theme(--breakpoint-md|-lg); a Svelte scoped style block using theme() MUST carry an @reference computed from its depth below web/src (three distinct depths in this tree) or the build fails loudly
+- [Phase ?]: The admin Sheet/server parity guard lives in package grpc, not test/meta — the allowlist is unexported, so only there is it a live symbol and only one side needs parsing
+- [Phase ?]: A parsing guard chosen over codegen or a shared schema for thirteen strings and two integers that change roughly never
 
 ### Pending Todos
 
@@ -726,7 +729,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-15T16:56:04.817Z
+Last session: 2026-08-15T17:11:24.654Z
 Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
 by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
 carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
@@ -737,7 +740,7 @@ short-circuit was declined a second consecutive phase — closing 59/59 threats,
 holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
 Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
 in the same commit. Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 06.1-05-PLAN.md
+Stopped at: Completed 06.1-06-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
