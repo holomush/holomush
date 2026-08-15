@@ -5,8 +5,8 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 06.1
 current_phase_name: admin-portal-web-surface-shadcn-components-and-the-single-ro
 status: executing
-stopped_at: Completed 06.1-01-PLAN.md
-last_updated: "2026-08-15T01:27:59.738Z"
+stopped_at: Completed 06.1-02-PLAN.md
+last_updated: "2026-08-15T01:58:16.182Z"
 last_activity: 2026-08-14
 last_activity_desc: Phase 06 execution started
 progress:
@@ -35,7 +35,7 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 06.1 (admin-portal-web-surface-shadcn-components-and-the-single-ro) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Progress: [█████████████████░░░] 34/40 plans ([██████████] 95%)
 Last activity: 2026-08-14 — Phase 06.1 execution started
@@ -279,6 +279,7 @@ no action needed.
 | Phase 06 P04 | 33 min | 3 tasks | 19 files |
 | Phase 06 P05 | 3h | 3 tasks | 44 files |
 | Phase 06.1 P01 | 74min | 3 tasks | 93 files |
+| Phase 06.1 P02 | 42min | 3 tasks | 29 files |
 
 ## Accumulated Context
 
@@ -645,6 +646,10 @@ the next milestone yet.
 - [Phase ?]: web/src/routes/ cannot hold a +-prefixed non-route file: SvelteKit refuses to build. Route-component tests are named after the route (error-boundary.svelte.test.ts), keeping the .svelte.test.ts client-project suffix. Filed #4979; plans 06.1-02/03 name the same impossible shape.
 - [Phase ?]: The not-found boundary derives its viewer tier through the shipped isPlayerAuthenticated resolution bit; an unresolved auth store falls back to GUEST (the smallest destination set), never the registered-player set.
 - [Phase ?]: INV-PRIVACY-14 registers only error-boundary resolution-point uniqueness, and says in its own summary that this is a precondition for per-viewer indistinguishability rather than a proof of it.
+- [Phase ?]: The admin shell's responsive frame is viewport @media at the shipped rail's own 767px/1023px literals, not container queries — the two collapse rules then coincide by construction, and no element becomes a containing block for a fixed-position descendant or an overlay.
+- [Phase ?]: classifyAdminFailure defaults every unrecognised gRPC code to the denial class, which renders the ordinary not-found; only Unavailable, DeadlineExceeded and a non-ConnectError throw are infrastructure. The default is fail-safe: a retry state for a genuine refusal would itself disclose that something is there.
+- [Phase ?]: The <768px drawer's Admin group crosses the layout boundary through adminNavStore, a module singleton SectionRail reads itself — the same crossing mobileNavStore already makes — so (authed)/+layout.svelte's diff stays exactly the roles prop.
+- [Phase ?]: Route-adjacent test files must not carry a + prefix (#4979); load tests are <route>.test.ts and component tests <route>.svelte.test.ts. task web:build is the only gate that catches a violation.
 
 ### Pending Todos
 
@@ -709,7 +714,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-15T01:27:52.067Z
+Last session: 2026-08-15T01:58:16.164Z
 Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
 by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
 carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
@@ -720,7 +725,7 @@ short-circuit was declined a second consecutive phase — closing 59/59 threats,
 holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
 Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
 in the same commit. Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 06.1-01-PLAN.md
+Stopped at: Completed 06.1-02-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z

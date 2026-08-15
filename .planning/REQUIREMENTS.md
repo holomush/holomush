@@ -215,7 +215,7 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       world envelope is projected today. Tracked in #4971; ROADMAP phase-6 criterion 3 carries the
       matching amendment.)
 
-- [ ] **ADMIN-07**: Admin navigation is **permission-filtered by registry contract**, not by template
+- [x] **ADMIN-07**: Admin navigation is **permission-filtered by registry contract**, not by template
       `{#if}` blocks.
 
 - [x] **ADMIN-08**: `WebCheckSessionResponse` exposes roles for **nav hiding only** — never as the

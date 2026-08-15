@@ -607,7 +607,7 @@ Plans:
 3. An admin lists, searches, sorts and opens characters in the table, and edits them through the Sheet; the Sheet's field set is the server's field-mask allowlist, and a denied or absent character renders the ordinary not-found.
 4. The responsive treatment uses the **same viewport mechanism** as the shipped rail (`@media (max-width: 767px)`), so the rail's collapse and the admin shell's collapse fire at the same moment by construction rather than by coincidence.
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -616,7 +616,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06.1-02-PLAN.md — The admin shell, the server-projected permission-filtered nav, and the planned-section state
+- [x] 06.1-02-PLAN.md — The admin shell, the server-projected permission-filtered nav, and the planned-section state
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
