@@ -474,9 +474,50 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 			path, ex.symbol, ex.reason)
 	}
 
-	// Ordered AFTER the allowlist staleness loop: allowlistLines is one side of
-	// the equality, so a stale or moved allowlist entry would otherwise fail this
-	// comparison with an arithmetic message that hides the real cause.
+	// Ordered AFTER the allowlist staleness loop and BEFORE the completeness
+	// equality. Both halves of that placement are load-bearing.
+	//
+	// AFTER the allowlist loop, because a stale exemption changes what an offender
+	// MEANS: a line the allowlist no longer covers is an offender for a different
+	// reason than a genuinely hand-written one, so the dead exemption must be
+	// reported first.
+	//
+	// BEFORE the equality, because a hand-written width is band-relevant too — the
+	// tally above is `forbidden || carries the token` — so it breaks BOTH
+	// assertions at once. Whichever fires first is the only instruction the
+	// operator ever sees, and only this one is correct for that case. The equality
+	// would tell them to ENUMERATE the hand-written rule in bandedViewportRules,
+	// which satisfies the equality AND the sibling's occurrence count, and thereby
+	// installs in the census the exact thing this test is named for forbidding.
+	// Measured, with the equality placed first: injecting `@media (max-width:
+	// 767px)` into AdminNav.svelte failed as `19 != 18 … Enumerate it`, and the
+	// "Derive it" message below was never reached. Re-measured in this order: the
+	// same injection now fails HERE, naming the offending line and telling the
+	// reader to derive it. Do not reorder these two.
+	//
+	// Neither assertion was weakened to achieve that. Both directions were
+	// re-proved after the swap: a TOKEN-form rule added with no census entry
+	// (`@media (width < theme(--breakpoint-md))`) still reaches the equality and
+	// fails `19 != 18 … Enumerate it`, and DELETING an enumerated rule while
+	// leaving its census entry still fails `17 != 18 … FEWER reached than
+	// claimed`.
+	require.Empty(t, offenders,
+		"viewport-deciding line(s) carry a hand-written breakpoint width:\n  %s\n\n"+
+			"A viewport width written by hand is a copy of a Tailwind default that nothing "+
+			"keeps in step. Derive it: `@media (width < theme(--breakpoint-md))` or "+
+			"`@media (width >= theme(--breakpoint-md))`, with an `@reference` line at the top "+
+			"of the style block. The JS half reads DESKTOP_MEDIA_QUERY from "+
+			"web/src/lib/hooks/mediaQuery.svelte.ts.",
+		strings.Join(offenders, "\n  "))
+
+	// Ordered LAST, after both the allowlist staleness loop and the offender list.
+	// allowlistLines is one side of this equality, so a stale or moved allowlist
+	// entry would otherwise fail this comparison with an arithmetic message that
+	// hides the real cause; and an outstanding offender is a band-relevant line
+	// with its own, better, message directly above. Reaching this line therefore
+	// means the corpus contains no hand-written widths, so a discrepancy here can
+	// only be a census/corpus disagreement — which is exactly what it reports.
+	//
 	// CORPUS-COMPLETENESS EQUALITY, derived from this census's own checked-in claims.
 	//
 	// It is a SUM over count, not len(bandedViewportRules), because the census is
@@ -550,15 +591,6 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 			"not the comparison, because most media rules can never carry a band literal.)",
 		bandRelevant, webSrcDir, ruleCensusOccurrences, allowlistLines,
 		ruleCensusOccurrences+allowlistLines, scanned)
-
-	require.Empty(t, offenders,
-		"viewport-deciding line(s) carry a hand-written breakpoint width:\n  %s\n\n"+
-			"A viewport width written by hand is a copy of a Tailwind default that nothing "+
-			"keeps in step. Derive it: `@media (width < theme(--breakpoint-md))` or "+
-			"`@media (width >= theme(--breakpoint-md))`, with an `@reference` line at the top "+
-			"of the style block. The JS half reads DESKTOP_MEDIA_QUERY from "+
-			"web/src/lib/hooks/mediaQuery.svelte.ts.",
-		strings.Join(offenders, "\n  "))
 }
 
 // TestEveryBandedViewportRuleDerivesItsWidthFromTheTailwindToken asserts that
