@@ -434,12 +434,17 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 	//  2. The floor is INTENDED to sit close to the tally, and would still be
 	//     correct at exactly zero headroom. It is an anti-vacuity floor, not a
 	//     budget — its job is to fail when the walk stops reaching the corpus, and
-	//     it does that best when it tracks the corpus. Deleting a rule therefore
-	//     fails BOTH this floor and the occurrence assertion in the sibling test,
-	//     producing two messages about one deletion. That redundancy is correct and
-	//     deliberate. Do NOT tune it away by subtracting a margin, by filtering the
-	//     tally, or by loosening the comparison; that is relaxing a guard rather
-	//     than repairing it.
+	//     it does that best when it tracks the corpus. Do NOT tune it away by
+	//     subtracting a margin, by filtering the tally, or by loosening the
+	//     comparison; that is relaxing a guard rather than repairing it.
+	//
+	//     Which guard catches what, precisely — the two are NOT redundant:
+	//     deleting one banded rule moves this comparison from 18 >= 16 to
+	//     17 >= 15, which still PASSES. The two lines of headroom are exactly the
+	//     two allowlisted symbol lines counted in (1), and they do not shrink when
+	//     a rule is deleted. A deletion is caught by the occurrence assertion in
+	//     the sibling test, which compares per-rule counts by equality. This floor
+	//     catches a different failure: the walk ceasing to REACH the corpus at all.
 	ruleCensusOccurrences := 0
 	for _, r := range bandedViewportRules {
 		ruleCensusOccurrences += r.count
