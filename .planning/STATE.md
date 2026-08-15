@@ -5,16 +5,16 @@ milestone_name: "Web Portal: Identity & Admin Foundations"
 current_phase: 06.1
 current_phase_name: admin-portal-web-surface-shadcn-components-and-the-single-ro
 status: executing
-stopped_at: Completed 06.1-09-PLAN.md
-last_updated: "2026-08-15T19:36:09.566Z"
+stopped_at: Completed 06.1-10-PLAN.md
+last_updated: "2026-08-15T20:31:47.669Z"
 last_activity: 2026-08-15
 last_activity_desc: Phase 06.1 execution started
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 71
-  completed_plans: 70
-  percent: 90
+  completed_plans: 71
+  percent: 100
 ---
 
 # Project State
@@ -35,9 +35,9 @@ without rework.
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
 Phase: 06.1 (admin-portal-web-surface-shadcn-components-and-the-single-ro) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 Status: Ready to execute
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 99%)
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
 Last activity: 2026-08-15 — Phase 06.1 execution started
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
@@ -287,6 +287,7 @@ no action needed.
 | Phase 06.1 P07 | 1h05m | 3 tasks | 10 files |
 | Phase 06.1 P08 | ~95m | 3 tasks | 4 files |
 | Phase 06.1 P09 | 24m | 2 tasks | 2 files |
+| Phase 06.1 P10 | ~50m | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -677,6 +678,7 @@ the next milestone yet.
 - [Phase ?]: A source-scanning test binds to purpose-built in-source markers with presence AND order asserted before slicing
 - [Phase ?]: The parity guard resolves the emitted maxBytes expression rather than inferring the cap from the constructor name; an unresolvable expression fails loudly instead of falling back (G-06.1-4)
 - [Phase ?]: A bare decimal literal resolves rather than failing at the resolver, so the existing per-path comparison produces the failure naming the path and both caps
+- [Phase ?]: Web browser floor declared in web/package.json: chrome/edge >=111, firefox >=128, safari/ios_saf >=16.4. Rule: Vite's baseline target raised per-browser where a shipped dep binds higher (@property forces firefox 128).
 
 ### Pending Todos
 
@@ -741,7 +743,7 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-15T19:36:05.035Z
+Last session: 2026-08-15T20:31:41.211Z
 Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
 by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
 carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
@@ -752,7 +754,7 @@ short-circuit was declined a second consecutive phase — closing 59/59 threats,
 holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
 Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
 in the same commit. Branch `v013-phase-03` is still UNPUSHED.
-Stopped at: Completed 06.1-09-PLAN.md
+Stopped at: Completed 06.1-10-PLAN.md
 Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
