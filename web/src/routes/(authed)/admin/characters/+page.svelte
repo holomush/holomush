@@ -223,15 +223,15 @@
     await applyLifecycle(row.id, transition, row.version);
   }
 
+  /** The filter bar instance, for cancelling its debounce from `clearFilters`. */
+  let filterBar = $state<ReturnType<typeof CharacterFilterBar> | null>(null);
+
   /**
    * Emptiness by a first-element probe. The total on this surface is the
    * server's own scalar COUNT over the filter, and nothing here may compute a
    * figure of its own from what came back — the two would disagree on the last
    * page and on any request the core clamped.
    */
-  /** The filter bar instance, for cancelling its debounce from `clearFilters`. */
-  let filterBar = $state<ReturnType<typeof CharacterFilterBar> | null>(null);
-
   const noRows = $derived(rows[0] === undefined);
   const filtered = $derived(term.trim() !== '' || status !== 'all' || playerId !== '');
   const searching = $derived(term.trim() !== '');
