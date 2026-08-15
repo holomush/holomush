@@ -607,7 +607,7 @@ Plans:
 3. An admin lists, searches, sorts and opens characters in the table, and edits them through the Sheet; the Sheet's field set is the server's field-mask allowlist, and a denied or absent character renders the ordinary not-found.
 4. The responsive treatment uses the **same viewport mechanism** as the shipped rail (`@media (max-width: 767px)`), so the rail's collapse and the admin shell's collapse fire at the same moment by construction rather than by coincidence.
 
-**Plans**: 6/6 plans executed (4 executed; 2 gap-closure plans added 2026-08-15 for G-06.1-2 and G-06.1-3)
+**Plans**: 10 plans (6 executed; 4 gap-closure plans added 2026-08-15 for G-06.1-2, G-06.1-4, G-06.1-5 and G-06.1-6 after re-verification returned 3/4 criteria MET)
 
 Plans:
 **Wave 1**
@@ -633,6 +633,16 @@ Plans:
 **Wave 6** *(gap closure — G-06.1-3, blocked on Wave 5)*
 
 - [x] 06.1-06-PLAN.md — The Go/TypeScript parity guard over the Sheet's thirteen paths, its two byte caps and its path-to-cap mapping, replacing the self-echoing assertion
+
+**Wave 7** *(gap closure — G-06.1-2, the tracer)*
+
+- [ ] 06.1-07-PLAN.md — One unit for both halves of the phone band: the census repaired so it stops licensing the px/rem split and stops rejecting its own fix, `DESKTOP_MEDIA_QUERY` in rem, and a Playwright project proving the two halves agree at a 20px root font size
+
+**Wave 8** *(gap closure — G-06.1-4, G-06.1-5, G-06.1-6; blocked on Wave 7)*
+
+- [ ] 06.1-08-PLAN.md — The census's reach: a floor derived from its own occurrence counts, a fail-closed extension set, arbitrary-variant and `innerWidth` clauses, a polled band settle, and a stable stylesheet anchor
+- [ ] 06.1-09-PLAN.md — The parity guard reads each path's cap from the `maxBytes` the constructor emits rather than from the constructor's name, and refuses to guess an expression it cannot resolve
+- [ ] 06.1-10-PLAN.md — A declared browser floor for the CSS media range syntax the conversion shipped, chosen at a blocking decision checkpoint and pinned by a meta-test
 
 > **Review provenance.** These four plans were reviewed as `06-03`, `06-06`, `06-07` and `06-08` across
 > three cross-AI cycles; `06-REVIEWS.md` in Phase 6 records those cycles under the **old** names and is
