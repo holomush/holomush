@@ -38,26 +38,59 @@
   const shown = $derived(bytes >= maxBytes * 0.8);
 </script>
 
-{#if shown}
-  <!-- `aria-live` because the two moments that matter here are both silent
-       otherwise: the counter APPEARS at 80% of cap and flips to `over` at 100%,
-       and neither is a focus change, so a screen-reader user typing into the
-       field is never told. `polite` rather than `assertive` — it must not
-       interrupt the character being echoed. The numerals carry the state on
-       their own (`101 / 100` reads as over), so colour is not the sole
-       carrier and this is the announcement gap, not a 1.4.1 fix. -->
-  <p
-    class="counter"
-    class:over
-    data-testid="byte-counter"
-    data-over={over ? 'true' : 'false'}
-    aria-live="polite"
-  >
-    {bytes} / {maxBytes}
-  </p>
-{/if}
+<!-- `aria-live` because the two moments that matter here are both silent
+     otherwise: the counter APPEARS at 80% of cap and flips to `over` at 100%,
+     and neither is a focus change, so a screen-reader user typing into the
+     field is never told. `polite` rather than `assertive` — it must not
+     interrupt the character being echoed. The numerals carry the state on
+     their own (`101 / 100` reads as over), so colour is not the sole carrier
+     and this is the announcement gap, not a 1.4.1 fix.
+
+     THE ELEMENT IS UNCONDITIONAL AND ONLY ITS CONTENT IS GATED. Assistive
+     technologies announce mutations to a region already in the accessibility
+     tree; one inserted wholesale together with its content generally is not
+     announced at all — so with the attribute inside the `{#if}`, the first of
+     those two moments never happened, while the code claimed both. It is the
+     SAME node across the transition, which is what makes the arrival of the
+     numerals an announceable mutation.
+
+     `idle` is what lets it be unconditional without changing a single pixel:
+     consuming fields lay their children out with `display: flex; gap`, where
+     an always-present empty BOX would add permanent spacing to every field on
+     every character surface, and `display: none` / `visibility: hidden` would
+     take the region back out of the accessibility tree and undo the fix. Out
+     of flow is the one state that is both. A second, separate live region
+     would work too, but it would carry the value twice in the tree.
+
+     `data-testid` and `data-over` describe the RENDERED counter, so they are
+     gated with it: below the display threshold there is no counter, only a
+     silent region waiting for one. -->
+<p
+  class="counter"
+  class:over
+  class:idle={!shown}
+  data-testid={shown ? 'byte-counter' : undefined}
+  data-over={shown ? (over ? 'true' : 'false') : undefined}
+  aria-live="polite"
+>
+  {#if shown}{bytes} / {maxBytes}{/if}
+</p>
 
 <style>
+  /* Out of flow, so a flex or grid parent lays its fields out exactly as it did
+     when this element did not exist — no extra flex item, no extra gap — while
+     the element itself stays in the accessibility tree as a live region. */
+  .idle {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
   .counter {
     margin: 0;
     font-size: 12px;

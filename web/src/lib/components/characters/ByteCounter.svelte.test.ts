@@ -24,7 +24,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { mount, unmount } from 'svelte';
+import { mount, unmount, flushSync } from 'svelte';
 import ByteCounter from './ByteCounter.svelte';
 
 // The two shipped caps, transcribed from internal/world/validation.go:19-20 via
@@ -152,5 +152,87 @@ describe('ByteCounter', () => {
 		const { text, dispose } = render(value, SHORT_CAP);
 		expect(text).toBe('84 / 100');
 		dispose();
+	});
+
+	/*
+	 * THE ANNOUNCEMENT REGION HAS TO OUTLIVE ITS OWN CONTENT.
+	 *
+	 * Assistive technologies announce mutations to a live region that is ALREADY
+	 * in the accessibility tree; a region inserted wholesale together with its
+	 * content is generally not announced. With `aria-live` inside the `{#if}`,
+	 * the appearance moment — the one the component's comment leads with — was
+	 * never announced, while the over-cap flip was, because by then the region
+	 * already existed. These drive a live prop change so the SAME node can be
+	 * identified across the transition; a re-mount would prove nothing.
+	 */
+	describe('the announcement region', () => {
+		function live(target: HTMLElement) {
+			return target.querySelector('[aria-live]');
+		}
+
+		it('is already in the tree while the counter is still below its display threshold', () => {
+			const props = $state({ value: 'x'.repeat(79), maxBytes: SHORT_CAP });
+			const target = document.createElement('div');
+			document.body.appendChild(target);
+			const component = mount(ByteCounter, { target, props });
+
+			const region = live(target);
+			expect(region).not.toBeNull();
+			expect(region!.textContent?.trim()).toBe('');
+			// The DISPLAY rule is untouched: nothing visible below 80% of cap.
+			expect(target.querySelector('[data-testid="byte-counter"]')).toBeNull();
+			expect((target.textContent ?? '').replace(/\s+/g, ' ').trim()).toBe('');
+
+			props.value = 'x'.repeat(80);
+			flushSync();
+
+			// THE SAME NODE, now populated — an announceable mutation.
+			expect(live(target)).toBe(region);
+			expect(region!.textContent?.trim()).toBe('80 / 100');
+			expect(
+				target.querySelector('[data-testid="byte-counter"]')?.textContent?.trim(),
+			).toBe('80 / 100');
+
+			unmount(component);
+			target.remove();
+		});
+
+		it('carries the over-cap flip through that same region', () => {
+			const atCap = THREE_BYTE.repeat(33) + 'x';
+			expect(encodedLength(atCap)).toBe(100);
+			const props = $state({ value: atCap, maxBytes: SHORT_CAP });
+			const target = document.createElement('div');
+			document.body.appendChild(target);
+			const component = mount(ByteCounter, { target, props });
+
+			const region = live(target);
+			expect(region!.textContent?.trim()).toBe('100 / 100');
+			expect(
+				target.querySelector('[data-testid="byte-counter"]')?.getAttribute('data-over'),
+			).toBe('false');
+
+			props.value = atCap + 'x';
+			flushSync();
+
+			expect(live(target)).toBe(region);
+			expect(region!.textContent?.trim()).toBe('101 / 100');
+			expect(
+				target.querySelector('[data-testid="byte-counter"]')?.getAttribute('data-over'),
+			).toBe('true');
+
+			unmount(component);
+			target.remove();
+		});
+
+		it('carries the value exactly once, with no duplicate copy in the tree', () => {
+			// A separate hidden region would announce correctly and read the number
+			// twice. The region IS the counter.
+			const { dispose } = render('x'.repeat(90), SHORT_CAP);
+			const regions = document.body.querySelectorAll('[aria-live]');
+			expect(regions).toHaveLength(1);
+			expect(regions[0]).toBe(document.body.querySelector('[data-testid="byte-counter"]'));
+			expect(document.body.textContent?.replace(/\s+/g, ' ').trim()).toBe('90 / 100');
+			dispose();
+		});
 	});
 });
