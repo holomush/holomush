@@ -247,6 +247,15 @@ describe('CharacterTable — the phone-band row target', () => {
    * is owned by the census in
    * test/meta/web_phone_band_breakpoint_census_test.go, which asserts the rule
    * text by occurrence count; this test deliberately no longer knows it.
+   *
+   * WHAT THE MARKERS DO AND DO NOT SCOPE. They anchor the walk; they do not
+   * bound it. The POSITIVE assertions (the overlay exists, and is inset) read
+   * the slice between them. The PROHIBITION — position: relative on the row and
+   * on no cell — walks braces OUTWARD from the opening marker to the media
+   * block's own close, because that property belongs to the whole block: a cell
+   * rule below the end marker still retargets the overlay. Scoping the
+   * prohibition to the slice narrowed it below the brace walk the markers
+   * replaced, and let exactly that rule through. Do not re-scope it.
    */
   it('declares position: relative on the row, and on no cell, inside the phone media block', () => {
     // Read from the repo path rather than import.meta.url: under Vite the
@@ -298,8 +307,48 @@ describe('CharacterTable — the phone-band row target', () => {
     // assertion enforcing it.
     const block = src.slice(sliceFrom + 2, sliceTo).replace(/\/\*[\s\S]*?\*\//g, '');
 
-    const relativeRules = [...block.matchAll(/([^{}]+)\{[^{}]*position:\s*relative/g)].map((m) =>
-      m[1].replace(/\s+/g, ' ').trim(),
+    /*
+     * THE PROHIBITION IS A PROPERTY OF THE WHOLE MEDIA BLOCK, NOT OF THE MARKED
+     * REGION, so it gets its own wider text.
+     *
+     * The marker slice is a strict SUB-region of the phone media block. Scoping
+     * "position: relative on no cell" to it was a NARROWING of the brace walk
+     * that preceded the markers: a cell-relative rule added inside the media
+     * query but BELOW the end marker sits outside the slice, `.rowbtn::after`'s
+     * containing block becomes that cell instead of the row, and a tap on
+     * Player, Status or Last active hits nothing — the exact failure this test
+     * is named for — while the test stays green. Measured: injecting
+     * `:global(.chartable .cell-name) { position: relative; }` after the end
+     * marker comment closes passed 17/17 under the slice-scoped version.
+     * (Deliberately not spelling the close-comment delimiter here: doing so
+     * ends THIS comment early and the file stops parsing.)
+     *
+     * So the walk is restored for this clause only. It runs OUTWARD from the
+     * slice start to the media block's own close, and is therefore a superset
+     * of the slice — nothing the marked region covered is given up. The markers
+     * keep their real job: anchoring the POSITIVE assertions below without a
+     * fourth verbatim copy of the media condition.
+     *
+     * Comments are stripped BEFORE the walk, not after, so a brace inside one
+     * cannot unbalance the depth count.
+     */
+    const afterStart = src.slice(sliceFrom + 2).replace(/\/\*[\s\S]*?\*\//g, '');
+    let depth = 1;
+    let i = 0;
+    while (depth > 0 && i < afterStart.length) {
+      if (afterStart[i] === '{') depth++;
+      else if (afterStart[i] === '}') depth--;
+      i++;
+    }
+    expect(
+      depth,
+      'the phone media block holding the overlay markers is never closed — the brace walk ran off ' +
+        'the end of the file, so the prohibition below would be scanning the rest of the stylesheet',
+    ).toBe(0);
+    const wholeBlock = afterStart.slice(0, i);
+
+    const relativeRules = [...wholeBlock.matchAll(/([^{}]+)\{[^{}]*position:\s*relative/g)].map(
+      (m) => m[1].replace(/\s+/g, ' ').trim(),
     );
     expect(relativeRules.length).toBeGreaterThan(0);
     // Every containing block declared in this media query is a ROW selector.
@@ -307,7 +356,7 @@ describe('CharacterTable — the phone-band row target', () => {
       expect(selector).toMatch(/charrow/);
       expect(selector).not.toMatch(/\btd\b|cell/);
     }
-    // And the overlay that depends on it exists.
+    // And the overlay that depends on it exists, between the markers.
     expect(block).toMatch(/\.rowbtn::after/);
     expect(block).toMatch(/inset:\s*0/);
   });

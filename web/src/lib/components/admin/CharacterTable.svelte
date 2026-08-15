@@ -396,9 +396,15 @@
       inset: 0;
     }
     /* phone-band-overlay:end — the closing counterpart of the opening marker at
-       the top of this block; read its note first. A rule added BELOW this
-       marker is outside the slice and therefore outside the "position: relative
-       on the row and on no cell" assertion, so keep the containing-block
-       declarations between the two. */
+       the top of this block; read its note first.
+
+       The markers bound the slice the test takes for its POSITIVE assertions
+       (the overlay exists, and is inset). They do NOT bound the prohibition:
+       "position: relative on the row and on no cell" is walked over this WHOLE
+       media block, from the opening marker out to the brace below, because a
+       cell-relative rule anywhere inside the block retargets the overlay's
+       containing block. An earlier revision scoped that clause to the slice,
+       and a cell rule placed here — inside the block, below this marker — went
+       unnoticed. Adding one here now fails by name. */
   }
 </style>
