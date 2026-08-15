@@ -55,6 +55,7 @@ function setAuth(isGuest: boolean) {
     playerId: null,
     isGuest,
     characters: [],
+    roles: [],
   });
 }
 

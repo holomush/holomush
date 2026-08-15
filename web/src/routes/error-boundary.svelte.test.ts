@@ -25,6 +25,7 @@ const UNRESOLVED = {
   playerId: null,
   isGuest: false,
   characters: [],
+  roles: [],
 };
 
 const RESOLVED_GUEST = { ...UNRESOLVED, isPlayerAuthenticated: true, isGuest: true };

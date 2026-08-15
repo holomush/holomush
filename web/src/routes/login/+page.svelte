@@ -112,6 +112,7 @@
               characterId: c.characterId,
               name: c.characterName,
             })),
+            roles: session.roles,
           });
         } catch (checkErr) {
           console.warn('webCheckSession after webCreateGuest failed; using fallback profile', checkErr);
@@ -123,6 +124,9 @@
               characterId: c.characterId,
               name: c.characterName,
             })),
+            // No session response, so no roles hint and no Admin rail entry.
+            // Fail-closed and correct: the RPCs deny regardless.
+            roles: [],
           });
         }
         const charId = resp.defaultCharacterId || resp.characters[0]?.characterId;

@@ -19,6 +19,13 @@ interface AuthState {
   playerId: string | null;
   isGuest: boolean;
   characters: CharacterSummary[];
+  /**
+   * The roles the session response carried, verbatim. A NAV HINT only: it
+   * decides whether the rail draws an Admin entry and nothing else. A viewer
+   * who forges a role gets an entry leading to a route whose every RPC denies
+   * them, which is why hiding it is a courtesy rather than a control.
+   */
+  roles: string[];
 }
 
 const initial: AuthState = {
@@ -29,17 +36,24 @@ const initial: AuthState = {
   playerId: null,
   isGuest: false,
   characters: [],
+  roles: [],
 };
 
 export const authState = writable<AuthState>(initial);
 export const isAuthenticated = derived(authState, ($s) => $s.isPlayerAuthenticated || !!$s.sessionId);
 export const hasCharacter = derived(authState, ($s) => !!$s.sessionId && !!$s.characterName);
 
+/**
+ * `roles` is REQUIRED, not optional-with-a-default. An optional field would let
+ * a missed call site fail silently into a role-less rail — which looks exactly
+ * like "this player is not an admin" — instead of failing at `svelte-check`.
+ */
 export function setPlayerProfile(profile: {
   playerId: string;
   playerName: string;
   isGuest: boolean;
   characters: CharacterSummary[];
+  roles: string[];
 }) {
   sessionStorage.removeItem('holomush-player'); // clean up legacy raw-token key
   authState.update((s) => ({
@@ -49,6 +63,7 @@ export function setPlayerProfile(profile: {
     playerName: profile.playerName,
     isGuest: profile.isGuest,
     characters: profile.characters,
+    roles: profile.roles,
   }));
 }
 

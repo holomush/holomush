@@ -21,6 +21,7 @@ export const load: PageLoad = async () => {
       playerName: resp.playerName,
       isGuest: resp.isGuest,
       characters: resp.characters.map((c) => ({ characterId: c.characterId, name: c.characterName })),
+      roles: resp.roles,
     });
     return { authenticated: true, playerName: resp.playerName, characters: resp.characters };
   } catch (e) {

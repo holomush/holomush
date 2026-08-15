@@ -22,6 +22,7 @@ export async function load() {
       playerName: resp.playerName,
       isGuest: resp.isGuest,
       characters: resp.characters.map((c) => ({ characterId: c.characterId, name: c.characterName })),
+      roles: resp.roles,
     });
     // The default character comes from THIS response, not a third round trip.
     // OwnCharacter (what the roster read and the default write return) carries
