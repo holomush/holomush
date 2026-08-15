@@ -117,6 +117,10 @@ type adminProfileMaskField struct {
 // invent a thirteenth profile path or to delete `description`.
 // TestAdminProfileMaskAllowlistMatchesSpec asserts SET EQUALITY against the
 // checked-in §10.6 list, in both directions.
+// TestAdminEditableFieldsInTheWebSheetMatchTheServerMaskAllowlist asserts the
+// same map DOWNWARD against the admin Sheet's ADMIN_EDITABLE_FIELDS — the path
+// set, both cap values and the per-path mapping — so the disagreement the next
+// paragraph rules out is enforced rather than merely intended.
 //
 // The caps reuse the shipped world constants rather than minting new numbers.
 // The seven short single-line fields cap at world.MaxNameLength; the five long

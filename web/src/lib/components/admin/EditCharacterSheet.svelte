@@ -10,10 +10,17 @@
    * it in, and the server's own byte cap for it.
    *
    * THE SET IS THE SERVER'S, NOT THIS FILE'S. `adminProfileMaskablePaths`
-   * (internal/grpc/admin_characters_write.go:130-169) is the closed allowlist,
-   * compared by exact string, and an unlisted path is REJECTED rather than
-   * ignored. What lives here is a rendering order and a label — the authority
-   * is server-side, which is why nothing below tries to enforce membership.
+   * (internal/grpc/admin_characters_write.go) is the closed allowlist, compared
+   * by exact string, and an unlisted path is REJECTED rather than ignored. What
+   * lives here is a rendering order and a label — the authority is server-side.
+   *
+   * AND THAT CLAIM IS ENFORCED, NOT ASSERTED.
+   * TestAdminEditableFieldsInTheWebSheetMatchTheServerMaskAllowlist (in
+   * internal/grpc, because only a test there holds the unexported allowlist as
+   * a live symbol) reads that map and `world.MaxNameLength` /
+   * `world.MaxDescriptionLength` directly and this declaration as parsed text.
+   * It fails when either side gains a path, loses one, or re-caps one. The
+   * guard changes when drift is CAUGHT — it does not move who decides.
    *
    * The order is the wire's own (WebAdminUpdateCharacterRequest fields 4-16),
    * so "the first conflicting field" is a stable, inspectable notion rather
@@ -39,6 +46,9 @@
     maxBytes: number;
   }
 
+  // Both values are asserted against the Go constants they name by
+  // TestAdminEditableFieldsInTheWebSheetMatchTheServerMaskAllowlist, so these
+  // comments point at an enforced relationship rather than promising one.
   const SHORT = 100; // world.MaxNameLength
   const LONG = 4000; // world.MaxDescriptionLength
 
