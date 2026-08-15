@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 23
+open_count: 24
 waived_count: 0
 fixed_count: 9
-total_count: 32
-last_updated: 2026-08-15T03:27:33.319Z
+total_count: 33
+last_updated: 2026-08-15T16:54:05.430Z
 ---
 
 # Broken Windows Ledger
@@ -47,6 +47,7 @@ last_updated: 2026-08-15T03:27:33.319Z
 | 30 | 06.1 | deviation | web/src/routes/error-boundary.svelte.test.ts |  | Plan mandated web/src/routes/+error.svelte.test.ts; SvelteKit refuses to build a +-prefixed non-route file under src/routes/. Renamed; plans 06.1-02/03 name the same shape (#4979). | open |  | 2026-08-15T01:27:46.184Z |  |
 | 31 | 06.1 | stub | web/src/routes/(authed)/admin/characters/+page.svelte |  | the selected {id,intent} seam is written by both row affordances and read by nothing until plan 06.1-04 lands the edit Sheet and lifecycle confirm | fixed |  | 2026-08-15T02:33:40.551Z | 2026-08-15T03:27:18.118Z |
 | 32 | 06.1 | deviation | web/src/lib/components/admin/EditCharacterSheet.svelte |  | the conflict alert's Reload reseeds loaded and working from the server, discarding the operator's draft — the authored copy promises exactly that ('reload to see the current values, then re-apply'), but it is the same tension ledger entry 18 records for ProfileSection's reload | open |  | 2026-08-15T03:27:33.319Z |  |
+| 33 | 06.1 | unrun-verify | web/e2e/admin-portal.spec.ts | 293 | Pre-existing flake: 'closes on Escape, on the close control and on Cancel' (375px phone band, plan 06.1-04) intermittently fails under the FULL task test:e2e suite — elementFromPoint over td.cell-status returns HEADER instead of BUTTON, a scroll/settle race in tapRowOutsideNameCell. Reproduced with plan 05's new describe block skipped, so it is independent of this plan. Scoped runs (task test:e2e -- admin-portal.spec.ts) are 14/14 green. | open |  | 2026-08-15T16:54:05.430Z |  |
 
 ````json
 [
@@ -432,6 +433,18 @@ last_updated: 2026-08-15T03:27:33.319Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-15T03:27:33.319Z",
+    "resolved_at": null
+  },
+  {
+    "id": 33,
+    "kind": "unrun-verify",
+    "phase": "06.1",
+    "file": "web/e2e/admin-portal.spec.ts",
+    "line": 293,
+    "description": "Pre-existing flake: 'closes on Escape, on the close control and on Cancel' (375px phone band, plan 06.1-04) intermittently fails under the FULL task test:e2e suite — elementFromPoint over td.cell-status returns HEADER instead of BUTTON, a scroll/settle race in tapRowOutsideNameCell. Reproduced with plan 05's new describe block skipped, so it is independent of this plan. Scoped runs (task test:e2e -- admin-portal.spec.ts) are 14/14 green.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-15T16:54:05.430Z",
     "resolved_at": null
   }
 ]

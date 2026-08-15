@@ -607,7 +607,7 @@ Plans:
 3. An admin lists, searches, sorts and opens characters in the table, and edits them through the Sheet; the Sheet's field set is the server's field-mask allowlist, and a denied or absent character renders the ordinary not-found.
 4. The responsive treatment uses the **same viewport mechanism** as the shipped rail (`@media (max-width: 767px)`), so the rail's collapse and the admin shell's collapse fire at the same moment by construction rather than by coincidence.
 
-**Plans**: 6 plans (4 executed; 2 gap-closure plans added 2026-08-15 for G-06.1-2 and G-06.1-3)
+**Plans**: 5/6 plans executed (4 executed; 2 gap-closure plans added 2026-08-15 for G-06.1-2 and G-06.1-3)
 
 Plans:
 **Wave 1**
@@ -628,7 +628,7 @@ Plans:
 
 **Wave 5** *(gap closure — G-06.1-2)*
 
-- [ ] 06.1-05-PLAN.md — One phone-band breakpoint: the Sheet through the shared media-query hook, nine `@media` rules onto Tailwind's own tokens, a source census, and the 767/768 boundary sweep
+- [x] 06.1-05-PLAN.md — One phone-band breakpoint: the Sheet through the shared media-query hook, nine `@media` rules onto Tailwind's own tokens, a source census, and the 767/768 boundary sweep
 
 **Wave 6** *(gap closure — G-06.1-3, blocked on Wave 5)*
 
