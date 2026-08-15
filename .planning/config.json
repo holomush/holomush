@@ -49,7 +49,8 @@
     "tdd_mode": true,
     "max_discuss_passes": 5,
     "_auto_chain_active": false,
-    "plan_review_convergence": true
+    "plan_review_convergence": true,
+    "use_worktrees": false
   },
   "ship": {
     "pr_body_sections": []
