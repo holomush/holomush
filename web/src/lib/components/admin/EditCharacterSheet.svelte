@@ -83,6 +83,7 @@
   import { Skeleton } from '$lib/components/ui/skeleton';
   import { byteCount } from '$lib/text/byteCount';
   import { isAbortedError } from '$lib/connect/errors';
+  import { isDesktop } from '$lib/hooks/mediaQuery.svelte';
   import { getAdminCharacter, type CharacterDetail, type CharacterRow } from '$lib/admin/client';
 
   /**
@@ -172,31 +173,26 @@
   let expectedVersion = $state(untrack(() => row.version));
 
   /** The phone band is a Svelte derivation, because `side` is a PROP. */
-  let isPhone = $state(false);
-
-  $effect(() => {
-    // Guarded for SSR and for a test environment with no matchMedia — this
-    // jsdom has none. The fallback is the DESKTOP shape: flickering through a
-    // bottom sheet on a desktop first paint is the failure this closes.
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mql = window.matchMedia('(max-width: 767px)');
-    isPhone = mql.matches;
-    const onchange = (e: MediaQueryListEvent) => {
-      isPhone = e.matches;
-    };
-    mql.addEventListener('change', onchange);
-    return () => mql.removeEventListener('change', onchange);
-  });
+  const desktop = isDesktop(true);
 
   /**
    * `side` is a Svelte PROP on Sheet.Content (sheet-content.svelte:18,25),
    * emitted as data-side={side} (:36). CSS cannot mutate an attribute, so no
    * media or container rule could ever produce this value or select the bottom
    * transition classes — which is why the flip lives here and only the height
-   * and the input font live in the stylesheet below. Both halves read the SAME
-   * 767px literal through the SAME viewport mechanism, in this one file.
+   * and the input font live in the stylesheet below.
+   *
+   * The query is the SHARED hook's, not one authored here: this file no longer
+   * carries a viewport number of its own. That query is the exact complement of
+   * this file's viewport rule at EVERY width — including a fractional one such
+   * as 767.5px, reachable under browser zoom and fractional DPI scaling, where
+   * a hand-written one-below-the-boundary form would match neither branch.
+   *
+   * The `true` argument is the fallback when there is no `matchMedia` to ask
+   * (SSR, and this jsdom): the DESKTOP shape, because flickering through a
+   * bottom sheet on a desktop first paint is the failure that guard closes.
    */
-  const side = $derived(isPhone ? 'bottom' : 'right');
+  const side = $derived(desktop.current ? 'right' : 'bottom');
 
   function valuesFrom(d: CharacterDetail | undefined): Record<string, string> {
     const out: Record<string, string> = {};

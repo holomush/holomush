@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { ConnectError, Code } from '@connectrpc/connect';
 import EditCharacterSheet, { ADMIN_EDITABLE_FIELDS } from './EditCharacterSheet.svelte';
+import { DESKTOP_MEDIA_QUERY } from '$lib/hooks/mediaQuery.svelte';
 import type { CharacterDetail, CharacterRow } from '$lib/admin/client';
 
 const CREATED = 1_700_000_000_000_000_000n;
@@ -63,16 +64,21 @@ function deferred<T>() {
 
 /**
  * matchMedia does not exist in this jsdom AT ALL — verified: `typeof
- * window.matchMedia` is 'undefined'. That is exactly why the component's SSR /
- * test guard defaults to the desktop shape, and why these two cases have to
- * install a stub to observe either branch.
+ * window.matchMedia` is 'undefined'. That is exactly why the shared hook's
+ * unsupported-fallback defaults this component to the desktop shape, and why
+ * these cases have to install a stub to observe either branch.
+ *
+ * The parameter is `desktopMatches`, not `matches`: the query the component now
+ * asks for is the shared hook's DESKTOP one, so `true` is the wide shape and
+ * `false` is the phone shape — the opposite polarity from the phone-band query
+ * this component used to author for itself.
  */
-function stubMatchMedia(matches: boolean) {
+function stubMatchMedia(desktopMatches: boolean) {
   const listeners: ((e: { matches: boolean }) => void)[] = [];
   const queries: string[] = [];
   const mql = {
-    matches,
-    media: '(max-width: 767px)',
+    matches: desktopMatches,
+    media: DESKTOP_MEDIA_QUERY,
     addEventListener: (_: string, l: (e: { matches: boolean }) => void) => void listeners.push(l),
     removeEventListener: (_: string, l: (e: { matches: boolean }) => void) => {
       const i = listeners.indexOf(l);
@@ -609,17 +615,20 @@ describe('EditCharacterSheet — the in-flight and conflict shapes', () => {
 });
 
 describe('EditCharacterSheet — the phone band is a Svelte derivation, not a CSS rule', () => {
-  it('renders data-side=bottom when the 767px query matches', async () => {
-    const { queries } = stubMatchMedia(true);
+  it('renders data-side=bottom when the shared desktop query does not match', async () => {
+    const { queries } = stubMatchMedia(false);
     const { component } = render();
     await settle();
     expect(content().getAttribute('data-side')).toBe('bottom');
-    expect(queries).toContain('(max-width: 767px)');
+    // The query this component asks for is the SHARED hook's, not one authored
+    // here. A component that mints its own string records a different query and
+    // fails this line — which is the duplication the shared hook removes.
+    expect(queries).toContain(DESKTOP_MEDIA_QUERY);
     unmount(component);
   });
 
-  it('renders data-side=right when the 767px query does not match', async () => {
-    stubMatchMedia(false);
+  it('renders data-side=right when the shared desktop query matches', async () => {
+    stubMatchMedia(true);
     const { component } = render();
     await settle();
     expect(content().getAttribute('data-side')).toBe('right');
@@ -627,12 +636,12 @@ describe('EditCharacterSheet — the phone band is a Svelte derivation, not a CS
   });
 
   it('flips on a change event from the MediaQueryList', async () => {
-    const { listeners } = stubMatchMedia(false);
+    const { listeners } = stubMatchMedia(true);
     const { component } = render();
     await settle();
     expect(content().getAttribute('data-side')).toBe('right');
     expect(listeners.length).toBeGreaterThan(0);
-    for (const l of listeners) l({ matches: true });
+    for (const l of listeners) l({ matches: false });
     flushSync();
     expect(content().getAttribute('data-side')).toBe('bottom');
     unmount(component);

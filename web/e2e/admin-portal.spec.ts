@@ -354,6 +354,103 @@ test.describe('admin portal — the 780px band', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Proof 1c — the BOUNDARY itself, at 767/768 and 1023/1024.
+//
+// The in-band proofs above (375, 780, 1280) each sit comfortably inside one
+// band. This block sits ON the edges, which is the only place the two
+// independent mechanisms can be observed disagreeing: the CSS half now reads
+// Tailwind's --breakpoint-md/-lg tokens and the JS half reads the shared hook's
+// DESKTOP_MEDIA_QUERY, and nothing but a browser can tell you they still fire
+// at the same width.
+//
+// It is a REGRESSION DETECTOR, not a reproduction: the pre-fix literals already
+// agreed at integer widths, so this block was green before the conversion too.
+// Its teeth were shown by mutating DESKTOP_MEDIA_QUERY and by mutating
+// --breakpoint-md, each of which makes the first test below fail.
+//
+// It does NOT cover the fractional-width case (767.5px) that the range form
+// actually buys — Playwright cannot set a fractional viewport. That improvement
+// is reasoned about in the plan and in EditCharacterSheet.svelte, not asserted.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test.describe('admin portal — the band boundaries', () => {
+  // Sign in at a desktop width and resize inside each test.
+  test.use({ viewport: { width: 1280, height: 900 } });
+
+  // Both measured columns carry `transition: width 180ms ease` —
+  // SectionRail.svelte and admin/+layout.svelte. Measuring before that settles
+  // reads mid-animation widths, which already invalidated one UAT pass.
+  const BAND_SETTLE_MS = 300;
+
+  async function columnsAt(page: Page, width: number) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForTimeout(BAND_SETTLE_MS);
+    // `:not(.is-drawer)` is load-bearing: the drawer carries the same test id
+    // and is full-width when open.
+    const rail = await page
+      .locator('[data-testid="rail"]:not(.is-drawer)')
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().width);
+    const nav = await page
+      .locator('.adminnav-col')
+      .evaluate((el) => el.getBoundingClientRect().width);
+    return { rail, nav };
+  }
+
+  test('collapses both columns at 767 and restores both at 768, and the Sheet flips with them', async ({
+    page,
+  }) => {
+    const admin = await signInAsAdmin(page, 'bnd');
+
+    // Resizing an OPEN Sheet is deliberate: it exercises the live listener, and
+    // it avoids the phone-band row-overlay tap target, which is proven at 375px.
+    await openSheetFromRowAction(page, admin.charName);
+    await expect(sheet(page)).toHaveAttribute('data-side', 'right');
+
+    const wide = await columnsAt(page, 768);
+    expect(wide.rail).toBeGreaterThan(0);
+    expect(wide.nav).toBeGreaterThan(0);
+    expect(Math.abs(wide.nav - wide.rail)).toBeLessThanOrEqual(1);
+    await expect(sheet(page)).toHaveAttribute('data-side', 'right');
+    const wideGeometry = await sheet(page).evaluate((el) => ({
+      height: el.getBoundingClientRect().height,
+      viewport: window.innerHeight,
+    }));
+    expect(Math.abs(wideGeometry.height - 0.84 * wideGeometry.viewport)).toBeGreaterThan(2);
+
+    const narrow = await columnsAt(page, 767);
+    // One expect per column: "one collapsed and the other did not" is the exact
+    // divergence this block closes, so the failure must name which one.
+    expect(narrow.rail, 'the persistent rail must be zero-width at 767').toBe(0);
+    expect(narrow.nav, 'the admin nav column must be zero-width at 767').toBe(0);
+    await expect(sheet(page)).toHaveAttribute('data-side', 'bottom');
+    const narrowGeometry = await sheet(page).evaluate((el) => ({
+      height: el.getBoundingClientRect().height,
+      viewport: window.innerHeight,
+    }));
+    expect(Math.abs(narrowGeometry.height - 0.84 * narrowGeometry.viewport)).toBeLessThanOrEqual(2);
+  });
+
+  test('merges the nav into a rail-width strip at 1023 and restores the full nav at 1024', async ({
+    page,
+  }) => {
+    await signInAsAdmin(page, 'lgb');
+
+    const merged = await columnsAt(page, 1023);
+    expect(merged.rail).toBeGreaterThan(0);
+    expect(merged.nav).toBeGreaterThan(0);
+    expect(Math.abs(merged.nav - merged.rail)).toBeLessThanOrEqual(1);
+
+    const full = await columnsAt(page, 1024);
+    // The claim is the RELATION between the two columns. Pinning 48 and 232 here
+    // would duplicate --rail-w and --adminnav-w into a third place, which is the
+    // defect this work removes.
+    expect(full.rail).toBe(merged.rail);
+    expect(full.nav).toBeGreaterThan(full.rail);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Proof 2 — the byte caps, at BOTH of them. The admin Sheet is a SECOND editor
 // for these thirteen paths, so this proof is its own rather than folded into
 // Phase 5's, which tests a different component against a different surface.

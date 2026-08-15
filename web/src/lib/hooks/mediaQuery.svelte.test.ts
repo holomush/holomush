@@ -75,6 +75,26 @@ describe('mediaQuery', () => {
     expect(removed).toBe(true);
   });
 
+  it('reports false and does not throw when matchMedia is absent', () => {
+    // Deliberately NO stub: this jsdom has no matchMedia at all, and
+    // vi.unstubAllGlobals in afterEach has already cleared any earlier one.
+    const cleanup = $effect.root(() => {
+      const mq = mediaQuery('(min-width: 768px)');
+      flushSync();
+      expect(mq.current).toBe(false);
+    });
+    cleanup();
+  });
+
+  it('reports the explicit fallback when matchMedia is absent', () => {
+    const cleanup = $effect.root(() => {
+      const mq = mediaQuery('(min-width: 768px)', true);
+      flushSync();
+      expect(mq.current).toBe(true);
+    });
+    cleanup();
+  });
+
   it('isDesktop tracks the Tailwind md breakpoint', () => {
     const { queries } = installMatchMedia(true);
     const cleanup = $effect.root(() => {
