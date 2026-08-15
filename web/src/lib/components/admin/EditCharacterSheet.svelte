@@ -46,9 +46,27 @@
     maxBytes: number;
   }
 
-  // Both values are asserted against the Go constants they name by
-  // TestAdminEditableFieldsInTheWebSheetMatchTheServerMaskAllowlist, so these
-  // comments point at an enforced relationship rather than promising one.
+  // EVERY CAP HERE IS A BYTE COUNT — the same unit world.MaxNameLength and
+  // world.MaxDescriptionLength enforce, and the same unit the counter below
+  // measures (`new TextEncoder().encode(v).length`), never code points and
+  // never grapheme clusters. Which is why a value that LOOKS short can be over
+  // the cap: one emoji is four bytes, one accented Latin letter is two.
+  //
+  // Two relationships are enforced here, not promised, both by
+  // TestAdminEditableFieldsInTheWebSheetMatchTheServerMaskAllowlist:
+  //
+  //   1. these two declarations are pinned BY VALUE to the Go constants their
+  //      trailing comments name;
+  //   2. each constructor below must EMIT one of these two identifiers. The
+  //      guard parses the maxBytes expression each one puts on the field it
+  //      builds and resolves it — so a number typed in place of SHORT or LONG
+  //      fails `task test`, naming the path and both numbers, instead of being
+  //      echoed into every counter that field renders.
+  //
+  // (2) is what makes (1) worth having. Pinning only the declarations left the
+  // constructors free to emit anything: `maxBytes: 90` read correctly against
+  // `const SHORT = 100` and every guard stayed green while all seven line
+  // counters showed a boundary the server does not enforce.
   const SHORT = 100; // world.MaxNameLength
   const LONG = 4000; // world.MaxDescriptionLength
 
