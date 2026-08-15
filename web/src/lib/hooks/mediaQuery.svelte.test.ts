@@ -40,7 +40,7 @@ describe('mediaQuery', () => {
   it('reflects the initial match state synchronously', () => {
     installMatchMedia(true);
     const cleanup = $effect.root(() => {
-      const mq = mediaQuery('(min-width: 768px)');
+      const mq = mediaQuery('(min-width: 500px)');
       expect(mq.current).toBe(true);
     });
     cleanup();
@@ -49,7 +49,7 @@ describe('mediaQuery', () => {
   it('updates reactively when the media query changes', () => {
     const { mql } = installMatchMedia(false);
     const cleanup = $effect.root(() => {
-      const mq = mediaQuery('(min-width: 768px)');
+      const mq = mediaQuery('(min-width: 500px)');
       flushSync();
       expect(mq.current).toBe(false);
       mql.emit(true);
@@ -68,7 +68,7 @@ describe('mediaQuery', () => {
       orig(t, cb);
     };
     const cleanup = $effect.root(() => {
-      mediaQuery('(min-width: 768px)');
+      mediaQuery('(min-width: 500px)');
       flushSync();
     });
     cleanup();
@@ -79,7 +79,7 @@ describe('mediaQuery', () => {
     // Deliberately NO stub: this jsdom has no matchMedia at all, and
     // vi.unstubAllGlobals in afterEach has already cleared any earlier one.
     const cleanup = $effect.root(() => {
-      const mq = mediaQuery('(min-width: 768px)');
+      const mq = mediaQuery('(min-width: 500px)');
       flushSync();
       expect(mq.current).toBe(false);
     });
@@ -88,7 +88,7 @@ describe('mediaQuery', () => {
 
   it('reports the explicit fallback when matchMedia is absent', () => {
     const cleanup = $effect.root(() => {
-      const mq = mediaQuery('(min-width: 768px)', true);
+      const mq = mediaQuery('(min-width: 500px)', true);
       flushSync();
       expect(mq.current).toBe(true);
     });

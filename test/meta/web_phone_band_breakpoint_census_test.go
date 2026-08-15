@@ -68,35 +68,65 @@ var bandedViewportRules = []bandedViewportRule{
 	{"web/src/lib/components/TopBar.svelte", ruleAtOrAboveM},
 }
 
-// forbiddenViewportWidths are the four decimal strings a hand-written md or lg
-// breakpoint takes, in BOTH spellings: the `max-width` complements (767, 1023)
-// and the `min-width` forms (768, 1024).
+// forbiddenViewportWidths are the strings a hand-written md or lg breakpoint
+// takes. Four decimals, in BOTH px spellings — the `max-width` complements
+// (767, 1023) and the `min-width` forms (768, 1024) — plus the two rem
+// spellings the Tailwind tokens compile to (48rem, 64rem).
 //
 // There is no exemption by spelling. `min-width: 768px` is exactly as much a
 // hand-written copy of --breakpoint-md as `max-width: 767px` is, and this tree
 // carried the two in roughly equal number before the conversion. A census that
 // forbade only one would license the other one directory over.
-var forbiddenViewportWidths = []string{"767", "768", "1023", "1024"}
+//
+// The rem forms are here because they are now the VISIBLE form of these
+// breakpoints: `theme(--breakpoint-md)` compiles to `48rem` in the emitted
+// stylesheet, and a reader who inspects the build and copies what they see
+// types `48rem`, not `768px`. That makes the rem spelling the most likely
+// future hand-written duplication, and a census that forbade only the retired
+// px spelling would license the live one.
+var forbiddenViewportWidths = []string{"767", "768", "1023", "1024", "48rem", "64rem"}
 
-// breakpointLiteralAllowlist maps a repo-relative PATH to the reason every
-// forbidden literal in it is permitted.
+// breakpointExemption is one allowlist entry: the SYMBOL whose declaration and
+// pin are permitted to carry a forbidden width, and why.
+//
+// The symbol — not the file — is the unit of exemption. A file-wide exemption
+// would silently absorb a SECOND hand-written media-query constant added beside
+// the first, which is exactly the duplication this census exists to catch.
+type breakpointExemption struct {
+	symbol string
+	reason string
+}
+
+// breakpointLiteralAllowlist maps a repo-relative PATH to the exemption that
+// applies inside it. A line in an allowlisted file is exempt only when it also
+// carries the exemption's symbol; any other forbidden literal in that same file
+// is an ordinary offender.
 //
 // It is keyed by PATH, not by path:line. Both exempt files are edited by
 // ordinary work — a case inserted above a fixture moves every line below it —
 // and a stale path:line key does not merely fail: it fails OPEN, silently
 // exempting whichever line inherited the number while permitting the literal
-// this census exists to catch. Nothing else in either file needs scanning, so
-// the path key gives up no coverage the line keys were buying.
-var breakpointLiteralAllowlist = map[string]string{
-	"web/src/lib/hooks/mediaQuery.svelte.ts": "the DESKTOP_MEDIA_QUERY declaration — THE single source of truth for the " +
-		"JS half of the bridge. Tailwind v4 compiles --breakpoint-md away at build time and does not " +
-		"emit it to :root, so the JS side provably cannot read the token at runtime and one authored " +
-		"number is unavoidable; forbidding it would forbid the fix",
-	"web/src/lib/hooks/mediaQuery.svelte.test.ts": "two kinds of line, both in the one file whose whole job is that constant. " +
-		"The expect(DESKTOP_MEDIA_QUERY).toBe(...) assertion PINS the exempted declaration — it is the " +
-		"guard on that line, not a second copy of it, and it is why a silent edit to the hook fails " +
-		"`task test`. The mediaQuery('(min-width: 768px)') fixtures are test INPUTS to the hook under " +
-		"test, not declarations of a boundary any surface renders at",
+// this census exists to catch. The symbol scope inside the file is what the
+// line keys were really buying, and it moves with the constant.
+var breakpointLiteralAllowlist = map[string]breakpointExemption{
+	"web/src/lib/hooks/mediaQuery.svelte.ts": {
+		symbol: "DESKTOP_MEDIA_QUERY",
+		reason: "the DESKTOP_MEDIA_QUERY declaration — THE single source of truth for the " +
+			"JS half of the bridge. SSR and this jsdom have no stylesheet to read, so the " +
+			"non-browser path needs a literal and one authored value is unavoidable; forbidding " +
+			"it would forbid the fix. That literal is pinned to the built Tailwind token by the " +
+			"browser proof in web/e2e/admin-band-root-font.spec.ts, which reads --breakpoint-md " +
+			"off :root at runtime and asserts the two halves are exact complements, and it is " +
+			"pinned to ONE place by this census",
+	},
+	"web/src/lib/hooks/mediaQuery.svelte.test.ts": {
+		symbol: "DESKTOP_MEDIA_QUERY",
+		reason: "the expect(DESKTOP_MEDIA_QUERY).toBe(...) assertion PINS the exempted " +
+			"declaration — it is the guard on that line, not a second copy of it, and it is why " +
+			"a silent edit to the hook fails `task test`. The hook's other fixtures pass an " +
+			"arbitrary off-band width, because they are test INPUTS to the hook under test, not " +
+			"declarations of a boundary any surface renders at",
+	},
 }
 
 // isViewportDecidingLine reports whether a source line DECIDES a viewport band.
@@ -174,10 +204,13 @@ func referenceDirectiveFor(t *testing.T, repoRelPath string) string {
 //
 // It is a guard over SOURCE TEXT, not over rendered layout. It cannot see
 // whether the rules fire at the same width in a browser — that is the boundary
-// block in web/e2e/admin-portal.spec.ts. And it cannot tie the one deliberately
-// allowlisted authored number, DESKTOP_MEDIA_QUERY, to a token the build
-// compiles away; what it does instead is force that number to exist in exactly
-// one place, pinned by exactly one assertion. See breakpointLiteralAllowlist.
+// block in web/e2e/admin-portal.spec.ts, and, at a NON-default root font size
+// where the two units can diverge, web/e2e/admin-band-root-font.spec.ts. Nor
+// does it tie the one deliberately allowlisted authored value,
+// DESKTOP_MEDIA_QUERY, to the token the build emits; that tie is the browser
+// proof's job. What this census does instead is force that value to exist in
+// exactly one place, pinned by exactly one assertion, in the same unit as the
+// CSS half. See breakpointLiteralAllowlist.
 func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T) {
 	root := findRepoRoot(t)
 	walkRoot := filepath.Join(root, webSrcDir)
@@ -224,7 +257,11 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 			if !lineCarriesForbiddenWidth(line) {
 				continue
 			}
-			if _, allowed := breakpointLiteralAllowlist[relSlash]; allowed {
+			// Symbol-scoped, not file-scoped: a forbidden width on a line that
+			// does NOT carry the exempted symbol is an ordinary offender even
+			// inside an allowlisted file. A hit therefore means "a line
+			// carrying the exempted symbol AND a forbidden width".
+			if ex, allowed := breakpointLiteralAllowlist[relSlash]; allowed && strings.Contains(line, ex.symbol) {
 				allowlistHits[relSlash]++
 				continue
 			}
@@ -250,13 +287,35 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 	// This runs BEFORE the offender assertion on purpose: a stale allowlist
 	// invalidates what the offender list MEANS, so it must be reported first and
 	// must stay reachable while offenders are outstanding.
-	for path, reason := range breakpointLiteralAllowlist {
-		require.FileExists(t, filepath.Join(root, path),
+	for path, ex := range breakpointLiteralAllowlist {
+		abs := filepath.Join(root, path)
+		require.FileExists(t, abs,
 			"allowlisted path %q no longer exists; its exemption (%s) is dead and must be removed",
-			path, reason)
+			path, ex.reason)
+
+		content, readErr := os.ReadFile(abs)
+		require.NoError(t, readErr, "read allowlisted path %q", path)
+		require.Contains(t, string(content), ex.symbol,
+			"allowlisted path %q no longer mentions %q — the exemption names a symbol the file "+
+				"does not declare, so it is dead and must be removed (or repointed at the symbol "+
+				"that replaced it). Exemption: %s",
+			path, ex.symbol, ex.reason)
+
+		// Symbol-scoped meaning: zero hits means %q is present but no longer
+		// declares a width literal at all, at which point the exemption buys
+		// nothing and is genuinely stale.
+		//
+		// A rem literal on that line satisfies this assertion exactly as a px
+		// literal did — `48rem` is a forbidden width here just as `768` is.
+		// This assertion is keyed to the SYMBOL, never to a spelling, so
+		// rewriting the constant from px to rem (or back) leaves it green.
+		// Read that sentence before concluding the guard rejects its own repair.
 		require.Positive(t, allowlistHits[path],
-			"allowlisted path %q carries no viewport-deciding line with a forbidden width; "+
-				"its exemption (%s) is stale and must be removed", path, reason)
+			"allowlisted path %q declares %q but no line carrying that symbol also carries a "+
+				"forbidden viewport width; the exemption buys nothing and is stale. (A rem width "+
+				"such as 48rem counts here exactly as 768 does — this check is symbol-scoped, not "+
+				"spelling-scoped.) Exemption: %s",
+			path, ex.symbol, ex.reason)
 	}
 
 	require.Empty(t, offenders,
