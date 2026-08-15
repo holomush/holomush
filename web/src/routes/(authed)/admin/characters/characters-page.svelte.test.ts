@@ -10,6 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
+import { ConnectError, Code } from '@connectrpc/connect';
 import type { CharacterPage, CharacterRow } from '$lib/admin/client';
 
 /**
@@ -22,7 +23,20 @@ import type { CharacterPage, CharacterRow } from '$lib/admin/client';
 const impl = vi.hoisted(() => ({
   list: null as unknown as (q: unknown) => Promise<CharacterPage>,
   search: null as unknown as (q: unknown, term: string) => Promise<CharacterPage>,
-  calls: [] as { kind: 'list' | 'search'; term?: string }[],
+  detail: null as unknown as (id: string) => Promise<unknown>,
+  update: null as unknown as (args: unknown) => Promise<unknown>,
+  retire: null as unknown as (id: string, v: number) => Promise<unknown>,
+  unretire: null as unknown as (id: string, v: number) => Promise<unknown>,
+  calls: [] as {
+    kind: 'list' | 'search' | 'detail' | 'update' | 'retire' | 'unretire';
+    term?: string;
+    args?: unknown;
+    expectedVersion?: number;
+  }[],
+  /** Every toast fired, in order, with the action label when one is offered. */
+  toasts: [] as { message: string; action?: string; duration?: number }[],
+  /** The most recent toast's Undo handler, so a test can trigger it. */
+  undo: null as null | (() => void),
 }));
 
 vi.mock('$lib/admin/client', async (importActual) => {
@@ -37,8 +51,37 @@ vi.mock('$lib/admin/client', async (importActual) => {
       impl.calls.push({ kind: 'search', term });
       return impl.search(q, term);
     },
+    getAdminCharacter: (id: string) => {
+      impl.calls.push({ kind: 'detail' });
+      return impl.detail(id);
+    },
+    updateAdminCharacter: (args: unknown) => {
+      impl.calls.push({ kind: 'update', args });
+      return impl.update(args);
+    },
+    retireAdminCharacter: (id: string, v: number) => {
+      impl.calls.push({ kind: 'retire', expectedVersion: v });
+      return impl.retire(id, v);
+    },
+    unretireAdminCharacter: (id: string, v: number) => {
+      impl.calls.push({ kind: 'unretire', expectedVersion: v });
+      return impl.unretire(id, v);
+    },
   };
 });
+
+/**
+ * The toast is replaced by a recorder. It is a RECEIPT and never the sole
+ * carrier of an outcome — the row already updated in place — so these cases
+ * assert that one fired and what it named, not that anything depended on it.
+ */
+vi.mock('svelte-sonner', () => ({
+  toast: (message: string, opts?: { duration?: number; action?: { label: string; onClick: () => void } }) => {
+    impl.toasts.push({ message, action: opts?.action?.label, duration: opts?.duration });
+    impl.undo = opts?.action?.onClick ?? null;
+    return 1;
+  },
+}));
 
 const CharactersPage = (await import('./+page.svelte')).default;
 
@@ -56,6 +99,13 @@ const row = (i: number): CharacterRow => ({
 });
 
 const rows = (n: number) => Array.from({ length: n }, (_, i) => row(i));
+
+/** What AdminGetCharacter returns behind the Sheet: prose the row never has. */
+const DETAIL = {
+  character: { version: 1 },
+  description: 'A tall figure in a long grey coat.',
+  profile: { 'profile.concept': 'Wandering archivist' },
+};
 
 function render(data: { rows: CharacterRow[]; totalCount: bigint; loadFailed: boolean }) {
   const target = document.createElement('div');
@@ -82,8 +132,14 @@ const typeSearch = async (target: HTMLElement, value: string) => {
 beforeEach(() => {
   vi.useFakeTimers();
   impl.calls = [];
+  impl.toasts = [];
+  impl.undo = null;
   impl.list = async () => ({ rows: [], totalCount: 0n });
   impl.search = async () => ({ rows: [], totalCount: 0n });
+  impl.detail = async () => DETAIL;
+  impl.update = async () => ({ ...row(0), version: 8 });
+  impl.retire = async () => ({ ...row(0), status: 'retired', version: 8 });
+  impl.unretire = async () => ({ ...row(0), status: 'active', version: 9 });
 });
 
 afterEach(() => {
@@ -261,6 +317,247 @@ describe('/admin/characters — the search wire', () => {
     impl.calls = [];
     await typeSearch(target, '');
     expect(impl.calls.map((c) => c.kind)).toEqual(['list']);
+    unmount(component);
+  });
+});
+
+/**
+ * D-110's binding sequence, driven through the real Sheet and the real confirm.
+ *
+ * The success and the conflict paths differ in exactly three places — whether
+ * the Sheet closes, whether the typed text survives, and whether a receipt
+ * fires — and each of those is asserted on both sides here rather than on the
+ * side where it happens to be convenient.
+ */
+const sheet = () => document.body.querySelector('[data-slot="sheet-content"]') as HTMLElement | null;
+const confirm = () =>
+  document.body.querySelector('[data-slot="alert-dialog-content"]') as HTMLElement | null;
+
+async function settle() {
+  for (let i = 0; i < 6; i++) {
+    await Promise.resolve();
+    flushSync();
+  }
+}
+
+function clickRowAction(target: HTMLElement, rowId: string, label: string) {
+  const tr = target.querySelector(`[data-row-id="${rowId}"]`) as HTMLElement;
+  const btn = [...tr.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
+  if (!btn) throw new Error(`no row action ${label}`);
+  (btn as HTMLButtonElement).click();
+  flushSync();
+}
+
+function sheetField(name: string): HTMLInputElement | HTMLTextAreaElement {
+  const el = sheet()!.querySelector(`[name="${name}"]`);
+  if (!el) throw new Error(`no sheet control named ${name}`);
+  return el as HTMLInputElement | HTMLTextAreaElement;
+}
+
+function typeInSheet(name: string, value: string) {
+  const el = sheetField(name);
+  el.value = value;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  flushSync();
+}
+
+describe('/admin/characters — D-110: the success path', () => {
+  it('closes the Sheet, updates the row from the response, and fires one receipt', async () => {
+    impl.list = async () => ({ rows: rows(2), totalCount: 2n });
+    impl.update = async () => ({ ...row(0), name: 'Name 0', version: 8 });
+    const { target, component } = render({ rows: rows(2), totalCount: 2n, loadFailed: false });
+
+    clickRowAction(target, 'c0', 'Edit');
+    await settle();
+    expect(sheet()).not.toBeNull();
+
+    typeInSheet('concept', 'Archivist, retired');
+    const save = sheet()!.querySelector('[data-testid="sheet-save"]') as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    expect(save.textContent?.trim()).toBe('Save changes');
+
+    const before = impl.calls.filter((c) => c.kind === 'list' || c.kind === 'search').length;
+    (sheet()!.querySelector('form') as HTMLFormElement).requestSubmit();
+    await settle();
+
+    // 3 — the Sheet closed.
+    expect(sheet()).toBeNull();
+    // 4 — the row's rendered version came from the RESPONSE.
+    const tr = target.querySelector('[data-row-id="c0"]') as HTMLElement;
+    expect(tr.textContent).toContain('8');
+    // …with no list request between the mutation and the row update.
+    const after = impl.calls.filter((c) => c.kind === 'list' || c.kind === 'search').length;
+    expect(after - before).toBe(0);
+    // 5 — one receipt, naming the RPC and the version transition.
+    expect(impl.toasts).toHaveLength(1);
+    expect(impl.toasts[0].message).toContain('AdminUpdateCharacter');
+    expect(impl.toasts[0].message).toContain('update_mask: 1 paths');
+    expect(impl.toasts[0].message).toContain('v1 → v8');
+    expect(impl.toasts[0].duration).toBe(6000);
+
+    unmount(component);
+  });
+
+  it('marks the submit busy without swapping its label, before the Sheet closes', async () => {
+    let release!: (v: unknown) => void;
+    impl.update = () =>
+      new Promise((res) => {
+        release = res;
+      });
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Edit');
+    await settle();
+    typeInSheet('concept', 'x');
+    (sheet()!.querySelector('form') as HTMLFormElement).requestSubmit();
+    await settle();
+
+    // 1 — label kept, disabled, aria-busy. 2 — the row is the pending one.
+    const save = sheet()!.querySelector('[data-testid="sheet-save"]') as HTMLButtonElement;
+    expect(save.textContent?.trim()).toBe('Save changes');
+    expect(save.getAttribute('aria-busy')).toBe('true');
+    expect(save.disabled).toBe(true);
+    expect(
+      (target.querySelector('[data-row-id="c0"]') as HTMLElement).getAttribute('aria-busy'),
+    ).toBe('true');
+    expect(impl.toasts).toHaveLength(0);
+
+    release({ ...row(0), version: 8 });
+    await settle();
+    expect(sheet()).toBeNull();
+    unmount(component);
+  });
+});
+
+describe('/admin/characters — D-110: the Aborted path', () => {
+  it('keeps the Sheet open with its typed text, names both versions, and fires no receipt', async () => {
+    let detailCalls = 0;
+    impl.detail = async () => {
+      detailCalls += 1;
+      return detailCalls === 1 ? DETAIL : { ...DETAIL, character: { version: 9 } };
+    };
+    impl.update = async () => {
+      throw new ConnectError('stale', Code.Aborted);
+    };
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Edit');
+    await settle();
+    typeInSheet('concept', 'Still mine');
+    (sheet()!.querySelector('form') as HTMLFormElement).requestSubmit();
+    await settle();
+
+    // 3 — the Sheet stayed open. 4 — the typed text survived.
+    expect(sheet()).not.toBeNull();
+    expect(sheetField('concept').value).toBe('Still mine');
+    // 5 — the conflict alert, with both numbers, and NO receipt.
+    const alert = sheet()!.querySelector('[role="alert"]') as HTMLElement;
+    expect(alert.textContent).toContain('version 1');
+    expect(alert.textContent).toContain('9');
+    expect(impl.toasts).toEqual([]);
+    // The row is no longer pending.
+    expect(
+      (target.querySelector('[data-row-id="c0"]') as HTMLElement).getAttribute('aria-busy'),
+    ).toBeNull();
+    unmount(component);
+  });
+});
+
+describe('/admin/characters — the lifecycle transitions', () => {
+  it('routes the row action to the confirm and sends no RPC until it is confirmed', async () => {
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Retire…');
+    await settle();
+    expect(confirm()).not.toBeNull();
+    expect(impl.calls.filter((c) => c.kind === 'retire')).toEqual([]);
+    unmount(component);
+  });
+
+  it('routes the Sheet picker to the same confirm', async () => {
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Edit');
+    await settle();
+    const picker = sheet()!.querySelector('select[name="lifecycle"]') as HTMLSelectElement;
+    picker.value = 'retired';
+    picker.dispatchEvent(new Event('change', { bubbles: true }));
+    flushSync();
+    await settle();
+    expect(confirm()).not.toBeNull();
+    expect(impl.calls.filter((c) => c.kind === 'retire')).toEqual([]);
+    unmount(component);
+  });
+
+  it('sends AdminRetireCharacter on confirm and offers an Undo receipt', async () => {
+    impl.retire = async () => ({ ...row(0), status: 'retired', version: 8 });
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Retire…');
+    await settle();
+    (confirm()!.querySelector('[data-testid="lifecycle-confirm"]') as HTMLButtonElement).click();
+    await settle();
+
+    expect(impl.calls.filter((c) => c.kind === 'retire')).toEqual([
+      { kind: 'retire', expectedVersion: 1 },
+    ]);
+    expect(confirm()).toBeNull();
+    const tr = target.querySelector('[data-row-id="c0"]') as HTMLElement;
+    expect(tr.textContent).toContain('retired');
+    expect(impl.toasts).toHaveLength(1);
+    expect(impl.toasts[0].message).toContain('AdminRetireCharacter');
+    expect(impl.toasts[0].message).toContain('v1 → v8');
+    expect(impl.toasts[0].action).toBe('Undo');
+    unmount(component);
+  });
+
+  it('sends AdminUnretireCharacter from Undo, at the NEW version, through the same path', async () => {
+    impl.retire = async () => ({ ...row(0), status: 'retired', version: 8 });
+    impl.unretire = async () => ({ ...row(0), status: 'active', version: 9 });
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Retire…');
+    await settle();
+    (confirm()!.querySelector('[data-testid="lifecycle-confirm"]') as HTMLButtonElement).click();
+    await settle();
+
+    expect(impl.undo).not.toBeNull();
+    impl.undo!();
+    await settle();
+
+    // The un-retire RPC, never a status value, at the version the retire
+    // response returned.
+    expect(impl.calls.filter((c) => c.kind === 'unretire')).toEqual([
+      { kind: 'unretire', expectedVersion: 8 },
+    ]);
+    const tr = target.querySelector('[data-row-id="c0"]') as HTMLElement;
+    expect(tr.textContent).toContain('active');
+    unmount(component);
+  });
+
+  it('offers no Undo on the un-retire receipt', async () => {
+    impl.unretire = async () => ({ ...row(0), status: 'active', version: 8 });
+    const { target, component } = render({
+      rows: [{ ...row(0), status: 'retired' }],
+      totalCount: 1n,
+      loadFailed: false,
+    });
+    clickRowAction(target, 'c0', 'Un-retire');
+    await settle();
+    (confirm()!.querySelector('[data-testid="lifecycle-confirm"]') as HTMLButtonElement).click();
+    await settle();
+    expect(impl.toasts).toHaveLength(1);
+    expect(impl.toasts[0].message).toContain('AdminUnretireCharacter');
+    expect(impl.toasts[0].action).toBeUndefined();
+    unmount(component);
+  });
+
+  it('keeps the confirm open on a lifecycle failure and fires no receipt', async () => {
+    impl.retire = async () => {
+      throw new ConnectError('boom', Code.Internal);
+    };
+    const { target, component } = render({ rows: rows(1), totalCount: 1n, loadFailed: false });
+    clickRowAction(target, 'c0', 'Retire…');
+    await settle();
+    (confirm()!.querySelector('[data-testid="lifecycle-confirm"]') as HTMLButtonElement).click();
+    await settle();
+    expect(confirm()).not.toBeNull();
+    expect(confirm()!.textContent).toContain("Couldn't change this character's lifecycle. Try again.");
+    expect(impl.toasts).toEqual([]);
     unmount(component);
   });
 });
