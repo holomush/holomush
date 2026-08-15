@@ -45,6 +45,10 @@
 </nav>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   .adminnav {
     display: flex;
     flex-direction: column;
@@ -118,7 +122,7 @@
   /* Narrowed strip. The label stays in the DOM and stays announced — clipped,
      never display:none — so the entry keeps its accessible name where the
      visible text is gone, and the badge becomes a dot. */
-  @media (max-width: 1023px) {
+  @media (width < theme(--breakpoint-lg)) {
     .navitem {
       justify-content: center;
       padding: 0;

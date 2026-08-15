@@ -55,8 +55,9 @@
     <div class="adminnav-col">
       <AdminNav sections={data.sections} {activeId} />
       <!-- Returns at the narrowed strip's foot, where the nav's own copy is
-           clipped. Rendered only inside the 1023px band so it never doubles
-           up at full width. Fallback only: no media path exists yet. -->
+           clipped. Rendered only inside the sub-lg band (Tailwind's
+           --breakpoint-lg) so it never doubles up at full width. Fallback
+           only: no media path exists yet. -->
       <div class="rail-identity">
         <Avatar.Root class="size-7">
           <Avatar.Fallback class="identity-plate">{initials}</Avatar.Fallback>
@@ -87,13 +88,18 @@
 {/if}
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   /* Two columns. The rail is inherited from the parent shell one level up;
      rendering a second one here would double it.
 
-     Every rule below is a VIEWPORT @media at the literals the shipped rail
-     already uses, so the rail's collapse and this frame's collapse fire at the
-     same moment BY CONSTRUCTION rather than by an argument about how wide some
-     element happens to be. Nothing here declares containment: an element with
+     Every rule below is a VIEWPORT @media reading the SAME Tailwind
+     --breakpoint-md / --breakpoint-lg tokens the shipped rail reads, so the
+     rail's collapse and this frame's collapse fire at the same moment BY
+     CONSTRUCTION rather than by an argument about how wide some element happens
+     to be. Nothing here declares containment: an element with
      layout containment becomes the containing block for every fixed-position
      descendant, and the authed subtree has several — plus every overlay, whose
      height percentages resolve against the viewport. */
@@ -181,7 +187,7 @@
   /* The nav narrows to a rail-width strip in THIS column, sitting adjacent to
      the inherited rail so the two read as one continuous column. The entries
      stay rendered here, where the awaited list actually is. */
-  @media (max-width: 1023px) {
+  @media (width < theme(--breakpoint-lg)) {
     .adminnav-col {
       width: var(--rail-w);
     }
@@ -190,7 +196,7 @@
     }
   }
 
-  @media (max-width: 767px) {
+  @media (width < theme(--breakpoint-md)) {
     .adminnav-col {
       width: 0;
       border-right-width: 0;

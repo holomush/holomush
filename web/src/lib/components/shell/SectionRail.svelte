@@ -148,6 +148,10 @@
 </aside>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../../app.css";
+
   .rail {
     width: var(--rail-w);
     flex-shrink: 0;
@@ -165,7 +169,7 @@
     border-right-width: 0;
   }
   /* Persistent desktop rail collapses on small screens; the drawer is exempt. */
-  @media (max-width: 767px) {
+  @media (width < theme(--breakpoint-md)) {
     .rail:not(.is-drawer) {
       width: 0;
       border-right-width: 0;
@@ -252,9 +256,10 @@
      section you are actually on. Two "you are here" bars in one visual column
      at two hierarchy levels reads as a bug. Scoped INSIDE the query on
      purpose — a global rule would strip the bar at full width, where it is the
-     only location signal. The 1023px literal is the shipped rail's own
-     mechanism and its sibling literal, so the two collapse by construction. */
-  @media (max-width: 1023px) {
+     only location signal. The width comes from Tailwind's --breakpoint-lg
+     token, which the admin nav's own rule also reads, so the two collapse by
+     construction rather than by two numbers happening to agree. */
+  @media (width < theme(--breakpoint-lg)) {
     .rail:not(.is-drawer) .rail-btn.is-context {
       opacity: 0.7;
     }
