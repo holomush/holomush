@@ -438,13 +438,17 @@ func TestNoAuthoredViewportRuleCarriesAHandWrittenBreakpointLiteral(t *testing.T
 	//     subtracting a margin, by filtering the tally, or by loosening the
 	//     comparison; that is relaxing a guard rather than repairing it.
 	//
-	//     Which guard catches what, precisely — the two are NOT redundant:
-	//     deleting one banded rule moves this comparison from 18 >= 16 to
-	//     17 >= 15, which still PASSES. The two lines of headroom are exactly the
-	//     two allowlisted symbol lines counted in (1), and they do not shrink when
-	//     a rule is deleted. A deletion is caught by the occurrence assertion in
-	//     the sibling test, which compares per-rule counts by equality. This floor
-	//     catches a different failure: the walk ceasing to REACH the corpus at all.
+	//     Which guard catches what, precisely — the two are NOT redundant.
+	//     Deleting one banded rule leaves this comparison PASSING on either path:
+	//     accidentally (the rule vanishes from source, the census `count` here is
+	//     left behind) gives 17 >= 16; deliberately (both dropped together, as the
+	//     sibling's own failure message instructs) gives 17 >= 15. The accidental
+	//     path is the one that matters, and this floor does not catch it. The two
+	//     lines of headroom are exactly the two allowlisted symbol lines counted
+	//     in (1), and they do not shrink when a rule is deleted. A deletion is
+	//     caught by the occurrence assertion in the sibling test, which compares
+	//     per-rule counts by equality. This floor catches a different failure: the
+	//     walk ceasing to REACH the corpus at all.
 	ruleCensusOccurrences := 0
 	for _, r := range bandedViewportRules {
 		ruleCensusOccurrences += r.count
