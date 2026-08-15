@@ -18,6 +18,24 @@
     <Empty.Title class="planned-name">{data.entry.displayName}</Empty.Title>
     <Empty.Description class="planned-line">Registered and gated. No handler yet.</Empty.Description>
   </Empty.Root>
+{:else}
+  <!--
+    LOUD, NOT BLANK. An `available` entry reaching the parameterised route means
+    no concrete route claimed it, which is a routing bug rather than a state the
+    operator caused. The load has already resolved the entry and answered 200,
+    so without this branch the frame, the rail and the breadcrumb all render
+    around an entirely empty content column — no copy, no error, nothing to
+    attribute. Today `characters` is the only available id and its own route
+    shadows this one; the registry's own comment anticipates a second flipping
+    as an ordinary PR.
+
+    No action: there is nowhere to send them.
+  -->
+  <Empty.Root class="planned" data-section-state="unhandled">
+    <Empty.Media variant="icon" class="planned-media"><CircleDashed size={16} /></Empty.Media>
+    <Empty.Title class="planned-name">{data.entry.displayName}</Empty.Title>
+    <Empty.Description class="planned-line">This section is not available here.</Empty.Description>
+  </Empty.Root>
 {/if}
 
 <style>

@@ -67,6 +67,39 @@ describe('the planned-section state', () => {
     unmount(component);
   });
 
+  /**
+   * The negative above is satisfied by rendering NOTHING, which is what the
+   * template did. The load has already resolved the entry and answered 200, so
+   * an `available` id with no concrete route drew the admin frame, the
+   * breadcrumb and a completely empty content column — no copy, no error, no
+   * not-found. Today `characters` is the only available row and its own
+   * concrete route shadows this one, so the branch is unreachable; it becomes
+   * reachable the moment a second section flips, and a blank screen with no
+   * console error and green tests is the hardest kind of failure to attribute.
+   */
+  it('renders an authored line for an available entry rather than an empty column', () => {
+    const { target, component } = render({
+      id: 'one',
+      displayName: 'Name One',
+      status: 'available',
+    });
+    const rendered = flat(target);
+    expect(rendered).toContain('Name One');
+    expect(rendered).toContain('This section is not available here.');
+    expect(rendered).not.toContain(COPY);
+    expect(target.querySelector('[data-section-state="unhandled"]')).not.toBeNull();
+    unmount(component);
+  });
+
+  it('offers no action in the unhandled state either', () => {
+    // There is nowhere to send the operator: an available entry arriving here
+    // is a routing bug, not a destination.
+    const { target, component } = render({ id: 'one', displayName: 'X', status: 'available' });
+    expect(target.querySelectorAll('button, [role="button"]')).toHaveLength(0);
+    expect(target.querySelectorAll('a[href], [role="link"]')).toHaveLength(0);
+    unmount(component);
+  });
+
   it('wraps a long name rather than truncating it', () => {
     const long = 'Ackermann Bureau of Contingent Provisioning Oversight';
     expect(long.length).toBeGreaterThan(40);
