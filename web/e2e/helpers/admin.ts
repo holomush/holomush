@@ -51,7 +51,32 @@ export async function gotoAdminCharacters(page: Page, charName: string) {
   // The random letters-only tail of the generated name: unique, ASCII, and a
   // substring of the stored normal form whatever the folding turns out to be.
   const term = charName.split(' ').pop() ?? charName;
+
+  // SETTLE THE SEARCH THIS HELPER STARTS — not merely the row it was looking for.
+  //
+  // `fill` arms CharacterFilterBar's 250ms debounce, and the row assertion below
+  // does NOT wait for it. A character this fixture just created is already on
+  // page 1 of the INITIAL unfiltered list, so the row can be present before the
+  // search has even been issued — measured: the only list read before the row
+  // appeared was the `+page.ts` load. The helper would then return with the timer
+  // still armed, and the search would land, as a WebAdminSearchCharacters read
+  // attributable to nothing the caller did, inside whatever the caller measured
+  // next.
+  //
+  // That is holomush-i4986. The D-110 spec snapshots the list-call count and
+  // asserts a mutation causes zero re-reads; the stray read lands inside that
+  // window whenever `fill`→snapshot is under 250ms and `fill`→assertion is over
+  // it. Locally it missed by 70ms; on CI's slower coverage-instrumented image the
+  // write round trip widened the window and it landed inside, 3/3.
+  //
+  // Awaiting the response is what makes "narrowed to one character" TRUE on
+  // return, rather than "a matching row happens to be on screen". Registered
+  // before the fill so a fast answer cannot be missed.
+  const searched = page.waitForResponse((r) => r.url().includes('WebAdminSearchCharacters'), {
+    timeout: 15000,
+  });
   await page.locator('input[name="q"]').fill(term);
+  await searched;
   await expect(rowFor(page, charName)).toHaveCount(1, { timeout: 15000 });
 }
 
