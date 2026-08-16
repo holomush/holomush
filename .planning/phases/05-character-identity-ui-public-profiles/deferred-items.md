@@ -54,3 +54,24 @@ classifies `AlreadyExists` by code and never renders the server's sentence.
 0 failed, 1 skipped, 116 total. Nothing was quarantined.
 
 **Status:** closed.
+
+## Deferred Items
+
+<!--
+The machine-readable ledger `audit-uat` reads. Everything above is the human
+narrative; this section is what `uat.cjs::parseDeferredItems` parses.
+
+Two things matter about the heading itself. It BOUNDS the scan: without a level-2
+`Deferred Items` heading the parser falls back to treating the whole file as the
+section body, and then `parseDeferredTableItems` surfaces every GFM table row —
+which is why the `File | Lines` table above was reported as six outstanding items.
+And it is the only place a `status:` field is honored: closure requires the exact
+token `resolved` (or `done`/`pass` in a table cell). `**Status:** closed.` above is
+prose — `closed` is not in that vocabulary and never closed anything.
+-->
+
+- item: Eight Playwright specs drive the deleted inline create form
+  status: resolved
+  resolved_by: plan 05-08
+  resolved_at: 2026-08-16
+  evidence: "`task test:e2e` exit 0 — 115 passed, 0 failed, 1 skipped. `/characters/new` exists; zero specs reference `Create New Character`; the surviving `input[name=\"characterName\"]` fills are the /register flow, deliberately preserved by 05-06."
