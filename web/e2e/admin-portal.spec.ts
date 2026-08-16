@@ -46,22 +46,69 @@ const overlay = (page: Page) => page.locator('[data-slot="sheet-overlay"]');
  */
 async function tapRowOutsideNameCell(page: Page, name: string) {
   const cell = rowFor(page, name).locator('td.cell-status');
-  await cell.scrollIntoViewIfNeeded();
 
-  // The rect and the hit test are read in ONE evaluate, inside the page, so
-  // they are the same viewport coordinates. A Playwright boundingBox is
-  // page-relative and disagrees with elementFromPoint's viewport coordinates
-  // the moment anything has scrolled — measured: it returned <html>.
-  const hit = await cell.evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    const x = r.x + r.width / 2;
-    const y = r.y + r.height / 2;
-    const top = document.elementFromPoint(x, y);
-    return { x, y, tag: top?.tagName ?? '', cls: top?.className?.toString() ?? '' };
-  });
+  // SETTLE BEFORE TOUCHING. The table re-renders on the debounced search, and a
+  // re-render between resolving this cell and interacting with it swaps the node
+  // out underneath us. Observed BOTH ways under load (holomush-i4981):
+  // `scrollIntoViewIfNeeded` throwing "element is not stable", and the tap
+  // landing on a detached node so the Sheet never opens. A one-shot read cannot
+  // tell a settled row from one caught mid-swap, which is why this is polled and
+  // not merely retried.
+  //
+  // Same discipline as `columnsAt`: require two CONSECUTIVE identical reads. On a
+  // slow machine that costs time, not correctness — the assertions below run
+  // against the settled read, so a genuinely wrong overlay still fails. A row
+  // that never settles fails the poll with a message saying so, rather than
+  // failing later somewhere less legible.
+  let previous = '';
+  let hit!: { x: number; y: number; tag: string; cls: string };
+
+  await expect
+    .poll(
+      async () => {
+        try {
+          // Re-scrolled every round: a re-render can move the row out of view
+          // again. A throw here IS the unsettled state this poll exists to wait
+          // out — swallow it, reset the streak, and try again rather than
+          // treating it as a failure.
+          await cell.scrollIntoViewIfNeeded({ timeout: 1_000 });
+
+          // The rect and the hit test are read in ONE evaluate, inside the page,
+          // so they are the same viewport coordinates. A Playwright boundingBox
+          // is page-relative and disagrees with elementFromPoint's viewport
+          // coordinates the moment anything has scrolled — measured: it returned
+          // <html>.
+          hit = await cell.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const x = r.x + r.width / 2;
+            const y = r.y + r.height / 2;
+            const top = document.elementFromPoint(x, y);
+            return { x, y, tag: top?.tagName ?? '', cls: top?.className?.toString() ?? '' };
+          });
+        } catch {
+          previous = '';
+          return false;
+        }
+
+        const current = JSON.stringify(hit);
+        const stable = previous !== '' && current === previous;
+        previous = current;
+        return stable;
+      },
+      {
+        message:
+          `the row for ${name} never stopped moving — its geometry and hit test ` +
+          'kept changing, so the debounced re-render never settled',
+        intervals: [50, 50, 100, 100, 250],
+        timeout: 10_000,
+      },
+    )
+    .toBe(true);
 
   // The overlay genuinely spans the row: the topmost element over the Status
-  // cell is the Name cell's button, not the cell.
+  // cell is the Name cell's button, not the cell. Unchanged by the settle above —
+  // a stably WRONG hit test satisfies the poll and then fails right here, which
+  // is the property under test and must stay reachable.
   expect(hit.tag).toBe('BUTTON');
   expect(hit.cls).toContain('rowbtn');
 
