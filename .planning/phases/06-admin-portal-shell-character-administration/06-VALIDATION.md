@@ -30,7 +30,7 @@ validated: 2026-08-16
 | **Config file** | `Taskfile.yaml` (targets verified: `test`:185, `test:int`:265, `test:e2e`:310, `web:test`:710) |
 | **Quick run command** | `task test -- ./internal/admin/... ./internal/grpc/...` |
 | **Full suite command** | `task pr-prep` (fast lane: schema/license/lint/fmt/unit/build/bats + `web:test`) |
-| **Estimated runtime** | ~{TBD — measure at Wave 0} seconds |
+| **Estimated runtime** | scoped unit run seconds; full `task test` measured at **88.7s** (11852 tests) on 2026-08-16; `task test:int` is a wave-boundary gate (minutes, Docker) |
 
 > Tier selection is governed by `.claude/rules/testing.md`. `task test` does **NOT**
 > compile `//go:build integration` files — any refactor of shared types MUST also run
@@ -43,7 +43,7 @@ validated: 2026-08-16
 - **After every task commit:** Run `task test -- ./<touched-package>/`
 - **After every plan wave:** Run `task test` (+ `task test:int` when the wave touched shared types)
 - **Before `/gsd-verify-work`:** Full suite must be green (`task pr-prep`)
-- **Max feedback latency:** {TBD — measure at Wave 0} seconds
+- **Max feedback latency:** ~90s for the scoped unit tier — full `task test` measured at **88.7s** on 2026-08-16. The integration tier is a wave-boundary gate, not a per-task one; judge it by **exit code**, never by grepping runner output.
 
 ---
 
@@ -64,7 +64,7 @@ validated: 2026-08-16
 | T2 | 06-01 | 1 | EXT-03 | — | Admin-prefixed RPCs fenced to admin packages, off the character facade | unit (meta) | `task test -- ./test/meta/` | ✅ `admin_rpc_placement_test.go:70`; `characteraccess_routing_census_test.go:905` | ✅ green |
 | T1–T2 | 06-01, 06-02 | 1–2 | EXT-04 | — | Descriptor set-equal to the served set **both directions**; malformed / 0-or-2-shape entries abort boot; denying default arm | unit | `task test -- ./internal/admin/section/ ./internal/grpc/` | ✅ `descriptor_test.go:74,169,218,250`; `admin_interceptor_test.go:402,442` | ✅ green |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ partial (covered but incomplete — see Audit) · 🌀 flaky*
 
 ---
 
