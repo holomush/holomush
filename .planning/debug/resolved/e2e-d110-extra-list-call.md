@@ -1,5 +1,5 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "GH issue 4986 needs triage and fixing"
 created: 2026-08-15
 updated: 2026-08-15
@@ -277,8 +277,20 @@ verification: |
   margin). The causal chain is directly observed (in-page JS stack naming `onsearch`, plus
   timestamps on both sides of the boundary), so this is not inference from six candidates.
   But final confirmation is CI on PR #4984, which has NOT been run — nothing was pushed.
+
+  CI CONFIRMATION (added after the above was written): pushed as `33731f215`.
+  `E2E Test` = SUCCESS on PR #4984, along with all eight required checks. The prediction
+  held: the fix that was labelled UNPROVEN against real CI is now proven against it.
+  Note `Build` failed once on this SHA and passed on re-run — an UNRELATED pre-existing
+  flake (a `bits-ui` body-scroll-lock `setTimeout` firing after test-env teardown:
+  `ReferenceError: document is not defined`, 772/772 tests passing, run failed on the
+  unhandled error alone). Two CI runs on the identical SHA disagreed on `Build`, which is
+  nondeterminism by direct demonstration; this change touches no file under `web/src/`.
 files_changed:
-  - web/e2e/helpers/admin.ts (+25 lines: awaited search settle in gotoAdminCharacters)
+  - web/e2e/helpers/admin.ts (awaited search settle in gotoAdminCharacters)
+  - commit 20ae6b2fc (the settle) and 33731f215 (code-review follow-ups: fully-qualified
+    RPC path; assert `ok()` so a failed search names the RPC instead of blaming the row
+    15s later; comment trimmed to the durable claim)
 
 why_not_caught: |
   No gate existed for this class. `task test:e2e` (and even an uninstrumented
