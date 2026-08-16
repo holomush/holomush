@@ -39,7 +39,12 @@ services:
       retries: 15
 
   playwright:
-    image: mcr.microsoft.com/playwright:v1.61.0-noble@sha256:57b65fdc9ceabe0ef613124c7bbe2babcf9362c4d85e382fe3b03604e84b428a
+    # MUST track `@playwright/test` in web/package.json on the same minor:
+    # browser binaries live at a version-keyed path inside this image, so a
+    # runner from a different minor cannot find them and every spec fails to
+    # launch. Renovate tracks the two halves independently (npm package vs
+    # Docker image), so a bump arrives as two PRs — bump both together by hand.
+    image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
     working_dir: /work
     volumes:
       - ./web:/work

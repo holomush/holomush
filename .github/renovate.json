@@ -138,6 +138,13 @@
       "groupName": "buf codegen go",
       "automerge": false,
       "addLabels": ["codegen", "go"]
+    },
+    {
+      "description": "Hold typescript below 7 until the Svelte toolchain supports it standalone. TypeScript 7 support currently requires BOTH TypeScript 7 and TypeScript 6 installed in the project, plus the `--tsgo` or `--tsgo-experimental-api` flag — svelte-check hard-errors otherwise, which is what closed PR #4848. This is an ecosystem-readiness pin, not a repo defect. Issue #5000 is the trigger to REMOVE this rule; do not remove it before that issue confirms the toolchain is ready. `allowedVersions` rather than `enabled: false` so TypeScript 6 patch/minor updates keep flowing normally.",
+      "matchPackageNames": [
+        "typescript"
+      ],
+      "allowedVersions": "<7"
     }
   ],
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
