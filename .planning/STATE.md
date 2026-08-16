@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 2
-current_phase_name: ABAC & Schema Vocabulary
-status: planning
+status: Awaiting next milestone
 stopped_at: Completed 06.1-10-PLAN.md
-last_updated: "2026-08-15T20:56:00.324Z"
-last_activity: 2026-08-15
-last_activity_desc: Phase 06.1 execution started
+last_updated: "2026-08-16T16:55:54.769Z"
+last_activity: 2026-08-16
+last_activity_desc: Milestone v0.13 completed and archived
 progress:
   total_phases: 10
   completed_phases: 10
   total_plans: 71
   completed_plans: 71
   percent: 100
+current_phase: 2
+current_phase_name: ABAC & Schema Vocabulary
 ---
 
 # Project State
@@ -33,54 +33,24 @@ without rework.
 
 ## Current Position
 
-Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 2 — ABAC & Schema Vocabulary
-Plan: Not started
-Status: Ready to plan
-Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
-Last activity: 2026-08-15 — Phase 06.1 complete, transitioned to Phase 2
+Phase: Milestone v0.13 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-16 — Milestone v0.13 completed and archived
 
-**Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
-(`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
-`task pr-prep`, push, and `/gsd-discuss-phase 2`.
+## Deferred Items
 
-**Phase 1 opened four issues, all still open:** #4899 (per-player vs per-character admin authority —
-answered *per player* by SPEC §10.5), #4900 (`docs/superpowers/` retirement sweep), #4901 (published-scene
-`participants_snapshot` documented as names, stores ids), #4902 (`oops.AsOops(err).Code()` resolves the
-deepest chain code, not the top-level one — PORTAL-10 rule 5 was corrected to a wire-level assertion).
+Items acknowledged and deferred at milestone close on 2026-08-16 (v0.13, `override_closeout` — 10 open artifacts):
 
-**Milestone shape (phases 1–6):**
+| Category | Item | Status |
+|----------|------|--------|
+| debug session | `knowledge-base` | False positive — this is GSD's persistent debug knowledge-base file, not an open session |
+| context question | Phase 02.1 — 3 questions in `02.1-CONTEXT.md` | Resolved in-phase and annotated 2026-08-16; adjudicated in `02.1-VERIFICATION.md` rows R4/P1/P3 and P6, and by Phase 02.2's D-59 action audit. The scanner has no resolved-marker vocabulary for CONTEXT questions, so it still counts them |
+| context question | Phase 02.2 — 3 questions in `02.2-CONTEXT.md` | Two carried `✅ RESOLVED` annotations from the phase itself (D-68, D-67/A1); the third was 02.1-owned and annotated 2026-08-16 |
+| deferred item | Phase 03 — 2 resilience-suite entries | Correctly unresolved against OPEN issue #4953; the guarantee is redundantly covered in the gating lane |
+| pending todo | 6 items in `.planning/todos/pending/` | Not milestone-scoped — survive close and remain actionable (world-caller naming/doc drift, INV-WORLD-4/6 questions, caller-attr hardening) |
 
-> Phase numbers **restart at 1 per milestone as of v0.13**; v0.11 (Phases 1–3) and v0.12 (Phases 4–9)
-> used the retired continuous global numbering and are not renumbered. A bare "Phase N" below means v0.13.
-
-| Phase | Name | Reqs | Notes |
-|-------|------|------|-------|
-| 1 | Portal SPEC | 10 | Opens the milestone — discharges PROJECT.md's Out-of-Scope precondition; 8 of 14 catalogued pitfalls are SPEC-phase decisions |
-| 2 | ABAC & Schema Vocabulary | 6 | Lifecycle column + normalized-name unique index land here (load-bearing for two phases each); narrow data audit needed |
-| 3 | World Character Commands | 3 | `Rename`/soft `Retire`; `--research-phase` (writeCommands census bijection) |
-| 4 | Shared Facade Helpers & `CharacterAccessService` | 7 | Verbatim copy of the shipped `sceneaccess_service.go` path |
-| 5 | Character Identity UI & Public Profiles | 12 | UI phase — first user-visible slice; ships the media-schema proof with no uploader |
-| 6 | Admin Portal Shell & Character Administration | 12 | UI phase; net-new trust boundary (zero `RoleAdmin` refs in `internal/web/` today); `--research-phase` |
-
-**Binding across every phase (PORTAL-10):** census with set equality; paired positive control on every
-denial test; assertions against marshaled response bytes; gates demonstrated RED against the pre-fix state;
-wire-level assertion of every opacity and authorization contract (rule 5 was corrected in Phase 1 — `oops.AsOops(err).Code()`
-resolves the *deepest* chain code, not the top-level one, so the original prescription asserted the opposite
-of the property it guarded; see #4902 and `01-SPEC.md` §12.1); invariant-scope discipline (no ad-hoc `INV-PROFILE-*` /
-`INV-ADMIN-*` — allocate in `ACCESS`/`PRIVACY` or declare a boundary, and ship `binding: pending` rather
-than fabricating a `// Verifies:`).
-
-**Pre-existing hazards this milestone is the first to load** (all verified in-tree 2026-07-31, none new
-defects): `PlayerHasRole` is player-wide not character-wide (`internal/store/role_store.go:83-103`) —
-excluded from scope by PORTAL-08/ADMIN-04 and to be filed as a GitHub issue; character-name uniqueness has
-no DB constraint and `Rename` doubles the writers into that race (Phase 2); rename/retire cannot reach
-denormalized history (`actor_display_name`, `scene_log` via `WebGetPublicSceneArchive`); hard-delete is
-already broken (`locations.owner_id`/`objects.owner_id` have no `ON DELETE`); a public profile page is
-currently DENIED by `seed:player-character-colocation`; `internal/web/` has zero `RoleAdmin` references.
-
-**Carried in from v0.12:** 3 open Broken Windows block `/gsd-ship` until fixed or waived — #4861
-(`cmd/holomush` coverage floor), #4788 (movement pipeline untested), #4864 (yamlfmt block-scalar leak).
+Known verification overrides: 10 (see above).
 
 ## Deferred Items
 
@@ -774,14 +744,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- Merge PR #4874 (Phase 9 — test-quality & code-health sweep). All 18 CI checks green.
-- **Operator-only, cannot be done from a PR:** decide the ruleset `11923801` required-check
-  question. Both halves of decision D-04 are currently deferred (#4876) — `codecov/project` has
-  never posted (codecov Team-plan limit, #4875) and requiring `codecov/patch` would deadlock
-  docs-only PRs, which `paths-ignore` routes to `ci-docs-skip.yaml` with no coverage upload.
-
-- Two named coverage floors remain unmet and are tracked, not waived: whole-project 79.11% vs
-  the 80% target, and `cmd/holomush` 70.09% vs 80% (#4861 — the remainder is `runCoreWithDeps`
-  boot branches needing live Postgres/NATS/TLS).
-
-- QUAL-02, QUAL-03 and QUAL-05 stay Pending deliberately; QUAL-04 is Complete.
+- Start the next milestone with /gsd-new-milestone

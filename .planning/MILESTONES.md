@@ -1,5 +1,20 @@
 # Milestones
 
+## v0.13 Web Portal: Identity & Admin Foundations (Shipped: 2026-08-16)
+
+**Phases completed:** 10 phases, 71 plans, 135 tasks
+
+**Key accomplishments:**
+
+- **Absence became a type-system property.** Three audiences, three proto messages, three projection functions, and a 29-row read-surface inventory that *is* the expected set Phase 4's census compares against by set equality — privacy enforced by a field not existing rather than by a filter remembering to run.
+- **Public profiles for logged-out visitors.** A visitor standing nowhere reads a character's name and in-world description through `WebGetCharacterProfile` — the first route served outside `(authed)` — and a profile below its reachability floor is byte-identical on the wire to a character that does not exist.
+- **Viewer-tier field masking, proven at the wire.** Twelve prose fields and eleven media rows reach the response through the term-A/term-B conjunction, with a below-floor field provably absent from the **marshaled bytes**, not merely absent from a struct.
+- **Admin portal foundations.** Sixteen typed RPCs carrying `expected_version` on every mutation, and a seven-section admin registry gated per player with a mandatory authorization descriptor — the six unbuilt sections registered and denied *after* the gate, so the denial is a diagnostic for admins rather than an enumeration oracle for everyone else.
+- **Background-job authorization.** A live job authorizes a world write under `job:<name>` and is provably confined to the aggregate its triggering event names — proven by a **passing permit** paired with a deny, through the production `world.Service` and a real engine over the whole shipped seed corpus.
+- **Verification discipline as a deliverable.** Criterion 1 is bound by set equality plus a fail-closed audience partition over every exported facade method, whose public side is recomputed from the code — so the obvious one-line escape from the guard is itself a RED.
+
+---
+
 ## v0.12 Foundation Hardening (Shipped: 2026-07-28)
 
 **Phases completed:** 6 phases (4–9), 66 plans
