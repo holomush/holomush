@@ -685,7 +685,7 @@ the next milestone yet.
 | 260728-sec | Add root `SECURITY.md` — vulnerability disclosure policy pointing at the repo's already-enabled GitHub private vulnerability reporting | 2026-07-28 | (this commit) |  | [260728-sec-…](./quick/260728-sec-add-security-md-vulnerability-disclosure/) |
 | 260730-wh1 | GH-4892: replace the drifted dependency-only exempt path list with shape-based globs anchored in `vars.DEPENDENCY_ONLY_PATHS`; exclude the E2E compose files, define the lockfile subset, qualify the `scripts/**` claim at all five sites | 2026-07-30 | 9cb8d8f53 |  | [260730-wh1-…](./quick/260730-wh1-fix-gh-issue-4892-dependency-only-exempt/) |
 | 260731-ea8 | GH-4890: implement the issue-first gate enforcement workflow — `Issue Gate` applies `gate-violation`, comments, and fails a check when a PR's linked issue lacks a gate label; never closes a PR. Exemption decided by git `:(glob)` pathspec against the Taskfile vars, plus a new `REPO_CONFIG_ONLY_PATHS` | 2026-07-31 | ddb99158f | Needs Review | [260731-ea8-…](./quick/260731-ea8-implement-the-issue-first-gate-enforceme/) |
-| 6 | handle all open Renovate PRs: unblock, fix, or close | 2026-08-16 | 0f300bb15 | — | — |
+| 260816-mta | handle all open Renovate PRs: unblock, fix, or close | 2026-08-16 | ebcfdb8c3 | — | [260816-mta-…](./quick/260816-mta-handle-all-open-renovate-prs-unblock-fix/) |
 
 ### Roadmap Evolution
 

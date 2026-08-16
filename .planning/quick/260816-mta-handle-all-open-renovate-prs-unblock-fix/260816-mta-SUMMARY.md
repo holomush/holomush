@@ -56,6 +56,30 @@ planned fix by disproving its premise.
 
 Our PR: **#5001** — `Closes #4999`, **Issue Gate: pass**, all checks green.
 
+### Post-execution addendum
+
+The table above is the state at the moment execution finished. Four dispositions changed
+afterwards, during the same session:
+
+| PR | Final state | What changed |
+|---|---|---|
+| #5001 | **MERGED** (`ebcfdb8c3`) | Our fix PR; auto-closed #4999 |
+| #4910 | **MERGED** (`78731d0f7`) | Merged by the maintainer once its checks went green |
+| #4851 | **MERGED** (`9793a2da9`) | Merged by the maintainer; the security fix is on `main` |
+| #4917 | **CLOSED** | Closed by the maintainer, not merged. Only its playwright half landed (via #5001); 12 other bumps — `@lucide/svelte`, `@opentelemetry/*` ×5, `@sentry/svelte`, `@sveltejs/kit`, `@sveltejs/vite-plugin-svelte`, `@types/pg`, `pg`, `vite`, `pnpm` — did **not** land and depend on Renovate recreating the group |
+
+**Full accounting of the ten Renovate PRs open at the start of this task**
+(#4923, #4922, #4920, #4919, #4917, #4915, #4910, #4851, #4848, #4550):
+
+- **6 merged** — #4923, #4922, #4920, #4919, #4910, #4851
+- **3 closed** — #4848 (TypeScript 7 blocked, tracked by #5000), #4550 (superseded),
+  #4917 (superseded in part; remainder pending Renovate recreation)
+- **1 open** — #4915 (needs a human `task web:generate` plus a linked issue)
+
+#5001 and #5002 are this task's own PRs and are **not** part of that population — an
+earlier draft of the #5002 description miscounted by including #5001 among the Renovate
+PRs and by listing #4917 as still open, which produced a total of eleven.
+
 ## Task 1c verdict — the buf codegen exemption was DROPPED
 
 **The probe found a diff, so the decision gate closed.** Bumping
@@ -234,14 +258,24 @@ Once PR #5001 is squash-merged into `main`:
    review dismissed or an approval first.
 4. **#4851** — your merge decision on the security update.
 
-## Finding not acted on
+## Finding not acted on — and the misreading behind it
 
-The `"buf codegen"` packageRule description in `.github/renovate.json` asserts *"a pin
-bump doesn't regenerate the committed `_pb.ts` stubs, so a human runs `task
-web:generate` on the bump PR"*. The 1c probe **falsifies the first half** — a pin bump
-does regenerate them. The conclusion (a human runs `task web:generate`) is right for
-the wrong reason. This was left unedited rather than silently amended inside a rule
-this task was not asked to touch; it is worth a follow-up one-line correction.
+**Corrected after review.** This section originally claimed the `"buf codegen"`
+packageRule description in `.github/renovate.json` was falsified by the 1c probe. It is
+not. The description is correct as written, and no change is needed.
+
+It asserts *"a pin bump doesn't regenerate the committed `_pb.ts` stubs, so a human runs
+`task web:generate` on the bump PR"*. The subject of that first clause is **Renovate's
+edit**, not the codegen tool: bumping the pin in `web/buf.gen.yaml` does not itself
+rewrite the stubs, which is precisely *why* a human must run `task web:generate`. The 1c
+probe — where running `task web:generate` rewrote 30 `_pb.ts` files — **confirms** that
+reading: the stubs were left stale by the pin bump and only the explicit generate step
+updated them.
+
+The original misreading took "a pin bump doesn't regenerate the stubs" to mean "the
+version change produces no diff in generated output", then treated the 30 changed files
+as a contradiction. Same fact, two readings. The rule description was correctly left
+unedited; amending it would have broken an accurate note.
 
 ## Deviations from Plan
 
