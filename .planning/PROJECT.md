@@ -20,7 +20,37 @@ roleplay in scenes — through either telnet or the web client, with every
 access-control decision default-deny and every plugin (Lua or binary)
 trusted identically by the host.
 
-## Current State: v0.12 Foundation Hardening shipped (2026-07-28)
+## Current State: v0.13 Web Portal — Identity & Admin Foundations shipped (2026-08-16)
+
+**No active milestone.** The next one is defined through `/gsd-new-milestone`, which also writes a fresh
+`REQUIREMENTS.md` (v0.13's is archived at `milestones/v0.13-REQUIREMENTS.md`).
+
+v0.13 gave the web client a complete character identity surface and stood up the admin portal shell. Ten
+phases, 71 plans, 135 tasks. The organising idea is that **privacy is enforced by absence rather than by
+filtering**: three audiences get three proto messages and three projection functions, so a field a viewer
+may not see is not omitted from the response — it does not exist on the message at all, and a set-equality
+census over every character-returning RPC makes adding a fourth path a compile-or-RED event.
+
+On top of that substrate: public profiles readable by a logged-out visitor (the first route served outside
+`(authed)`), per-field viewer-tier masking proven against marshaled bytes, an ABAC-gated `/admin` with a
+seven-section registry where the six unbuilt sections are registered and denied *after* the gate, and a
+background-job authorization model (`job:<name>` principals with per-execution instance scoping) that
+closed a class of unauthenticated write the world service previously had no vocabulary for.
+
+**Closed as `override_closeout`.** All ten phases verified `passed`; all 51 in-scope requirements
+satisfied. IDENT-03 (`RenameCharacter`) was deliberately removed from the milestone on 2026-08-06 and
+moved to backlog 999.20 — it cannot be specified until the character identity model gains an approval
+dimension, which is milestone-scale work. Nyquist coverage is complete: 5 phases compliant, 5 partial
+with named causes. Ten open artifacts were acknowledged and deferred (see `STATE.md`).
+
+Carried forward: #4990/#4991/#4992 (integration orphans — #4991 is the sharp one, a deferral note naming
+a job identity that does not exist, so a policy written to it fails closed and silently), #4993/#4994
+(Nyquist partials), #4996 (agent-facing pipe hazard in `.planning/` commands), and #4974/#4966 (the
+traceability writer defects that left the archived REQUIREMENTS table reading `Pending`).
+
+<details>
+<summary>v0.12 Foundation Hardening — shipped 2026-07-28</summary>
+
 
 **Active milestone: v0.13 Web Portal — Identity & Admin Foundations** (started 2026-07-31; see
 `## Current Milestone` below).
@@ -85,73 +115,7 @@ feature-shaped Highs F5 no-movement (#4788) and F6 PWA/offline (#4803).
 
 </details>
 
-## Current Milestone: v0.13 Web Portal — Identity & Admin Foundations
-
-**Goal:** Give web players a complete character identity surface — creation, management, and public
-profiles with privacy — and stand up the admin portal shell that gives character administration a home,
-with both designed to absorb the deferred portal surfaces without rework.
-
-**Target features:**
-
-- **Portal design/spec phase (opens the milestone)** — produces the SPEC that this document's Out-of-Scope
-  entry for non-scene web-portal surfaces demanded as its precondition: admin-portal information
-  architecture with named slots for the deferred sections, character data model, per-field privacy model,
-  media-ready profile schema, and the full new RPC surface.
-- **Character creation + management UI** (backlog 999.1 / `holomush-qve.15`, non-roster) — plus the
-  missing RPC surface. *Corrected by research 2026-07-31:* the service layer is further along than the
-  kickoff assumed — `world.Service.UpdateCharacterDescription` (`internal/world/service.go:799`) and
-  `DeleteCharacter` (`:745`) already exist and are already ABAC-gated. The real gap is the proto/BFF RPC
-  surface plus **rename** and **soft-retire**. Retire MUST be modelled distinctly from purge and MUST NOT
-  release the name back to the pool (that would foreclose rostering, 999.6).
-- **Public character profiles + sheets** (`holomush-qve.9`) — profile page, sheet display, owner edit, and
-  per-field visibility. *Corrected by research 2026-07-31:* per-field privacy is largely **reuse, not
-  invention** — `entity_properties` already carries per-row `visibility`/`visible_to`/`excluded_from`
-  (`migrations/000001_baseline.sql:354-375`), resolved by `PropertyProvider`
-  (`attribute/property.go:61-147`) and governed by six seed policies (`seed.go:110-145`). Profile and
-  sheet are distinct: ship the split with the sheet **empty** (mechanical stats need a system that does
-  not exist yet). Storage shape for the 1-primary + 10-gallery media model is an OPEN QUESTION for the
-  SPEC phase — the research pass produced two incompatible answers (a new `character_profiles` table with
-  `media JSONB`, vs. `entity_properties` rows needing zero DDL) and it must be adjudicated, not averaged.
-- **Admin portal shell + character administration** (`holomush-qve.10`, subset) — `/admin` route,
-  `RoleAdmin`-gated nav, and the character admin surface (list/search, edit, delete/disable). The nav and
-  IA carry declared, empty room for stats, player management, moderation, audit viewer, config, and
-  plugin management.
-
-**Extensibility is a requirement, not a note.** The admin IA must ship a working "home" *plus* named room
-for the deferred sections, and the profile schema must accept the 1-primary + 10-gallery media model
-without a later migration. Both carry their own REQ-IDs so they cannot be quietly dropped during
-planning — this is the milestone's defining constraint, chosen deliberately at kickoff.
-
-**Explicitly deferred, and recorded:** roster integration (backlog 999.6 / `holomush-gloh` — `qve.15`'s
-bead names it as a dependency); avatar/blob storage (999.16); the remainder of the admin portal (999.8,
-partially consumed — shell only); and the rest of 999.1 (`qve.7` offline/PWA, `qve.8` wiki, `qve.17` web DMs).
-
-**Carried in from v0.12:** 3 open Broken Windows (#4861 `cmd/holomush` coverage floor, #4788 movement
-pipeline untested, #4864 yamlfmt block-scalar leak) block `/gsd-ship` until fixed or waived.
-
-**Pre-existing hazards this milestone must decide on (surfaced by the 2026-07-31 research pass, all
-verified in-tree — none are new defects introduced by v0.13, but v0.13 is the first work to load them):**
-
-- **`PlayerHasRole` is player-wide, not character-wide.** `internal/store/role_store.go:83-103` returns
-  true iff *any* character of the player holds the role, so a role on a throwaway alt confers it
-  everywhere (incl. `internal/admin/auth/ingame.go:116`). Any admin surface exposing role mutation is an
-  escalation vector until this is decided.
-- **Character name uniqueness has no database constraint** — check-then-insert races across
-  `internal/bootstrap/setup/adapters.go:38-50` and `internal/auth/character_service.go:112-121`, with no
-  unique index and no `LOWER(name)` index (`000001_baseline.sql:72-79`), and normalization that does
-  no NFKC or confusable folding (`internal/world/validation.go:114-126`). Adding `Rename` doubles the
-  writers into that race.
-- **Rename/retire cannot reach denormalized history** — display names are copied into immutable event
-  payloads (`actor_display_name`) and `scene_log`, the latter served publicly via
-  `WebGetPublicSceneArchive`.
-- **Hard-delete is already broken** — `locations.owner_id`/`objects.owner_id` reference `characters(id)`
-  with no `ON DELETE` (baseline:99, 143), while `character_roles` cascades and silently drops roles.
-- **A public profile page is currently DENIED by default-deny** — `seed:player-character-colocation`
-  requires co-location. One new seed policy plus an audit of already-public character properties.
-- **`internal/web/` contains zero `RoleAdmin` references** — `/admin` is a net-new trust boundary with no
-  existing precedent or test coverage.
-- New mutation RPCs MUST carry `expected_version` (migration `000049`) and emit through the transactional
-  outbox in-transaction, or they silently regress v0.12's MODEL-03/04.
+</details>
 
 ## Requirements
 
