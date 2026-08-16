@@ -55,28 +55,25 @@ export async function gotoAdminCharacters(page: Page, charName: string) {
   // SETTLE THE SEARCH THIS HELPER STARTS — not merely the row it was looking for.
   //
   // `fill` arms CharacterFilterBar's 250ms debounce, and the row assertion below
-  // does NOT wait for it. A character this fixture just created is already on
+  // does NOT wait for it: a character this fixture just created is already on
   // page 1 of the INITIAL unfiltered list, so the row can be present before the
-  // search has even been issued — measured: the only list read before the row
-  // appeared was the `+page.ts` load. The helper would then return with the timer
-  // still armed, and the search would land, as a WebAdminSearchCharacters read
-  // attributable to nothing the caller did, inside whatever the caller measured
-  // next.
-  //
-  // That is holomush-i4986. The D-110 spec snapshots the list-call count and
-  // asserts a mutation causes zero re-reads; the stray read lands inside that
-  // window whenever `fill`→snapshot is under 250ms and `fill`→assertion is over
-  // it. Locally it missed by 70ms; on CI's slower coverage-instrumented image the
-  // write round trip widened the window and it landed inside, 3/3.
+  // search has even been issued. Returning with the timer still armed lets that
+  // search land inside whatever the caller measures next — holomush-i4986, where
+  // it was counted as a list re-read no caller had caused.
   //
   // Awaiting the response is what makes "narrowed to one character" TRUE on
   // return, rather than "a matching row happens to be on screen". Registered
   // before the fill so a fast answer cannot be missed.
-  const searched = page.waitForResponse((r) => r.url().includes('WebAdminSearchCharacters'), {
-    timeout: 15000,
-  });
+  const searched = page.waitForResponse(
+    (r) => r.url().includes('/holomush.web.v1.WebService/WebAdminSearchCharacters'),
+    { timeout: 15000 },
+  );
   await page.locator('input[name="q"]').fill(term);
-  await searched;
+  const searchResponse = await searched;
+  // Fail naming the RPC. A failed search renders the `failure === 'search'` empty
+  // state, so without this the row assertion below reports "expected 1, received 0"
+  // 15s later — blaming the row for an error this line already has in hand.
+  expect(searchResponse.ok(), `search RPC failed: HTTP ${searchResponse.status()}`).toBeTruthy();
   await expect(rowFor(page, charName)).toHaveCount(1, { timeout: 15000 });
 }
 
