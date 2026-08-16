@@ -62,43 +62,43 @@ type mockWorldMutator struct {
 	getLocationErr    error
 }
 
-func (m *mockWorldMutator) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *mockWorldMutator) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	return m.getLocationRet, m.getLocationErr
 }
 
-func (m *mockWorldMutator) GetCharacter(_ context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+func (m *mockWorldMutator) GetCharacter(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Character, error) {
 	return nil, world.ErrNotFound
 }
 
-func (m *mockWorldMutator) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+func (m *mockWorldMutator) GetCharactersByLocation(_ context.Context, _ world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	return nil, nil
 }
 
-func (m *mockWorldMutator) GetObject(_ context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+func (m *mockWorldMutator) GetObject(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Object, error) {
 	return nil, world.ErrNotFound
 }
 
-func (m *mockWorldMutator) CreateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *mockWorldMutator) CreateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return m.createLocationErr
 }
 
-func (m *mockWorldMutator) CreateExit(_ context.Context, _ string, _ *world.Exit) error {
+func (m *mockWorldMutator) CreateExit(_ context.Context, _ world.Caller, _ *world.Exit) error {
 	return m.createExitErr
 }
 
-func (m *mockWorldMutator) CreateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *mockWorldMutator) CreateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (m *mockWorldMutator) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *mockWorldMutator) UpdateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (m *mockWorldMutator) UpdateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *mockWorldMutator) UpdateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (m *mockWorldMutator) FindLocationByName(_ context.Context, _, _ string) (*world.Location, error) {
+func (m *mockWorldMutator) FindLocationByName(_ context.Context, _ world.Caller, _ string) (*world.Location, error) {
 	if m.findLocationRet != nil {
 		return m.findLocationRet, nil
 	}

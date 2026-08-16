@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# scripts/codemod/probe-subject-param.yml — READ-ONLY CENSUS PROBE. Enumerates
+# every subject-named bare `string` parameter declaration on a world command.
+# This is the scoped "is any bare subject-string parameter left on a world
+# command?" question the caller-model flip is gated on.
+#
+# Prerequisite: ast-grep 0.45.1 or later. It is NOT installed by `task setup`
+# and is NOT present in CI — this is a local developer step, never a CI gate.
+#
+# ⚠️  THIS PROBE DECLARES NO REWRITE KEY AND MUST NOT BE RUN WITH -U.
+#
+# Count:  ast-grep scan -r scripts/codemod/probe-subject-param.yml . | rg -c '┌─ '
+#   (Because it declares no rewrite, ast-grep prints the rich `┌─ ` frame rather than a
+#    unified diff. The four REWRITE rules are the opposite — count those with
+#    `rg -c '│\+'`.)
+#
+# PINNED COUNTS
+#   pre-flip:  185 sites across 24 files
+#   post-flip: EXACTLY 8, all of them the deliberately out-of-scope Lua-facing
+#              façades — internal/plugin/hostfunc/cap_property.go:28,34,
+#              cap_property_test.go:54,68, cap_world_query.go:38,41,
+#              cap_world_query_test.go:43,48.
+#
+# NO `ignores:` — deliberately. The residual visibility of those four cap_* files
+# in the output IS the point: it proves they were left alone rather than silently
+# swept.
+#
+# BLIND SPOT (the same one the declaration rules have): an UNNAMED parameter is a
+# parameter_declaration with NO `name` field, so this probe cannot see it. A
+# double declared `GetLocation(context.Context, string, ulid.ULID)` is invisible
+# to this census. The probe returning 8 is therefore NECESSARY BUT NOT
+# SUFFICIENT; the compiler and `task test:int` are what close that gap. Eight
+# such declarations are known and hand-migrated — see
+# scripts/codemod/README.md § Hand-migrated surfaces.
+id: probe-subject-param
+language: go
+severity: hint
+rule:
+  kind: parameter_declaration
+  all:
+    # POSITIONAL FENCE (added 02.1-02). Same root cause as the declaration rules:
+    # the NAME constraint below admits `_`, so without this clause the probe also
+    # counts the blank-named `name string` parameter of FindLocationByName. That
+    # parameter is legitimately a string and MUST stay one. Pre-flip it hid inside
+    # a grouped `_, _ string` node; the migration splits that node, so post-flip
+    # the probe read 16 (8 façades + 8 name parameters) instead of the pinned 8.
+    # The subject is ALWAYS parameter 2 — measuring that position is what the
+    # probe claims to do.
+    - nthChild: 2
+    - has: {field: name, pattern: $NAME}
+    - has: {field: type, regex: '^string$'}
+    - inside:
+        kind: parameter_list
+        inside:
+          any:
+            - kind: method_declaration
+            - kind: function_declaration
+            - kind: method_elem
+          has:
+            field: name
+            regex: '^(GetLocation|CreateLocation|UpdateLocation|DeleteLocation|GetExit|CreateExit|UpdateExit|DeleteExit|GetExitsByLocation|GetObject|CreateObject|UpdateObject|DeleteObject|MoveObject|DeleteCharacter|GetCharacter|UpdateCharacterDescription|GetCharactersByLocation|ListSceneParticipants|MoveCharacter|FindLocationByName|GetObjectsByLocation|ListPropertiesByParent)$'
+constraints:
+  NAME:
+    regex: '^(subjectID|subject|_)$'

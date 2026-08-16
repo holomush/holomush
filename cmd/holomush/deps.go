@@ -19,6 +19,8 @@ import (
 	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/xdg"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
+	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
@@ -206,5 +208,51 @@ type GRPCClient interface {
 	CastPublishSceneVote(ctx context.Context, req *sceneaccessv1.CastPublishSceneVoteRequest) (*sceneaccessv1.CastPublishSceneVoteResponse, error)
 	WithdrawScenePublish(ctx context.Context, req *sceneaccessv1.WithdrawScenePublishRequest) (*sceneaccessv1.WithdrawScenePublishResponse, error)
 	GetPublishedScene(ctx context.Context, req *sceneaccessv1.GetPublishedSceneRequest) (*sceneaccessv1.GetPublishedSceneResponse, error)
+	// Character-access facade RPCs
+	GetCharacterProfile(ctx context.Context, req *characteraccessv1.GetCharacterProfileRequest) (*characteraccessv1.GetCharacterProfileResponse, error)
+	ListMyCharacters(ctx context.Context, req *characteraccessv1.ListMyCharactersRequest) (*characteraccessv1.ListMyCharactersResponse, error)
+	GetMyCharacter(ctx context.Context, req *characteraccessv1.GetMyCharacterRequest) (*characteraccessv1.GetMyCharacterResponse, error)
+	UpdateCharacterProfile(ctx context.Context, req *characteraccessv1.UpdateCharacterProfileRequest) (*characteraccessv1.UpdateCharacterProfileResponse, error)
+	UpdateCharacterDescription(ctx context.Context, req *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error)
+	SetDefaultCharacter(ctx context.Context, req *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error)
+	ListCharacterDirectory(ctx context.Context, req *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error)
+	// CreateOwnCharacter is the character-access facade's create. Its Go name
+	// differs from its proto name because CoreService.CreateCharacter above
+	// already occupies that identifier on this one interface with a different
+	// message pair — see (*grpcclient.Client).CreateOwnCharacter. Both RPCs are
+	// live: the core one still serves the telnet CREATE verb.
+	CreateOwnCharacter(ctx context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error)
+	// Admin-portal RPCs. A separate service behind its own core-side gate; the
+	// gateway forwards its answers and its refusals and decides neither.
+	AdminListSections(ctx context.Context, req *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error)
+	AdminGetSection(ctx context.Context, req *adminportalv1.AdminGetSectionRequest) (*adminportalv1.AdminGetSectionResponse, error)
+	AdminListCharacters(ctx context.Context, req *adminportalv1.AdminListCharactersRequest) (*adminportalv1.AdminListCharactersResponse, error)
+	AdminSearchCharacters(ctx context.Context, req *adminportalv1.AdminSearchCharactersRequest) (*adminportalv1.AdminSearchCharactersResponse, error)
+	AdminGetCharacter(ctx context.Context, req *adminportalv1.AdminGetCharacterRequest) (*adminportalv1.AdminGetCharacterResponse, error)
+	AdminUpdateCharacter(ctx context.Context, req *adminportalv1.AdminUpdateCharacterRequest) (*adminportalv1.AdminUpdateCharacterResponse, error)
+	AdminRetireCharacter(ctx context.Context, req *adminportalv1.AdminRetireCharacterRequest) (*adminportalv1.AdminRetireCharacterResponse, error)
+	AdminUnretireCharacter(ctx context.Context, req *adminportalv1.AdminUnretireCharacterRequest) (*adminportalv1.AdminUnretireCharacterResponse, error)
 	Close() error
+}
+
+// characterAccessGateway adapts a GRPCClient to web.CharacterAccessClient.
+//
+// It exists solely to undo the Go-identifier collision described above: the web
+// interface is generated from the character-access service and therefore names
+// its method CreateCharacter, while GRPCClient must spell the same call
+// CreateOwnCharacter to leave the core RPC its name. Embedding promotes the six
+// facade methods whose names do not collide (and the core CreateCharacter,
+// which the explicit method below shadows), so the adapter carries exactly one
+// line of behaviour.
+//
+// The web layer must NOT be bent to the gateway's naming instead: the routing
+// census requires the proxy body to name CreateCharacter on the facade client,
+// which is what proves it reaches the character facade rather than the core RPC
+// it replaced.
+type characterAccessGateway struct {
+	GRPCClient
+}
+
+func (g characterAccessGateway) CreateCharacter(ctx context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error) {
+	return g.CreateOwnCharacter(ctx, req)
 }

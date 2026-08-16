@@ -173,13 +173,11 @@ func newTestSceneAccessServer(
 ) *SceneAccessServer {
 	t.Helper()
 	return &SceneAccessServer{
-		playerSessionRepo: sessionRepo,
-		playerRepo:        playerRepo,
-		charRepo:          charRepo,
-		sessionStore:      sessStore,
-		coordinator:       coord,
-		sceneClient:       sceneClient,
-		pluginManager:     mgr,
+		playerGate:    newPlayerGate(sessionRepo, playerRepo, charRepo, sceneGuestDenialMessage, sceneAccessLogPrefix),
+		sessionStore:  sessStore,
+		coordinator:   coord,
+		sceneClient:   sceneClient,
+		pluginManager: mgr,
 	}
 }
 

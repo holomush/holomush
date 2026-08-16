@@ -46,6 +46,7 @@ export const load: PageLoad = async () => {
         characterId: c.characterId,
         name: c.characterName,
       })),
+      roles: resp.roles,
     });
     return {
       ...baseData,

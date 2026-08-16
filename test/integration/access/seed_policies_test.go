@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/testsupport/chartest"
+	"github.com/holomush/holomush/internal/world"
 )
 
 var _ = Describe("Seed Policy Behavior", func() {
@@ -713,8 +714,7 @@ var _ = Describe("Seed Policy Behavior", func() {
 			Expect(err).NotTo(HaveOccurred())
 			_ = insertProperty("character", charID2, "thirdparty", "x", "private", &otherChar, nil, nil)
 
-			got, err := env.worldService.ListPropertiesByParent(context.Background(),
-				"character:"+charID1.String(), "character", charID2)
+			got, err := env.worldService.ListPropertiesByParent(context.Background(), world.HumanCaller("character:"+charID1.String()), "character", charID2)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(HaveLen(1))
 			Expect(got[0].ID).To(Equal(public))
@@ -740,15 +740,13 @@ var _ = Describe("Seed Policy Behavior", func() {
 			Expect(err).NotTo(HaveOccurred())
 			_ = insertProperty("character", remoteChar, "hidden", "x", "private", &remoteChar, nil, nil)
 
-			got, err := env.worldService.ListPropertiesByParent(context.Background(),
-				"character:"+charID1.String(), "character", remoteChar)
+			got, err := env.worldService.ListPropertiesByParent(context.Background(), world.HumanCaller("character:"+charID1.String()), "character", remoteChar)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(BeEmpty())
 		})
 
 		It("F3: returns empty list when parent has no properties", func() {
-			got, err := env.worldService.ListPropertiesByParent(context.Background(),
-				"character:"+charID1.String(), "character", charID2)
+			got, err := env.worldService.ListPropertiesByParent(context.Background(), world.HumanCaller("character:"+charID1.String()), "character", charID2)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(BeEmpty())
 		})
@@ -770,8 +768,7 @@ var _ = Describe("Seed Policy Behavior", func() {
 			// Also insert a public prop so there's something to return.
 			public := insertProperty("character", charID2, "bio", "x", "public", nil, nil, nil)
 
-			got, err := env.worldService.ListPropertiesByParent(context.Background(),
-				"character:"+charID1.String(), "character", charID2)
+			got, err := env.worldService.ListPropertiesByParent(context.Background(), world.HumanCaller("character:"+charID1.String()), "character", charID2)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(HaveLen(1))
 			Expect(got[0].ID).To(Equal(public),

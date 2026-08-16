@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/admin/socket"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/charactivity"
 	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/eventbus"
@@ -26,6 +27,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/lifecycle"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/retirement"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -110,7 +112,7 @@ func (r *startRecorder) snapshot() []lifecycle.SubsystemID {
 	return out
 }
 
-// realProductionSubsystemGraph constructs every one of the 18 production
+// realProductionSubsystemGraph constructs every one of the 20 production
 // subsystem types with a minimal/zero-value config and reads each one's
 // real DependsOn() LIVE. None of these constructors allocate or touch live
 // resources (07-09 D-12 Wave A made every constructor allocate nothing
@@ -152,14 +154,16 @@ func realProductionSubsystemGraph(t *testing.T) map[lifecycle.SubsystemID][]life
 		socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{}),
 		dek.NewCheckpointSweepSubsystem(dek.CheckpointSweepConfig{}),
 		worldsetup.NewOutboxRelaySubsystem(worldsetup.OutboxRelaySubsystemConfig{}),
+		retirement.NewSubsystem(retirement.Config{}),
+		charactivity.NewSubsystem(charactivity.Config{}),
 	}
 
 	graph := make(map[lifecycle.SubsystemID][]lifecycle.SubsystemID, len(subs))
 	for _, s := range subs {
 		graph[s.ID()] = s.DependsOn()
 	}
-	require.Len(t, graph, 18,
-		"expected exactly the 18 production subsystems (productionSubsystemSet); "+
+	require.Len(t, graph, 20,
+		"expected exactly the 20 production subsystems (productionSubsystemSet); "+
 			"a subsystem was added or removed without updating this test's construction list")
 	return graph
 }
@@ -203,10 +207,20 @@ func TestProductionSubsystemsTopologicalStartOrderIsPinned(t *testing.T) {
 		lifecycle.SubsystemCluster,
 		lifecycle.SubsystemCryptoChainVerifier,
 		lifecycle.SubsystemOutboxRelay,
+		// CharacterActivity (03-02) shares OutboxRelay's ready-tier —
+		// both are Database+EventBus leaves — and sorts after it on the
+		// SubsystemID tie-break (16 < 19).
+		lifecycle.SubsystemCharacterActivity,
 		lifecycle.SubsystemPlugins,
 		lifecycle.SubsystemAdminSocket,
 		lifecycle.SubsystemBootstrap,
 		lifecycle.SubsystemAuditProjection,
+		// RetirementReactor (03-02) becomes ready only once Bootstrap has
+		// run (its fanout destination is StartLocationID()), which puts it
+		// in AuditProjection's tier; it sorts after AuditProjection on the
+		// SubsystemID tie-break (10 < 18) and before GRPC, which is not
+		// ready until AuditProjection completes.
+		lifecycle.SubsystemRetirementReactor,
 		lifecycle.SubsystemGRPC,
 		lifecycle.SubsystemCryptoPolicy,
 		lifecycle.SubsystemRekeyCheckpointSweep,

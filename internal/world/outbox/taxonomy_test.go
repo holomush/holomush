@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -117,4 +118,144 @@ func TestRegistryDeclaresWorldChangeKinds(t *testing.T) {
 		require.True(t, outbox.IsDeclared(kind), "kind %q must be declared", kind)
 		assert.False(t, strings.HasPrefix(kind, "scene"), "no scene kinds (D-07)")
 	}
+}
+
+// --- 06-05 Task 1: the eight-step taxonomy ratchet (D-103 / D-105) ---
+
+// payloadFieldNames returns the declared field names of a kind's payload
+// schema, so an assertion is made against the DECLARATION rather than against a
+// struct that happens to marshal the same way.
+func payloadFieldNames(t *testing.T, kind string) []string {
+	t.Helper()
+	schema, err := outbox.Lookup(kind)
+	require.NoError(t, err)
+	require.NotEmpty(t, schema.Payload, "a declared kind describes its payload schema")
+	names := make([]string, 0, len(schema.Payload))
+	for _, f := range schema.Payload {
+		names = append(names, f.Name)
+	}
+	return names
+}
+
+// TestCharacterLifecyclePayloadDeclaresBeforeStatusSectionAndAction pins steps
+// 4 and 5 of the ratchet: the widened lifecycle payload shape AND the
+// SchemaVersion bump that declares it, on BOTH lifecycle kinds.
+//
+// Reverting either kind's SchemaVersion to 1 fails this test — which is what
+// makes the all-or-none claim true rather than asserted.
+func TestCharacterLifecyclePayloadDeclaresBeforeStatusSectionAndAction(t *testing.T) {
+	for _, kind := range []string{outbox.KindCharacterRetired, outbox.KindCharacterUnretired} {
+		t.Run(kind, func(t *testing.T) {
+			assert.ElementsMatch(t,
+				[]string{"character_id", "status", "before_status", "section", "action"},
+				payloadFieldNames(t, kind),
+				"the lifecycle payload declares the D-103 before-status and the §10.7 admin context")
+
+			schema, err := outbox.Lookup(kind)
+			require.NoError(t, err)
+			assert.Equal(t, 2, schema.SchemaVersion,
+				"widening a declared payload REQUIRES its per-kind schema version to move 1 -> 2")
+		})
+	}
+}
+
+// TestCharacterProfilePayloadDeclaresSectionAndAction pins steps 6 and 7 — the
+// half an earlier six-step enumeration left able to drift green.
+//
+// The admin profile write REUSES KindCharacterProfileUpdate rather than minting
+// an admin kind, so this one declaration carries both actor flavours; the player
+// path emits empty section and action on it, which is correct because the
+// envelope Actor already distinguishes who acted.
+func TestCharacterProfilePayloadDeclaresSectionAndAction(t *testing.T) {
+	assert.ElementsMatch(t,
+		[]string{"character_id", "changed_attributes", "section", "action"},
+		payloadFieldNames(t, outbox.KindCharacterProfileUpdate),
+		"the profile payload gains the §10.7 admin context and still carries NO values")
+
+	schema, err := outbox.Lookup(outbox.KindCharacterProfileUpdate)
+	require.NoError(t, err)
+	assert.Equal(t, 2, schema.SchemaVersion,
+		"widening characterProfilePayload REQUIRES KindCharacterProfileUpdate's schema version to move 1 -> 2")
+}
+
+// TestAppSchemaVersionTracksTheWidenedCharacterPayloads pins step 8, the
+// registry-revision bump AppSchemaVersion's own doc comment requires whenever a
+// per-type payload schema changes.
+//
+// It is a separate test from the two above precisely so reverting the
+// AppSchemaVersion bump ALONE — with both payload widenings and all three
+// per-kind bumps left in place — still fails.
+func TestAppSchemaVersionTracksTheWidenedCharacterPayloads(t *testing.T) {
+	assert.Equal(t, 4, outbox.AppSchemaVersion,
+		"revision 4 widens both character lifecycle payloads and the character profile payload (v0.13 phase-06 plan 05)")
+}
+
+// TestNoAdminOnlyCharacterKindWasMinted proves the reuse decision structurally:
+// the admin profile write and the admin lifecycle transitions declare the SAME
+// three kinds the player path declares, and no fourth admin-flavoured character
+// kind exists.
+//
+// A distinct admin kind would force a census row, a command->kind parity row and
+// a service kind-list entry — none of which this plan touches — and would split
+// "a character's profile changed" into two audit vocabularies keyed on who
+// acted, which the envelope Actor already records.
+func TestNoAdminOnlyCharacterKindWasMinted(t *testing.T) {
+	for _, kind := range outbox.Kinds() {
+		assert.NotContains(t, strings.ToLower(kind), "admin",
+			"the admin write reuses the shipped character kinds; %q looks like a minted admin kind", kind)
+	}
+}
+
+// TestARelayedWorldEnvelopeCarriesNoRenderingMetadata pins the CURRENT boundary
+// between the world outbox and the host audit projection — a boundary this
+// phase's D-105 reasoning assumes is closed and which is not.
+//
+// # What is true
+//
+// An admin mutation's audit envelope commits or rolls back WITH its state change.
+// That is proven end to end in test/integration/access/admin_characters_write_test.go
+// and it is the half of ROADMAP criterion 3 that holds.
+//
+// # What is NOT true today
+//
+// The second half — "the events_audit row is PROJECTED from that envelope" — does
+// not happen for a world-outbox envelope, because the two ends do not meet:
+//
+//   - EnvelopeToEvent (wire.go) constructs the eventbus.Event with no Rendering,
+//     asserted below.
+//   - The relay publishes through EventBus.Publisher() — a bare
+//     JetStreamPublisher. Only eventbus.RenderingPublisher writes the
+//     App-Rendering header, and it is not in the relay's path. (It could not be:
+//     its Lookup resolves the wire type against plugin verbs[].type and
+//     hard-fails EMIT_UNKNOWN_VERB on a world-change kind like character_retired.)
+//   - audit.writeAuditRow REQUIRES App-Rendering and returns AUDIT_MISSING_HEADER
+//     without it (projection.go, the renderingJSON == "" arm).
+//
+// So a world envelope reaching the projection is rejected rather than persisted.
+// This test asserts the first bullet — the one fact that lives in this package —
+// so the boundary is recorded as a pinned property rather than as a comment. If a
+// future change gives relayed world events rendering metadata, this test goes RED
+// and whoever does it is pointed at the audit-projection contract that change
+// would newly satisfy.
+func TestARelayedWorldEnvelopeCarriesNoRenderingMetadata(t *testing.T) {
+	env := wmodel.Envelope{
+		EventID:       ulid.Make(),
+		GameID:        "main",
+		Kind:          outbox.KindCharacterRetired,
+		SchemaVersion: 2,
+		Actor:         "player:" + ulid.Make().String(),
+		AggregateType: wmodel.AggregateCharacter,
+		AggregateID:   ulid.Make(),
+		Payload:       []byte(`{"character_id":"x","status":"retired","before_status":"active","section":"characters","action":"write"}`),
+	}
+
+	ev, err := outbox.EnvelopeToEvent(env)
+	require.NoError(t, err)
+	require.NotEmpty(t, ev.Payload, "control: the adapter really did build an event")
+	assert.Nil(t, ev.Rendering,
+		"a relayed world envelope carries NO rendering metadata, so the host audit projection "+
+			"(which requires the App-Rendering header) cannot persist it — see this test's doc comment")
+	assert.NotContains(t, ev.Headers, "App-Rendering",
+		"and the header is absent too: only eventbus.RenderingPublisher writes it, and the relay "+
+			"does not route through it")
 }

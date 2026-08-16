@@ -707,6 +707,14 @@ tasks:
     generates:
       - web/build/index.html
 
+  web:test:
+    desc: Run web unit/component tests (vitest) and the svelte-check type pass
+    dir: web
+    deps: ['web:install', 'web:generate']
+    cmds:
+      - pnpm test:unit
+      - pnpm check
+
   web:embed:
     desc: Copy SvelteKit build to internal/web/dist for go:embed
     deps: ['web:build']
@@ -1140,6 +1148,8 @@ tasks:
       - task: fmt:check
       - echo "▸ Running unit tests..."
       - task: test
+      - echo "▸ Running web unit tests..."
+      - task: web:test
       - echo "▸ Building..."
       - task: build
       - echo "✓ Fast PR checks passed (run 'task pr-prep:full' for integration + E2E)."
@@ -1274,6 +1284,8 @@ tasks:
       - task: fmt:check
       - echo "▸ Running unit tests..."
       - task: test
+      - echo "▸ Running web unit tests..."
+      - task: web:test
       - echo "▸ Running integration tests..."
       - task: test:int
       - echo "▸ Running E2E tests..."

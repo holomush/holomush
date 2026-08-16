@@ -230,41 +230,6 @@ func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv
 	return resp, nil
 }
 
-// WebCreateCharacter creates a new character for the authenticated player.
-func (h *Handler) WebCreateCharacter(ctx context.Context, req *connect.Request[webv1.WebCreateCharacterRequest]) (*connect.Response[webv1.WebCreateCharacterResponse], error) {
-	slog.DebugContext(ctx, "web: WebCreateCharacter", "character_name", req.Msg.GetCharacterName())
-
-	token, err := playerTokenFromHeader(req.Header())
-	if err != nil {
-		return nil, err
-	}
-
-	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
-	defer cancel()
-
-	coreResp, err := h.client.CreateCharacter(rpcCtx, &corev1.CreateCharacterRequest{
-		PlayerSessionToken: token,
-		CharacterName:      req.Msg.GetCharacterName(),
-	})
-	if err != nil {
-		errutil.LogErrorContext(ctx, "web: create character RPC failed", err)
-		return connect.NewResponse(&webv1.WebCreateCharacterResponse{
-			Success: false, ErrorMessage: "character creation error",
-		}), nil
-	}
-	if !coreResp.GetSuccess() {
-		return connect.NewResponse(&webv1.WebCreateCharacterResponse{
-			Success: false, ErrorMessage: coreResp.GetErrorMessage(),
-		}), nil
-	}
-
-	return connect.NewResponse(&webv1.WebCreateCharacterResponse{
-		Success:       true,
-		CharacterId:   coreResp.GetCharacterId(),
-		CharacterName: coreResp.GetCharacterName(),
-	}), nil
-}
-
 // WebListCharacters returns the characters available for the authenticated player.
 func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[webv1.WebListCharactersRequest]) (*connect.Response[webv1.WebListCharactersResponse], error) {
 	slog.DebugContext(ctx, "web: WebListCharacters")
@@ -288,30 +253,6 @@ func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[we
 	return connect.NewResponse(&webv1.WebListCharactersResponse{
 		Characters: translateCharacterSummaries(coreResp.GetCharacters()),
 	}), nil
-}
-
-// WebListAllCharacters returns the full character directory (id+name) for the
-// picker. Proxies to CoreService.ListAllCharacters, which authorizes the call:
-// any session (registered or guest) holding the named, session-owned acting
-// character may list names (INV-ACCESS-9). Authorization is enforced at core;
-// this BFF only forwards the cookie token and character_id.
-func (h *Handler) WebListAllCharacters(ctx context.Context, req *connect.Request[webv1.WebListAllCharactersRequest]) (*connect.Response[webv1.WebListAllCharactersResponse], error) {
-	slog.DebugContext(ctx, "web: WebListAllCharacters")
-	token, err := playerTokenFromHeader(req.Header())
-	if err != nil {
-		return nil, err
-	}
-	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
-	defer cancel()
-	coreResp, err := h.client.ListAllCharacters(rpcCtx, &corev1.ListAllCharactersRequest{
-		PlayerSessionToken: token,
-		CharacterId:        req.Msg.GetCharacterId(),
-	})
-	if err != nil {
-		errutil.LogErrorContext(ctx, "web: list all characters RPC failed", err)
-		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
-	}
-	return connect.NewResponse(&webv1.WebListAllCharactersResponse{Characters: coreResp.GetCharacters()}), nil
 }
 
 // WebLogout ends the current session and clears the session cookie.
@@ -356,10 +297,16 @@ func (h *Handler) WebCheckSession(ctx context.Context, req *connect.Request[webv
 	}
 
 	return connect.NewResponse(&webv1.WebCheckSessionResponse{
-		PlayerName: coreResp.GetPlayerName(),
-		PlayerId:   coreResp.GetPlayerId(),
-		IsGuest:    coreResp.GetIsGuest(),
-		Characters: translateCharacterSummaries(coreResp.GetCharacters()),
+		PlayerName:         coreResp.GetPlayerName(),
+		PlayerId:           coreResp.GetPlayerId(),
+		IsGuest:            coreResp.GetIsGuest(),
+		Characters:         translateCharacterSummaries(coreResp.GetCharacters()),
+		DefaultCharacterId: coreResp.GetDefaultCharacterId(),
+		// Read the field, copy the field. The gateway MUST NOT look roles up
+		// itself and MUST NOT derive them: internal/web/ is
+		// protocol-translation-only, and a role decision made here would be in
+		// the wrong process and bypassable by anyone speaking gRPC to core.
+		Roles: coreResp.GetRoles(),
 	}), nil
 }
 

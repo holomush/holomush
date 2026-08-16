@@ -472,6 +472,98 @@ func SeedPolicies() []SeedPolicy {
 			SeedVersion: 1,
 		},
 
+		// --- Background-job fixture: instance-scoped character write (AUTHZ-02) ---
+		//
+		// WHAT THIS SEED PROVES. A background job (subject job:<name>) may write
+		// exactly the character its triggering event names — and no other. It is
+		// the phase tracer's grant: the `when` clause binds the caller-supplied
+		// provenance (world.JobCaller's action.job.* triple) against the
+		// resolver-stamped resource.id, so a handler that derives the wrong
+		// aggregate is denied rather than corrupting it.
+		//
+		// `fixture` IS A FIXTURE. No job by that name is ever registered in
+		// production, so the liveness gate in attribute.JobProvider resolves it to
+		// nothing and this permit cannot match: principal.job.name is absent, and
+		// a missing attribute is false for every operator (ADR holomush-iv43).
+		// Grants for the REAL consumers — job:retirement, job:activity-flush — are
+		// deliberately deferred to Phase 3 (D-52); none shipped here.
+		//
+		// THE `when` CLAUSE IS MANDATORY, NOT DECORATION. parseEntityType matches
+		// the PREFIX ONLY, so a bare `permit(principal is job, ...)` would be a
+		// blanket grant to every present and future job — exactly the failure D-48
+		// created a disjoint namespace to avoid.
+		//
+		// BOTH action.job.* CONJUNCTS ARE LOAD-BEARING (D-54). trigger_subject
+		// bounds WHAT the job may touch; trigger_event_type bounds WHAT CAUSED the
+		// write. The event-type half reads as redundant against the subject match
+		// and is not: dropping it would grant this job every event type its
+		// subscription happens to deliver for that aggregate, which is how a job
+		// on a broad filter acquires broader authority than intended.
+		//
+		// THE CAPABILITY-CLASS CONJUNCT IS THE SECOND GATE (D-51). A job declares
+		// its write kinds in Go at registration; that declaration NARROWS, and
+		// this seed GRANTS. Both must pass, and the declaration alone authorizes
+		// nothing unless a seed reads it — which is exactly what
+		// `principal.job.writes.containsAll(["character"])` does. Delete it and
+		// the declaration becomes decoration.
+		//
+		// trigger_subject is the BARE AGGREGATE ULID — byte-identical to
+		// bags.Resource["id"], which is the substring after the first ':' of the
+		// resource ref. Not a dotted NATS subject, not a prefixed entity ref:
+		// either compares unequal and every job write silently default-denies.
+		{
+			Name:        "seed:job-fixture-instance-scoped",
+			Description: "A live background job may write only the character its triggering event names (AUTHZ-02 fixture; no production consumer — real job grants are Phase 3's per D-52)",
+			DSLText:     `permit(principal is job, action in ["write"], resource is character) when { principal.job.name == "fixture" && principal.job.writes.containsAll(["character"]) && action.job.trigger_event_type == "fixture_triggered" && action.job.trigger_subject == resource.id };`,
+			SeedVersion: 1,
+		},
+
+		// --- Background job: the retirement reactor (IDENT-04, D-52) ---
+		//
+		// The first REAL job grant. It is the fixture above with `fixture`
+		// replaced by the live job, and it is deliberately no wider: every
+		// conjunct there is load-bearing here for the same reasons, so read
+		// that comment first.
+		//
+		// WHAT IT AUTHORIZES, EXACTLY. The retirement reactor
+		// (internal/retirement) consumes character_retired off
+		// events.*.character.> and moves the retiree to the starting location.
+		// Two effects cross the ABAC chokepoint — the status read the guard
+		// performs and the move itself — so the action list is read+write and
+		// nothing else. Notably NOT here: retire, unretire, delete. The
+		// reactor reacts to a retirement; it never performs one.
+		//
+		// WHY BOTH READ AND WRITE ARE INSTANCE-SCOPED. The read looks like it
+		// could safely be broader — it is only a status lookup — but a
+		// job-wide character read is a character-enumeration primitive, and
+		// the reactor genuinely needs exactly one character per delivery. The
+		// same `when` clause therefore fences both.
+		//
+		// THE INSTANCE FENCE IS WHAT MAKES THIS SAFE (D-54). The reactor
+		// derives the character from the message BODY while the provenance
+		// triple is stamped from the transport SUBJECT. Those two derivations
+		// are independent, so `action.job.trigger_subject == resource.id`
+		// denies a handler that derives the wrong aggregate rather than
+		// letting it corrupt one. A blanket `permit(principal is job, ...)`
+		// would be the ceiling this seed exists to stay under, not the target.
+		//
+		// THE EVENT-TYPE CONJUNCT IS NOT REDUNDANT. The consumer's filter is
+		// the whole character aggregate, so character_created / _moved /
+		// _unretired all reach the handler. Binding the trigger to
+		// character_retired is what stops a broad subscription from becoming
+		// broad authority.
+		//
+		// LIVENESS IS THE THIRD GATE (D-49). principal.job.name resolves only
+		// while internal/jobs.Registry reports the job running — the reactor
+		// registers in Activate and unregisters in Stop — so a host that does
+		// not run the reactor cannot have this permit match at all.
+		{
+			Name:        "seed:job-retirement-instance-scoped",
+			Description: "The retirement reactor may read and write only the character its triggering character_retired event names (IDENT-04, D-52/D-54)",
+			DSLText:     `permit(principal is job, action in ["read", "write"], resource is character) when { principal.job.name == "retirement" && principal.job.writes.containsAll(["character"]) && action.job.trigger_event_type == "character_retired" && action.job.trigger_subject == resource.id };`,
+			SeedVersion: 1,
+		},
+
 		// --- Character directory (INV-ACCESS-9) ---
 		//
 		// Any authenticated character (registered or guest) may list the server-wide
@@ -483,6 +575,39 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:directory-list-characters",
 			Description: "Any authenticated character (incl. guest) may list the character directory (names only)",
 			DSLText:     `permit(principal is character, action in ["list_character_directory"], resource is character_directory);`,
+			SeedVersion: 1,
+		},
+
+		// The VIEWER-flavored twin of the permit above (D-76, D-01's pattern).
+		// The shipped policy is `principal is character`-scoped, so a `viewer:`
+		// principal — the web reader, who may hold no character at all — matches
+		// nothing and the default-deny floor closes the surface. This entry is
+		// 01-SPEC §9.2's tier floor ON THE DIRECTORY RESOURCE, and it is what
+		// CharacterAccessServer.ListCharacterDirectory evaluates, ONCE, before it
+		// enumerates anything.
+		//
+		// THE CLEARING SET IS THE WHOLE CONFIGURATION SURFACE. Raising the
+		// directory floor — publishing it to logged-in players only, or closing
+		// it entirely — is an edit to this list and nothing else; no handler, no
+		// resource type and no action token changes with it.
+		//
+		// IT IS INDEPENDENT OF seed:profile-reachable. The two govern different
+		// questions on different resource types — "may this viewer enumerate the
+		// directory at all" versus "does this character's profile resolve" — so a
+		// game may publish the directory at a rung it does not publish profiles
+		// at, or the reverse. The facade evaluates both and never derives one
+		// from the other.
+		//
+		// It reads NO resource attributes, exactly as seed:profile-reachable
+		// does, so `resource is character_directory` needs no AttributeProvider:
+		// it is a target match on the parsed resource type. `character_directory`
+		// is also a DIFFERENT resource type from `character`, which is why this
+		// entry is outside TestNoPhase2SeedIntroducesACharacterResourceTypePermit's
+		// sweep rather than an exception to it.
+		{
+			Name:        "seed:viewer-directory-list-characters",
+			Description: "A viewer at any rung may enumerate the character directory (§9.2 directory tier floor: anonymous)",
+			DSLText:     `permit(principal is viewer, action in ["list_character_directory"], resource is character_directory) when { principal.viewer.tier in ["anonymous", "guest", "player"] };`,
 			SeedVersion: 1,
 		},
 
@@ -767,6 +892,68 @@ func SeedPolicies() []SeedPolicy {
 			SeedVersion: 1,
 		},
 
+		// --- The characters.description half, landing in Phase 4 (D-75, D-76) ---
+		//
+		// This is the deferral immediately above being discharged, and it is
+		// discharged the way that comment said it had to be: with the projection
+		// narrowing that makes it safe. Each of the four reasons the Phase-2
+		// permit was rejected is answered by a NARROW ACTION rather than by
+		// weakening any of them.
+		//
+		// THE ACTION IS `read_description`, NOT `read`. That is the whole
+		// mechanism. The rejected Phase-2 permit was `action in ["read"]` on
+		// `resource is character`, which is the pair world.Service.GetCharacter
+		// gates on — so it handed every principal the entire CharacterInfo
+		// projection (Id, PlayerId, Name, Description, LocationId), not the one
+		// column it was justified by. A distinct action reaches exactly one
+		// method, world.Service.GetCharacterDescription, whose return type
+		// (world.CharacterDescription) has only Name and Description fields. The
+		// narrowing is therefore structural: PlayerID and LocationID have nowhere
+		// to go, so no reviewer has to notice that they were cleared.
+		//
+		// `seed:player-character-colocation` and GetCharacter's `read` gate are
+		// left BYTE-IDENTICAL. The grid path does not move; these are new
+		// additive permits and permits combine disjunctively (combineDecisions,
+		// engine.go), which is what lets the description widen without editing a
+		// shipped policy or opening an upgrade path that could collide with an
+		// admin-customized row.
+		//
+		// THE ACTION TOKEN IS REGISTERED NOWHERE, and that is correct.
+		// POLICY_UNREGISTERED_ACTION_ATTRIBUTE (compiler.go) gates `action.<key>`
+		// ATTRIBUTE references inside `when {}` clauses, not action TOKENS in a
+		// target clause, and neither policy below carries such a reference.
+		// attribute.ActionNamespaceSchema() and internal/command/types.go's
+		// validActions govern different surfaces and MUST NOT grow an entry for
+		// this token.
+		//
+		// BOTH SHIP AT SeedVersion 1. The version is PER POLICY, not a global
+		// counter: bootstrap.go:91 compares a seed's declared version against
+		// that same policy's own stored row purely as an upgrade trigger, and a
+		// brand-new policy has no prior row to upgrade from. Every policy Phase 2
+		// added ships at 1 for the same reason.
+		{
+			Name:        "seed:character-description-read",
+			Description: "Any character may read another character's in-world description, off-location (PROFILE-11's characters.description half; D-29's literal deferral, D-75)",
+			DSLText:     `permit(principal is character, action in ["read_description"], resource is character);`,
+			SeedVersion: 1,
+		},
+		// The D-76 viewer twin. It carries the tier clearing test rather than
+		// deferring to the tier-floor family, because that family targets
+		// `resource is property` and this resource is a CHARACTER — so before
+		// this entry NO shipped policy granted a `viewer:` principal any read on
+		// characters.description, and the paired positive control in
+		// test/integration/access/character_profile_read_test.go is exactly that
+		// tree. 01-SPEC §8.6 seeds the in-world description at the `anonymous`
+		// floor (§7.4, §8.11's recorded divergence from strict grid-parity), so
+		// all three rungs clear. The clearing list below is what a game edits to
+		// raise that floor (§7.4 closing paragraph).
+		{
+			Name:        "seed:viewer-character-description-read",
+			Description: "A viewer at any rung may read a character's in-world description on the profile (§7.4, §8.6 anonymous floor; D-76)",
+			DSLText:     `permit(principal is viewer, action in ["read_description"], resource is character) when { principal.viewer.tier in ["anonymous", "guest", "player"] };`,
+			SeedVersion: 1,
+		},
+
 		// --- Admin sections (EXT-07, §10.4, §10.5) ---
 		//
 		// SCOPED BY RESOURCE TYPE, NOT BY ENUMERATED ID. `resource is
@@ -798,6 +985,53 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:admin-section-access",
 			Description: "Admin players may read and write every admin section, scoped by resource type (EXT-07, §10.4, §10.5)",
 			DSLText:     `permit(principal is player, action in ["read", "write"], resource is admin_section) when { "admin" in principal.player.roles };`,
+			SeedVersion: 1,
+		},
+
+		// --- Admin character administration (ADMIN-03/04/05, §10.4) ---
+		//
+		// THE WORLD-LAYER GATE, and without it the whole admin character write
+		// path is default-denied one layer BELOW the section interceptor. Every
+		// world method the admin RPCs reuse runs its own checkAccess on a
+		// `character:<id>` resource — "retire", "unretire" and "write" — and
+		// neither shipped policy reaches it: seed:admin-full-access above
+		// requires `principal is character` and never fires for a player
+		// principal, and seed:admin-section-access is scoped
+		// `resource is admin_section`.
+		//
+		// PLAYER-FLAVORED PRINCIPAL, and here it is REQUIRED rather than
+		// preferred. D-104 makes the admin caller player-flavoured so the
+		// envelope Actor is `player:<id>`; a character-flavoured caller would put
+		// the acting-character id back into the RETAINED audit trail, which is
+		// precisely what D-104 exists to remove. Same family of reason as its
+		// admin_section sibling above: one answer to "is this human an admin",
+		// not two.
+		//
+		// `delete` IS DELIBERATELY ABSENT. world.Service.DeleteCharacter is
+		// irreversible and cascades entity_properties (§4.4). There is no
+		// AdminDeleteCharacter RPC, and omitting the action here makes the same
+		// guarantee hold at the POLICY layer: a player-principal admin is denied
+		// `delete` on a character by the ENGINE, not only by the absence of a
+		// button — which an RPC-level omission alone could be quietly undone by.
+		// `read` IS ALSO DELIBERATELY ABSENT, for a different reason than
+		// `delete`: it was a DEAD GRANT. The admin portal's reads do not traverse
+		// world policy at all — they go through AdminGetCharacterRow
+		// (internal/world/postgres/character_repo_admin.go), a bounded repository
+		// projection that evaluates no checkAccess. The only world method a `read`
+		// permit would unlock for a player principal is world.Service.GetCharacter,
+		// whose projection returns PlayerId and LocationId for any character — the
+		// very fields D-75 narrowed away — and no production caller reaches it with
+		// a player-flavoured subject: GetCharacter's callers stamp character, job or
+		// plugin subjects, and command dispatch is character-flavoured throughout.
+		// Carrying `read` therefore granted nothing today while pre-authorising that
+		// full projection for the first player-flavoured read caller to be added
+		// later, with no test able to catch the drift. Adjudicated by abac-reviewer
+		// over the finished Phase 6 surface; the three actions below are exactly
+		// those AdminCharacterWriter exposes.
+		{
+			Name:        "seed:admin-character-administration",
+			Description: "Admin players may write and move the lifecycle of any character, scoped to the character resource type (ADMIN-03/04/05, §10.4). Not delete, and not read — admin reads use a bounded repository projection that evaluates no policy.",
+			DSLText:     `permit(principal is player, action in ["write", "retire", "unretire"], resource is character) when { "admin" in principal.player.roles };`,
 			SeedVersion: 1,
 		},
 	}

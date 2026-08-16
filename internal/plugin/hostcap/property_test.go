@@ -37,7 +37,7 @@ func (f *fakePropertyDef) Get(_ context.Context, _ property.WorldQuerier, _ stri
 	return f.getValue, f.getErr
 }
 
-func (f *fakePropertyDef) Set(_ context.Context, _ property.WorldQuerier, _ property.WorldMutator, _ string, _ string, _ ulid.ULID, _ string) error {
+func (f *fakePropertyDef) Set(_ context.Context, _ property.WorldQuerier, _ property.WorldMutator, _ world.Caller, _ string, _ ulid.ULID, _ string) error {
 	return f.setErr
 }
 
@@ -65,43 +65,43 @@ func (fakePropertyWorldQuerier) GetObject(_ context.Context, _ ulid.ULID) (*worl
 // fakePropertyWorldMutator satisfies world.Mutator (= hostcap.WorldMutator) with no-op stubs.
 type fakePropertyWorldMutator struct{}
 
-func (fakePropertyWorldMutator) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (fakePropertyWorldMutator) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	return nil, nil
 }
 
-func (fakePropertyWorldMutator) GetCharacter(_ context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+func (fakePropertyWorldMutator) GetCharacter(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Character, error) {
 	return nil, nil
 }
 
-func (fakePropertyWorldMutator) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+func (fakePropertyWorldMutator) GetCharactersByLocation(_ context.Context, _ world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	return nil, nil
 }
 
-func (fakePropertyWorldMutator) GetObject(_ context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+func (fakePropertyWorldMutator) GetObject(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Object, error) {
 	return nil, nil
 }
 
-func (fakePropertyWorldMutator) CreateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (fakePropertyWorldMutator) CreateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (fakePropertyWorldMutator) CreateExit(_ context.Context, _ string, _ *world.Exit) error {
+func (fakePropertyWorldMutator) CreateExit(_ context.Context, _ world.Caller, _ *world.Exit) error {
 	return nil
 }
 
-func (fakePropertyWorldMutator) CreateObject(_ context.Context, _ string, _ *world.Object) error {
+func (fakePropertyWorldMutator) CreateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (fakePropertyWorldMutator) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (fakePropertyWorldMutator) UpdateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (fakePropertyWorldMutator) UpdateObject(_ context.Context, _ string, _ *world.Object) error {
+func (fakePropertyWorldMutator) UpdateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (fakePropertyWorldMutator) FindLocationByName(_ context.Context, _, _ string) (*world.Location, error) {
+func (fakePropertyWorldMutator) FindLocationByName(_ context.Context, _ world.Caller, _ string) (*world.Location, error) {
 	return nil, nil
 }
 

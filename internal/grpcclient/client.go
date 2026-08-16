@@ -22,6 +22,8 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
+	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
@@ -29,10 +31,12 @@ import (
 
 // Client wraps a gRPC connection to the Core service.
 type Client struct {
-	conn              *grpc.ClientConn
-	client            corev1.CoreServiceClient
-	contentClient     contentv1.ContentServiceClient
-	sceneAccessClient sceneaccessv1.SceneAccessServiceClient
+	conn                  *grpc.ClientConn
+	client                corev1.CoreServiceClient
+	contentClient         contentv1.ContentServiceClient
+	sceneAccessClient     sceneaccessv1.SceneAccessServiceClient
+	characterAccessClient characteraccessv1.CharacterAccessServiceClient
+	adminPortalClient     adminportalv1.AdminPortalServiceClient
 }
 
 // ClientConfig holds configuration for the gRPC client.
@@ -89,10 +93,12 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 	}
 
 	return &Client{
-		conn:              conn,
-		client:            corev1.NewCoreServiceClient(conn),
-		contentClient:     contentv1.NewContentServiceClient(conn),
-		sceneAccessClient: sceneaccessv1.NewSceneAccessServiceClient(conn),
+		conn:                  conn,
+		client:                corev1.NewCoreServiceClient(conn),
+		contentClient:         contentv1.NewContentServiceClient(conn),
+		sceneAccessClient:     sceneaccessv1.NewSceneAccessServiceClient(conn),
+		characterAccessClient: characteraccessv1.NewCharacterAccessServiceClient(conn),
+		adminPortalClient:     adminportalv1.NewAdminPortalServiceClient(conn),
 	}, nil
 }
 
@@ -382,6 +388,208 @@ func (c *Client) ListContent(ctx context.Context, req *contentv1.ListContentRequ
 // CoreClient returns the underlying gRPC CoreClient interface for advanced usage.
 func (c *Client) CoreClient() corev1.CoreServiceClient {
 	return c.client
+}
+
+// GetCharacterProfile reads one character's public profile from the character-
+// access facade. The gateway forwards the caller's optional session token; the
+// facade resolves the viewer rung from it and owns every visibility decision.
+func (c *Client) GetCharacterProfile(ctx context.Context, req *characteraccessv1.GetCharacterProfileRequest) (*characteraccessv1.GetCharacterProfileResponse, error) {
+	resp, err := c.characterAccessClient.GetCharacterProfile(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "GetCharacterProfile").Wrap(err)
+	}
+	return resp, nil
+}
+
+// ListMyCharacters reads the authenticated player's own roster from the
+// character-access facade. The facade resolves the player from the forwarded
+// session token; the gateway names no player.
+//
+// This and the three legs below reach facade handlers that land in plans 04-05
+// and 04-06. Until then the facade's embedded server stub answers Unimplemented
+// and these pass that through, wrapped with the method name like every sibling.
+func (c *Client) ListMyCharacters(ctx context.Context, req *characteraccessv1.ListMyCharactersRequest) (*characteraccessv1.ListMyCharactersResponse, error) {
+	resp, err := c.characterAccessClient.ListMyCharacters(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListMyCharacters").Wrap(err)
+	}
+	return resp, nil
+}
+
+// GetMyCharacter reads one owned character in the owner audience's shape.
+// Ownership is verified in the facade against the token's player.
+func (c *Client) GetMyCharacter(ctx context.Context, req *characteraccessv1.GetMyCharacterRequest) (*characteraccessv1.GetMyCharacterResponse, error) {
+	resp, err := c.characterAccessClient.GetMyCharacter(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "GetMyCharacter").Wrap(err)
+	}
+	return resp, nil
+}
+
+// UpdateCharacterProfile applies a masked partial edit to the character's
+// stored profile.* rows. The mask is forwarded unread — the allowlist that
+// decides which paths are acceptable lives in the facade.
+func (c *Client) UpdateCharacterProfile(ctx context.Context, req *characteraccessv1.UpdateCharacterProfileRequest) (*characteraccessv1.UpdateCharacterProfileResponse, error) {
+	resp, err := c.characterAccessClient.UpdateCharacterProfile(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "UpdateCharacterProfile").Wrap(err)
+	}
+	return resp, nil
+}
+
+// UpdateCharacterDescription rewrites the in-world `look` text — the intrinsic
+// characters.description column, not a profile.* row.
+func (c *Client) UpdateCharacterDescription(ctx context.Context, req *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error) {
+	resp, err := c.characterAccessClient.UpdateCharacterDescription(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "UpdateCharacterDescription").Wrap(err)
+	}
+	return resp, nil
+}
+
+// SetDefaultCharacter repoints the authenticated player's default character.
+// The facade proves ownership and playability; the gateway names neither.
+func (c *Client) SetDefaultCharacter(ctx context.Context, req *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error) {
+	resp, err := c.characterAccessClient.SetDefaultCharacter(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "SetDefaultCharacter").Wrap(err)
+	}
+	return resp, nil
+}
+
+// CreateOwnCharacter seats a new character from the structured identity card
+// and answers with it in the owner audience's shape.
+//
+// # Why the Go name is not CreateCharacter
+//
+// TWO services in this codebase declare an RPC named CreateCharacter:
+// holomush.core.v1.CoreService's, which the telnet CREATE verb drives and
+// which answers with a bare character_name scalar, and
+// holomush.characteraccess.v1.CharacterAccessService's, which this method
+// reaches. Both are live and neither is going away, but *Client is ONE Go type
+// and a Go type cannot carry two methods with one name.
+//
+// So the collision is resolved HERE, at the only place both surfaces meet,
+// rather than by renaming an RPC or dropping one of them. The proto method
+// name is unchanged on both sides — this is a Go-identifier accommodation and
+// nothing else. cmd/holomush's characterAccessGateway adapter re-exposes this
+// method under the interface name web.CharacterAccessClient expects.
+func (c *Client) CreateOwnCharacter(ctx context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error) {
+	resp, err := c.characterAccessClient.CreateCharacter(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "CreateCharacter").Wrap(err)
+	}
+	return resp, nil
+}
+
+// ListCharacterDirectory lists the characters whose profiles the calling viewer
+// can reach, as identity rows only.
+func (c *Client) ListCharacterDirectory(ctx context.Context, req *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
+	resp, err := c.characterAccessClient.ListCharacterDirectory(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListCharacterDirectory").Wrap(err)
+	}
+	return resp, nil
+}
+
+// AdminListSections forwards to AdminPortalService.AdminListSections.
+//
+// Unlike its character-facade peers it does NOT wrap the error in oops. The
+// admin refusal is a gRPC status carrying a deliberately static message, and
+// status.FromError replaces a WRAPPED status's message with the outer error's
+// full text — so wrapping here would substitute "RPC_FAILED: …" for the opaque
+// refusal the core built, at the one boundary whose whole job is to forward it
+// unchanged.
+func (c *Client) AdminListSections(ctx context.Context, req *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error) {
+	resp, err := c.adminPortalClient.AdminListSections(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminGetSection forwards to AdminPortalService.AdminGetSection.
+//
+// Like its AdminListSections peer it does NOT wrap the error in oops. Both of
+// this RPC's refusals carry deliberately static messages — the PermissionDenied
+// a denied caller gets and the FailedPrecondition a permitted caller gets for a
+// planned section — and status.FromError replaces a WRAPPED status's message
+// with the outer error's full text, which would substitute "RPC_FAILED: …" for
+// the opaque refusal the core built.
+func (c *Client) AdminGetSection(ctx context.Context, req *adminportalv1.AdminGetSectionRequest) (*adminportalv1.AdminGetSectionResponse, error) {
+	resp, err := c.adminPortalClient.AdminGetSection(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminListCharacters forwards to AdminPortalService.AdminListCharacters.
+//
+// Like its section-registry peers it does NOT wrap the error in oops: the admin
+// refusals carry deliberately static messages, and status.FromError replaces a
+// WRAPPED status's message with the outer error's full text.
+func (c *Client) AdminListCharacters(ctx context.Context, req *adminportalv1.AdminListCharactersRequest) (*adminportalv1.AdminListCharactersResponse, error) {
+	resp, err := c.adminPortalClient.AdminListCharacters(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminSearchCharacters forwards to AdminPortalService.AdminSearchCharacters.
+// It does NOT wrap the error, for the same reason its list peer does not.
+func (c *Client) AdminSearchCharacters(ctx context.Context, req *adminportalv1.AdminSearchCharactersRequest) (*adminportalv1.AdminSearchCharactersResponse, error) {
+	resp, err := c.adminPortalClient.AdminSearchCharacters(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminGetCharacter forwards to AdminPortalService.AdminGetCharacter.
+//
+// The unwrapped pass-through matters here for a second reason beyond the
+// refusal: the NotFound this RPC returns carries a static message naming no id,
+// and wrapping would substitute the outer error's text for it.
+func (c *Client) AdminGetCharacter(ctx context.Context, req *adminportalv1.AdminGetCharacterRequest) (*adminportalv1.AdminGetCharacterResponse, error) {
+	resp, err := c.adminPortalClient.AdminGetCharacter(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminUpdateCharacter forwards to AdminPortalService.AdminUpdateCharacter.
+//
+// The unwrapped pass-through is what keeps the core's per-outcome statuses
+// distinguishable at the browser: InvalidArgument for an unlisted mask path or a
+// zero version, Aborted for a stale one, and the SAME opaque PermissionDenied
+// for both authorization layers.
+func (c *Client) AdminUpdateCharacter(ctx context.Context, req *adminportalv1.AdminUpdateCharacterRequest) (*adminportalv1.AdminUpdateCharacterResponse, error) {
+	resp, err := c.adminPortalClient.AdminUpdateCharacter(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminRetireCharacter forwards to AdminPortalService.AdminRetireCharacter.
+func (c *Client) AdminRetireCharacter(ctx context.Context, req *adminportalv1.AdminRetireCharacterRequest) (*adminportalv1.AdminRetireCharacterResponse, error) {
+	resp, err := c.adminPortalClient.AdminRetireCharacter(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
+}
+
+// AdminUnretireCharacter forwards to AdminPortalService.AdminUnretireCharacter.
+func (c *Client) AdminUnretireCharacter(ctx context.Context, req *adminportalv1.AdminUnretireCharacterRequest) (*adminportalv1.AdminUnretireCharacterResponse, error) {
+	resp, err := c.adminPortalClient.AdminUnretireCharacter(ctx, req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is: wrapping would rewrite the static refusal message
+	}
+	return resp, nil
 }
 
 // ListScenesForViewer returns the public scene board filtered by the player's preferences.

@@ -118,7 +118,7 @@ func newMockWorldSeeder() *mockWorldSeeder {
 	return &mockWorldSeeder{locations: make(map[string]*world.Location)}
 }
 
-func (m *mockWorldSeeder) CreateLocation(_ context.Context, _ string, loc *world.Location) error {
+func (m *mockWorldSeeder) CreateLocation(_ context.Context, _ world.Caller, loc *world.Location) error {
 	if m.createErr != nil {
 		return m.createErr
 	}
@@ -135,7 +135,7 @@ func (m *mockWorldSeeder) CreateLocation(_ context.Context, _ string, loc *world
 	return nil
 }
 
-func (m *mockWorldSeeder) CreateExit(_ context.Context, _ string, exit *world.Exit) error {
+func (m *mockWorldSeeder) CreateExit(_ context.Context, _ world.Caller, exit *world.Exit) error {
 	if m.createErr != nil {
 		return m.createErr
 	}
@@ -151,7 +151,7 @@ func (m *mockWorldSeeder) CreateExit(_ context.Context, _ string, exit *world.Ex
 	return nil
 }
 
-func (m *mockWorldSeeder) FindLocationByName(_ context.Context, _ string, name string) (*world.Location, error) {
+func (m *mockWorldSeeder) FindLocationByName(_ context.Context, _ world.Caller, name string) (*world.Location, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	loc, ok := m.locations[name]

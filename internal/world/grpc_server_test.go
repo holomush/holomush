@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
+	"github.com/holomush/holomush/pkg/errutil"
 	worldv1 "github.com/holomush/holomush/pkg/proto/holomush/world/v1"
 )
 
@@ -303,4 +304,45 @@ func TestWorldServiceServer_ListExits(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
+}
+
+// TestComposedJobDenyCodeStillClassifiesAsPermissionDenied is the wire-level
+// half of D-58: composing the principal kind into the deny code must not cost
+// the code its gRPC classification.
+//
+// mapWorldError classifies on the "_ACCESS_DENIED" SUFFIX
+// (internal/world/grpc_server.go:169), which is precisely why the qualifier is a
+// PREFIX. The rejected alternative — CHARACTER_ACCESS_DENIED_JOB — reads fine
+// and breaks this classification outright, turning every job denial into a
+// codes.Internal.
+//
+// The error fed to the mapper is the REAL one a denied job produces, taken from
+// the shipped-corpus fixture probe rather than hand-spelled, so a change to the
+// composition cannot leave this test asserting a string production no longer
+// emits.
+func TestComposedJobDenyCodeStillClassifiesAsPermissionDenied(t *testing.T) {
+	charID := ulid.MustParse(fixtureCharacter)
+	svc, _ := newFixtureJobProbe(t, charID)
+
+	// Provenance naming a DIFFERENT aggregate: denied by the instance-scoping
+	// conjunct of seed:job-fixture-instance-scoped.
+	denyErr := svc.UpdateCharacterDescription(context.Background(),
+		world.JobCaller(fixtureJobName, world.Provenance{
+			EventID:   fixtureEventID,
+			EventType: fixtureEventType,
+			Subject:   unrelatedCharacer,
+		}), charID, "retired")
+	require.Error(t, denyErr)
+	errutil.AssertErrorCode(t, denyErr, "JOB_CHARACTER_ACCESS_DENIED")
+
+	mapped := world.MapWorldErrorForTest(denyErr)
+
+	st, ok := status.FromError(mapped)
+	require.True(t, ok, "the mapper MUST return a gRPC status error")
+	assert.Equal(t, codes.PermissionDenied, st.Code(),
+		"a JOB_-qualified deny code MUST still classify as PermissionDenied — the qualifier is a "+
+			"prefix precisely so the _ACCESS_DENIED suffix classification survives")
+	assert.Equal(t, "access denied", st.Message(),
+		"the mapper MUST keep returning its static message: no inner error text, and no "+
+			"principal kind, crosses the wire boundary (.claude/rules/grpc-errors.md)")
 }

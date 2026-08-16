@@ -160,6 +160,10 @@
 </header>
 
 <style>
+  /* Lets Tailwind resolve theme() inside this scoped style block; the build
+     fails loudly without it. */
+  @reference "../../app.css";
+
   header {
     height: var(--topbar-h);
     display: flex;
@@ -197,7 +201,7 @@
     color: var(--color-status-text);
     font-size: 11px;
   }
-  @media (min-width: 768px) {
+  @media (width >= theme(--breakpoint-md)) {
     .kbd-hint { display: inline-flex; }
   }
   .kbd-hint kbd {
@@ -237,7 +241,7 @@
   .theme-swatches { display: flex; gap: 2px; }
   .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--color-border); }
   .mobile-only { display: inline-flex; }
-  @media (min-width: 768px) {
+  @media (width >= theme(--breakpoint-md)) {
     .mobile-only { display: none; }
   }
 </style>

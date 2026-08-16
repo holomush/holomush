@@ -22,7 +22,7 @@
  *     so there is no UI path to click one.
  */
 
-import { test, expect, db } from './helpers/fixtures';
+import { test, expect, db, createCharacter, enterGameAs } from './helpers/fixtures';
 import type { Page } from '@playwright/test';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -83,12 +83,8 @@ async function registerAndEnterTerminal(
   await page.fill('input[name="confirmPassword"]', password);
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
-  await page.locator('text=Create New Character').click();
-  await page.fill('input[name="characterName"]', charName);
-  await page.locator('button[role="checkbox"]').click();
-  await page.locator('button:has-text("Create")').click();
-  await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
-  await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+  await createCharacter(page, charName);
+  await enterGameAs(page, charName);
 
   return { username, password, charName };
 }
@@ -244,9 +240,12 @@ test.describe('Terminal — Negative Journeys', () => {
 
 test.describe('Scenes — Negative Journeys', () => {
   // A player who already owns a character with name X cannot create a second
-  // character with the same name on the same account. The server returns
-  // success=false with "character name is already taken". The character picker
-  // renders this inline as `p.text-destructive` without navigating away.
+  // character with the same name on the same account. The facade refuses with
+  // AlreadyExists, and /characters/new classifies that BY CODE into authored
+  // copy — it never renders the server's own sentence, because naming the
+  // colliding character would rebuild an enumeration oracle (plan 05-06, D-88).
+  // So the assertion is on the authored line and on staying put, not on the
+  // server's wording.
   //
   // We use one player with two creation attempts — simpler and less prone to
   // cookie-state races than the two-player variant.
@@ -268,28 +267,25 @@ test.describe('Scenes — Negative Journeys', () => {
     await page.locator('button[type="submit"]').click();
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
-    // First creation: succeed without entering game (leave "Enter game immediately" unticked).
-    await page.locator('text=Create New Character').click();
-    await page.fill('input[name="characterName"]', takenName);
-    // Do NOT tick autoDefault — stay on /characters after creation.
-    await page.locator('button:has-text("Create")').click();
-    // The character appears in the list — creation succeeded.
-    await expect(page.locator('[data-testid="char-name"]', { hasText: takenName })).toBeVisible({
-      timeout: 10000,
-    });
+    // First creation: succeeds and lands back on the roster. Entering the game
+    // is a separate act now, so nothing has to be left unticked to stay here.
+    await createCharacter(page, takenName);
 
     // Second creation attempt: same name, same player.
-    await page.locator('text=Create New Character').click();
+    await page.locator('[data-testid="create-character"]').click();
+    await expect(page).toHaveURL(/\/characters\/new/, { timeout: 10000 });
     await page.fill('input[name="characterName"]', takenName);
-    await page.locator('button:has-text("Create")').click();
+    await page.locator('button[type="submit"]').click();
 
-    // Must stay on /characters — no redirect to /terminal.
-    await expect(page).toHaveURL(/\/characters/, { timeout: 5000 });
+    // The refusal keeps the player on the form — no navigation to the roster
+    // and none to the terminal.
+    await expect(page).toHaveURL(/\/characters\/new/, { timeout: 5000 });
 
-    // Inline createError must be visible and contain the server's sanitized message.
-    const errorEl = page.locator('p.text-destructive');
+    // The authored taken copy, and NOT the server's own sentence.
+    const errorEl = page.locator('[role="alert"]');
     await expect(errorEl.first()).toBeVisible({ timeout: 5000 });
-    await expect(errorEl.first()).toContainText(/already taken/i);
+    await expect(errorEl.first()).toContainText(/that name is taken/i);
+    await expect(errorEl.first()).not.toContainText(/already taken/i);
   });
 
   // A guest player navigating directly to /scenes/browse must be redirected

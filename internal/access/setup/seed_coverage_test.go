@@ -119,8 +119,8 @@ var AcknowledgedMissingSeedNamespaces = map[string]string{}
 
 // TestValidateSeedProviderCoverage_ProductionCorpusIsCovered is the
 // load-bearing regression lock at the UNIT level: it verifies the validator
-// CORRECTLY identifies the known-missing namespaces (property, object) for
-// the production seed corpus. The companion integration test
+// CORRECTLY identifies the known-missing namespaces for the production seed
+// corpus. The companion integration test
 // TestBuildABACStack_SeedCoverageMatchesAcknowledged
 // (internal/access/setup/buildabacstack_seed_coverage_integ_test.go) is the
 // drift-detector: it builds the REAL BuildABACStack and asserts its actual
@@ -138,6 +138,7 @@ func TestValidateSeedProviderCoverage_ProductionCorpusIsCovered(t *testing.T) {
 	// registrations. The integration test asserts no drift.
 	productionRegistered := []string{
 		"character", "location", "object", "property", "player", "viewer", "command", "stream", "plugin",
+		"job",
 	}
 
 	missing := validateSeedProviderCoverage(productionRegistered, policy.SeedPolicies())
@@ -194,4 +195,56 @@ func TestValidateSeedProviderCoverage_TargetOnlyMatchesNotFlagged(t *testing.T) 
 	assert.Empty(t, missing,
 		"target-only matchers (resource is X, principal is X) do NOT need a provider; "+
 			"only when-clause attribute references do. Regex must not flag them.")
+}
+
+// TestSeedNamespaceRefPatternNeverMatchesAnActionRoot pins that registering the
+// `action` schema cannot introduce a new boot WARN.
+//
+// warnOnMissingSeedCoverage reports a namespace as uncovered when a seed
+// references it but no PROVIDER owns it, and `action` has no provider by design
+// (D-60 registers it directly, which never touches
+// Resolver.RegisteredNamespaces). The reason that is safe is structural rather
+// than incidental: seedNamespaceRefPattern is anchored on a `principal.` or
+// `resource.` root, so an `action.` root is not a candidate at all.
+//
+// This asserts that behavior directly instead of trusting the reasoning: the
+// shipped seeds that reference action.* are fed through the real validator with
+// NOTHING registered, and the missing-set must still come back empty.
+func TestSeedNamespaceRefPatternNeverMatchesAnActionRoot(t *testing.T) {
+	t.Parallel()
+
+	// Direct assertion on the regex itself.
+	for _, ref := range []string{
+		"action.dispatch_location",
+		"action.job.trigger_subject",
+		"action.name",
+	} {
+		assert.False(t, seedNamespaceRefPattern.MatchString(ref),
+			"%q MUST NOT match: the pattern is rooted on principal/resource, so an action "+
+				"root can never be reported as an uncovered namespace", ref)
+	}
+
+	// Paired positive control: the pattern DOES match the roots it owns, so the
+	// assertions above cannot pass because the pattern matches nothing at all.
+	assert.True(t, seedNamespaceRefPattern.MatchString("resource.location.id"),
+		"control: a resource-rooted reference MUST still match, or the negatives are vacuous")
+
+	// End-to-end through the real validator, using the two SHIPPED seeds that
+	// reference action.* — with an empty registered set, the harshest case.
+	seeds := []policy.SeedPolicy{
+		{
+			Name:    "test:action-dispatch-location",
+			DSLText: `permit(principal is plugin, action in ["write"], resource is location) when { resource.location.id == action.dispatch_location };`,
+		},
+		{
+			Name:    "test:action-job-provenance",
+			DSLText: `permit(principal is job, action in ["write"], resource is character) when { action.job.trigger_event_type == "fixture_triggered" && action.job.trigger_subject == resource.id };`,
+		},
+	}
+
+	missing := validateSeedProviderCoverage(nil, seeds)
+	assert.NotContains(t, missing, "action",
+		"`action` MUST NEVER be reported as an uncovered namespace: it is a caller-supplied "+
+			"bag with no provider by design (D-60), so a WARN naming it would be a permanent "+
+			"operator-signal regression at every boot")
 }

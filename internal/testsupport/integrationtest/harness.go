@@ -61,20 +61,28 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
+	"net"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/access/profilevis"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
+	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/charactivity"
 	"github.com/holomush/holomush/internal/charname"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/commandquery"
@@ -90,18 +98,22 @@ import (
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/jobs"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/pgnanos"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/presence"
+	"github.com/holomush/holomush/internal/retirement"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
+	worldsetup "github.com/holomush/holomush/internal/world/setup"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
 	channelv1 "github.com/holomush/holomush/pkg/proto/holomush/channel/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
@@ -135,12 +147,24 @@ type Server struct {
 	// retained so tests can build a SceneAccessServer with a real
 	// RepoCharacterNameResolver (mirrors production sub_grpc.go:597).
 	worldCharRepo *worldpg.CharacterRepository
-	sessionStore  session.Store
-	locRepo       *worldpg.LocationRepository
+	// propertyRepo is the SAME repository the reaping service holds, hoisted so
+	// the gated listener's admin portal reads through one object rather than a
+	// second one over the same pool.
+	propertyRepo *worldpg.PropertyRepository
+	sessionStore session.Store
+	locRepo      *worldpg.LocationRepository
 
 	// services
 	authService *auth.Service
 	guestSvc    *auth.GuestService
+	// characterSvc is the REAL create pipeline — the §6.1.1 uniqueness
+	// pre-check, charname.Gate.Admit, the character limit, the starting location
+	// and CharacterGenesisService.Create — built here rather than stubbed so an
+	// integration spec exercising CreateCharacter runs production's refusals
+	// against production's Postgres uniqueness index, not a fake's opinion of
+	// them. It shares the SAME genesis service and the SAME name gate the guest
+	// path uses, exactly as cmd/holomush shares one of each.
+	characterSvc *auth.CharacterService
 
 	// bus (embedded NATS JetStream)
 	bus *eventbustest.Embedded
@@ -202,6 +226,40 @@ type Server struct {
 	// exercises the real JoinFocus → SetConnectionFocus path (holomush-5rh.8.26).
 	focusCoord focus.Coordinator
 
+	// worldSvc is the ONE world.Service this harness constructs (newWorldService).
+	// It is always built — construction touches no live resource — and is shared
+	// by the plugin subsystem and by WithRetirementReactor's reactor surface, so
+	// there is exactly one ServiceConfig wiring in the harness and no chance of
+	// the reactor writing through a differently-configured service than the one
+	// a spec retires through. Exposed via World().
+	worldSvc *world.Service
+
+	// verbRegistry is the bootstrapped verb registry the harness's publishers
+	// stamp rendering metadata from. Retained so options that build an
+	// additional publisher (WithRetirementReactor's presence emitter) wrap the
+	// SAME registry the CoreServer's publisher does — a frame with nil Rendering
+	// is dropped by the gateway (INV-EVENTBUS-6).
+	verbRegistry *core.VerbRegistry
+
+	// jobRegistry is the ONE background-job liveness registry, mirroring
+	// cmd/holomush/core.go: the SAME instance the ABAC subsystem's JobProvider
+	// reads and the retirement reactor registers into. A second instance would
+	// report the job as not running and every world write it makes would
+	// silently default-deny. Always constructed (it has no dependencies); empty
+	// unless a job subsystem registers, which is the correct fail-closed state.
+	jobRegistry *jobs.Registry
+
+	// retirementStartLoc is the location WithRetirementReactor created as the
+	// fanout's move destination. Zero unless that option was passed. It is
+	// DELIBERATELY distinct from guestStartLocationID: characters are seeded at
+	// the guest start location, so a retirement move to the same location would
+	// hit the reactor's already-there skip gate and be unobservable.
+	retirementStartLoc ulid.ULID
+
+	// gatedGRPCConn is the dialed client end of the bufconn server
+	// WithGatedGRPCListener stood up; nil otherwise. Read via GatedGRPCConn().
+	gatedGRPCConn *grpc.ClientConn
+
 	// cmdRegistry is the registry the dispatcher was actually built against —
 	// the default empty one, the compiled-in set under WithBuiltinCommands, or
 	// the plugin subsystem's registry when WithInTreePlugins adopted it. Unlike
@@ -237,6 +295,21 @@ type startConfig struct {
 	// of creating a fresh one (WithSharedDatabase). Used by the two-replica
 	// resilience suite so replica 2 boots against replica 1's database.
 	sharedConnStr string
+	// characterActivity boots the real charactivity subsystem (WithCharacterActivity).
+	characterActivity bool
+	// characterActivityStorage is the KV bucket's backing store. Explicit
+	// because FileStorage is StorageType's zero value — see the option's doc.
+	characterActivityStorage jetstream.StorageType
+	// characterActivityFlushInterval shortens the production five-minute tick.
+	characterActivityFlushInterval time.Duration
+	// outboxRelay boots the real world outbox relay subsystem (WithOutboxRelay).
+	outboxRelay bool
+	// retirementReactor boots the real retirement reactor subsystem
+	// (WithRetirementReactor).
+	retirementReactor bool
+	// gatedGRPCListener stands up a bufconn *grpc.Server through the production
+	// server factory (WithGatedGRPCListener).
+	gatedGRPCListener bool
 }
 
 // WithPolicyEngine overrides the harness's default allow-all ABAC engine.
@@ -330,6 +403,30 @@ func WithFocusDelivery() StartOption {
 // suites keep the WithSubscriber-only wiring — zero blast radius (01-09 CHAN-05).
 func WithSessionStreamDelivery() StartOption {
 	return func(c *startConfig) { c.withSessionStreamDelivery = true }
+}
+
+// WithGatedGRPCListener stands up a bufconn *grpc.Server built by the SAME
+// production factory cmd/holomush uses (holoGRPC.NewGRPCServer), carrying the
+// real admin section interceptor over the harness's real ABAC engine and real
+// player-session repository, registers AdminPortalService on it, and exposes a
+// dialed client conn via [Server.GatedGRPCConn].
+//
+// # What it provides that no existing option does
+//
+// The harness's coreServer is IN-PROCESS with no network transport at all
+// (see the coreServer field). Before this option there was no way to assert a
+// WIRE-level property here — status codes, status messages, what a caller
+// bypassing the browser and the gateway actually receives — because nothing
+// ever crossed a transport.
+//
+// It goes through the factory rather than calling grpc.NewServer directly, and
+// that is the point: the denial a spec proves over this connection is a
+// property of the PRODUCTION composition, not of a constructor nothing calls.
+//
+// Pair with WithRealABAC. Against the default allow-all engine every caller is
+// an admin and the denial half of any gate spec passes vacuously.
+func WithGatedGRPCListener() StartOption {
+	return func(c *startConfig) { c.gatedGRPCListener = true }
 }
 
 // Start bootstraps a full in-process holomush stack and returns a Server.
@@ -443,9 +540,13 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		worldpg.NewReapingGuard(pool),
 	)
 	require.NoError(t, err, "integrationtest.Start: create character genesis service")
+	// ONE property repository over this pool, shared by its two consumers: the
+	// guest reaping service and the admin portal's detail read, mirroring
+	// cmd/holomush/sub_grpc.go.
+	propertyRepo := worldpg.NewPropertyRepository(pool)
 	guestReaping, err := auth.NewCharacterReapingService(
 		worldCharRepo, worldCharRepo,
-		worldpg.NewPropertyRepository(pool),
+		propertyRepo,
 		guestBindingRepo,
 		guestTransactor,
 		worldpg.NewOutboxStore(pool),
@@ -466,6 +567,21 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		harnessNameGate,
 	)
 	require.NoError(t, err, "integrationtest.Start: create guest service")
+
+	// The registered-player create pipeline, wired production-equivalently
+	// (mirrors cmd/holomush/sub_grpc.go's auth.NewCharacterService call). The
+	// location adapter reads through a POINTER to guestLocID because
+	// bootstrapsetup.LocRepoAdapter exists for a start location resolved after
+	// its construction; here the value is already known, so the pointer is just
+	// the shape the adapter takes.
+	harnessStartLocID := guestLocID
+	characterSvc, err := auth.NewCharacterService(
+		charRepo,
+		bootstrapsetup.NewLocRepoAdapter(&harnessStartLocID, locRepo),
+		guestGenesis,
+		harnessNameGate,
+	)
+	require.NoError(t, err, "integrationtest.Start: create character service")
 
 	// Embedded NATS bus (in-memory, cleaned up via t.Cleanup) — unless
 	// WithExternalNATS swapped in a production external-mode subsystem dialing a
@@ -497,13 +613,26 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 
 	pe := cfg.accessEngine
 
+	// The ONE background-job liveness registry, constructed unconditionally
+	// exactly as cmd/holomush/core.go does. It is handed to the real ABAC
+	// subsystem below AND to any job subsystem an option boots, so a job's
+	// declared liveness is visible to the engine that gates its writes. An empty
+	// registry fails closed (every job-gating seed default-denies), so building
+	// it on every path costs nothing and changes nothing.
+	jobRegistry := jobs.NewRegistry()
+
 	// Real seeded ABAC engine (opt-in). Overrides the allow-all default and is
 	// retained for the plugin layer's resolver/pluginProvider threading below.
 	var abacSub *abacsetup.ABACSubsystem
 	if cfg.withRealABAC {
-		abacSub = startRealABAC(t, ctx, pool)
+		abacSub = startRealABAC(t, ctx, pool, jobRegistry)
 		pe = abacSub.Engine()
 	}
+
+	// The ONE world.Service. Built here rather than inside startPlugins so the
+	// plugin subsystem and WithRetirementReactor share a single instance built
+	// from a single ServiceConfig — see the Server.worldSvc field comment.
+	worldSvc := newWorldService(pool, pe)
 
 	// VerbRegistry must exist before plugins load (they register verbs). It is
 	// also required by the locationFollower's synthetic location_state emit path
@@ -558,6 +687,7 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 			pool:                  pool,
 			connStr:               connStr,
 			engine:                pe,
+			worldSvc:              worldSvc,
 			sessionStore:          sessionStoreInst,
 			verbReg:               verbRegistry,
 			playerRepo:            playerRepo,
@@ -738,6 +868,13 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		// without the operational complexity of seeded ABAC policies.
 		holoGRPC.WithAccessEngine(pe),
 		holoGRPC.WithVerbRegistry(verbRegistry),
+		// The ADMIN-08 nav hint, wired from the REAL role store exactly as
+		// cmd/holomush does. This half is LOAD-BEARING, not a convenience: the
+		// boundary spec that proves `roles` is non-authoritative reads the field
+		// as a setup precondition before exercising the denial, so without this
+		// line the precondition fails — and if the spec were written without it,
+		// the whole test would pass while asserting nothing about the field.
+		holoGRPC.WithPlayerRoleLookup(store.NewPostgresRoleStore(pool).PlayerRoles),
 	}
 	// Under WithPluginCrypto, enable the Phase 3b crypto identity path so
 	// QueryStreamHistory builds a typed CHARACTER SessionIdentity (binding_id
@@ -803,10 +940,12 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		playerRepo:           playerRepo,
 		charRepo:             charRepo,
 		worldCharRepo:        worldCharRepo,
+		propertyRepo:         propertyRepo,
 		sessionStore:         sessionStoreInst,
 		locRepo:              locRepo,
 		authService:          authService,
 		guestSvc:             guestSvc,
+		characterSvc:         characterSvc,
 		bus:                  bus,
 		coreServer:           coreServer,
 		pluginSub:            pluginSub,
@@ -816,6 +955,9 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 		guestStartLocationID: guestLocID,
 		focusCoord:           focusCoord,
 		cmdRegistry:          cmdRegistry,
+		worldSvc:             worldSvc,
+		jobRegistry:          jobRegistry,
+		verbRegistry:         verbRegistry,
 	}
 
 	// Plugin-crypto links 3+4 (Task 8): the audit projection (PluginConsumerManager
@@ -858,8 +1000,264 @@ func Start(t *testing.T, opts ...StartOption) *Server {
 	// migration.
 	srv.backfillCharacterSkeletons(ctx)
 
+	if cfg.characterActivity {
+		srv.startCharacterActivity(ctx, cfg)
+	}
+	// The relay must be live BEFORE the reactor's durable consumer exists only
+	// in the sense that both must be live before a spec acts; the two options
+	// are orthogonal and neither implies the other, so each is booted on its own
+	// flag. Relay first mirrors the production start order (OutboxRelay depends
+	// on Database + EventBus; RetirementReactor additionally on World +
+	// Sessions + Bootstrap).
+	if cfg.outboxRelay {
+		srv.startOutboxRelay(ctx)
+	}
+	if cfg.retirementReactor {
+		srv.startRetirementReactor(ctx)
+	}
+	if cfg.gatedGRPCListener {
+		srv.startGatedGRPCListener()
+	}
+
 	return srv
 }
+
+// newWorldService builds the harness's world.Service, mirroring
+// internal/world/setup/subsystem.go's ServiceConfig verbatim — including the
+// OutboxWriter, without which every world write routed through mutate() hits a
+// nil writer (05-07).
+func newWorldService(pool *pgxpool.Pool, engine types.AccessPolicyEngine) *world.Service {
+	return world.NewService(world.ServiceConfig{
+		LocationRepo:  worldpg.NewLocationRepository(pool),
+		ExitRepo:      worldpg.NewExitRepository(pool),
+		ObjectRepo:    worldpg.NewObjectRepository(pool),
+		SceneRepo:     worldpg.NewSceneRepository(pool),
+		CharacterRepo: worldpg.NewCharacterRepository(pool),
+		PropertyRepo:  worldpg.NewPropertyRepository(pool),
+		Engine:        engine,
+		Transactor:    worldpg.NewTransactor(pool),
+		OutboxWriter:  worldpg.NewOutboxStore(pool),
+	})
+}
+
+// startOutboxRelay boots the REAL world outbox relay subsystem over the
+// harness's pool and embedded bus (WithOutboxRelay).
+//
+// It goes through the production Prepare/Activate/Stop contract rather than
+// driving outbox.Relay directly, so a spec observes the same lease acquisition,
+// the same LISTEN/NOTIFY waker and the same drain loop production runs. This is
+// what turns a committed outbox row into a published bus event — the link every
+// downstream event-driven subsystem depends on and that this harness previously
+// left unstarted.
+func (s *Server) startOutboxRelay(ctx context.Context) {
+	s.t.Helper()
+	gameID := s.bus.Bus.GameID()
+	sub := worldsetup.NewOutboxRelaySubsystem(worldsetup.OutboxRelaySubsystemConfig{
+		DB:       poolProvider{pool: s.pool},
+		EventBus: s.bus.Bus,
+		GameID:   func() string { return gameID },
+	})
+	require.NoError(s.t, sub.Prepare(ctx), "integrationtest.Start: prepare outbox relay subsystem")
+	require.NoError(s.t, sub.Activate(ctx), "integrationtest.Start: activate outbox relay subsystem")
+	s.t.Cleanup(func() {
+		if err := sub.Stop(context.Background()); err != nil {
+			s.t.Logf("integrationtest.Start: outbox relay subsystem Stop: %v", err)
+		}
+	})
+}
+
+// startRetirementReactor boots the REAL retirement reactor subsystem
+// (WithRetirementReactor) with production-SHAPED dependencies resolved from the
+// harness stack.
+//
+// Two of those dependencies are deliberately NOT the harness's own:
+//
+//   - The presence emitter is a fresh presence.NewEmitter over the bus
+//     publisher, rendering-wrapped exactly as production's is. The harness's own
+//     presenceEmitter publishes into &noopPublisher{}, so the reactor's leave and
+//     session_ended emissions would be unobservable through it — the opposite of
+//     what this option exists for.
+//   - The move destination is a location created here, DISTINCT from
+//     guestStartLocationID. Characters are seeded at the guest start location, so
+//     a destination equal to it would hit the reactor's already-there skip gate
+//     and the move would correctly emit nothing.
+//
+// Everything else is the harness's real stack: the same session store, the same
+// world.Service a spec retires through, the same job registry the ABAC engine
+// reads, and the embedded JetStream the durable consumer is created against.
+//
+// WHICH ENGINE A SPEC NEEDS. Under the default allow-all engine the reactor's
+// world calls pass the ABAC chokepoint trivially — correct for observing the
+// FANOUT, and honest about what it does not prove. A spec asserting the job's
+// authorization (the instance fence: provenance for aggregate X must not
+// authorize a write to aggregate Y) MUST pass WithRealABAC(), which seeds the
+// production corpus including seed:job-retirement-instance-scoped; the job's
+// liveness comes from this subsystem registering into the shared registry that
+// option's ABAC subsystem reads.
+func (s *Server) startRetirementReactor(ctx context.Context) {
+	s.t.Helper()
+
+	// The move destination. Persistent so it survives the whole spec.
+	startLoc := idgen.New()
+	_, err := s.locRepo.Create(ctx, &world.Location{
+		ID:           startLoc,
+		Name:         "Retirement Hall",
+		Description:  "Where retired characters are set down.",
+		Type:         world.LocationTypePersistent,
+		ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
+	})
+	require.NoError(s.t, err, "integrationtest.Start: create retirement start location")
+	s.retirementStartLoc = startLoc
+
+	sub := retirement.NewSubsystem(retirement.Config{
+		JetStream: jsHandle{js: s.bus.JS},
+		Sessions:  s.sessionStore,
+		Presence: presence.NewEmitter(
+			eventbus.NewRenderingPublisher(s.bus.Bus.Publisher(), s.verbRegistry),
+			s.bus.Bus.GameID,
+		),
+		World:           s.worldSvc,
+		Jobs:            s.jobRegistry,
+		StartLocationID: func() ulid.ULID { return startLoc },
+	})
+	require.NoError(s.t, sub.Prepare(ctx), "integrationtest.Start: prepare retirement reactor subsystem")
+	require.NoError(s.t, sub.Activate(ctx), "integrationtest.Start: activate retirement reactor subsystem")
+	s.t.Cleanup(func() {
+		if err := sub.Stop(context.Background()); err != nil {
+			s.t.Logf("integrationtest.Start: retirement reactor subsystem Stop: %v", err)
+		}
+	})
+}
+
+// startCharacterActivity boots the real charactivity subsystem against the
+// harness's embedded JetStream and pool (WithCharacterActivity).
+//
+// It goes through the production Prepare/Activate/Stop contract rather than
+// reaching inside, so the spec observes the same bucket, the same durable
+// consumer and the same flush loop production runs. The writer is the same
+// closure cmd/holomush wires — the real writer-boundary free function, not a
+// harness stand-in — because the property under test is that THAT function is
+// what advances the column.
+func (s *Server) startCharacterActivity(ctx context.Context, cfg *startConfig) {
+	s.t.Helper()
+	sub := charactivity.NewSubsystemWithStorage(charactivity.Config{
+		FlushInterval: cfg.characterActivityFlushInterval,
+		JetStream:     jsHandle{js: s.bus.JS},
+		Writer: func(ctx context.Context, characterID ulid.ULID, lastActiveNanos int64) error {
+			return worldpg.UpdateCharacterLastActive(ctx, s.pool, characterID, lastActiveNanos)
+		},
+	}, cfg.characterActivityStorage)
+	require.NoError(s.t, sub.Prepare(ctx), "integrationtest.Start: prepare character activity subsystem")
+	require.NoError(s.t, sub.Activate(ctx), "integrationtest.Start: activate character activity subsystem")
+	s.t.Cleanup(func() {
+		if err := sub.Stop(context.Background()); err != nil {
+			s.t.Logf("integrationtest.Start: character activity subsystem Stop: %v", err)
+		}
+	})
+}
+
+// gatedListenerBufSize is the bufconn buffer for the gated listener. Admin
+// portal messages are small; this is the conventional bufconn size and bounds
+// nothing the specs care about.
+const gatedListenerBufSize = 1024 * 1024
+
+// startGatedGRPCListener builds the bufconn server WithGatedGRPCListener
+// promises. It mirrors cmd/holomush/sub_grpc.go's composition exactly except
+// for TLS: the factory's nil-TLS path is the documented test affordance, and a
+// bufconn has no network to protect.
+func (s *Server) startGatedGRPCListener() {
+	s.t.Helper()
+
+	lis := bufconn.Listen(gatedListenerBufSize)
+
+	srv, err := holoGRPC.NewGRPCServer(holoGRPC.GRPCServerConfig{
+		// Deliberate cleartext: this listener is an in-process bufconn with no
+		// network to protect. Stating it here rather than inheriting it from a
+		// nil TLS keeps production's nil case a build refusal.
+		AllowInsecure: true,
+		AdminInterceptor: holoGRPC.NewAdminSectionInterceptor(holoGRPC.AdminInterceptorDeps{
+			Engine:      s.accessEngine,
+			SessionRepo: s.playerSessionStore,
+		}),
+	})
+	require.NoError(s.t, err, "integrationtest: build gated gRPC server")
+
+	// The SAME two options production wires at cmd/holomush/sub_grpc.go. Wiring
+	// only one root would leave the other silently answering with an empty page
+	// or twelve empty prose fields — which is exactly the failure the readers
+	// exist to prevent, made invisible by passing tests.
+	adminportalv1.RegisterAdminPortalServiceServer(srv, holoGRPC.NewAdminPortalServer(
+		s.accessEngine,
+		holoGRPC.WithAdminCharacterReader(s.worldCharRepo),
+		holoGRPC.WithAdminProfileReader(s.propertyRepo),
+		// The writer is the harness's ONE world.Service — the same instance
+		// Server.World() hands a spec — so a spec that drives an admin write over
+		// the wire and then reads through the service is looking at one write path,
+		// not two differently-configured ones.
+		holoGRPC.WithAdminCharacterWriter(s.worldSvc),
+	))
+
+	go func() {
+		if serveErr := srv.Serve(lis); serveErr != nil {
+			s.t.Logf("integrationtest: gated gRPC server stopped: %v", serveErr)
+		}
+	}()
+
+	conn, dialErr := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
+	)
+	require.NoError(s.t, dialErr, "integrationtest: dial gated gRPC server")
+
+	s.gatedGRPCConn = conn
+	s.t.Cleanup(func() {
+		_ = conn.Close()
+		srv.Stop()
+		_ = lis.Close()
+	})
+}
+
+// CoreServer returns the harness's in-process CoreServer, for specs that must
+// read a CoreService response DIRECTLY rather than through a Session helper.
+//
+// # What it provides that the existing accessors do not
+//
+// The gated listener (WithGatedGRPCListener) mounts only AdminPortalService, and
+// the Session helpers drive game sessions rather than the auth surface — so
+// before this there was no way to read CheckPlayerSession's answer at all. The
+// ADMIN-08 boundary spec needs exactly that: it asserts the `roles` nav hint
+// says "admin" as a PRECONDITION, then watches the admin RPC deny that same
+// caller anyway.
+//
+// It is a READ of the harness's own composition, never a second one: this is the
+// same CoreServer Start built, with the same WithPlayerRoleLookup wiring
+// cmd/holomush uses — which is what makes an assertion on its answer meaningful.
+func (s *Server) CoreServer() *holoGRPC.CoreServer {
+	s.t.Helper()
+	require.NotNil(s.t, s.coreServer, "integrationtest: the harness has no CoreServer")
+	return s.coreServer
+}
+
+// GatedGRPCConn returns the client end of the bufconn server
+// WithGatedGRPCListener stood up. It FAILS the test when that option was not
+// passed, rather than returning nil: a nil conn produces an obscure dial
+// failure far from the missing option.
+func (s *Server) GatedGRPCConn() *grpc.ClientConn {
+	s.t.Helper()
+	require.NotNil(s.t, s.gatedGRPCConn,
+		"integrationtest: GatedGRPCConn requires WithGatedGRPCListener()")
+	return s.gatedGRPCConn
+}
+
+// jsHandle adapts the harness's already-live JetStream handle to the
+// charactivity.JetStreamProvider deferral shape (production defers because the
+// eventbus subsystem has not started at construction time; here it already has).
+type jsHandle struct{ js jetstream.JetStream }
+
+func (h jsHandle) JS() jetstream.JetStream { return h.js }
 
 // cryptoPublisherOf returns pc's crypto-enabled publisher, or nil when pc is
 // nil (no WithPluginCrypto). A nil cryptoPublisher leaves the plugin event
@@ -965,6 +1363,41 @@ func (s *Server) NewSceneAccessServer() *holoGRPC.SceneAccessServer {
 	)
 	facade.WithCharacterNameResolver(holoGRPC.NewRepoCharacterNameResolver(s.worldCharRepo))
 	return facade
+}
+
+// NewCharacterAccessServer constructs a CharacterAccessServer wired with the
+// harness's real world.Service, its real auth repositories, and a
+// profilevis.Evaluator over the harness's own ABAC engine. This is the
+// production-equivalent wiring (mirroring cmd/holomush/sub_grpc.go).
+//
+// It requires NO plugins and no focus coordinator — the character-access facade
+// has neither dependency. It DOES require a policy engine that can actually
+// deny: compose with WithRealABAC, because the harness default is the allow-all
+// engine and every visibility assertion would pass against it whether or not the
+// seeded corpus permits the read.
+func (s *Server) NewCharacterAccessServer() *holoGRPC.CharacterAccessServer {
+	if s.accessEngine == nil {
+		s.t.Fatalf("integrationtest.Server.NewCharacterAccessServer: requires an access engine (accessEngine is nil)")
+	}
+	return holoGRPC.NewCharacterAccessServer(
+		s.worldSvc,
+		s.worldSvc,
+		&profilevis.Evaluator{Engine: s.accessEngine},
+		// The §9.2 directory gate's evaluator is the harness's own engine — the
+		// same value the profilevis.Evaluator above is built over, exactly as
+		// cmd/holomush passes one policyEngine to both.
+		s.accessEngine,
+		// The directory enumeration and the owner audience's ownership lookup are
+		// the same adapter, as in production.
+		s.charRepo,
+		s.playerSessionStore,
+		s.playerRepo,
+		s.charRepo,
+		// The create pipeline: the harness's REAL auth.CharacterService, sharing
+		// the genesis service and the name gate with the guest path exactly as
+		// production shares one of each.
+		s.characterSvc,
+	)
 }
 
 // AccessEngine returns the ABAC policy engine the stack evaluates against.
@@ -1525,6 +1958,29 @@ func (s *Server) Pool() *pgxpool.Pool {
 // same store the harness uses (holomush-rsoe6, Task 13).
 func (s *Server) SessionStore() session.Store {
 	return s.sessionStore
+}
+
+// World returns the harness's single world.Service — the SAME instance the
+// plugin subsystem was given and the same one WithRetirementReactor hands the
+// reactor. A spec that retires a character through this service therefore
+// exercises the identical write path the reactor later reads and moves through;
+// there is no second, differently-configured service.
+func (s *Server) World() *world.Service {
+	return s.worldSvc
+}
+
+// RetirementStartLocation returns the location WithRetirementReactor created as
+// the retirement fanout's move destination. It is distinct from the guest start
+// location the harness seeds characters at, which is what makes the move
+// observable rather than a no-op the reactor correctly skips.
+//
+// Panics when WithRetirementReactor was not passed: a zero ULID here would
+// silently turn a move assertion into an assertion about nothing.
+func (s *Server) RetirementStartLocation() ulid.ULID {
+	if s.retirementStartLoc.Compare(ulid.ULID{}) == 0 {
+		s.t.Fatalf("integrationtest: RetirementStartLocation() requires WithRetirementReactor()")
+	}
+	return s.retirementStartLoc
 }
 
 // BackdateGuestPlayer sets a guest player's updated_at to the given time.

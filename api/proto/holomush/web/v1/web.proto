@@ -9,7 +9,8 @@ import "buf/validate/validate.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
-import "holomush/core/v1/core.proto";
+import "holomush/adminportal/v1/adminportal.proto";
+import "holomush/characteraccess/v1/characteraccess.proto";
 import "holomush/scene/v1/scene.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1";
@@ -172,19 +173,20 @@ service WebService {
   // cookie-collision gate first.
   rpc WebCreateGuest(WebCreateGuestRequest) returns (WebCreateGuestResponse);
 
-  // WebCreateCharacter adds a character to the authenticated player. Proxies
-  // to CoreService.CreateCharacter using the cookie-derived session token.
+  // WebCreateCharacter adds a character to the authenticated player from a
+  // structured identity card. Proxies to
+  // CharacterAccessService.CreateCharacter — NOT CoreService.CreateCharacter,
+  // which still serves the telnet CREATE verb and still answers with a bare
+  // character_name scalar. web.Handler.WebCreateCharacter forwards the six
+  // submitted values plus the cookie-derived session token and computes
+  // nothing; a refusal arrives as a gRPC status the client classifies, so
+  // there is no gateway-synthesised success boolean.
   rpc WebCreateCharacter(WebCreateCharacterRequest) returns (WebCreateCharacterResponse);
 
   // WebListCharacters returns the authenticated player's character roster.
   // Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
   // CodeUnauthenticated (session expired or invalid).
   rpc WebListCharacters(WebListCharactersRequest) returns (WebListCharactersResponse);
-
-  // WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-  // reads player_session_token from the X-Session-Token cookie; any
-  // authenticated caller (guest included) may list character names.
-  rpc WebListAllCharacters(WebListAllCharactersRequest) returns (WebListAllCharactersResponse);
 
   // WebLogout ends the player session and clears the session cookie. Proxies
   // to CoreService.Logout (best-effort) when a token is present, then always
@@ -358,6 +360,92 @@ service WebService {
   rpc WebWithdrawScenePublish(WebWithdrawScenePublishRequest) returns (WebWithdrawScenePublishResponse);
   // WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
   rpc WebGetPublishedScene(WebGetPublishedSceneRequest) returns (WebGetPublishedSceneResponse);
+
+  // WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+  // Handler.WebGetCharacterProfile lifts the session token from the
+  // X-Session-Token header CookieMiddleware injected and forwards it; a request
+  // with no cookie is the ordinary logged-out case, not an error.
+  rpc WebGetCharacterProfile(WebGetCharacterProfileRequest) returns (WebGetCharacterProfileResponse);
+
+  // WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+  // Handler.WebListMyCharacters lifts the session token from the header and
+  // forwards nothing else; whose roster is returned follows from the token.
+  rpc WebListMyCharacters(WebListMyCharactersRequest) returns (WebListMyCharactersResponse);
+  // WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+  // is verified in the facade, not here.
+  rpc WebGetMyCharacter(WebGetMyCharacterRequest) returns (WebGetMyCharacterResponse);
+  // WebUpdateCharacterProfile proxies
+  // CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+  // forwards the mask and every prose field verbatim; the gateway neither
+  // validates the mask nor decides which fields it reaches.
+  rpc WebUpdateCharacterProfile(WebUpdateCharacterProfileRequest) returns (WebUpdateCharacterProfileResponse);
+  // WebUpdateCharacterDescription proxies
+  // CharacterAccessService.UpdateCharacterDescription.
+  rpc WebUpdateCharacterDescription(WebUpdateCharacterDescriptionRequest) returns (WebUpdateCharacterDescriptionResponse);
+  // WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+  // Handler.WebSetDefaultCharacter lifts the session token from the header and
+  // forwards only the character id; whose default is repointed follows from the
+  // token, and ownership is proven in the facade rather than here.
+  rpc WebSetDefaultCharacter(WebSetDefaultCharacterRequest) returns (WebSetDefaultCharacterResponse);
+  // WebListCharacterDirectory proxies
+  // CharacterAccessService.ListCharacterDirectory.
+  // Handler.WebListCharacterDirectory lifts the session token from the
+  // X-Session-Token header and forwards nothing else; a request with no cookie
+  // is the ordinary logged-out case rather than an error. The gateway neither
+  // filters nor re-sorts the listing — reachability and order are the facade's.
+  rpc WebListCharacterDirectory(WebListCharacterDirectoryRequest) returns (WebListCharacterDirectoryResponse);
+  // WebAdminListSections proxies AdminPortalService.AdminListSections.
+  // Handler.WebAdminListSections lifts the session token from the
+  // X-Session-Token header and forwards nothing else. It makes NO
+  // authorization decision of its own: the core interceptor already denied a
+  // caller with no `admin_section:` access before the core handler ran, so a
+  // non-admin's PermissionDenied reaches the browser unmodified rather than
+  // being turned into an empty list here.
+  rpc WebAdminListSections(WebAdminListSectionsRequest) returns (WebAdminListSectionsResponse);
+  // WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+  // Handler.WebAdminGetSection lifts the session token from the
+  // X-Session-Token header and forwards only section_id. It makes NO
+  // authorization decision: the core interceptor gates the supplied id before
+  // the core handler runs, so both the PermissionDenied a refused caller gets
+  // and the FailedPrecondition a permitted caller gets for a planned section
+  // reach the browser unmodified.
+  //
+  // It has NO browser caller in v0.13, and that is deliberate rather than dead
+  // code: D-100 makes both registry RPCs published wire contract and census
+  // members, and the wire-level gate tests in test/integration/access are what
+  // exercise this path.
+  rpc WebAdminGetSection(WebAdminGetSectionRequest) returns (WebAdminGetSectionResponse);
+  // WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+  // Handler.WebAdminListCharacters lifts the session token from the
+  // X-Session-Token header and forwards the page and ordering fields verbatim.
+  // It computes nothing: the clamp, the enum switches and the section gate all
+  // live core-side, where a caller speaking gRPC directly cannot skip them.
+  rpc WebAdminListCharacters(WebAdminListCharactersRequest) returns (WebAdminListCharactersResponse);
+  // WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+  // Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+  // it does not trim, case-fold or normalize it, because normalization is
+  // core-side through the one charname pipeline and a gateway mirror of it
+  // would be a second definition of name equality.
+  rpc WebAdminSearchCharacters(WebAdminSearchCharactersRequest) returns (WebAdminSearchCharactersResponse);
+  // WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+  // Handler.WebAdminGetCharacter forwards character_id and returns the detail
+  // message unmodified; the core's static NotFound reaches the browser as-is.
+  rpc WebAdminGetCharacter(WebAdminGetCharacterRequest) returns (WebAdminGetCharacterResponse);
+  // WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+  // Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+  // the expected_version verbatim and computes nothing: the closed allowlist,
+  // the byte caps, the version guard and the section gate all live core-side,
+  // where a caller speaking gRPC directly cannot skip them.
+  rpc WebAdminUpdateCharacter(WebAdminUpdateCharacterRequest) returns (WebAdminUpdateCharacterResponse);
+  // WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+  // Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+  // the core's Aborted for a stale version and FailedPrecondition for an
+  // already-retired character both reach the browser unmodified.
+  rpc WebAdminRetireCharacter(WebAdminRetireCharacterRequest) returns (WebAdminRetireCharacterResponse);
+  // WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+  // with the same forward-verbatim shape its retire peer has. There is no
+  // WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+  rpc WebAdminUnretireCharacter(WebAdminUnretireCharacterRequest) returns (WebAdminUnretireCharacterResponse);
 }
 
 // SendCommandRequest carries one raw command line for a game session, optionally
@@ -637,25 +725,72 @@ message WebCreateGuestResponse {
   string current_player_name = 6;
 }
 
-// WebCreateCharacterRequest names the new character to add to the authenticated
-// player. The player is identified by the cookie session token, not a body
-// field.
+// WebCreateCharacterRequest is the structured identity card a creation form
+// submits. The player is identified by the cookie session token, never a body
+// field — field 1 stays retired from the cookie cutover for exactly that
+// reason.
+//
+// The five prose values are OPTIONAL and their names match
+// CreateCharacterRequest's, because web.Handler.WebCreateCharacter forwards
+// them one-for-one. A value left empty is not written at all, so a name-only
+// submission seeds no profile rows.
 message WebCreateCharacterRequest {
-  // character_name is the desired display name for the new character. Field
-  // number is 2 (field 1 retired with the cookie cutover).
-  string character_name = 2;
+  // Field 1 carried `player_token` before the cookie cutover moved player
+  // identity onto the cookie, and field 2's name changed from `character_name`
+  // to `name`. Declaring both reserved is what makes the prose above
+  // ENFORCEABLE rather than merely asserted: without it a later field is free
+  // to take number 1 with a new meaning, and the freed NAME is free to reappear
+  // on a different number — at which point a stale client mis-decodes instead
+  // of failing, and protoc says nothing.
+  reserved 1;
+  reserved "player_token", "character_name";
+  // name is the submitted character name, forwarded verbatim.
+  // CharacterAccessServer.CreateCharacter hands it to
+  // auth.CharacterService.CreateBound, which normalizes it server-side; the
+  // gateway neither normalizes nor pre-checks it, so there is one normalizer.
+  // Field number is 2 (field 1 retired with the cookie cutover).
+  string name = 2;
+  // pronouns seeds the `profile.pronouns` row.
+  string pronouns = 3;
+  // concept seeds the `profile.concept` row.
+  string concept = 4;
+  // species seeds the `profile.species` row.
+  string species = 5;
+  // age seeds the `profile.age` row.
+  string age = 6;
+  // faction seeds the `profile.faction` row.
+  string faction = 7;
 }
 
-// WebCreateCharacterResponse reports the result of creating a character.
+// WebCreateCharacterResponse carries the created character in the owner
+// audience's shape, forwarded verbatim from
+// CharacterAccessServer.CreateCharacter.
+//
+// IT CARRIES NO success/error_message PAIR, and the absence is the contract
+// change. The gateway no longer synthesises a boolean from a downstream
+// outcome: a refusal is the facade's own gRPC status — AlreadyExists for a
+// taken name, InvalidArgument for a name the admission gate declined,
+// FailedPrecondition for a reached character limit — which the client
+// classifies directly.
 message WebCreateCharacterResponse {
-  // success is true when the character was created.
-  bool success = 1;
-  // character_id is the new character's ULID identity.
-  string character_id = 2;
-  // character_name is the created character's display name.
-  string character_name = 3;
-  // error_message is a human-readable failure detail on the non-success path.
-  string error_message = 4;
+  // The retired numbers and names from the pre-05-03 shape: `character_id` = 2,
+  // `character_name` = 3, `error_message` = 4. Reserving them stops a later
+  // field from silently inheriting a number or a name a stale client still
+  // recognises, which is the one failure mode that produces a wrong VALUE
+  // rather than a decode error.
+  //
+  // Field 1 is NOT reserved because it is reused: `success` (bool, varint) gave
+  // way to `character` (message, length-delimited). Reusing a number with a
+  // different wire type is a break protobuf cannot express as `reserved`, and
+  // it is deliberate — D-86 retires the old shape in the same change and this
+  // schema has never been deployed, so there is no stale client to protect. The
+  // note is here so the asymmetry with 2/3/4 reads as a decision.
+  reserved 2 to 4;
+  reserved "success", "character_id", "character_name", "error_message";
+  // character is the newly seated character. Its `name` is the SERVER-stored
+  // display form, which is what the post-submit echo shows the player; its
+  // `profile` map holds whichever of the five supplied values were written.
+  holomush.characteraccess.v1.OwnCharacter character = 1;
 }
 
 // WebListCharactersRequest is the empty request for the authenticated player's
@@ -667,19 +802,6 @@ message WebListCharactersRequest {}
 message WebListCharactersResponse {
   // characters is the player's full character roster.
   repeated CharacterSummary characters = 1;
-}
-
-// WebListAllCharactersRequest proxies to CoreService.ListAllCharacters; token
-// is injected from the X-Session-Token cookie.
-message WebListAllCharactersRequest {
-  // character_id is the acting alt (forwarded as the ABAC subject). Required.
-  string character_id = 1;
-}
-
-// WebListAllCharactersResponse re-exports the directory page from core.
-message WebListAllCharactersResponse {
-  // characters is the id+name list from CoreService.ListAllCharacters.
-  repeated holomush.core.v1.CharacterDirectoryEntry characters = 1;
 }
 
 // WebLogoutRequest is the empty request to end the current session; the session
@@ -743,6 +865,34 @@ message WebCheckSessionResponse {
   // characters is the player's character roster, returned so the client can
   // restore character-selection state on reload.
   repeated CharacterSummary characters = 4;
+  // default_character_id is the core response's field of the same name,
+  // forwarded verbatim by Handler.WebCheckSession. The web client's authed
+  // layout reads it to mark which roster card is the default without a second
+  // round trip; OwnCharacter carries no is-default flag, so this is the only
+  // server-side source for that marker. Empty means the player has set no
+  // default.
+  string default_character_id = 5;
+  // roles are the core response's roles, forwarded verbatim by
+  // Handler.WebCheckSession. The gateway neither looks them up nor derives
+  // them: it reads the field and copies it.
+  //
+  // It exists so the section rail can decide whether to draw the `/admin`
+  // entrance without a WebAdminListSections round trip on every authed layout
+  // load. It is player-scoped and SINGULAR, never a per-character map.
+  //
+  // It is NEVER the authorization boundary. Every admin RPC still evaluates
+  // ABAC on an `admin_section:` resource and denies independently of what this
+  // field said, so a browser holding "admin" here can still be refused — and a
+  // browser that forges it gains nothing, because identity is resolved
+  // server-side from the hashed session token and no admin request message
+  // carries a roles field. Drawing a link the viewer may not use is a cosmetic
+  // error; treating this field as permission is a security one.
+  //
+  // A player holding no roles receives a zero-length list. On the wire absence
+  // and empty are the SAME answer — a zero-element repeated scalar is omitted
+  // from the serialized bytes — and no client may distinguish them.
+  // (D-102 / ADMIN-08 / §10.5.1.1.)
+  repeated string roles = 6;
 }
 
 // --- Web content messages ---
@@ -1481,4 +1631,341 @@ message WebUpdateSceneRequest {
 message WebUpdateSceneResponse {
   // scene is the scene row after the partial update.
   holomush.scene.v1.SceneInfo scene = 1;
+}
+
+// WebGetCharacterProfileRequest names the character whose public profile the
+// browser is rendering. It carries NO session-token field: the gateway reads
+// the token from the request header rather than the body, so a client cannot
+// assert one Handler.WebGetCharacterProfile did not authenticate.
+message WebGetCharacterProfileRequest {
+  // character_id is the target character's ULID, taken from the profile URL.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// WebGetCharacterProfileResponse re-exports the facade's projection verbatim.
+message WebGetCharacterProfileResponse {
+  // character is the projection the facade built; the gateway forwards it
+  // unmodified and computes nothing.
+  holomush.characteraccess.v1.PublicCharacter character = 1;
+}
+
+// WebListMyCharactersRequest carries NO fields at all, and the emptiness is the
+// point: the roster's owner is the player the session token resolves to, and
+// Handler.WebListMyCharacters reads that token from the request header. A
+// player-id field here would let a client name a roster it does not own.
+message WebListMyCharactersRequest {}
+
+// WebListMyCharactersResponse re-exports the facade's roster verbatim.
+message WebListMyCharactersResponse {
+  // characters is the owner-audience roster the facade projected, retired
+  // entries included; the gateway forwards it unmodified.
+  repeated holomush.characteraccess.v1.OwnCharacter characters = 1;
+}
+
+// WebGetMyCharacterRequest names one owned character. It carries no
+// session-token field: Handler.WebGetMyCharacter reads the token from the
+// request header rather than the body.
+message WebGetMyCharacterRequest {
+  // character_id is the target character's ULID, taken from the edit-page URL.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// WebGetMyCharacterResponse re-exports the facade's owner projection verbatim.
+message WebGetMyCharacterResponse {
+  // character is the projection the facade built for the owning player.
+  holomush.characteraccess.v1.OwnCharacter character = 1;
+}
+
+// WebUpdateCharacterProfileRequest mirrors the facade's partial-edit request
+// minus its session-token field, which travels in the request header. Every
+// prose field is forwarded verbatim; whether it is APPLIED is decided by the
+// facade against update_mask, never by the gateway.
+message WebUpdateCharacterProfileRequest {
+  // character_id is the character whose profile rows are edited.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // expected_version is the characters.version the browser last read; the
+  // facade rejects an absent or zero value rather than writing unguarded.
+  int32 expected_version = 2;
+  // pronouns is forwarded to the facade's `profile.pronouns` edit.
+  string pronouns = 3;
+  // concept is forwarded to the facade's `profile.concept` edit.
+  string concept = 4;
+  // species is forwarded to the facade's `profile.species` edit.
+  string species = 5;
+  // age is forwarded to the facade's `profile.age` edit.
+  string age = 6;
+  // faction is forwarded to the facade's `profile.faction` edit.
+  string faction = 7;
+  // appearance is forwarded to the facade's `profile.appearance` edit.
+  string appearance = 8;
+  // personality is forwarded to the facade's `profile.personality` edit.
+  string personality = 9;
+  // biography is forwarded to the facade's `profile.biography` edit.
+  string biography = 10;
+  // rumors is forwarded to the facade's `profile.rumors` edit.
+  string rumors = 11;
+  // currently is forwarded to the facade's `profile.currently` edit.
+  string currently = 12;
+  // rp_preferences is forwarded to the facade's `profile.rp_preferences` edit —
+  // the OUT-OF-CHARACTER block, not the characters.preferences settings column.
+  string rp_preferences = 13;
+  // timezone is forwarded to the facade's `profile.timezone` edit.
+  string timezone = 14;
+  // update_mask is the set of snake_case paths the facade will apply. The
+  // gateway forwards it without inspecting it; an empty mask is a no-op success
+  // and the web client is expected to skip the round trip entirely.
+  google.protobuf.FieldMask update_mask = 99;
+}
+
+// WebUpdateCharacterProfileResponse re-exports the post-write projection.
+message WebUpdateCharacterProfileResponse {
+  // character is the character as it stands after the partial edit.
+  holomush.characteraccess.v1.OwnCharacter character = 1;
+}
+
+// WebUpdateCharacterDescriptionRequest rewrites the in-world `look` text. It
+// carries no session-token field; the token travels in the request header.
+message WebUpdateCharacterDescriptionRequest {
+  // character_id is the character whose description column is rewritten.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  // expected_version is the characters.version the browser last read.
+  int32 expected_version = 2;
+  // description is the replacement `look` text; an empty value clears it.
+  string description = 3;
+}
+
+// WebUpdateCharacterDescriptionResponse re-exports the post-write projection.
+message WebUpdateCharacterDescriptionResponse {
+  // character is the character as it stands after the rewrite.
+  holomush.characteraccess.v1.OwnCharacter character = 1;
+}
+
+// WebSetDefaultCharacterRequest names the character to make the caller's
+// default. It carries no session-token field: Handler.WebSetDefaultCharacter
+// reads the token from the request header, so a body-supplied identity is not
+// representable.
+message WebSetDefaultCharacterRequest {
+  // character_id is the character the roster card's control named. The gateway
+  // forwards it unread; whether the caller owns it and whether it is playable
+  // are the facade's decisions.
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// WebSetDefaultCharacterResponse re-exports the facade's post-write roster
+// verbatim, so the browser re-renders its cards from server truth.
+message WebSetDefaultCharacterResponse {
+  // characters is the owner-audience roster the facade projected after the
+  // column moved, retired entries included; the gateway forwards it unmodified.
+  repeated holomush.characteraccess.v1.OwnCharacter characters = 1;
+}
+
+// WebListCharacterDirectoryRequest carries NO fields at all, and the emptiness
+// is the point: the viewer rung follows entirely from the header token
+// Handler.WebListCharacterDirectory reads, so a client cannot name an acting
+// character, a page or a filter the facade did not authorize. The retired RPC
+// this one replaces took a character id in the body; this surface is
+// viewer-scoped and needs none.
+message WebListCharacterDirectoryRequest {}
+
+// WebListCharacterDirectoryResponse re-exports the facade's listing verbatim.
+message WebListCharacterDirectoryResponse {
+  // characters is the reachable identity rows the facade projected, in the order
+  // it produced them; the gateway forwards them unmodified.
+  repeated holomush.characteraccess.v1.PublicCharacterSummary characters = 1;
+}
+
+// WebAdminListSectionsRequest carries NO fields, and the emptiness is the
+// point: Handler.WebAdminListSections reads the bearer token from the
+// X-Session-Token header, so a browser cannot assert an identity the gateway
+// did not authenticate.
+message WebAdminListSectionsRequest {}
+
+// WebAdminListSectionsResponse re-exports the portal's projection verbatim.
+message WebAdminListSectionsResponse {
+  // sections is the server-filtered section list AdminPortalService returned,
+  // in its order; the gateway neither filters nor re-sorts it. Reusing the
+  // portal's own message type is what keeps a second, drifting web-side
+  // section shape from existing.
+  repeated holomush.adminportal.v1.AdminSection sections = 1;
+}
+
+// WebAdminGetSectionRequest names the section to fetch and NOTHING else. It
+// carries no session token on purpose: Handler.WebAdminGetSection reads the
+// bearer token from the X-Session-Token header, so a browser cannot assert an
+// identity the gateway did not authenticate. A token field copied from the core
+// request would be a second, client-supplied identity on the same call.
+message WebAdminGetSectionRequest {
+  // section_id is forwarded verbatim to AdminPortalService.AdminGetSection. The
+  // gateway neither trims nor case-folds it; the core interceptor matches it
+  // exactly and refuses a miss.
+  string section_id = 1;
+}
+
+// WebAdminGetSectionResponse re-exports the portal's single row verbatim.
+message WebAdminGetSectionResponse {
+  // section is the entry AdminPortalService returned, forwarded unmodified.
+  // Reusing the portal's own message type is what keeps a second, drifting
+  // web-side section shape from existing.
+  holomush.adminportal.v1.AdminSection section = 1;
+}
+
+// WebAdminListCharactersRequest carries the page and ordering fields and NO
+// session token: Handler.WebAdminListCharacters reads the bearer token from the
+// X-Session-Token header, so a browser cannot assert an identity the gateway
+// did not authenticate.
+message WebAdminListCharactersRequest {
+  // sort_field is forwarded verbatim; the core refuses its unspecified value.
+  holomush.adminportal.v1.AdminCharacterSortField sort_field = 1;
+  // descending is forwarded verbatim.
+  bool descending = 2;
+  // status_filter is forwarded verbatim; unspecified means no filter.
+  holomush.adminportal.v1.AdminCharacterStatusFilter status_filter = 3;
+  // player_id is forwarded verbatim — the click-to-filter equality field.
+  string player_id = 4;
+  // page is the 1-based page number, forwarded verbatim; the core refuses a
+  // value below 1.
+  int32 page = 5;
+  // page_size is forwarded verbatim; the core clamps it to at most 50. The
+  // gateway does NOT clamp, because a clamp here would be bypassable by any
+  // caller speaking gRPC to core directly.
+  int32 page_size = 6;
+}
+
+// WebAdminListCharactersResponse re-exports the portal's page verbatim.
+message WebAdminListCharactersResponse {
+  // characters is the page AdminPortalService returned, in its order; the
+  // gateway neither filters nor re-sorts it. Reusing the portal's own message
+  // type is what keeps a second, drifting web-side character shape from
+  // existing.
+  repeated holomush.adminportal.v1.AdminCharacter characters = 1;
+  // total_count is forwarded unmodified.
+  int64 total_count = 2;
+}
+
+// WebAdminSearchCharactersRequest adds the raw search term to the page fields.
+// It carries no session token, for the same reason its list peer does not.
+message WebAdminSearchCharactersRequest {
+  // sort_field is forwarded verbatim.
+  holomush.adminportal.v1.AdminCharacterSortField sort_field = 1;
+  // descending is forwarded verbatim.
+  bool descending = 2;
+  // status_filter is forwarded verbatim.
+  holomush.adminportal.v1.AdminCharacterStatusFilter status_filter = 3;
+  // player_id is forwarded verbatim.
+  string player_id = 4;
+  // page is the 1-based page number, forwarded verbatim.
+  int32 page = 5;
+  // page_size is forwarded verbatim and clamped core-side.
+  int32 page_size = 6;
+  // query is the RAW STRING THE OPERATOR TYPED, forwarded byte-for-byte. The
+  // gateway does not trim, lower-case or NFKC-fold it; the core normalizes it
+  // through the single charname pipeline that produced the stored normal form.
+  string query = 7;
+}
+
+// WebAdminSearchCharactersResponse re-exports the portal's matching page
+// verbatim.
+message WebAdminSearchCharactersResponse {
+  // characters is the matching page AdminPortalService returned, in its order.
+  repeated holomush.adminportal.v1.AdminCharacter characters = 1;
+  // total_count is forwarded unmodified.
+  int64 total_count = 2;
+}
+
+// WebAdminGetCharacterRequest names the character to read and NOTHING else, for
+// the same reason its section peer does: the token comes from the header.
+message WebAdminGetCharacterRequest {
+  // character_id is forwarded verbatim to
+  // AdminPortalService.AdminGetCharacter. The gateway neither validates nor
+  // parses it; the core answers an unparseable and an absent id identically.
+  string character_id = 1;
+}
+
+// WebAdminGetCharacterResponse re-exports the portal's detail row verbatim.
+message WebAdminGetCharacterResponse {
+  // character is the detail message AdminPortalService returned, forwarded
+  // unmodified — including its closed twelve-key profile map.
+  holomush.adminportal.v1.AdminCharacterDetail character = 1;
+}
+
+// WebAdminUpdateCharacterRequest mirrors the portal's edit request minus the
+// token, which the gateway lifts from the X-Session-Token header.
+message WebAdminUpdateCharacterRequest {
+  // character_id is forwarded verbatim to AdminPortalService.AdminUpdateCharacter.
+  string character_id = 1;
+  // expected_version is the optimistic-concurrency token the write is fenced on,
+  // forwarded verbatim. The gateway does not default or clamp it; the core
+  // refuses an absent or zero value.
+  int32 expected_version = 2;
+  // update_mask names which of the thirteen writable paths to apply, forwarded
+  // verbatim. The gateway neither validates nor expands it: the closed
+  // exact-string allowlist is core-side.
+  google.protobuf.FieldMask update_mask = 3;
+  // description is the in-world `look` text, applied when update_mask names it.
+  string description = 4;
+  // pronouns is the `profile.pronouns` value, applied when update_mask names it.
+  string pronouns = 5;
+  // concept is the `profile.concept` value, applied when update_mask names it.
+  string concept = 6;
+  // species is the `profile.species` value, applied when update_mask names it.
+  string species = 7;
+  // age is the `profile.age` free-text value, applied when update_mask names it.
+  string age = 8;
+  // faction is the `profile.faction` value, applied when update_mask names it.
+  string faction = 9;
+  // currently is the `profile.currently` value, applied when update_mask names it.
+  string currently = 10;
+  // timezone is the `profile.timezone` free-text value, applied when update_mask
+  // names it.
+  string timezone = 11;
+  // appearance is the `profile.appearance` value, applied when update_mask names it.
+  string appearance = 12;
+  // personality is the `profile.personality` value, applied when update_mask names it.
+  string personality = 13;
+  // biography is the `profile.biography` value, applied when update_mask names it.
+  string biography = 14;
+  // rumors is the `profile.rumors` value, applied when update_mask names it.
+  string rumors = 15;
+  // rp_preferences is the `profile.rp_preferences` value, applied when
+  // update_mask names it.
+  string rp_preferences = 16;
+}
+
+// WebAdminUpdateCharacterResponse re-exports the portal's post-write row verbatim.
+message WebAdminUpdateCharacterResponse {
+  // character is the row AdminPortalService returned, carrying the version the
+  // client sends as its next expected_version.
+  holomush.adminportal.v1.AdminCharacter character = 1;
+}
+
+// WebAdminRetireCharacterRequest names the character to soft-retire and the
+// version the operator read it at.
+message WebAdminRetireCharacterRequest {
+  // character_id is forwarded verbatim to AdminPortalService.AdminRetireCharacter.
+  string character_id = 1;
+  // expected_version is forwarded verbatim; the core refuses an absent or zero
+  // value and answers a stale one with Aborted.
+  int32 expected_version = 2;
+}
+
+// WebAdminRetireCharacterResponse re-exports the portal's post-transition row.
+message WebAdminRetireCharacterResponse {
+  // character is the row AdminPortalService returned, with status `retired`.
+  holomush.adminportal.v1.AdminCharacter character = 1;
+}
+
+// WebAdminUnretireCharacterRequest names the retired character to return to play.
+message WebAdminUnretireCharacterRequest {
+  // character_id is forwarded verbatim to
+  // AdminPortalService.AdminUnretireCharacter.
+  string character_id = 1;
+  // expected_version is forwarded verbatim, under the same guard rules retire
+  // applies.
+  int32 expected_version = 2;
+}
+
+// WebAdminUnretireCharacterResponse re-exports the portal's post-transition row.
+message WebAdminUnretireCharacterResponse {
+  // character is the row AdminPortalService returned, with status `active`.
+  holomush.adminportal.v1.AdminCharacter character = 1;
 }

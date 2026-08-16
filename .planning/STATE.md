@@ -2,43 +2,43 @@
 gsd_state_version: 1.0
 milestone: v0.13
 milestone_name: "Web Portal: Identity & Admin Foundations"
-current_phase: 02
+current_phase: 2
 current_phase_name: ABAC & Schema Vocabulary
 status: planning
-stopped_at: Completed 02-11-PLAN.md — phase 02 closeout; abac-reviewer gate OUTSTANDING
-last_updated: "2026-08-06T16:15:55.519Z"
-last_activity: 2026-08-06
-last_activity_desc: Phase 01.1 complete, transitioned to Phase 02
+stopped_at: Completed 06.1-10-PLAN.md
+last_updated: "2026-08-15T20:56:00.324Z"
+last_activity: 2026-08-15
+last_activity_desc: Phase 06.1 execution started
 progress:
-  total_phases: 7
-  completed_phases: 3
-  total_plans: 26
-  completed_plans: 26
-  percent: 43
+  total_phases: 10
+  completed_phases: 10
+  total_plans: 71
+  completed_plans: 71
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-07)
+See: .planning/PROJECT.md (updated 2026-08-13)
 
 **Core value:** Players can play HoloMUSH end-to-end (create characters, communicate, roleplay in scenes)
 through either telnet or the web client, with every access-control decision default-deny and every plugin
 trusted identically.
-**Current focus:** Phase 02 — abac-schema-vocabulary
-complete character identity surface (creation, management, public profiles with privacy) and stand up the
-`RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces without rework.
+**Current focus:** Phase 06.1 — admin-portal-web-surface-shadcn-components-and-the-single-ro
+unchanged: complete the character identity surface (creation, management, public profiles with privacy) and
+stand up the `RoleAdmin`-gated admin portal shell, both designed to absorb the deferred portal surfaces
+without rework.
 
 ## Current Position
 
 Milestone: v0.13 Web Portal — Identity & Admin Foundations (Phases 1–6)
-Phase: 02 — ABAC & Schema Vocabulary
+Phase: 2 — ABAC & Schema Vocabulary
 Plan: Not started
 Status: Ready to plan
-Progress: [██████████] 100% (1/6 phases)
-Last activity: 2026-08-06 — Phase 01.1 complete, transitioned to Phase 02
-`binding: pending`, 9 amendments applied, 3 verification gaps closed
+Progress: [█████████████████░░░] 34/40 plans ([██████████] 100%)
+Last activity: 2026-08-15 — Phase 06.1 complete, transitioned to Phase 2
 
 **Next action:** review the branch, then `/gsd-code-review` **and** `abac-reviewer`
 (`/holomush-dev:review-abac`) — the diff amends the `INV-ACCESS`/`INV-PRIVACY` scope records — then
@@ -109,7 +109,7 @@ no action needed.
 
 **Velocity:**
 
-- Total plans completed: 69
+- Total plans completed: 88
 - Average duration: N/A (no plans executed yet under this GSD roadmap)
 - Total execution time: 0 hours
 
@@ -119,12 +119,15 @@ no action needed.
 |-------|-------|-------|----------|
 | 01 | 10 | - | - |
 | 02 | 7 | - | - |
-| 03 | 9 | - | - |
-| 04 | 4 | - | - |
+| 03 | 6 | - | - |
+| 4 | 9 | - | - |
 | 05 | 16 | - | - |
-| 06 | 5 | - | - |
+| 06 | 4 | - | - |
 | 07 | 11 | - | - |
 | 01.1 | 7 | - | - |
+| 02.1 | 3 | - | - |
+| 02.2 | 5 | - | - |
+| 06.1 | 10 | - | - |
 
 **Recent Trend:**
 
@@ -241,6 +244,51 @@ no action needed.
 | Phase 02 P12 | ~200min | 3 tasks | 45 files |
 | Phase 02 P10 | 63min | 6 tasks | 5 files |
 | Phase 02 P11 | 105m | 3 tasks | 5 files |
+| Phase 02.1 P01 | 3h | 2 tasks | 35 files |
+| Phase 02.1 P02 | ~2h | 3 tasks | 42 files |
+| Phase 02.1 P03 | ~1.5h | 3 tasks | 4 files |
+| Phase 02.2 P01 | 27min | 3 tasks | 15 files |
+| Phase 02.2 P02 | 17min | 2 tasks | 9 files |
+| Phase 02.2 P03 | 11min | 2 tasks | 6 files |
+| Phase 02.2 P04 | 20min | 3 tasks | 10 files |
+| Phase 02.2 P05 | 21min | 3 tasks | 8 files |
+| Phase 03 P01 | 14m | 3 tasks | 13 files |
+| Phase 03 P02 | ~35 min | 3 tasks | 14 files |
+| Phase 03 P03 | 35m | 2 tasks | 4 files |
+| Phase 03 P04 | 50m | 2 tasks | 11 files |
+| Phase 03 P05 | 70m | 3 tasks | 15 files |
+| Phase 03 P06 | 55m | 2 tasks | 7 files |
+| Phase 04 P01 | 35min | 3 tasks | 28 files |
+| Phase 04 P03 | ~20min | 2 tasks | 2 files |
+| Phase 04 P02 | 11min | 2 tasks | 4 files |
+| Phase 04 P09 | 17min | 2 tasks | 6 files |
+| Phase 04 P04 | 24min | 3 tasks | 16 files |
+| Phase 04 P05 | 24min | 3 tasks | 12 files |
+| Phase 04 P06 | 68min | 3 tasks | 14 files |
+| Phase 04 P07 | 39min | 3 tasks | 38 files |
+| Phase 04 P08 | 37min | 3 tasks | 3 files |
+| Phase 05 P01 | 29min | 3 tasks | 38 files |
+| Phase 05 P02 | 15min | 3 tasks | 8 files |
+| Phase 05 P03 | 78min | 3 tasks | 41 files |
+| Phase 05 P04 | 15min | 3 tasks | 5 files |
+| Phase 05 P05 | 55m | 3 tasks | 6 files |
+| Phase 05 P06 | 17min | 3 tasks | 6 files |
+| Phase 05 P07 | 11min | 3 tasks | 5 files |
+| Phase 05 P08 | 58min | 4 tasks | 9 files |
+| Phase 06 P01 | 33min | 2 tasks tasks | 36 files files |
+| Phase 06 P02 | 30min | 3 tasks | 35 files |
+| Phase 06 P04 | 33 min | 3 tasks | 19 files |
+| Phase 06 P05 | 3h | 3 tasks | 44 files |
+| Phase 06.1 P01 | 74min | 3 tasks | 93 files |
+| Phase 06.1 P02 | 42min | 3 tasks | 29 files |
+| Phase 06.1 P03 | 41min | 3 tasks | 11 files |
+| Phase 06.1 P04 | 51min | 3 tasks | 12 files |
+| Phase 06.1 P05 | 34min | 4 tasks | 19 files |
+| Phase 06.1 P06 | 24min | 2 tasks | 4 files |
+| Phase 06.1 P07 | 1h05m | 3 tasks | 10 files |
+| Phase 06.1 P08 | ~95m | 3 tasks | 4 files |
+| Phase 06.1 P09 | 24m | 2 tasks | 2 files |
+| Phase 06.1 P10 | ~50m | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -288,6 +336,10 @@ the next milestone yet.
 - [Phase 07]: rev3 — 07-09's ~20 pre-orchestrator live-value reads are settled by HOISTING core.go:705-1060 whole into a memoized (sync.Once) `cryptoWiring` builder in package main; the block's body moves verbatim so the dbSub.Pool()/authSub.Hasher()/abacSub.Resolver() reads inside it simply execute post-Start. No 18th subsystem; no repo signature churn. THE RULE: every cryptoWiring consumer must declare DependsOn ⊇ {Database, Auth, ABAC, EventBus} — the first consumer to resolve the provider builds it.
 - [Phase 07]: rev3 — `deps.TLSCertEnsurer` (deps.go:53,71) is a live test seam that breaks at compile time when ensureTLSCerts is deleted; the body becomes exported `tls.EnsureCerts` with the SAME signature so the Deps field type is unchanged.
 - [Phase 07]: rev3 — the promised `Seq == 0` → BeforeID pagination fallback DOES NOT EXIST (bus.go:87,94; hot_jetstream.go:334; cold_postgres.go:125 — BeforeID is a tripwire for a NONZERO seq). Policy settled: zero seq means "no cursor, read the tail" (status quo); reject-as-stale and ID→seq resolution both rejected.
+- [Phase 02.2]: D-67 — an undeclared `action.*` attribute key is now a HARD BOOT FAILURE with no runtime override (no env kill switch, no seed-vs-DB conditional; `compiler.go:197-202`). Chosen over silent default-deny, which gives a typo'd policy no signal at all. Operator cost is real and accepted (AR-02.2-04): upgrades of any deployment carrying operator- or plugin-authored policy rows MUST run the pre-flight query first.
+- [Phase 02.2]: the `job:` principal is liveness-gated at the provider — an unregistered job resolves to `(nil, nil)` so a stale/dead job cannot retain authority, and instance scope comes from the triggering event's provenance (D-55) carried by a TYPED `world.JobCaller`, never a `map[string]any` (which would have opened a second door onto the host-vouched `action.dispatch_location`).
+- [Phase 02.2]: mechanism shipped with a FIXTURE job only (D-52) — `jobs.Registry` has no production writer yet and the empty registry is intended fail-closed. `job:retirement` / `job:activity-flush` and their grants are Phase 3's. INV-ACCESS-13 bound; INV-ACCESS-14 (consumer-boundary stamping) deliberately `binding: pending` — no consumer wrapper exists in-tree to assert against.
+- [Phase 02.2]: plugin-installed policy rows are a THIRD policy source D-67's original analysis never enumerated; they are now compiled at install so a bad row fails plugin load rather than persisting and bricking every later cache reload.
 - [Phase 07]: rev3 — Go evaluates deferred ARGUMENTS at registration, so `defer orch.StopAll(shutdownCtx)` would expire ~5s into uptime and cancel every graceful stop. The closure form (core.go:255-261 telemetry / :356-362 observability) is the in-repo precedent and the mandated shape.
 - [Phase ?]: 06-05: OPS-04 audit-DLQ replay resolves game_id MIRRORING the server (--game-id override -> core.game_id via config.Load(...,core) -> persisted DB), closing the F3 external-NATS subject-prefix mismatch; tautological embedded-NATS test replaced with a divergent-game natstest test driving the real resolver seam
 - [Phase ?]: 07-01: internal/grpc/client.go extracted verbatim into new leaf package internal/grpcclient; telnet closure dropped 47->10 holomush/internal/ packages, closing the gateway.go client-import gap RESEARCH.md Pitfall-4 missed
@@ -485,6 +537,149 @@ the next milestone yet.
 - [Phase ?]: D-03's tier-floor count verified against seed.go (2 == 2) and 02-CONTEXT.md deliberately NOT edited — a check that self-heals is not a check
 - [Phase ?]: 01-SPEC §8.5.1.1 option 2 recorded REJECTED; D-01's five viewer twins are the settled shape
 - [Phase ?]: 02-RESEARCH.md's stale schema section deliberately NOT rewritten — a dated research record is annotated, never rewritten
+- [Phase ?]: world.Caller is opaque: unexported fields, two constructors, no exported accessor; the zero value fails closed at checkAccess rather than being blocked at construction
+- [Phase ?]: caller_test.go is package world_test + export_test.go bridge — an in-package test cannot build a real policy.Engine because policy/attribute imports internal/world
+- [Phase ?]: 02.1-02: the committed decl codemod rules and census probe were position-blind (NAME admits '_'); the grouped-declaration split exposed 8 build-breaking re-run hunks. Fixed at the rule with an nthChild:2 positional fence, not with ignores:.
+- [Phase ?]: 02.1-02: system:bootstrap (4 sites) and cascade_delete_test's bare "system" (3 sites) map to HumanCaller, never SystemCaller — the S1 gate is exact string equality, so the system constructor would create total ABAC bypasses.
+- [Phase ?]: INV-WORLD-8 stays in INV-WORLD and the scope's description/boundary are amended to name the command-API caller argument, rather than moving the invariant to INV-ACCESS (D-67)
+- [Phase ?]: the census universe is scoped structurally to world.Service COMMANDS (exported *Service method, context.Context first), so SetMovementHook is excluded by predicate rather than by a second exemption entry
+- [Phase ?]: 02.2-01: trigger_subject is the BARE aggregate ULID, byte-identical to bags.Resource["id"] — settled by a passing permit (research A6); Phase 3 plan 03-04 copies this spelling byte-for-byte
+- [Phase ?]: 02.2-01: seed:job-fixture-instance-scoped was added to D-29's pinned resource-is-character fence with a written justification (job principal, write-only, unmatchable liveness gate) rather than the fence being weakened
+- [Phase ?]: 02.2-01: only the fixture grant shipped — job:retirement and job:activity-flush have no seed and remain Phase 3's to add (D-52)
+- [Phase ?]: 02-02: jobs.Registry injected through config, not a PluginProvider-style two-phase SetRegistry — zero-dependency registry means no nil window in production
+- [Phase ?]: 02-02: the D-58 principal qualifier is a PREFIX because grpc_server.go:169 classifies on the _ACCESS_DENIED suffix; CHARACTER_ACCESS_DENIED_JOB was rejected outright
+- [Phase ?]: 02-02: evaluation-failure codes stay UNQUALIFIED and KnownEntityPrefixes()/internal/command/errors.go were NOT extended — those exact-match maps drive player-facing text a job denial never reaches
+- [Phase ?]: 02-02: no lifecycle.SubsystemID minted for the job registry; the pinned 18-element topological start order was not touched
+- [Phase ?]: 02-02: AUTHZ-02 left Pending — all five plans of phase 02.2 carry it; requirements.mark-complete was not run at all this time, so no flip needed reverting. Plan 02.2-05 owns it.
+- [Phase ?]: action DECLARE set is exactly 5 keys; the criterion is what policy TEXT references, not what a producer produces
+- [Phase ?]: 02.2-RESEARCH §Q2 is WRONG that authguard/guard.go supplies no caller attrs — :130 supplies event_type/plugin_name/plugin_inst since v0.3.0
+- [Phase ?]: The // 10b. action registration is a NO-OP until plan 02.2-04 wires the compiler to schemaReg; the call site says so
+- [Phase ?]: 02.2-04: BuildABACStack's compiler is now built on schemaReg.Schema() and the initial cache.Reload moved AFTER all provider and action registrations, so boot and steady-state validate against the same populated schema
+- [Phase ?]: 02.2-04: the action hard-error branch carries oops code POLICY_UNREGISTERED_ACTION_ATTRIBUTE and is fatal for EVERY policy source including operator-authored DB rows (D-67) — no flag, no source-conditional
+- [Phase ?]: 02.2-04: sites 2 and 3 use attribute.NewActionOnlySchemaRegistry() rather than a new ABACSubsystem.SchemaRegistry() accessor; the compiler validates by DSL root, never by provider name, so action validation is identical at all four sites
+- [Phase ?]: INV-ACCESS-13 splits D-55's consumer-boundary stamping into a separate binding: pending entry (INV-ACCESS-14) rather than over-claiming a partial binding
+- [Phase ?]: ROADMAP criterion 4 amended by scoped Edit because gsd-tools has no phase edit verb; gap filed upstream as open-gsd/gsd-core#3254
+- [Phase ?]: AUTHZ-02 traceability row filled by hand after requirements.mark-complete reported table_unmatched; root cause is updateTableCell's first-table-wins scan (open-gsd/gsd-core#3255)
+- [Phase ?]: Retire/Unretire commands take a caller-supplied expected_version; the version conflict outranks every lifecycle-state guard (R1 guard order)
+- [Phase ?]: The two lifecycle command bodies are deliberately not deduplicated — two meta-test AST cross-checks require each command's own body to reference s.mutator and call s.checkAccess
+- [Phase ?]: D-46 relocation landed via the CREATE branch: no neutral package existed; 02.2's D-55 provenance triple lives on internal/world/caller.go, so consumer.CreateWithRetry stamps nothing and only points at it.
+- [Phase ?]: consumer.CreateWithRetry deliberately codes nothing — an identity assertion (not errors.Is) pins that it returns the create error unwrapped, so neither audit caller's oops Code can be demoted by a future edit.
+- [Phase ?]: task generate does not exist in this repo; the SubsystemID stringer is regenerated with go generate ./internal/lifecycle/, matching every other generator in the tree.
+- [Phase ?]: Adding a productionSubsystemSet field without widening allStubs' fixed-size array is NOT a compile error (contra the in-repo comment) — the field is nil and the suite segfaults; the doc comment now states the real failure mode.
+- [Phase ?]: 03-03: neither new spec carries a // Verifies: annotation — INV-WORLD-1 and INV-WORLD-6 are already bound, and a second claimant on a bound entry dilutes provenance
+- [Phase ?]: 03-03: the retire atomicity proof's third case drives the transactor+repo directly — an in-transaction CAS failure is unreachable through the public command because 03-01's version precheck fires first
+- [Phase ?]: Interlock §0.4-2 fired on CREATE: 02.2 shipped only the job fixture seed, so plan 03-04 ships seed:job-retirement-instance-scoped — the first real background-job grant.
+- [Phase ?]: The retirement job seed permits read AND write; the D-29 character-resource guard was extended with an argued single-member exemption (the instance fence makes the read a single-row lookup, not an enumeration primitive) rather than relaxed.
+- [Phase ?]: The reactor stamps its D-55 provenance at its own message boundary, not at consumer.CreateWithRetry — 02.2 landed the vocabulary on world.JobCaller and the wrapper stamps nothing.
+- [Phase ?]: 03-05: interlock 0.4-3 fired on the ANSWERED branch — 02.2's D-68 (option A+D) names the last_active_at flusher, so it registers job identity character_activity with writes [character] and stamps no per-execution attributes
+- [Phase ?]: 03-05: INV-WORLD-4 amended THREE->FOUR; the atomicity clause is NARROWED to world-state writers with the activity flusher named as the sole envelope-exempt operational-column writer. Whether that becomes a CLASS is deferred until a second one appears
+- [Phase ?]: 03-05: the charactivity KV seam declares DeleteRevision(ctx,key,revision) rather than jetstream's variadic KVDeleteOpt, because deleteOpts is unexported and a fake could not otherwise observe the guarded revision
+- [Phase ?]: Phase 03 harness now boots the REAL outbox relay and retirement reactor (WithOutboxRelay/WithRetirementReactor); one shared world.Service and one shared jobs.Registry mirror cmd/holomush
+- [Phase ?]: IDENT-04 and IDENT-10 closed in 03-06 with the last_active_at operational-column writer named as the one argued INV-WORLD-4 exemption
+- [Phase ?]: Phase 3: character ownership is policy text, not a Go predicate (D-39/D-40) — retire/unretire are distinct ABAC actions, admin-only in v0.13 via the pre-existing bare-action admin seed; no new human-principal grant shipped.
+- [Phase ?]: Phase 3: the first production job: consumer is instance-scoped by its triggering event (D-54) — seed:job-retirement-instance-scoped binds BOTH action.job.trigger_event_type and action.job.trigger_subject == resource.id.
+- [Phase ?]: Phase 3: IDENT-04 ruled Complete as a DOMAIN capability; the admin-reachable half is ADMIN-05 (Phase 6), conditional on a Phase 6 traceability link being added.
+- [Phase ?]: 04-01: D-29 discharged by a NARROW ACTION (read_description) reaching only world.Service.GetCharacterDescription, whose return type has no player-id/location-id field — not the deferred permit(character, read, character) shape
+- [Phase ?]: 04-01: a read_description DENIAL collapses into the uniform not-found rather than PermissionDenied — a distinguishable denial discloses that the character exists (8.7); unreachable in the shipped corpus, it is the fail-closed floor under a raised description floor
+- [Phase ?]: 04-01: mapDescriptionError tests world.ErrNotFound BEFORE ErrAccessEvaluationFailed — an absent character carries both sentinels because the ABAC gate resolves character attributes before the row is read; the reverse order was a live id-existence oracle (Internal vs NotFound) the differential spec caught
+- [Phase ?]: 04-01: D-83 implemented literally — the facade holds the session repos and resolves all three rungs itself, including the GUEST rung playerGate.resolveAndGate refuses outright (INV-SCENE-64)
+- [Phase ?]: 04-01: PROFILE-04/PROFILE-05 left Pending in REQUIREMENTS.md — 04-01 delivers reachability gating and name, but pronouns arrive with the property slice in 04-02/04-04; only EXT-06 marked Complete
+- [Phase ?]: 04-03: 01-SPEC 9.3 carries no RenameCharacter row (D-74); both dangling prose references re-sourced to 6.1.3's unique index, with the deferral cited to Phase 3 D-44 / IDENT-03 backlog 999.20
+- [Phase ?]: 04-03: D-81 verdicts recorded — A3 and A2's RPC half ACCEPTED as design for Phase 6, admin rename census WITHDRAWN; none produces Phase-4 code
+- [Phase ?]: 04-03: Phase-4 plan-count (cycle-6 L4) needed no edit — roadmap update-plan-progress had already written '1/9 plans executed'; hand-forcing the literal '9 plans' would have replaced a tool-owned shape
+- [Phase ?]: 04-02: resolveAndGate (INV-SCENE-64) + ownedCharacter (INV-SCENE-63) extracted onto an embedded playerGate; method promotion kept all 45 SceneAccessServer call sites byte-identical, and the guest-denial wire message is now a per-facade constructor parameter defaulting to the scene literal
+- [Phase ?]: 04-02: ownedCharacter opacity is a TWO-way equality (malformed id == non-owned id); the repository-failure path stays codes.Internal with a distinct message, pinned by a separate inequality assertion so an outage is never masked as NotFound
+- [Phase ?]: 04-09: the profile write is gated by ABAC write on character:<id>, never the property resource — a create has no property id and PropertyProvider.ResolveResource fails closed, so a property-resource gate would default-deny the FIRST write of every profile.* attribute
+- [Phase ?]: 04-09: every created entity_properties row sets Visibility explicitly to "public" — Create passes p.Visibility into the INSERT and applies no defaulting, so the column DEFAULT never applies and an empty string fails the CHECK; the withholding lever is the per-attribute tier floor, not this column
+- [Phase ?]: 04-09: character_profile_update payload carries the changed attribute NAMES, never values (erasure-safe); the partition reads outside the tx safely because the character CAS is the aggregate lock and this is the only production property writer
+- [Phase ?]: 04-09: IDENT-02 NOT marked complete — its server-enforced length caps belong to the facade RPC per 01-SPEC 9.3, not the world command (same revert 04-02/04-03 made)
+- [Phase ?]: 04-04: values are joined back from a row-id index over the SAME term-B-filtered slice that fed profilevis; profilevis.Property carries no value, so a projection from the admissibility set alone yields the right keys with empty values
+- [Phase ?]: 04-04: a row id in the visible map with no row in the enumeration index returns Internal — never a zero-value emit and never a silent skip
+- [Phase ?]: 04-04: determinism is scoped — proto.Equal is the claim, byte equality needs MarshalOptions{Deterministic:true}, and the sentinel absence scan stays on plain proto.Marshal because absence is not an ordering property
+- [Phase ?]: 04-04: criterion 3's configuration-side clause (a config cannot raise name/pronouns above the reachability floor) has NO enforcing mechanism in v0.13 per 01-SPEC 8.8; routed to manual operator review, no Verifies annotation added
+- [Phase ?]: 04-05: the owner audience constructs NO viewer principal — it reads its own rows through the owning character's subject, so D-27's ALL-direction owner peer never governs a path anyone depends on (D-69)
+- [Phase ?]: 04-05: ListMyCharacters carries no profile map by design — §9.2 gives the roster and GetMyCharacter distinct jobs, and enumerating per character would make the detail read redundant and the roster N+1
+- [Phase ?]: 04-05: INV-ACCESS-15 registered and bound; INV-PRIVACY-9 flipped to bound after verifying both preconditions; INV-PRIVACY-10 left pending because binding its facade half alone would be an undetectable partial binding
+- [Phase ?]: 04-06: update_mask paths are the §7.2 property names verbatim (profile.pronouns), not bare proto field names — 01-SPEC §9.5 rule 2 settles it by example
+- [Phase ?]: 04-06: issue #4954 closed — world.Service.UpdateCharacterDescription performed NO validation; routed through char.SetDescription with CodeCharacterInvalid, behavioral RED captured first
+- [Phase ?]: 04-06: the description path's version guard is a TOCTOU narrowing, not a CAS (the domain command takes no expectedVersion) — pinned by a documenting test, option (b) filed as issue #4956
+- [Phase ?]: 04-06: exactly one layer caps each field — the twelve profile.* fields in the facade (D-82), characters.description in the domain
+- [Phase ?]: 04-07: a directory-gate denial is PermissionDenied, not the 8.7 not-found-equivalent — the singleton character_directory resource names no character and carries no count, so its existence is a product fact rather than a secret
+- [Phase ?]: 04-07: the 9.2 gate and the 8.7 membership rule are proven separable in BOTH directions at both tiers — a closed gate with reachability wide open, and a raised reachability floor with the gate open
+- [Phase ?]: 04-07: WebListAllCharacters retired outright with no forwarder; CoreService.ListAllCharacters and grpcclient.Client.ListAllCharacters untouched, and internal/web's CoreClient loses the method because no caller survives there
+- [Phase ?]: 04-08: the routing census teaches its ownership predicate BOTH names (ownedCharacter and the checked-in ownedCharacterForMutation), and asserts the wrapper's own body reaches the shared resolution before the comparison consumes it — so this phase's two write RPCs are inside criterion 1's proof rather than dropped from it
+- [Phase ?]: 04-08: criterion 1 needed a fail-closed audience PARTITION, not three set comparisons. Membership is derived from what a body references, so an ungated handler joins no derived set and no expected set and passes silently; the partition plus a DERIVED public-audience counterpart closes both that case and its one-line 'fix'
+- [Phase ?]: 04-08: WorldQueryService.QueryCharacter is a name-reachable census member, not type-reachable — its response declares id/player_id/name/description inline as bare scalars, so no typed message exists for a descriptor predicate to find. The descriptor census found this on its first run
+- [Phase ?]: 04-08: 01-SPEC 2.6's substring example does not hold literally (ListCharacters is not a substring of ListAllCharacters), but the trap is live one level down — no fully-qualified name collapses, while 17 pairs of METHOD names do. That is why the key is the fully-qualified name and why a Go handler identifier is forbidden as one
+- [Phase ?]: Phase 5 criterion 4 AMENDMENT OWED (D-97): 'next load' overclaims. internal/access/policy/cache.go holds a compiled snapshot refreshed by a poller on a 10s default interval (poller.go:35), so a viewer-tier config change is visible on the next load AFTER the cache reloads, not the next load. Substance (read-time evaluation, never stamped onto a row, no backfill) is intact. Reword to 'next load after the policy cache reloads (poller interval, default 10s)'. No gsd-tools verb rewrites a phase's success criteria (phase verbs: uat-passed/next-decimal/add/add-batch/insert/remove/complete/list-plans; roadmap verbs: analyze/get-phase/update-plan-progress/annotate-dependencies/validate/upgrade), so this is recorded here rather than hand-edited per rule a32nfcekfc.
+- [Phase ?]: Phase 5 PROFILE-12 AMENDMENT OWED (D-91): criterion 4's 'both the retirement flow and the surface where a player authors profile fields' cannot hold — there is NO player-facing retirement flow in v0.13. IDENT-04 records player self-retire as 'deferred beyond v0.13'; the only retire path is AdminRetireCharacter in Phase 6. Strike 'both the retirement flow and' from Phase 5 criterion 4; the retirement half of PROFILE-12 moves to Phase 6 alongside AdminRetireCharacter. REQUIREMENTS' PROFILE-12 row needs the same note. Recorded not hand-edited per rule a32nfcekfc.
+- [Phase ?]: 05-01: SetDefaultCharacter carries no expected_version and never calls requireGuardedVersion — the target is a players row with no version column to predicate a CAS on (D-89); the handler doc says so because the omission looks exactly like a bug to fix.
+- [Phase ?]: 05-01: a retired character is refused codes.FailedPrecondition with its own literal, not the uniform ownership message — ownership is already proven at that point, so a lookup-shaped refusal misreports a working rule and buys no opacity (Q4); the predicate is world.Selectable (INV-WORLD-5), never a != retired test.
+- [Phase ?]: 05-01: the plan's Q2-corollary grounding was wrong — default_character_id was NOT on WebCheckSessionResponse (web.proto:567 is WebAuthenticatePlayerResponse). Added as field 5 to CheckPlayerSessionResponse + WebCheckSessionResponse, populated from the player row CheckPlayerSession already loads; moves no census row and preserves the no-extra-round-trip property.
+- [Phase ?]: 05-01: ListMyCharacters' projection loop extracted into the shared unexported ownerRoster helper, so D-90's 'OwnCharacter is never a struct literal' holds by construction rather than by two loops agreeing.
+- [Phase ?]: The public profile shares NO presentational component with the owner authoring surface; CharacterPortrait is the one deliberate exception because UI-SPEC unifies the portrait treatment
+- [Phase ?]: /c/[id] adds no +page.ts — adapter-static's fallback:'index.html' plus the root layout's ssr=false make route-level indistinguishability structural
+- [Phase ?]: PublicProfile reads each profile key by name by hand; a list of expected names iterated in a loop is the client-side allowlist §8.9 forbids
+- [Phase ?]: 05-03 Q1 ratified option-a: CreateCharacter runs in TWO transactions, the create authoritative; a failed profile-seeding write is logged and swallowed and the RPC still returns success with the un-set keys absent
+- [Phase ?]: 05-03: profile-value validation runs BEFORE the create, so a fixable refusal never lands on the far side of the seeding swallow (deviation from the plan's ordering)
+- [Phase ?]: 05-03: the CreateCharacter Go-identifier collision between CoreService and CharacterAccessService is resolved at the gateway client ((*grpcclient.Client).CreateOwnCharacter + a cmd/holomush adapter), never by renaming an RPC or bending internal/web
+- [Phase ?]: 05-03: the WebCreateCharacter census row MOVED from characterNameReachableRPCs to characterReadSurfaceInventory rather than being duplicated (Q6)
+- [Phase ?]: 05-04: per-section save on /characters/[id] — five sections over two RPCs sharing one characters.version cell; the four profile masks partition exactly the twelve shipped allowlist paths
+- [Phase ?]: 05-04: the concurrent-edit Reload performs a full page reload as the authored copy promises, at the known cost of discarding unsaved text in the other four sections
+- [Phase ?]: INV-ACCESS-10 bound clause-by-clause: all three summary clauses have a genuine asserting site; the clause-to-site table is recorded because the registry's genuinely-asserted guard cannot detect a partial binding
+- [Phase ?]: ROADMAP criterion 4's 'next load' latency wording overclaims (policy poller defaults to 10s) — filed as amendment #4963 rather than encoded as a test assertion
+- [Phase ?]: Web unit/component tests are ungated (no Taskfile target, no CI job runs vitest or svelte-check) — filed as #4964
+- [Phase ?]: 05-06: ConnectError.rawMessage, never .message, when rendering a server string verbatim — .message carries a [code] prefix that puts wire vocabulary in front of a player
+- [Phase ?]: 05-06: the create form's name input keeps name="characterName", the attribute the eight broken Playwright specs already fill, so 05-08's repair is a navigation change not a selector rewrite
+- [Phase ?]: 05-07: the session-badge suppression lives in the RosterCard template, not in the route's join — a template rule holds for every caller, a join rule holds only while the join remembers
+- [Phase ?]: 05-07: the session badge renders two authored words (Active | Offline) rather than forwarding CharacterSummary.sessionStatus, so no wire token can reach a player-facing badge
+- [Phase ?]: 05-07: the roster h1 changed from 'Choose Your Character' to 'Your characters' — the page now creates, defaults and lists retired characters, so 'choose' names a fraction of it; character-switcher.spec.ts:65 must absorb it (05-08)
+- [Phase ?]: Plan 05-08 repointed the eight broken Playwright specs by extracting registerPlayer/createCharacter/enterGameAs into web/e2e/helpers/fixtures.ts — six private copies of the creation journey is what turned one deletion into an eight-file breakage
+- [Phase ?]: The plan's not-found parity pair [nonexistent ULID] vs [unreachable character] is unconstructible: seed:profile-reachable and seed:viewer-character-description-read both clear anonymous, so v0.13 has no below-floor character. Shipped [nonexistent ULID] vs [malformed id] instead, plus a positive control proving a populated profile differs
+- [Phase ?]: characters-roster.spec.ts asserts no roster ordering: charRepo.ListByPlayer has no ORDER BY, so a stable-order spec would pin an implementation accident
+- [Phase ?]: 06-01: the admin gate is mounted by ONE server factory that refuses a nil interceptor (GRPC_SERVER_ADMIN_GATE_MISSING); the two zero-caller constructors collapsed into it and NewGRPCServerInsecure was deleted, so the mount is structural rather than remembered
+- [Phase ?]: 06-01: wire opacity and internal-code identity are asserted at two layers and never collapsed — adminRefusal implements GRPCStatus() DIRECTLY (a wrapped status has its message replaced by the outer error's text) and Unwrap()s to the typed oops; single-wrap is asserted as unwrap-chain DEPTH because oops Code() resolves the deepest code
+- [Phase ?]: 06-01: AdminListSections IS deniable (interceptor runs AssertSectionAdmission for the EnumeratesAllSections descriptor), and the handler's enumeration filter is admission — never AssertSectionAccess, whose availability step would drop all six planned sections out of the nav
+- [Phase ?]: 06-02: the ONE RPC with an attacker-controlled section id is gated by the INTERCEPTOR (third arm: typed GetSectionId assertion, blank refusal, AssertSectionAccess on the RAW id, resolved Section stashed) with a DENYING default on the shape switch; the handler is a pure projection, proven by stubbing it empty while both refusals survived
+- [Phase ?]: 06-02: SECTION_NOT_IMPLEMENTED is produced by the interceptor (step 4 of the gate call it makes), so it is FailedPrecondition with a static message and NO body — 06.1-02 must render the planned-section screen from AdminListSections layout data
+- [Phase ?]: 06-02: the blank section_id refusal comes from the interceptor's TrimSpace check, NOT buf.validate — no protovalidate interceptor exists on any server path, so the shipped annotations are inert at RPC runtime
+- [Phase ?]: 06-02: roles reuses the SHARED attribute.PlayerRoleLookup seam (RoleStore interface NOT widened) and fails quiet — nil or failing lookup yields an initialised empty slice, never an error, because a nav hint must not break session restore
+- [Phase ?]: 06-02: the WIRE differential cannot observe the gate-before-registry ordering — mapAdminSectionError collapses DENY_ADMIN_SECTION and DENY_ADMIN_SECTION_UNREGISTERED onto one status by design — so the ordering is asserted in-process on the typed code instead (criterion defect reported, not repaired)
+- [Phase ?]: 06-04: the detail read is a bounded trusted projection — PropertyRepository.ListByParent filtered by updateCharacterProfileMaskablePaths membership (12 names), NOT world.Service.ListPropertiesByParent, which returns an EMPTY slice for a player-flavoured caller (verified: zero player-principal property permits in the seed corpus)
+- [Phase ?]: 06-04: player_id is unsortable STRUCTURALLY — no enum value exists to express it — while remaining an equality filter; the illegal request is inexpressible rather than rejected at runtime
+- [Phase ?]: 06-04: admin list/page types live in internal/world, not internal/world/postgres, so internal/grpc can name them on its narrow reader interfaces without importing a storage driver
+- [Phase ?]: 06-05: the section REGISTRY entry, not only the method descriptor, must declare ActionWrite — assertSectionAccess refuses a request exceeding the section's declared maximum regardless of policy
+- [Phase ?]: 06-05: INV-WORLD-9 claims the transactional and single-writer properties only; world outbox envelopes are NOT projected into events_audit today (the relay stamps no App-Rendering header)
+- [Phase ?]: 06-05: seed:admin-character-administration grants read/write/retire/unretire on resource is character to admin PLAYERS; delete deliberately absent so DeleteCharacter is denied at the policy layer
+- [Phase ?]: The toaster's light/dark bit derives from the repo's own themeStore, not a second theme package — one new npm dependency (svelte-sonner 1.1.1), one source of truth.
+- [Phase ?]: web/src/routes/ cannot hold a +-prefixed non-route file: SvelteKit refuses to build. Route-component tests are named after the route (error-boundary.svelte.test.ts), keeping the .svelte.test.ts client-project suffix. Filed #4979; plans 06.1-02/03 name the same impossible shape.
+- [Phase ?]: The not-found boundary derives its viewer tier through the shipped isPlayerAuthenticated resolution bit; an unresolved auth store falls back to GUEST (the smallest destination set), never the registered-player set.
+- [Phase ?]: INV-PRIVACY-14 registers only error-boundary resolution-point uniqueness, and says in its own summary that this is a precondition for per-viewer indistinguishability rather than a proof of it.
+- [Phase ?]: The admin shell's responsive frame is viewport @media at the shipped rail's own 767px/1023px literals, not container queries — the two collapse rules then coincide by construction, and no element becomes a containing block for a fixed-position descendant or an overlay.
+- [Phase ?]: classifyAdminFailure defaults every unrecognised gRPC code to the denial class, which renders the ordinary not-found; only Unavailable, DeadlineExceeded and a non-ConnectError throw are infrastructure. The default is fail-safe: a retry state for a genuine refusal would itself disclose that something is there.
+- [Phase ?]: The <768px drawer's Admin group crosses the layout boundary through adminNavStore, a module singleton SectionRail reads itself — the same crossing mobileNavStore already makes — so (authed)/+layout.svelte's diff stays exactly the roles prop.
+- [Phase ?]: Route-adjacent test files must not carry a + prefix (#4979); load tests are <route>.test.ts and component tests <route>.svelte.test.ts. task web:build is the only gate that catches a violation.
+- [Phase ?]: 06.1-03: the /admin/characters initial page resolves in a +page.ts load, because the concrete route shadows [section] and a denial must be a route decision — throwing from a component renders nothing and navigating would make the refusal distinguishable
+- [Phase ?]: 06.1-03: a CSS property that exists only inside a media query is asserted on the stylesheet TEXT, never on computed style — jsdom applies no media query and has no layout engine, so a computed read fails a correct implementation
+- [Phase ?]: 06.1-03: the status control is counted by the spelling shadcn-svelte generated — bits-ui's Select.Trigger is a button with aria-haspopup=listbox and exposes no role=combobox, so the plan's getAllByRole('combobox') criterion was unsatisfiable
+- [Phase ?]: The lifecycle picker is a native <select>, not bits-ui: the plan's zero-RPC selection case cannot be driven through a popover in jsdom, and a disabled native option is browser-enforced unselectability rather than a handler that declines
+- [Phase ?]: The Sheet keys its detail fetch on row.id, not on the row prop: a fresh object from any list re-read otherwise re-ran the fetch, disabled Save mid-edit and discarded the operator's draft (found in Chromium, invisible to jsdom)
+- [Phase ?]: The confirm's action is a plain button, not AlertDialog.Action, which closes on click and would dismiss the confirmation before the RPC answered
+- [Phase ?]: Admin-mutation accountability in v0.13 is a UI receipt naming the RPC, not a durable audit row: #4971 is open and no criterion may assert an events_audit write
+- [Phase ?]: 06.1-05: the breakpoint census allowlist is keyed by PATH, not path:line — a stale line key fails OPEN, silently exempting whichever line inherited the number
+- [Phase ?]: 06.1-05: all sixteen authored viewport rules under web/src derive from theme(--breakpoint-md|-lg); a Svelte scoped style block using theme() MUST carry an @reference computed from its depth below web/src (three distinct depths in this tree) or the build fails loudly
+- [Phase ?]: The admin Sheet/server parity guard lives in package grpc, not test/meta — the allowlist is unexported, so only there is it a live symbol and only one side needs parsing
+- [Phase ?]: A parsing guard chosen over codegen or a shared schema for thirteen strings and two integers that change roughly never
+- [Phase ?]: Both halves of the phone band expressed in rem (48rem), so the CSS @media rules and DESKTOP_MEDIA_QUERY resolve against one reference — the browser's initial font size
+- [Phase ?]: Breakpoint census exemptions are keyed to the SYMBOL (DESKTOP_MEDIA_QUERY), never to a file or a spelling, so the guard survives a neighbouring constant and accepts its own repair
+- [Phase ?]: New Playwright project chromium-large-font runs at a 20px root font size and asserts that root font size in-page before any complement assertion, so the harness fails closed
+- [Phase ?]: The census's anti-vacuity floor is derived from its own checked-in occurrence counts, not a hand-picked number
+- [Phase ?]: The extension filter is a closed classification (scan-set + skip-set, fail on neither) because an allow-set fails open
+- [Phase ?]: E2E band settling is observed by polling a single paired evaluate; the poll decides when to measure, never what the answer is
+- [Phase ?]: A source-scanning test binds to purpose-built in-source markers with presence AND order asserted before slicing
+- [Phase ?]: The parity guard resolves the emitted maxBytes expression rather than inferring the cap from the constructor name; an unresolvable expression fails loudly instead of falling back (G-06.1-4)
+- [Phase ?]: A bare decimal literal resolves rather than failing at the resolver, so the existing per-path comparison produces the failure naming the path and both caps
+- [Phase ?]: Web browser floor declared in web/package.json: chrome/edge >=111, firefox >=128, safari/ios_saf >=16.4. Rule: Vite's baseline target raised per-browser where a shipped dep binds higher (@property forces firefox 128).
 
 ### Pending Todos
 
@@ -501,7 +696,15 @@ None yet.
 - Operator action outstanding: ruleset 11923801 unchanged; no coverage context gates merges (#4875, #4876)
 - 02-07: PROFILE-11's characters.description half is NOT discharged in Phase 2 — D-29 defers seed:profile-public-read-character to Phase 4, to land with the characterToProto projection narrowing. EXT-07's admin section registry is still 02-09's.
 - BLOCKING pre-merge: abac-reviewer (/holomush-dev:review-abac) has NOT reviewed the Phase 2 diff. D-05 makes it mandatory. Brief is written verbatim in 02-11-SUMMARY.md; owner is the orchestrator/human.
-- MAINTAINER DECISION: ROADMAP success criterion 4 — the in-world-description half is deferred to Phase 4 by D-29. Three options stated in 02-11-SUMMARY.md, none selected. Criterion 1 is settled by D-30 and MUST NOT be touched.
+- MAINTAINER DECISION: ROADMAP success criterion 4 — the in-world-description half is deferred to Phase 4 by D-29. Three options stated in 02-11-SUMMARY.md, selected. Criterion 1 is settled by D-30 and MUST NOT be touched.
+- [Phase 02.2] DEPLOYMENT PRECONDITION (AR-02.2-04): UAT test 2 passed *vacuously* — there are no deployed instances holding data, so the D-67 pre-flight query was never actually executed. It MUST be run before the first upgrade of any instance whose `access_policies` table carries operator- or plugin-authored rows; an undeclared `action.*` key there is an unrecoverable boot failure. Query and remedy: `02.2-UAT.md` test 2 and `contributing/explanation/background-job-authorization.md`.
+- [Phase 02.2] Five compiler-construction sites in the integration tiers still skip the `action` gate (WR-05: `world_suite_test.go:243`, `access_suite_test.go:214`, `abac_widget_test.go:283`/`:426`, `binary_plugin_test.go:457`), so a typo'd `action.*` key can compile clean there. Test-tier only — production still fails loudly. The sharper half is that `action_schema.go:92-95` and `setup.go:374-379` claim the gate is "identical at every compilation site", which is now inaccurate.
+- [Phase 02.2] Two concurrency findings on `jobs.Registry`, neither blocking: the liveness read is two calls under separate RLocks (WR-02 — fails closed either way, but INV-ACCESS-13 clause 1 is not concurrency-exact as phrased), and `Register` is silently last-writer-wins with no duplicate check (WR-03 — a second registration can replace a security-gating capability class). Both sit inside the D-53 in-process out-of-scope boundary.
+- [Phase 02.2] Four abac-reviewer Low findings filed, not fixed: check-then-act in `SchemaRegistry.Register`; `attribute.Resolver`'s own maps unsynchronized (pre-existing); three undeclared action keys at `eventbus/authguard/guard.go:134`; `reservedActionKeys` still a one-entry denylist rather than an allowlist.
+- The two-replica resilience suite is fully red on the nightly lane (4 pre-existing failures; natstest.Conn dials a scoped NATS env without credentials) — filed as holomush/holomush#4953, not fixed in 03-03
+- [Phase 3] AR-03-04: the TWO-REPLICA retire-concurrency proof (test/integration/resilience/retire_concurrency_test.go) is gated on quarantinetest.Enabled(), so it does not run in the required Integration Test lane — and it is currently RED where it does run. Ruled SCHEDULED-not-accepted at UAT: holomush/holomush#4953 must close for the resilience suite to rejoin the gating lane. The single-process guarantee IS covered in CI; only the two-replica case is unwatched.
+- [Phase 3] IDENT-04 traceability gap: the requirement is marked Complete and traced to Phase 3 ONLY, but its admin-reachable half is ADMIN-05 (Phase 6) — world.Service.RetireCharacter has zero non-test callers today. If ADMIN-05 slips or is rescoped, nothing flags that a Complete requirement has no user-reachable path. The GSD traceability writer cannot add the row (phase.complete reported 'no matching row found' for IDENT-04/IDENT-10 despite REQUIREMENTS.md:372 existing) — same standing writer gap as AUTHZ-01 in Phase 02.1.
+- 06-04: /holomush-dev:review-abac (T-06-29's mitigation of record, high-rated ABAC-bypass-in-shape) did NOT run — the Task tool is disabled in the executor session. Substantive claims verified manually at source; the adversarial gate is outstanding and should run before the phase ships. Logged in .planning/WINDOWS.md.
 
 ### Quick Tasks Completed
 
@@ -521,6 +724,13 @@ None yet.
 - Phase 01.1 edited: criterion 1 row-count corrected post-research: 'goose_db_version with 44 rows' -> '44 rows at version_id > 0 plus goose's version-0 bootstrap row (45 total)'. goose inserts a version-0 row at table creation (RESEARCH.md:875-877, verified by execution against postgres:18-alpine), so the prior assertion failed against a correct database.
 - Phase 01.1 edited: criterion 3 amended post-research (maintainer decision): 'up/down/status/version/force parity' -> 'up/down/status/version parity, force REMOVED with docs+tests'. goose commits body and version row in one transaction (provider_run.go:213-219), so the dirty state force repairs cannot arise; force has no analogue and no purpose (RESEARCH.md:777).
 - Phase 2 edited: criterion 4 split: public-properties half stays Phase 2, in-world-description half deferred to Phase 4 as its criterion 6 (D-29)
+- Phase 3 edited: scope narrowed: RenameCharacter removed from phase and milestone, moved to backlog 999.20 (linked to 999.6); goal, depends-on, requirements (IDENT-03 dropped), success criteria 1-2, and sketch-findings all amended; rationale in 03-CONTEXT.md D-44
+- Phase 3 edited: D-42 resolved: last_active_at lands here via NATS JetStream KV buffer + periodic flush in its OWN general-purpose subsystem (not the retirement reactor); added success criterion 5; phase now adds two subsystems (18->20)
+- Phase 02.1 inserted: Background-Job Authorization Model inserted after Phase 2; Phase 3's reactor blocked on it. Three candidate authz models examined and rejected (synthetic system: principal unnarrowable per engine.go:542-548; envelope-actor propagation over-grants; WithSystemSubject bypasses the chokepoint).
+- Phase 3 edited: edited fields: depends_on (added Phase 02.1 — retirement reactor cannot authorize MoveCharacter without the job-identity model; D-45 superseded)
+- Phase 02.1 edited: edited fields: requirements (AUTHZ-01 minted), shape (JobCaller deferred to 02.2 per D-62)
+- Phase 02.2 edited: edited fields: requirements (AUTHZ-02 minted)
+- Phase 02.1 blast-radius numbers superseded by measurement: ROADMAP §02.1's 'Verified blast radius (grep-confirmed, do not re-estimate)' block is WRONG in four load-bearing ways; 02.1-RESEARCH.md §'Verified Blast Radius — corrections' (2026-08-08, rg+ast-grep reproducible) supersedes it and is authoritative for planning: 23 public Service methods not 21 (checkAccess appears 23x, 1:1); 5 interfaces + 1 callback type + 3 supporting signatures not 3 (command/types.go has 15 not '9+'; hostfunc.WorldService, property.WorldMutator, property.EntityMutator, property.Definition.Set were unnamed); NO mockery regeneration is needed (no generated mock carries subjectID) — the real work is ~106 hand-rolled test-double method declarations across 13 files; 31 arg-2 production call sites not 47, and ~332 true test sites not 347 (two codemod classes, not one rule). Also: CONTEXT.md D-65 cites internal/world/world_envelope_census_test.go; the census test actually lives at test/meta/world_envelope_census_test.go. NOTE: no gsd-tools verb exists to rewrite an existing ROADMAP phase section (phase verbs are uat-passed/next-decimal/add/add-batch/insert/remove/complete/list-plans; roadmap verbs are analyze/get-phase/update-plan-progress/annotate-dependencies/validate/upgrade), so the stale prose is recorded as superseded here rather than hand-edited.
 
 ## Deferred Items
 
@@ -534,11 +744,19 @@ Items acknowledged and carried forward from the ingest, not part of this roadmap
 
 ## Session Continuity
 
-Last session: 2026-08-05T20:16:12.262Z
-100% coverage validated (no orphans, no duplicates). Phase numbers **restart at 1 per milestone as of
-v0.13** (v0.11 Phases 1–3 and v0.12 Phases 4–9 keep their old continuous global numbers).
-Roadmap follows `research/SUMMARY.md`'s proposed 6-phase decomposition. Nothing executed yet.
-Stopped at: Completed 02-11-PLAN.md — phase 02 closeout; abac-reviewer gate OUTSTANDING
+Last session: 2026-08-15T20:31:41.211Z
+Phase 05 closed. UAT 5/5 passed — driven LIVE against a docker-compose stack with Playwright rather than
+by hand, which is how checkpoint 4 was caught resting on a false premise (`charRepo.ListByPlayer` has
+carried `ORDER BY name` since 7ff05af3c / PR #4816, so #4965 is invalid as written; the same claim also
+sits in `web/e2e/characters-roster.spec.ts:11-17`). Canonical verification advanced `human_needed` →
+`passed`. Security gate ran at scaled ASVS depth (L3/L2/L1) across three independent auditors — the L1
+short-circuit was declined a second consecutive phase — closing 59/59 threats, `threats_open: 0`, with
+11 accepted risks and 1 transfer logged in `05-SECURITY.md`; five findings recorded where the property
+holds but the register's stated reason was wrong (F-1…F-5). ROADMAP and STATE advanced to Phase 6.
+Transition reproduced #4961 (bare-phase-number collision wrote v0.13 data into v0.12's rows) — repaired
+in the same commit. Branch `v013-phase-03` is still UNPUSHED.
+Stopped at: Completed 06.1-10-PLAN.md
+Resume file: None
 
 Previous session: 2026-07-27T16:45:13.288Z
 Phase 09 closed: all 21 plans executed, shipped as PR #4874 on `gsd/v0.12-milestone`.

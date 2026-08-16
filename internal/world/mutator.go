@@ -17,44 +17,48 @@ import (
 // This interface represents the full set of authorized world operations
 // available to plugins that need to modify world state.
 //
-// All methods accept a subjectID parameter for ABAC authorization.
-// Plugins use "plugin:<name>" as their subject ID (via access.PluginSubject).
+// All methods accept a Caller value carrying the execution identity for ABAC
+// authorization. Construct it with world.HumanCaller (which wraps an
+// already-built subject string verbatim) or world.SystemCaller (for
+// server-internal operations on behalf of no character). Plugins pass
+// world.HumanCaller(access.PluginSubject(name)), so their ABAC subject is
+// still "plugin:<name>".
 type Mutator interface {
 	// Read operations (from Service)
 
 	// GetLocation retrieves a location by ID after checking read authorization.
-	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*Location, error)
+	GetLocation(ctx context.Context, subjectID Caller, id ulid.ULID) (*Location, error)
 
 	// GetCharacter retrieves a character by ID after checking read authorization.
-	GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*Character, error)
+	GetCharacter(ctx context.Context, subjectID Caller, id ulid.ULID) (*Character, error)
 
 	// GetCharactersByLocation retrieves characters at a location with pagination
 	// after checking read authorization.
-	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error)
+	GetCharactersByLocation(ctx context.Context, subjectID Caller, locationID ulid.ULID, opts ListOptions) ([]*Character, error)
 
 	// GetObject retrieves an object by ID after checking read authorization.
-	GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*Object, error)
+	GetObject(ctx context.Context, subjectID Caller, id ulid.ULID) (*Object, error)
 
 	// Write operations
 
 	// CreateLocation creates a new location after checking write authorization.
-	CreateLocation(ctx context.Context, subjectID string, loc *Location) error
+	CreateLocation(ctx context.Context, subjectID Caller, loc *Location) error
 
 	// CreateExit creates a new exit between locations after checking write authorization.
-	CreateExit(ctx context.Context, subjectID string, exit *Exit) error
+	CreateExit(ctx context.Context, subjectID Caller, exit *Exit) error
 
 	// CreateObject creates a new object with the given containment after checking write authorization.
-	CreateObject(ctx context.Context, subjectID string, obj *Object) error
+	CreateObject(ctx context.Context, subjectID Caller, obj *Object) error
 
 	// UpdateLocation updates an existing location after checking write authorization.
-	UpdateLocation(ctx context.Context, subjectID string, loc *Location) error
+	UpdateLocation(ctx context.Context, subjectID Caller, loc *Location) error
 
 	// UpdateObject updates an existing object after checking write authorization.
-	UpdateObject(ctx context.Context, subjectID string, obj *Object) error
+	UpdateObject(ctx context.Context, subjectID Caller, obj *Object) error
 
 	// FindLocationByName searches for a location by name after checking read authorization.
 	// Returns ErrNotFound if no location matches.
-	FindLocationByName(ctx context.Context, subjectID, name string) (*Location, error)
+	FindLocationByName(ctx context.Context, subjectID Caller, name string) (*Location, error)
 }
 
 // Compile-time check that Service implements Mutator.
@@ -97,6 +101,9 @@ var writeCommands = []WriteCommandDescriptor{
 	{Command: "UpdateCharacterDescription", Kind: kindCharacterUpdated},
 	{Command: "MoveCharacter", Kind: kindCharacterMoved},
 	{Command: "UpdateCharacterPreferences", Kind: kindCharacterPreferencesUpdate},
+	{Command: "RetireCharacter", Kind: kindCharacterRetired},
+	{Command: "UnretireCharacter", Kind: kindCharacterUnretired},
+	{Command: "UpdateCharacterProfileAttributes", Kind: kindCharacterProfileUpdate},
 }
 
 // WriteCommands returns the explicit closed write-command descriptor set (a copy),
@@ -253,12 +260,106 @@ func (m *worldMutator) updateCharacterPreferences(
 	})
 }
 
+// setCharacterStatus builds the character-lifecycle write closure — capturing
+// the PRIVATE character writer plus the target status — and routes it through
+// mutate(). ONE executor serves BOTH lifecycle commands: the census keys on
+// world.Service method names, not on executor methods, so RetireCharacter and
+// UnretireCharacter each keep their own descriptor and their own taxonomy kind
+// while sharing this closure builder.
+//
+// expectedVersion is the CALLER's expected version threaded from service.go,
+// NOT a freshly-read one — passing the just-read char.Version would make the
+// guard vacuous for caller staleness (INV-WORLD-7).
+func (m *worldMutator) setCharacterStatus(
+	ctx context.Context,
+	intent wmodel.EnvelopeIntent,
+	characterID ulid.ULID,
+	status Status,
+	expectedVersion int,
+) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		return m.characterWriter.SetStatus(txCtx, characterID, status, expectedVersion)
+	})
+}
+
 // updateCharacter routes a character update through mutate() (character_updated).
 // char carries the read Version as the CAS guard; the character writer's Update
 // finalizes the character_updated envelope from the returned delta in the same tx.
 func (m *worldMutator) updateCharacter(ctx context.Context, intent wmodel.EnvelopeIntent, char *Character) (*wmodel.MutationDelta, error) {
 	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
 		return m.characterWriter.Update(txCtx, char)
+	})
+}
+
+// updateCharacterProfileAttributes builds the character profile-attribute write
+// closure — capturing the PRIVATE character writer AND the PRIVATE property
+// writer — and routes it through mutate(). It is the FIRST production property
+// writer: before 04-09 the only production use of the property repository was a
+// ListByParent read plus the delete-cascade DeleteByParent, so there is no older
+// property write path to stay consistent with.
+//
+// Two seams differ from every other closure builder here.
+//
+// THE CAS GUARD. Property rows carry no version of their own; the character row
+// does, and the profile is part of the character aggregate. So the closure runs
+// the version-guarded characterWriter.Update FIRST and fails fast on a stale
+// version before doing any property work. char.Version is the CALLER's expected
+// version threaded from service.go, NOT a freshly-read one — passing the
+// just-read version would make the guard vacuous for caller staleness
+// (INV-WORLD-7). It also bumps the character version on a profile-only write,
+// which is the intended aggregate-level behavior: the aggregate carries exactly
+// one optimistic-concurrency token.
+//
+// THE DELTA. characterWriter.Update returns a *wmodel.MutationDelta; the three
+// property writers return a bare error. The closure returns the character
+// update's delta and constructs none of its own — mutate() finalizes the
+// envelope's manifest from a REAL repo delta, never from command inputs.
+//
+// creates, updates and deletes are the partition service.go computed against the
+// character's existing rows. Every row in creates is fully specified by the
+// caller (id, parent, name, value, owner, visibility) — the property repository
+// applies NO visibility defaulting, so a row built here with an empty Visibility
+// would fail the column's CHECK constraint.
+func (m *worldMutator) updateCharacterProfileAttributes(
+	ctx context.Context,
+	intent wmodel.EnvelopeIntent,
+	char *Character,
+	creates []*EntityProperty,
+	updates []*EntityProperty,
+	deletes []ulid.ULID,
+) (*wmodel.MutationDelta, error) {
+	return m.mutate(ctx, intent, func(txCtx context.Context) (*wmodel.MutationDelta, error) {
+		// The version-guarded character update runs FIRST: a stale caller is
+		// refused before any property row is touched.
+		delta, err := m.characterWriter.Update(txCtx, char)
+		if err != nil {
+			return nil, oops.Wrap(err)
+		}
+		for _, p := range creates {
+			if err := m.propertyWriter.Create(txCtx, p); err != nil {
+				return nil, oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+					With("operation", "create_profile_attribute").
+					With("attribute", p.Name).
+					Wrapf(err, "create profile attribute %q for character %s", p.Name, char.ID)
+			}
+		}
+		for _, p := range updates {
+			if err := m.propertyWriter.Update(txCtx, p); err != nil {
+				return nil, oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+					With("operation", "update_profile_attribute").
+					With("attribute", p.Name).
+					Wrapf(err, "update profile attribute %q for character %s", p.Name, char.ID)
+			}
+		}
+		for _, id := range deletes {
+			if err := m.propertyWriter.Delete(txCtx, id); err != nil {
+				return nil, oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+					With("operation", "delete_profile_attribute").
+					With("property_id", id.String()).
+					Wrapf(err, "delete profile attribute %s for character %s", id, char.ID)
+			}
+		}
+		return delta, nil
 	})
 }
 

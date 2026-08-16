@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/auth"
 	authmocks "github.com/holomush/holomush/internal/auth/mocks"
@@ -1456,6 +1457,115 @@ func TestResolvePlayerSession_RefreshTTLError_StillReturnsSession(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, ps.ID, got.ID)
 	assert.Equal(t, playerID, got.PlayerID)
+}
+
+// --- CheckPlayerSession roles tests (ADMIN-08) ---
+
+// newRolesTestServer builds the minimal CoreServer CheckPlayerSession needs,
+// with the role lookup applied THROUGH WithPlayerRoleLookup rather than by
+// setting the field — so the option itself is exercised, not bypassed.
+//
+// A nil lookup is applied as no option at all, which is the mis-wired
+// composition root Test 3b is about.
+func newRolesTestServer(t *testing.T, playerID ulid.ULID, isGuest bool, lookup attribute.PlayerRoleLookup) *CoreServer {
+	t.Helper()
+
+	sessionRepo := setupSessionRepo(t, makePlayerSession(playerID))
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(&auth.Player{ID: playerID, Username: "Wren Halloway", IsGuest: isGuest}, nil)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).Return(nil, nil)
+
+	server := &CoreServer{
+		presence:          newTestPresenceEmitter(newTestEventStore()),
+		sessionStore:      sessiontest.NewStore(t),
+		playerSessionRepo: sessionRepo,
+		playerRepo:        playerRepo,
+		charRepo:          charRepo,
+	}
+	if lookup != nil {
+		WithPlayerRoleLookup(lookup)(server)
+	}
+	return server
+}
+
+// TestCheckPlayerSessionReportsThePlayersRolesForTheNavHint covers ADMIN-08's
+// four answers in one place: an admin, a role-less player, a guest, and a
+// CoreServer whose composition root never wired the lookup.
+//
+// The empty cases assert Len == 0 and deliberately NOT require.NotNil. A
+// zero-element repeated scalar is omitted from the serialized bytes and the
+// generated getter presents nil and empty storage identically, so NotNil would
+// assert implementation memory rather than a wire contract. The durable contract
+// — absence and empty are the same answer — lives in the proto doc comment.
+func TestCheckPlayerSessionReportsThePlayersRolesForTheNavHint(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		isGuest bool
+		lookup  func(playerID ulid.ULID) attribute.PlayerRoleLookup
+		want    []string
+	}{
+		{
+			name: "a player holding the admin role receives exactly that role",
+			lookup: func(playerID ulid.ULID) attribute.PlayerRoleLookup {
+				return func(_ context.Context, id string) ([]string, error) {
+					require.Equal(t, playerID.String(), id, "the lookup MUST be asked about the SESSION's player")
+					return []string{"admin"}, nil
+				}
+			},
+			want: []string{"admin"},
+		},
+		{
+			name: "a player holding no roles receives an empty list",
+			lookup: func(ulid.ULID) attribute.PlayerRoleLookup {
+				return func(context.Context, string) ([]string, error) { return nil, nil }
+			},
+			want: []string{},
+		},
+		{
+			name:    "a guest receives an empty list",
+			isGuest: true,
+			lookup: func(ulid.ULID) attribute.PlayerRoleLookup {
+				return func(context.Context, string) ([]string, error) { return nil, nil }
+			},
+			want: []string{},
+		},
+		{
+			// A mis-wired composition root must hide no admin and grant none. An
+			// error return here would surface a wiring mistake as a failed session
+			// restore, which is a worse outcome than a missing nav link.
+			name:   "a CoreServer built without the lookup answers empty and never errors",
+			lookup: func(ulid.ULID) attribute.PlayerRoleLookup { return nil },
+			want:   []string{},
+		},
+		{
+			// Fail-QUIET here is fail-CLOSED: an empty list draws no admin
+			// entrance, and this field must not be able to break session restore.
+			name: "a failing lookup yields an empty list rather than an error",
+			lookup: func(ulid.ULID) attribute.PlayerRoleLookup {
+				return func(context.Context, string) ([]string, error) {
+					return nil, samberOops.Code("ROLE_PLAYER_ROLES_FAILED").Errorf("pool exhausted")
+				}
+			},
+			want: []string{},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			playerID := ulid.Make()
+			server := newRolesTestServer(t, playerID, tc.isGuest, tc.lookup(playerID))
+
+			resp, err := server.CheckPlayerSession(context.Background(), &corev1.CheckPlayerSessionRequest{
+				PlayerSessionToken: validToken,
+			})
+
+			require.NoError(t, err, "the roles hint MUST NOT be able to fail a session check")
+			require.Len(t, resp.GetRoles(), len(tc.want))
+			require.Equal(t, tc.want, resp.GetRoles())
+		})
+	}
 }
 
 // --- CheckPlayerSession tests ---

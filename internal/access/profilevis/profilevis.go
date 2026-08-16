@@ -128,11 +128,11 @@ type Evaluator struct {
 // entity" — a different question from "does this character's profile resolve on
 // the web".
 func (e *Evaluator) Reachable(ctx context.Context, viewerSubject, characterID string) (bool, error) {
-	if err := e.check(viewerSubject); err != nil {
+	if err := e.check(ctx, viewerSubject); err != nil {
 		return false, err
 	}
 	if characterID == "" {
-		return false, malformed("characterID", "an empty character id would build a bare profile: reference no policy target matches")
+		return false, malformed(ctx, "characterID", "an empty character id would build a bare profile: reference no policy target matches")
 	}
 	return e.evaluate(ctx, viewerSubject, ActionReachable, access.ProfileResource(characterID))
 }
@@ -157,11 +157,11 @@ func (e *Evaluator) Reachable(ctx context.Context, viewerSubject, characterID st
 func (e *Evaluator) AttributeVisible(
 	ctx context.Context, viewerSubject, propertyID, attrName string,
 ) (bool, error) {
-	if err := e.check(viewerSubject); err != nil {
+	if err := e.check(ctx, viewerSubject); err != nil {
 		return false, err
 	}
 	if propertyID == "" {
-		return false, malformed("propertyID", "an empty property id would build a bare property: reference no policy target matches")
+		return false, malformed(ctx, "propertyID", "an empty property id would build a bare property: reference no policy target matches")
 	}
 
 	resource := access.PropertyResource(propertyID)
@@ -275,18 +275,27 @@ func (e *Evaluator) evaluate(ctx context.Context, subject, action, resource stri
 
 // check rejects a call that could not be evaluated meaningfully, BEFORE any
 // engine call, so a malformed request never reaches the audit log as a denial.
-func (e *Evaluator) check(viewerSubject string) error {
+func (e *Evaluator) check(ctx context.Context, viewerSubject string) error {
 	if e.Engine == nil {
-		return malformed("Engine", "an Evaluator with no engine cannot make an authorization decision")
+		return malformed(ctx, "Engine", "an Evaluator with no engine cannot make an authorization decision")
 	}
 	if viewerSubject == "" {
-		return malformed("viewerSubject", "an empty subject would bypass access control")
+		return malformed(ctx, "viewerSubject", "an empty subject would bypass access control")
 	}
 	return nil
 }
 
-func malformed(field, why string) error {
-	return oops.Code(CodeEvaluationFailed).
+// malformed builds — and LOGS — a CodeEvaluationFailed for a call that could not
+// be evaluated at all.
+//
+// It logs at the ORIGIN, like every other failure branch in this file, because
+// its callers are contracted to treat a CodeEvaluationFailed as already-logged
+// and classify it without logging again. Leaving this one shape silent would
+// make an impossible-by-construction outage the only one nobody can see.
+func malformed(ctx context.Context, field, why string) error {
+	err := oops.Code(CodeEvaluationFailed).
 		With("field", field).
 		Wrap(errors.Join(ErrEvaluationFailed, errors.New(why)))
+	errutil.LogErrorContext(ctx, "profile visibility: request could not be evaluated", err)
+	return err
 }

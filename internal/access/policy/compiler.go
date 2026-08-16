@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gobwas/glob"
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/dsl"
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -146,6 +147,40 @@ func mapEffect(effect string) (types.PolicyEffect, error) {
 
 // validateAttributes walks all condition nodes and validates attribute references
 // against the schema.
+//
+// Validation is BY DSL ROOT, never by provider name. collectAttrRefs sets
+// namespace to the grammar root, which dsl constrains to exactly
+// principal | resource | action | env, and key to the whole dotted remainder. So
+// a reference like resource.character.name is looked up as namespace "resource",
+// key "character.name" — a compiler whose schema carries no "resource" namespace
+// skips it entirely. That is why a compilation site holding only the `action`
+// namespace validates `action` exactly as the full production stack does while
+// staying silent about every other root.
+//
+// The `action` branch below is DELIBERATELY FATAL FOR EVERY POLICY SOURCE —
+// in-tree seeds, operator-authored database rows, and plugin-manifest policies
+// alike (02.2-CONTEXT D-67). The considered-and-rejected alternative was
+// fatal-for-seeds-only with a warning for DB rows; it was rejected because a
+// typo'd action.* reference must never silently default-deny anywhere, which is
+// the same fail-closed posture the rest of the ABAC stack takes. Do not soften
+// this to a warning, a log-and-skip, or a source-conditional, and do not gate it
+// behind a flag: a validation gate that can be turned off will be off in the
+// deployment that needed it.
+//
+// WHERE EACH SOURCE MEETS IT differs, and that difference is load-bearing.
+// Seeds and DB rows meet it at Cache.Reload, which is all-or-nothing: one bad
+// row fails the whole corpus. That is the right posture for rows an operator
+// authored or the binary shipped. It would be the WRONG posture for a plugin,
+// because a plugin's row is already persisted by the time a reload sees it, so a
+// third-party manifest could take the corpus into deny-all and fail the next
+// boot. Plugin policies therefore meet this same gate EARLIER, at install time
+// (internal/plugin/policy_installer.go actionGate), where a rejection fails that
+// one plugin's load and nothing else. Same compiler, same branch, same verdict —
+// only the containment boundary differs.
+//
+// The declared key set and its per-key provenance live in
+// attribute.ActionNamespaceSchema(), whose audit is
+// .planning/phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md.
 func (c *Compiler) validateAttributes(cb *dsl.ConditionBlock) ([]ValidationWarning, error) {
 	refs := collectAttrRefs(cb)
 	warnings := make([]ValidationWarning, 0, len(refs))
@@ -160,7 +195,10 @@ func (c *Compiler) validateAttributes(cb *dsl.ConditionBlock) ([]ValidationWarni
 
 		fqn := ref.namespace + "." + ref.key
 		if ref.namespace == "action" {
-			return nil, fmt.Errorf("unregistered action attribute %q: action namespace is registered but attribute is not", fqn)
+			return nil, oops.
+				Code("POLICY_UNREGISTERED_ACTION_ATTRIBUTE").
+				With("attribute", fqn).
+				Errorf("unregistered action attribute %q: action namespace is registered but attribute is not", fqn)
 		}
 		warnings = append(warnings, ValidationWarning{
 			Message: fmt.Sprintf("unknown attribute %q in registered namespace %q", fqn, ref.namespace),

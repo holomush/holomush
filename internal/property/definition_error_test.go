@@ -10,6 +10,8 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/world"
 )
 
 func TestNamePropertyDefinition_MissingMutator(t *testing.T) {
@@ -19,7 +21,7 @@ func TestNamePropertyDefinition_MissingMutator(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "entity mutator not found for type: widget")
 
-	err = def.Set(context.Background(), nil, nil, "subject", "widget", ulid.ULID{}, "value")
+	err = def.Set(context.Background(), nil, nil, world.HumanCaller("subject"), "widget", ulid.ULID{}, "value")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "entity mutator not found for type: widget")
 }
@@ -31,7 +33,7 @@ func TestDescriptionPropertyDefinition_MissingMutator(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "entity mutator not found for type: widget")
 
-	err = def.Set(context.Background(), nil, nil, "subject", "widget", ulid.ULID{}, "value")
+	err = def.Set(context.Background(), nil, nil, world.HumanCaller("subject"), "widget", ulid.ULID{}, "value")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "entity mutator not found for type: widget")
 }

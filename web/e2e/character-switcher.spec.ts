@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { test, expect, db } from './helpers/fixtures';
+import { test, expect, db, createCharacter, enterGameAs } from './helpers/fixtures';
 
 /** Generate unique test credentials. */
 function uniqueUser(prefix: string) {
@@ -26,12 +26,8 @@ async function registerAndEnterGame(
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
-  await page.locator('text=Create New Character').click();
-  await page.fill('input[name="characterName"]', charName);
-  await page.locator('button[role="checkbox"]').click();
-  await page.locator('button:has-text("Create")').click();
-  await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
-  await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+  await createCharacter(page, charName);
+  await enterGameAs(page, charName);
 }
 
 test.describe('Character Switcher', () => {
@@ -61,8 +57,11 @@ test.describe('Character Switcher', () => {
     // Should navigate to /characters, not / or /login
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
-    // Player is still authenticated — character picker title visible
-    await expect(page.locator('text=Choose Your Character')).toBeVisible({ timeout: 10000 });
+    // Player is still authenticated — the roster heading is visible.
+    // The heading changed from `Choose Your Character` to `Your characters` in
+    // plan 05-07: the page now also creates, sets the default and lists retired
+    // characters, so `choose` named a fraction of it.
+    await expect(page.locator('h1', { hasText: 'Your characters' })).toBeVisible({ timeout: 10000 });
 
     // Player remains authenticated via cookie (no client-side token storage)
   });

@@ -49,52 +49,52 @@ type recordingWorldMutator struct {
 
 var _ hostfunc.WorldMutator = (*recordingWorldMutator)(nil)
 
-func (m *recordingWorldMutator) GetLocation(context.Context, string, ulid.ULID) (*world.Location, error) {
+func (m *recordingWorldMutator) GetLocation(context.Context, world.Caller, ulid.ULID) (*world.Location, error) {
 	return nil, world.ErrNotFound
 }
 
-func (m *recordingWorldMutator) GetCharacter(context.Context, string, ulid.ULID) (*world.Character, error) {
+func (m *recordingWorldMutator) GetCharacter(context.Context, world.Caller, ulid.ULID) (*world.Character, error) {
 	return nil, world.ErrNotFound
 }
 
-func (m *recordingWorldMutator) GetCharactersByLocation(context.Context, string, ulid.ULID, world.ListOptions) ([]*world.Character, error) {
+func (m *recordingWorldMutator) GetCharactersByLocation(context.Context, world.Caller, ulid.ULID, world.ListOptions) ([]*world.Character, error) {
 	return nil, nil
 }
 
-func (m *recordingWorldMutator) GetObject(context.Context, string, ulid.ULID) (*world.Object, error) {
+func (m *recordingWorldMutator) GetObject(context.Context, world.Caller, ulid.ULID) (*world.Object, error) {
 	return nil, world.ErrNotFound
 }
 
-func (m *recordingWorldMutator) CreateLocation(_ context.Context, _ string, loc *world.Location) error {
+func (m *recordingWorldMutator) CreateLocation(_ context.Context, _ world.Caller, loc *world.Location) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.createdLocs = append(m.createdLocs, loc)
 	return nil
 }
 
-func (m *recordingWorldMutator) CreateExit(_ context.Context, _ string, exit *world.Exit) error {
+func (m *recordingWorldMutator) CreateExit(_ context.Context, _ world.Caller, exit *world.Exit) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.createdExits = append(m.createdExits, exit)
 	return nil
 }
 
-func (m *recordingWorldMutator) CreateObject(_ context.Context, _ string, obj *world.Object) error {
+func (m *recordingWorldMutator) CreateObject(_ context.Context, _ world.Caller, obj *world.Object) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.createdObjects = append(m.createdObjects, obj)
 	return nil
 }
 
-func (m *recordingWorldMutator) UpdateLocation(context.Context, string, *world.Location) error {
+func (m *recordingWorldMutator) UpdateLocation(context.Context, world.Caller, *world.Location) error {
 	return nil
 }
 
-func (m *recordingWorldMutator) UpdateObject(context.Context, string, *world.Object) error {
+func (m *recordingWorldMutator) UpdateObject(context.Context, world.Caller, *world.Object) error {
 	return nil
 }
 
-func (m *recordingWorldMutator) FindLocationByName(context.Context, string, string) (*world.Location, error) {
+func (m *recordingWorldMutator) FindLocationByName(context.Context, world.Caller, string) (*world.Location, error) {
 	return nil, world.ErrNotFound
 }
 

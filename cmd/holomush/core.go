@@ -28,6 +28,7 @@ import (
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	"github.com/holomush/holomush/internal/bootstrap"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/charactivity"
 	"github.com/holomush/holomush/internal/charname/blocklist"
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/command"
@@ -41,15 +42,18 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/natsconn"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/jobs"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
 	"github.com/holomush/holomush/internal/plugin/cryptowiring"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/retirement"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telemetry"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	"github.com/holomush/holomush/internal/xdg"
@@ -394,10 +398,27 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// instead would make ABAC a wiring consumer and close a second
 	// ABAC -> cryptoWiring -> ABAC cycle (THE RULE forces every consumer to
 	// DependsOn SubsystemABAC) — cross-AI round 4, BLOCKER.
+	// The single background-job liveness registry for this process. It is
+	// constructed HERE, before subsystem assembly, because jobs.Registry has
+	// zero dependencies — which is also why it is deliberately NOT a
+	// lifecycle.Subsystem (minting a SubsystemID is a multi-site cascade across
+	// the pinned topological start order, and nothing here needs ordered
+	// start/stop).
+	//
+	// Today its only consumer is the ABAC job attribute provider, which reads it
+	// to answer "is job <name> running, and what did it declare it writes".
+	// Phase 3's job subsystems are the writers: they will call
+	// jobRegistry.Register(...) from their own Start and Unregister(...) from
+	// their Stop, against THIS instance. Until then the registry is empty, so
+	// every job resolves to no attributes and every job-gating seed
+	// default-denies — the correct fail-closed state.
+	jobRegistry := jobs.NewRegistry()
+
 	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
 		DB:              dbSub,
 		Registry:        registry,
 		CryptoOperators: cryptoConfig.Operators,
+		JobRegistry:     jobRegistry,
 	})
 
 	authSub := authsetup.NewAuthSubsystem(authsetup.AuthSubsystemConfig{
@@ -872,6 +893,38 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		RekeyCheckpointSweep: rekeyCheckpointSweepSub,
 		OutboxRelay:          outboxRelaySub,
 		BlockList:            blockListSub,
+		RetirementReactor: retirement.NewSubsystem(retirement.Config{
+			Logger:    slog.Default(),
+			JetStream: eventBusSub,
+			Sessions:  &retirementSessionBridge{sub: sessionSub},
+			Presence:  &retirementPresenceBridge{sub: grpcSub},
+			World:     &retirementWorldBridge{sub: worldSub},
+			// THE SAME registry instance abacSub reads. A second one would
+			// report the reactor as not running to the attribute provider, and
+			// every world write it makes would silently default-deny.
+			Jobs: jobRegistry,
+			// Resolved per delivered message, never here: StartLocationID
+			// PANICS before the bootstrap subsystem's Prepare, which is the
+			// reason the reactor declares DependsOn(Bootstrap).
+			StartLocationID: bootstrapSub.StartLocationID,
+		}),
+		CharacterActivity: charactivity.NewSubsystem(charactivity.Config{
+			Logger:    slog.Default(),
+			JetStream: eventBusSub,
+			// The flusher's write is INV-WORLD-4's fourth sanctioned
+			// out-of-world writer, and the only envelope-exempt one. It is
+			// injected as a closure over the pool — resolved per flush, never
+			// here, because dbSub.Pool() PANICS before the database
+			// subsystem's Prepare — so internal/charactivity holds no fenced
+			// SQL and imports no database driver.
+			Writer: func(ctx context.Context, characterID ulid.ULID, lastActiveNanos int64) error {
+				return worldpostgres.UpdateCharacterLastActive(ctx, dbSub.Pool(), characterID, lastActiveNanos)
+			},
+			// THE SAME registry instance abacSub reads (D-68 option A+D: every
+			// background consumer declares an identity and a capability class,
+			// whether or not anything consumes it at an Evaluate call today).
+			Jobs: jobRegistry,
+		}),
 	}) {
 		orch.Register(sub)
 	}
@@ -1068,6 +1121,69 @@ type sessionBridge struct {
 	sub *sessionsetup.SessionSubsystem
 }
 
+// --- Retirement reactor bridges ---
+//
+// All three resolve their live dependency PER CALL rather than at
+// construction. The retirement subsystem is built here, before any Prepare has
+// run, so an eager read would panic (WorldSubsystem.Service and
+// SessionSubsystem.Store both do) or capture nil. Per-call resolution also
+// keeps a Stop/Prepare retry from leaving the reactor bound to a torn-down
+// handle.
+
+// retirementSessionBridge adapts SessionSubsystem to retirement.SessionEnder.
+type retirementSessionBridge struct {
+	sub *sessionsetup.SessionSubsystem
+}
+
+func (b *retirementSessionBridge) DeleteByCharacter(ctx context.Context, characterID ulid.ULID) (*session.Info, error) {
+	return b.sub.Store().DeleteByCharacter(ctx, characterID)
+}
+
+// retirementWorldBridge adapts WorldSubsystem to retirement.WorldSurface. Both
+// methods cross the ABAC chokepoint with the caller they are handed — the
+// bridge adds no identity of its own and MUST NOT.
+type retirementWorldBridge struct {
+	sub *worldsetup.WorldSubsystem
+}
+
+func (b *retirementWorldBridge) GetCharacter(ctx context.Context, caller world.Caller, id ulid.ULID) (*world.Character, error) {
+	return b.sub.Service().GetCharacter(ctx, caller, id)
+}
+
+func (b *retirementWorldBridge) MoveCharacter(ctx context.Context, caller world.Caller, characterID, toLocationID ulid.ULID) error {
+	return b.sub.Service().MoveCharacter(ctx, caller, characterID, toLocationID)
+}
+
+// retirementPresenceBridge adapts the gRPC subsystem's single presence emitter
+// to retirement.PresenceEmitter.
+//
+// The reactor is topologically BEFORE gRPC, so this resolves nil until the
+// gRPC subsystem's Prepare has run. The orchestrator's global barrier — every
+// Prepare returns before any Activate — means that is impossible by the time
+// the reactor's consume loop can deliver a message. A nil emitter is
+// nonetheless handled rather than dereferenced: losing a leave notification is
+// operational degradation, exactly as it is at the eight existing fanout
+// sites, and is never worth panicking a live server over.
+type retirementPresenceBridge struct {
+	sub *grpcSubsystem
+}
+
+func (b *retirementPresenceBridge) EmitLeave(ctx context.Context, char core.CharacterRef, reason string) error {
+	em := b.sub.PresenceEmitter()
+	if em == nil {
+		return oops.Code("PRESENCE_EMITTER_UNAVAILABLE").Errorf("presence emitter is not yet constructed")
+	}
+	return em.EmitLeave(ctx, char, reason)
+}
+
+func (b *retirementPresenceBridge) EmitSessionEnded(ctx context.Context, char core.CharacterRef, sessionID, cause, reason string) error {
+	em := b.sub.PresenceEmitter()
+	if em == nil {
+		return oops.Code("PRESENCE_EMITTER_UNAVAILABLE").Errorf("presence emitter is not yet constructed")
+	}
+	return em.EmitSessionEnded(ctx, char, sessionID, cause, reason)
+}
+
 // pluginAuditClientAdapter bridges the proto-generated
 // pluginv1.PluginAuditServiceClient to the narrow audit.PluginAuditClient
 // interface. Keeps the audit package free of generated-proto dependency
@@ -1207,6 +1323,13 @@ type productionSubsystemSet struct {
 	// (IDENT-07, 02-05). Bootstrap declares a DependsOn edge on it, so it
 	// prepares before any character-name admission can run.
 	BlockList lifecycle.Subsystem
+	// RetirementReactor owns the character-retirement fanout (IDENT-04,
+	// 03-02/03-04): an event-driven reactor consuming character_retired.
+	// DependsOn Database + EventBus + World + Sessions + Bootstrap.
+	RetirementReactor lifecycle.Subsystem
+	// CharacterActivity owns the last_active_at JetStream KV (IDENT-10,
+	// 03-02/03-05). DependsOn Database + EventBus.
+	CharacterActivity lifecycle.Subsystem
 }
 
 // productionSubsystems returns the ordered list of subsystems registered
@@ -1251,6 +1374,12 @@ func productionSubsystems(s productionSubsystemSet) []lifecycle.Subsystem {
 		// OutboxRelaySubsystem (MODEL-04, 05-07): DependsOn Database + EventBus;
 		// registered after eventBusSub so the relay starts once the bus is up.
 		s.OutboxRelay,
+		// The retirement reactor (IDENT-04) and the character-activity KV
+		// (IDENT-10) both consume off the bus. This SLICE position is
+		// cosmetic per the doc comment above; the asserted order lives in
+		// cmd/holomush/core_topo_order_test.go.
+		s.RetirementReactor,
+		s.CharacterActivity,
 	}
 }
 

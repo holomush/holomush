@@ -26,36 +26,39 @@ type mockWorldService struct {
 	object     *world.Object
 	err        error
 
-	// Capture the subject ID passed to each method
-	capturedSubjectID string
+	// capturedCaller captures the world.Caller argument passed to each method.
+	// world.Caller exposes no accessor by design (D-62), so a Caller-typed
+	// method cannot render its subject back out as a string; assertions compare
+	// against world.HumanCaller(<same expected subject>) instead.
+	capturedCaller world.Caller
 }
 
-func (m *mockWorldService) GetLocation(_ context.Context, subjectID string, _ ulid.ULID) (*world.Location, error) {
-	m.capturedSubjectID = subjectID
+func (m *mockWorldService) GetLocation(_ context.Context, subjectID world.Caller, _ ulid.ULID) (*world.Location, error) {
+	m.capturedCaller = subjectID
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.location, nil
 }
 
-func (m *mockWorldService) GetCharacter(_ context.Context, subjectID string, _ ulid.ULID) (*world.Character, error) {
-	m.capturedSubjectID = subjectID
+func (m *mockWorldService) GetCharacter(_ context.Context, subjectID world.Caller, _ ulid.ULID) (*world.Character, error) {
+	m.capturedCaller = subjectID
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.character, nil
 }
 
-func (m *mockWorldService) GetCharactersByLocation(_ context.Context, subjectID string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
-	m.capturedSubjectID = subjectID
+func (m *mockWorldService) GetCharactersByLocation(_ context.Context, subjectID world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+	m.capturedCaller = subjectID
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.characters, nil
 }
 
-func (m *mockWorldService) GetObject(_ context.Context, subjectID string, _ ulid.ULID) (*world.Object, error) {
-	m.capturedSubjectID = subjectID
+func (m *mockWorldService) GetObject(_ context.Context, subjectID world.Caller, _ ulid.ULID) (*world.Object, error) {
+	m.capturedCaller = subjectID
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -111,7 +114,7 @@ func TestWorldQuerierAdapter_GetLocation(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedLoc, loc)
-		assert.Equal(t, "plugin:test-plugin", svc.capturedSubjectID)
+		assert.Equal(t, world.HumanCaller("plugin:test-plugin"), svc.capturedCaller)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {
@@ -172,7 +175,7 @@ func TestWorldQuerierAdapter_GetCharacter(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedChar, char)
-		assert.Equal(t, "plugin:chat-plugin", svc.capturedSubjectID)
+		assert.Equal(t, world.HumanCaller("plugin:chat-plugin"), svc.capturedCaller)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {
@@ -231,7 +234,7 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedChars, chars)
-		assert.Equal(t, "plugin:presence-plugin", svc.capturedSubjectID)
+		assert.Equal(t, world.HumanCaller("plugin:presence-plugin"), svc.capturedCaller)
 	})
 
 	t.Run("returns empty slice", func(t *testing.T) {
@@ -299,7 +302,7 @@ func TestWorldQuerierAdapter_GetObject(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedObj, obj)
-		assert.Equal(t, "plugin:inventory-plugin", svc.capturedSubjectID)
+		assert.Equal(t, world.HumanCaller("plugin:inventory-plugin"), svc.capturedCaller)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {
@@ -346,22 +349,22 @@ func TestWorldQuerierAdapter_GetObject(t *testing.T) {
 // Methods block until the context is cancelled, then return context.DeadlineExceeded.
 type blockingMockWorldService struct{}
 
-func (m *blockingMockWorldService) GetLocation(ctx context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *blockingMockWorldService) GetLocation(ctx context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
 
-func (m *blockingMockWorldService) GetCharacter(ctx context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+func (m *blockingMockWorldService) GetCharacter(ctx context.Context, _ world.Caller, _ ulid.ULID) (*world.Character, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
 
-func (m *blockingMockWorldService) GetCharactersByLocation(ctx context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+func (m *blockingMockWorldService) GetCharactersByLocation(ctx context.Context, _ world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
 
-func (m *blockingMockWorldService) GetObject(ctx context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+func (m *blockingMockWorldService) GetObject(ctx context.Context, _ world.Caller, _ ulid.ULID) (*world.Object, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }

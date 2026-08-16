@@ -16,7 +16,6 @@ import (
 	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
-	policytypes "github.com/holomush/holomush/internal/access/policy/types"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/lifecycle"
@@ -34,19 +33,41 @@ func (p poolProvider) Pool() *pgxpool.Pool { return p.pool }
 // cmd/holomush/core.go:380 uses). It returns the started subsystem; callers read
 // Engine()/AttributeResolver()/PluginProvider()/AuditLogger() and the poller is
 // stopped via t.Cleanup.
-func startRealABAC(t *testing.T, ctx context.Context, pool *pgxpool.Pool) *abacsetup.ABACSubsystem {
+//
+// jobRegistry is the harness's single background-job liveness registry, passed
+// through verbatim exactly as cmd/holomush/core.go passes its one instance. It
+// is what lets a job subsystem booted by another option (WithRetirementReactor)
+// be seen as RUNNING by this engine's job attribute provider — without it every
+// job-gating seed default-denies, which would make a denial spec pass for the
+// wrong reason and its paired positive control fail.
+func startRealABAC(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	jobRegistry attribute.JobRegistry,
+) *abacsetup.ABACSubsystem {
 	t.Helper()
 
 	// Seed first: the subsystem's Start → BuildABACStack → cache.Reload reads
 	// the policy store at construction. An unseeded store has zero policies and
 	// default-denies everything.
+	//
+	// Because seeding runs BEFORE abacSub.Prepare/Activate, no populated provider
+	// registry exists at this point BY CONSTRUCTION — the registry the providers
+	// fill is created inside BuildABACStack, which has not run yet. So this
+	// compiler is built on an action-only registry (02.2-04, D-66 site 3), which
+	// is what keeps the harness's validation behaviour identical to production's
+	// for `action`: the compiler validates by DSL ROOT, never by provider name, so
+	// the roots this registry does not carry are skipped and only the `action`
+	// hard-error branch differs from a bare schema — which is exactly the branch
+	// the harness must not silently disarm.
 	require.NoError(
 		t,
 		policy.Bootstrap(
 			ctx,
 			audit.NewPostgresPartitionCreator(pool),
 			policystore.NewPostgresStore(pool),
-			policy.NewCompiler(policytypes.NewAttributeSchema()),
+			policy.NewCompiler(attribute.NewActionOnlySchemaRegistry().Schema()),
 			slog.Default(),
 			policy.BootstrapOptions{},
 		),
@@ -54,8 +75,9 @@ func startRealABAC(t *testing.T, ctx context.Context, pool *pgxpool.Pool) *abacs
 	)
 
 	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
-		DB:       poolProvider{pool: pool},
-		Registry: lifecycle.NewReadinessRegistry(),
+		DB:          poolProvider{pool: pool},
+		Registry:    lifecycle.NewReadinessRegistry(),
+		JobRegistry: jobRegistry,
 	})
 	require.NoError(t, abacSub.Prepare(ctx), "startRealABAC: ABAC subsystem prepare")
 	require.NoError(t, abacSub.Activate(ctx), "startRealABAC: ABAC subsystem activate")

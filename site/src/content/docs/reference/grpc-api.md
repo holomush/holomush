@@ -111,6 +111,33 @@ title: "gRPC API Reference"
   
     - [AdminService](#holomush-admin-v1-AdminService)
   
+- [holomush/adminportal/v1/adminportal.proto](#holomush_adminportal_v1_adminportal-proto)
+    - [AdminCharacter](#holomush-adminportal-v1-AdminCharacter)
+    - [AdminCharacterDetail](#holomush-adminportal-v1-AdminCharacterDetail)
+    - [AdminCharacterDetail.ProfileEntry](#holomush-adminportal-v1-AdminCharacterDetail-ProfileEntry)
+    - [AdminGetCharacterRequest](#holomush-adminportal-v1-AdminGetCharacterRequest)
+    - [AdminGetCharacterResponse](#holomush-adminportal-v1-AdminGetCharacterResponse)
+    - [AdminGetSectionRequest](#holomush-adminportal-v1-AdminGetSectionRequest)
+    - [AdminGetSectionResponse](#holomush-adminportal-v1-AdminGetSectionResponse)
+    - [AdminListCharactersRequest](#holomush-adminportal-v1-AdminListCharactersRequest)
+    - [AdminListCharactersResponse](#holomush-adminportal-v1-AdminListCharactersResponse)
+    - [AdminListSectionsRequest](#holomush-adminportal-v1-AdminListSectionsRequest)
+    - [AdminListSectionsResponse](#holomush-adminportal-v1-AdminListSectionsResponse)
+    - [AdminRetireCharacterRequest](#holomush-adminportal-v1-AdminRetireCharacterRequest)
+    - [AdminRetireCharacterResponse](#holomush-adminportal-v1-AdminRetireCharacterResponse)
+    - [AdminSearchCharactersRequest](#holomush-adminportal-v1-AdminSearchCharactersRequest)
+    - [AdminSearchCharactersResponse](#holomush-adminportal-v1-AdminSearchCharactersResponse)
+    - [AdminSection](#holomush-adminportal-v1-AdminSection)
+    - [AdminUnretireCharacterRequest](#holomush-adminportal-v1-AdminUnretireCharacterRequest)
+    - [AdminUnretireCharacterResponse](#holomush-adminportal-v1-AdminUnretireCharacterResponse)
+    - [AdminUpdateCharacterRequest](#holomush-adminportal-v1-AdminUpdateCharacterRequest)
+    - [AdminUpdateCharacterResponse](#holomush-adminportal-v1-AdminUpdateCharacterResponse)
+  
+    - [AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField)
+    - [AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter)
+  
+    - [AdminPortalService](#holomush-adminportal-v1-AdminPortalService)
+  
 - [holomush/channel/v1/channel.proto](#holomush_channel_v1_channel-proto)
     - [BanMemberRequest](#holomush-channel-v1-BanMemberRequest)
     - [BanMemberResponse](#holomush-channel-v1-BanMemberResponse)
@@ -141,6 +168,32 @@ title: "gRPC API Reference"
     - [WhoInChannelResponse](#holomush-channel-v1-WhoInChannelResponse)
   
     - [ChannelService](#holomush-channel-v1-ChannelService)
+  
+- [holomush/characteraccess/v1/characteraccess.proto](#holomush_characteraccess_v1_characteraccess-proto)
+    - [CreateCharacterRequest](#holomush-characteraccess-v1-CreateCharacterRequest)
+    - [CreateCharacterResponse](#holomush-characteraccess-v1-CreateCharacterResponse)
+    - [GetCharacterProfileRequest](#holomush-characteraccess-v1-GetCharacterProfileRequest)
+    - [GetCharacterProfileResponse](#holomush-characteraccess-v1-GetCharacterProfileResponse)
+    - [GetMyCharacterRequest](#holomush-characteraccess-v1-GetMyCharacterRequest)
+    - [GetMyCharacterResponse](#holomush-characteraccess-v1-GetMyCharacterResponse)
+    - [ListCharacterDirectoryRequest](#holomush-characteraccess-v1-ListCharacterDirectoryRequest)
+    - [ListCharacterDirectoryResponse](#holomush-characteraccess-v1-ListCharacterDirectoryResponse)
+    - [ListMyCharactersRequest](#holomush-characteraccess-v1-ListMyCharactersRequest)
+    - [ListMyCharactersResponse](#holomush-characteraccess-v1-ListMyCharactersResponse)
+    - [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter)
+    - [OwnCharacter.ProfileEntry](#holomush-characteraccess-v1-OwnCharacter-ProfileEntry)
+    - [ProfileImage](#holomush-characteraccess-v1-ProfileImage)
+    - [PublicCharacter](#holomush-characteraccess-v1-PublicCharacter)
+    - [PublicCharacter.ProfileEntry](#holomush-characteraccess-v1-PublicCharacter-ProfileEntry)
+    - [PublicCharacterSummary](#holomush-characteraccess-v1-PublicCharacterSummary)
+    - [SetDefaultCharacterRequest](#holomush-characteraccess-v1-SetDefaultCharacterRequest)
+    - [SetDefaultCharacterResponse](#holomush-characteraccess-v1-SetDefaultCharacterResponse)
+    - [UpdateCharacterDescriptionRequest](#holomush-characteraccess-v1-UpdateCharacterDescriptionRequest)
+    - [UpdateCharacterDescriptionResponse](#holomush-characteraccess-v1-UpdateCharacterDescriptionResponse)
+    - [UpdateCharacterProfileRequest](#holomush-characteraccess-v1-UpdateCharacterProfileRequest)
+    - [UpdateCharacterProfileResponse](#holomush-characteraccess-v1-UpdateCharacterProfileResponse)
+  
+    - [CharacterAccessService](#holomush-characteraccess-v1-CharacterAccessService)
   
 - [holomush/comm/v1/comm.proto](#holomush_comm_v1_comm-proto)
     - [CommunicationContent](#holomush-comm-v1-CommunicationContent)
@@ -382,6 +435,8 @@ title: "gRPC API Reference"
     - [GetPublicSceneArchiveResponse](#holomush-scene-v1-GetPublicSceneArchiveResponse)
     - [GetPublishedSceneRequest](#holomush-scene-v1-GetPublishedSceneRequest)
     - [GetPublishedSceneResponse](#holomush-scene-v1-GetPublishedSceneResponse)
+    - [GetSceneNotifyPrefRequest](#holomush-scene-v1-GetSceneNotifyPrefRequest)
+    - [GetSceneNotifyPrefResponse](#holomush-scene-v1-GetSceneNotifyPrefResponse)
     - [GetSceneRequest](#holomush-scene-v1-GetSceneRequest)
     - [GetSceneResponse](#holomush-scene-v1-GetSceneResponse)
     - [InviteToSceneRequest](#holomush-scene-v1-InviteToSceneRequest)
@@ -394,12 +449,16 @@ title: "gRPC API Reference"
     - [LeaveSceneResponse](#holomush-scene-v1-LeaveSceneResponse)
     - [ListCharacterScenesRequest](#holomush-scene-v1-ListCharacterScenesRequest)
     - [ListCharacterScenesResponse](#holomush-scene-v1-ListCharacterScenesResponse)
+    - [ListMutedScenesRequest](#holomush-scene-v1-ListMutedScenesRequest)
+    - [ListMutedScenesResponse](#holomush-scene-v1-ListMutedScenesResponse)
     - [ListPublishedScenesRequest](#holomush-scene-v1-ListPublishedScenesRequest)
     - [ListPublishedScenesResponse](#holomush-scene-v1-ListPublishedScenesResponse)
     - [ListScenePublishAttemptsRequest](#holomush-scene-v1-ListScenePublishAttemptsRequest)
     - [ListScenePublishAttemptsResponse](#holomush-scene-v1-ListScenePublishAttemptsResponse)
     - [ListScenesRequest](#holomush-scene-v1-ListScenesRequest)
     - [ListScenesResponse](#holomush-scene-v1-ListScenesResponse)
+    - [MuteSceneRequest](#holomush-scene-v1-MuteSceneRequest)
+    - [MuteSceneResponse](#holomush-scene-v1-MuteSceneResponse)
     - [ParticipantInfo](#holomush-scene-v1-ParticipantInfo)
     - [PauseSceneRequest](#holomush-scene-v1-PauseSceneRequest)
     - [PauseSceneResponse](#holomush-scene-v1-PauseSceneResponse)
@@ -417,6 +476,8 @@ title: "gRPC API Reference"
     - [ScenePublishVoteAttemptsExtendedEvent](#holomush-scene-v1-ScenePublishVoteAttemptsExtendedEvent)
     - [ScenePublishVoteCastEvent](#holomush-scene-v1-ScenePublishVoteCastEvent)
     - [ScenePublishWithdrawnEvent](#holomush-scene-v1-ScenePublishWithdrawnEvent)
+    - [SetSceneNotifyPrefRequest](#holomush-scene-v1-SetSceneNotifyPrefRequest)
+    - [SetSceneNotifyPrefResponse](#holomush-scene-v1-SetSceneNotifyPrefResponse)
     - [StartScenePublishRequest](#holomush-scene-v1-StartScenePublishRequest)
     - [StartScenePublishResponse](#holomush-scene-v1-StartScenePublishResponse)
     - [TransferOwnershipRequest](#holomush-scene-v1-TransferOwnershipRequest)
@@ -459,12 +520,16 @@ title: "gRPC API Reference"
     - [ListPublishedScenesResponse](#holomush-sceneaccess-v1-ListPublishedScenesResponse)
     - [ListScenesForViewerRequest](#holomush-sceneaccess-v1-ListScenesForViewerRequest)
     - [ListScenesForViewerResponse](#holomush-sceneaccess-v1-ListScenesForViewerResponse)
+    - [MuteSceneRequest](#holomush-sceneaccess-v1-MuteSceneRequest)
+    - [MuteSceneResponse](#holomush-sceneaccess-v1-MuteSceneResponse)
     - [PauseSceneRequest](#holomush-sceneaccess-v1-PauseSceneRequest)
     - [PauseSceneResponse](#holomush-sceneaccess-v1-PauseSceneResponse)
     - [ResumeSceneRequest](#holomush-sceneaccess-v1-ResumeSceneRequest)
     - [ResumeSceneResponse](#holomush-sceneaccess-v1-ResumeSceneResponse)
     - [SetSceneFocusRequest](#holomush-sceneaccess-v1-SetSceneFocusRequest)
     - [SetSceneFocusResponse](#holomush-sceneaccess-v1-SetSceneFocusResponse)
+    - [SetSceneNotifyPrefRequest](#holomush-sceneaccess-v1-SetSceneNotifyPrefRequest)
+    - [SetSceneNotifyPrefResponse](#holomush-sceneaccess-v1-SetSceneNotifyPrefResponse)
     - [StartScenePublishRequest](#holomush-sceneaccess-v1-StartScenePublishRequest)
     - [StartScenePublishResponse](#holomush-sceneaccess-v1-StartScenePublishResponse)
     - [TransferOwnershipRequest](#holomush-sceneaccess-v1-TransferOwnershipRequest)
@@ -490,6 +555,22 @@ title: "gRPC API Reference"
     - [SendCommandResponse](#holomush-web-v1-SendCommandResponse)
     - [StreamEventsRequest](#holomush-web-v1-StreamEventsRequest)
     - [StreamEventsResponse](#holomush-web-v1-StreamEventsResponse)
+    - [WebAdminGetCharacterRequest](#holomush-web-v1-WebAdminGetCharacterRequest)
+    - [WebAdminGetCharacterResponse](#holomush-web-v1-WebAdminGetCharacterResponse)
+    - [WebAdminGetSectionRequest](#holomush-web-v1-WebAdminGetSectionRequest)
+    - [WebAdminGetSectionResponse](#holomush-web-v1-WebAdminGetSectionResponse)
+    - [WebAdminListCharactersRequest](#holomush-web-v1-WebAdminListCharactersRequest)
+    - [WebAdminListCharactersResponse](#holomush-web-v1-WebAdminListCharactersResponse)
+    - [WebAdminListSectionsRequest](#holomush-web-v1-WebAdminListSectionsRequest)
+    - [WebAdminListSectionsResponse](#holomush-web-v1-WebAdminListSectionsResponse)
+    - [WebAdminRetireCharacterRequest](#holomush-web-v1-WebAdminRetireCharacterRequest)
+    - [WebAdminRetireCharacterResponse](#holomush-web-v1-WebAdminRetireCharacterResponse)
+    - [WebAdminSearchCharactersRequest](#holomush-web-v1-WebAdminSearchCharactersRequest)
+    - [WebAdminSearchCharactersResponse](#holomush-web-v1-WebAdminSearchCharactersResponse)
+    - [WebAdminUnretireCharacterRequest](#holomush-web-v1-WebAdminUnretireCharacterRequest)
+    - [WebAdminUnretireCharacterResponse](#holomush-web-v1-WebAdminUnretireCharacterResponse)
+    - [WebAdminUpdateCharacterRequest](#holomush-web-v1-WebAdminUpdateCharacterRequest)
+    - [WebAdminUpdateCharacterResponse](#holomush-web-v1-WebAdminUpdateCharacterResponse)
     - [WebAuthenticatePlayerRequest](#holomush-web-v1-WebAuthenticatePlayerRequest)
     - [WebAuthenticatePlayerResponse](#holomush-web-v1-WebAuthenticatePlayerResponse)
     - [WebAvailableCommand](#holomush-web-v1-WebAvailableCommand)
@@ -515,8 +596,12 @@ title: "gRPC API Reference"
     - [WebEndSceneResponse](#holomush-web-v1-WebEndSceneResponse)
     - [WebExportSceneRequest](#holomush-web-v1-WebExportSceneRequest)
     - [WebExportSceneResponse](#holomush-web-v1-WebExportSceneResponse)
+    - [WebGetCharacterProfileRequest](#holomush-web-v1-WebGetCharacterProfileRequest)
+    - [WebGetCharacterProfileResponse](#holomush-web-v1-WebGetCharacterProfileResponse)
     - [WebGetContentRequest](#holomush-web-v1-WebGetContentRequest)
     - [WebGetContentResponse](#holomush-web-v1-WebGetContentResponse)
+    - [WebGetMyCharacterRequest](#holomush-web-v1-WebGetMyCharacterRequest)
+    - [WebGetMyCharacterResponse](#holomush-web-v1-WebGetMyCharacterResponse)
     - [WebGetPublicSceneArchiveRequest](#holomush-web-v1-WebGetPublicSceneArchiveRequest)
     - [WebGetPublicSceneArchiveResponse](#holomush-web-v1-WebGetPublicSceneArchiveResponse)
     - [WebGetPublishedSceneRequest](#holomush-web-v1-WebGetPublishedSceneRequest)
@@ -529,8 +614,8 @@ title: "gRPC API Reference"
     - [WebKickFromSceneResponse](#holomush-web-v1-WebKickFromSceneResponse)
     - [WebLeaveSceneRequest](#holomush-web-v1-WebLeaveSceneRequest)
     - [WebLeaveSceneResponse](#holomush-web-v1-WebLeaveSceneResponse)
-    - [WebListAllCharactersRequest](#holomush-web-v1-WebListAllCharactersRequest)
-    - [WebListAllCharactersResponse](#holomush-web-v1-WebListAllCharactersResponse)
+    - [WebListCharacterDirectoryRequest](#holomush-web-v1-WebListCharacterDirectoryRequest)
+    - [WebListCharacterDirectoryResponse](#holomush-web-v1-WebListCharacterDirectoryResponse)
     - [WebListCharactersRequest](#holomush-web-v1-WebListCharactersRequest)
     - [WebListCharactersResponse](#holomush-web-v1-WebListCharactersResponse)
     - [WebListCommandsRequest](#holomush-web-v1-WebListCommandsRequest)
@@ -540,6 +625,8 @@ title: "gRPC API Reference"
     - [WebListContentResponse](#holomush-web-v1-WebListContentResponse)
     - [WebListFocusPresenceRequest](#holomush-web-v1-WebListFocusPresenceRequest)
     - [WebListFocusPresenceResponse](#holomush-web-v1-WebListFocusPresenceResponse)
+    - [WebListMyCharactersRequest](#holomush-web-v1-WebListMyCharactersRequest)
+    - [WebListMyCharactersResponse](#holomush-web-v1-WebListMyCharactersResponse)
     - [WebListMyScenesRequest](#holomush-web-v1-WebListMyScenesRequest)
     - [WebListMyScenesResponse](#holomush-web-v1-WebListMyScenesResponse)
     - [WebListPlayerSessionsRequest](#holomush-web-v1-WebListPlayerSessionsRequest)
@@ -552,6 +639,8 @@ title: "gRPC API Reference"
     - [WebListSessionStreamsResponse](#holomush-web-v1-WebListSessionStreamsResponse)
     - [WebLogoutRequest](#holomush-web-v1-WebLogoutRequest)
     - [WebLogoutResponse](#holomush-web-v1-WebLogoutResponse)
+    - [WebMuteSceneRequest](#holomush-web-v1-WebMuteSceneRequest)
+    - [WebMuteSceneResponse](#holomush-web-v1-WebMuteSceneResponse)
     - [WebPauseSceneRequest](#holomush-web-v1-WebPauseSceneRequest)
     - [WebPauseSceneResponse](#holomush-web-v1-WebPauseSceneResponse)
     - [WebPlayerSessionInfo](#holomush-web-v1-WebPlayerSessionInfo)
@@ -568,12 +657,20 @@ title: "gRPC API Reference"
     - [WebRevokePlayerSessionResponse](#holomush-web-v1-WebRevokePlayerSessionResponse)
     - [WebSelectCharacterRequest](#holomush-web-v1-WebSelectCharacterRequest)
     - [WebSelectCharacterResponse](#holomush-web-v1-WebSelectCharacterResponse)
+    - [WebSetDefaultCharacterRequest](#holomush-web-v1-WebSetDefaultCharacterRequest)
+    - [WebSetDefaultCharacterResponse](#holomush-web-v1-WebSetDefaultCharacterResponse)
     - [WebSetSceneFocusRequest](#holomush-web-v1-WebSetSceneFocusRequest)
     - [WebSetSceneFocusResponse](#holomush-web-v1-WebSetSceneFocusResponse)
+    - [WebSetSceneNotifyPrefRequest](#holomush-web-v1-WebSetSceneNotifyPrefRequest)
+    - [WebSetSceneNotifyPrefResponse](#holomush-web-v1-WebSetSceneNotifyPrefResponse)
     - [WebStartScenePublishRequest](#holomush-web-v1-WebStartScenePublishRequest)
     - [WebStartScenePublishResponse](#holomush-web-v1-WebStartScenePublishResponse)
     - [WebTransferOwnershipRequest](#holomush-web-v1-WebTransferOwnershipRequest)
     - [WebTransferOwnershipResponse](#holomush-web-v1-WebTransferOwnershipResponse)
+    - [WebUpdateCharacterDescriptionRequest](#holomush-web-v1-WebUpdateCharacterDescriptionRequest)
+    - [WebUpdateCharacterDescriptionResponse](#holomush-web-v1-WebUpdateCharacterDescriptionResponse)
+    - [WebUpdateCharacterProfileRequest](#holomush-web-v1-WebUpdateCharacterProfileRequest)
+    - [WebUpdateCharacterProfileResponse](#holomush-web-v1-WebUpdateCharacterProfileResponse)
     - [WebUpdateSceneRequest](#holomush-web-v1-WebUpdateSceneRequest)
     - [WebUpdateSceneResponse](#holomush-web-v1-WebUpdateSceneResponse)
     - [WebWatchSceneRequest](#holomush-web-v1-WebWatchSceneRequest)
@@ -739,6 +836,14 @@ safety contract documented in internal/auth (session ownership).
 | player_id | [string](#string) |  | player_id is the player&#39;s ULID. |
 | is_guest | [bool](#bool) |  | is_guest is true when the session belongs to an ephemeral guest player. |
 | characters | [CharacterSummary](#holomush-core-v1-CharacterSummary) | repeated | characters is the player&#39;s roster (enriched with session status). |
+| default_character_id | [string](#string) |  | default_character_id is players.default_character_id, forwarded by CoreServer.CheckPlayerSession from the player row it already loaded. It is EMPTY when the player has set no default, which is the state a fresh account is in — an empty value is &#34;no preference&#34;, never &#34;the first character&#34;. It matches the field of the same name on AuthenticatePlayerResponse; a session-restoring client needs it for the same reason a logging-in one does, and reading it here costs no extra round trip. |
+| roles | [string](#string) | repeated | roles are the role names this PLAYER holds, as store.PostgresRoleStore.PlayerRoles returns them: the deduplicated, sorted union across all of the player&#39;s characters. CoreServer.CheckPlayerSession reads them through the optional WithPlayerRoleLookup seam.
+
+It is a NAV HINT and never an authorization boundary. Every admin RPC evaluates ABAC on an `admin_section:` resource and denies independently of what this field said, so a client that lies about it on the way back gains nothing.
+
+It is player-scoped and SINGULAR — never a per-character map — so it cannot leak which characters belong to one player (§10.5.1.1).
+
+A CoreServer with no lookup wired, and a lookup that fails, both yield an EMPTY list and never an error: this field decides what is DRAWN and must not be able to break session restore. Empty is fail-closed, because an empty list draws no admin entrance. On the wire absence and empty are the same answer — a zero-element repeated scalar is omitted from the serialized bytes — and no client may distinguish them. |
 
 
 
@@ -2413,6 +2518,515 @@ allowing incremental feature deployment without breaking callers.
 
 
 
+<a name="holomush_adminportal_v1_adminportal-proto"></a>
+<p align="right"><a href="#top">Top</a></p>
+
+## holomush/adminportal/v1/adminportal.proto
+
+
+
+<a name="holomush-adminportal-v1-AdminCharacter"></a>
+
+### AdminCharacter
+AdminCharacter is the LIST projection: 01-SPEC §11.3&#39;s field list and nothing
+else.
+
+It carries NO profile prose. The list is a bulk cross-player projection, and
+prose in it would be a bulk prose export of player-authored text — which is
+why the edit surface reads AdminCharacterDetail for ONE character instead.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the character&#39;s ULID. |
+| player_id | [string](#string) |  | player_id is the owning player&#39;s ULID. It is a §11.3 Filter=Yes field and is what the click-to-filter path sends back as AdminListCharactersRequest.player_id; it is never an ordering key. |
+| player_username | [string](#string) |  | player_username is players.username for player_id — the OOC identity column the admin audience already sees, joined onto the row so the table needs no second lookup. |
+| name | [string](#string) |  | name is characters.name, the stored display form. Ordering is on the normalized form; this is what the table draws. |
+| status | [string](#string) |  | status is world.Status as a string: exactly one of the §9.3 lifecycle values. |
+| last_active_at | [int64](#int64) |  | last_active_at is characters.last_active_at as BIGINT epoch NANOSECONDS, sent RAW. 0 means &#34;has never been active&#34;. The server sends no formatted string: the client renders the coarse relative text, so the wire carries a fact and the presentation stays where the locale is. |
+| created_at | [int64](#int64) |  | created_at is the row&#39;s creation time as epoch nanoseconds. |
+| version | [int32](#int32) |  | version is the optimistic-concurrency version (MODEL-03) the edit surface sends back on a write. It is NOT a sortable §11.3 field — no sort enum value can express an ordering on it. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminCharacterDetail"></a>
+
+### AdminCharacterDetail
+AdminCharacterDetail is the SINGLE-character read the admin edit surface
+fetches when its sheet opens.
+
+# Why it is a separate message from AdminCharacter
+
+It carries the thirteen values §10.6 lets an admin write: characters.description
+plus the twelve §7.2 profile names. Seeding an edit form from LIST rows
+instead would render those fields blank and OVERWRITE existing content on
+save, because a blank field and an unfetched field are indistinguishable once
+they are both empty strings in a form model. One character, requested
+deliberately, is the only shape that cannot do that.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the same §11.3 projection the list carries, so the two cannot drift. |
+| description | [string](#string) |  | description is characters.description, the in-world `look` text. It is a column on characters, not a property row — which is why the twelve below are twelve and the writable set is thirteen. |
+| profile | [AdminCharacterDetail.ProfileEntry](#holomush-adminportal-v1-AdminCharacterDetail-ProfileEntry) | repeated | profile carries the governed profile values, keyed by their §7.2 path (`profile.pronouns` and its eleven siblings).
+
+The key set is CLOSED by membership in the facade&#39;s updateCharacterProfileMaskablePaths — the same twelve names §10.6 lets an admin WRITE — so the read surface and the write surface are the same set by construction. A property row outside that set is dropped, and a row whose stored value is NULL is OMITTED rather than sent as present-and-empty, so a flag-style row does not round-trip through the edit surface as a blank the operator never authored. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminCharacterDetail-ProfileEntry"></a>
+
+### AdminCharacterDetail.ProfileEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminGetCharacterRequest"></a>
+
+### AdminGetCharacterRequest
+AdminGetCharacterRequest names one character to read in full.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side. |
+| character_id | [string](#string) |  | character_id is the ULID to read. A value that does not parse, and one that parses but names no row, both produce codes.NotFound with the SAME static message carrying no id — so this field is not an existence oracle. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminGetCharacterResponse"></a>
+
+### AdminGetCharacterResponse
+AdminGetCharacterResponse carries the one row the edit surface reads.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacterDetail](#holomush-adminportal-v1-AdminCharacterDetail) |  | character is the full detail projection. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminGetSectionRequest"></a>
+
+### AdminGetSectionRequest
+AdminGetSectionRequest names one section and the caller asking for it. It is
+the one admin-portal request whose section is attacker-controlled, which is
+why the interceptor rather than the handler evaluates it.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| section_id | [string](#string) |  | section_id is the registry id to fetch, matched by exact lowercase-ASCII byte equality with no case folding: NewAdminSectionInterceptor reads it through the GetSectionId() accessor and passes it to section.AssertSectionAccess verbatim, so a mis-cased id resolves to no entry and is refused indistinguishably from an id the caller may not reach.
+
+The min_len annotation documents the schema contract. It is NOT what enforces it at runtime — no protovalidate interceptor is installed on any server path — so the interceptor&#39;s own blank check refuses an empty or whitespace-only value with ADMIN_SECTION_NO_SECTION_ID before the handler runs. |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header. NewAdminSectionInterceptor resolves it to a player through auth.PlayerSessionRepository; there is deliberately no player-id field a caller could point at someone else. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminGetSectionResponse"></a>
+
+### AdminGetSectionResponse
+AdminGetSectionResponse carries the single registry row the gate already
+authorized. It is reached only on the permitted-and-available path: every
+other outcome is a status error with no body.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| section | [AdminSection](#holomush-adminportal-v1-AdminSection) |  | section is the entry section.AssertSectionAccess resolved, projected by AdminPortalServer.AdminGetSection from the context the interceptor stashed it on. Its status is always &#34;available&#34; here, because the gate refuses a planned section with FailedPrecondition before this message is built. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminListCharactersRequest"></a>
+
+### AdminListCharactersRequest
+AdminListCharactersRequest is one page request against the cross-player
+character list. Every field that shapes SQL is a closed enum or a bound
+value; nothing here reaches an ORDER BY or a predicate as text.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header. NewAdminSectionInterceptor resolves it to a player through auth.PlayerSessionRepository; there is deliberately no player-id field a caller could point at someone else. |
+| sort_field | [AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField) |  | sort_field selects the ordering column. AdminPortalServer REFUSES the unspecified value with codes.InvalidArgument rather than picking an order. |
+| descending | [bool](#bool) |  | descending reverses the primary sort key only. The never-active sentinel stays last and the normalized-name tiebreak stays ascending in both directions, so the order is total either way. |
+| status_filter | [AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter) |  | status_filter restricts to one lifecycle state; unspecified means no filter. |
+| player_id | [string](#string) |  | player_id, when non-empty, restricts to one player&#39;s characters. This is §11.3&#39;s Filter=Yes half of player_id and the click-to-filter path; there is no ordering on it. A value that does not parse as a ULID is codes.InvalidArgument. |
+| page | [int32](#int32) |  | page is the 1-based page number. AdminPortalServer refuses a value below 1 with codes.InvalidArgument rather than computing a negative OFFSET. |
+| page_size | [int32](#int32) |  | page_size is the requested rows per page. It is SERVER-CLAMPED: 0 or absent means 50, and any value above 50 is clamped DOWN to 50 rather than honoured. That clamp is what discharges T-06-24 — without it a page_size of 2^31-1 would reach the repository as a LIMIT. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminListCharactersResponse"></a>
+
+### AdminListCharactersResponse
+AdminListCharactersResponse is one page plus the total over the same filtered
+set.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) | repeated | characters is the page, in the requested order. |
+| total_count | [int64](#int64) |  | total_count is the number of rows matching the filter, computed by its own scalar count in the same read transaction as the page — so it is correct for a page BEYOND the last one, where a window column would report 0.
+
+This list is NOT privacy-partitioned: it is the admin audience&#39;s view of every character. It MUST NOT be cited as precedent for a count on the public character directory, whose row set differs per viewer and where a total would disclose the size of the withheld remainder. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminListSectionsRequest"></a>
+
+### AdminListSectionsRequest
+AdminListSectionsRequest carries only the caller&#39;s bearer token, because
+which sections are listed follows entirely from who is asking.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header. NewAdminSectionInterceptor reads it through the GetPlayerSessionToken() accessor protoc-gen-go emits for this field and resolves the player through auth.PlayerSessionRepository; there is deliberately no player-id field a caller could point at someone else. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminListSectionsResponse"></a>
+
+### AdminListSectionsResponse
+AdminListSectionsResponse is the server-filtered projection the /admin nav
+renders from. It is the only source for that nav — there is no client-side
+section registry to drift from it.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| sections | [AdminSection](#holomush-adminportal-v1-AdminSection) | repeated | sections are the entries section.AssertSectionAdmission permitted, in section.All()&#39;s row order. An entry the gate refused is absent; its absence is the only signal, so a refused section cannot be distinguished from one that does not exist. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminRetireCharacterRequest"></a>
+
+### AdminRetireCharacterRequest
+AdminRetireCharacterRequest names one character to soft-retire.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side. |
+| character_id | [string](#string) |  | character_id is the ULID to retire. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller read. An absent, zero or negative value is refused with InvalidArgument before any domain call; a stale one surfaces as Aborted and neither the status change nor its envelope lands. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminRetireCharacterResponse"></a>
+
+### AdminRetireCharacterResponse
+AdminRetireCharacterResponse carries the post-transition row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the §11.3 projection re-read after the transition, with status `retired` and the bumped version. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminSearchCharactersRequest"></a>
+
+### AdminSearchCharactersRequest
+AdminSearchCharactersRequest adds a substring term to the list request.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side exactly as on the list RPC. |
+| sort_field | [AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField) |  | sort_field selects the ordering column; the unspecified value is refused. |
+| descending | [bool](#bool) |  | descending reverses the primary sort key only. |
+| status_filter | [AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter) |  | status_filter restricts to one lifecycle state; unspecified means no filter. |
+| player_id | [string](#string) |  | player_id, when non-empty, restricts to one player&#39;s characters. |
+| page | [int32](#int32) |  | page is the 1-based page number; below 1 is refused. |
+| page_size | [int32](#int32) |  | page_size is server-clamped to at most 50, defaulting to 50 when 0. |
+| query | [string](#string) |  | query is the RAW STRING THE OPERATOR TYPED. It is normalized SERVER-SIDE through the same charname pipeline that produced the stored characters.normalized_name — there is exactly one normalizer and no client mirror of it, so a client that pre-folded this value would be applying a second, drifting definition of name equality.
+
+It has NO minimum length. Blank after trimming means &#34;no filter&#34; and returns the unfiltered page; a value that normalizes to nothing (a lone zero-width joiner, say) returns an empty page rather than an error. Literal %, _ and \ match literally. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminSearchCharactersResponse"></a>
+
+### AdminSearchCharactersResponse
+AdminSearchCharactersResponse has the same shape as its list peer, so the
+table renders one component against both.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) | repeated | characters is the matching page, in the requested order. |
+| total_count | [int64](#int64) |  | total_count is the number of rows matching the term AND the filters, computed by its own scalar count in the same read transaction as the page. The same non-precedent note as on the list response applies. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminSection"></a>
+
+### AdminSection
+AdminSection is one row of the admin section registry
+(internal/admin/section/registry.go) as the portal renders it.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the registry entry&#39;s section id, verbatim — the same lowercase-ASCII token section.Lookup matches and access.AdminSectionResource derives the `admin_section:` reference from. Matching is exact; there is no case folding anywhere on this path. |
+| display_name | [string](#string) |  | display_name is the human label the nav draws for this section. |
+| status | [string](#string) |  | status is section.Status as a string: exactly &#34;available&#34; or &#34;planned&#34; and nothing else. It is carried as DATA so the nav can render a planned section in its own treatment; it is not an authorization signal, and the handler does not filter on it. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminUnretireCharacterRequest"></a>
+
+### AdminUnretireCharacterRequest
+AdminUnretireCharacterRequest names one retired character to return to play.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side. |
+| character_id | [string](#string) |  | character_id is the ULID to un-retire. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller read, under the same guard rules retire applies. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminUnretireCharacterResponse"></a>
+
+### AdminUnretireCharacterResponse
+AdminUnretireCharacterResponse carries the post-transition row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the §11.3 projection re-read after the transition, with status `active` and the bumped version. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminUpdateCharacterRequest"></a>
+
+### AdminUpdateCharacterRequest
+AdminUpdateCharacterRequest carries one partial edit: which of the thirteen
+§10.6-writable paths to apply, their new values, and the optimistic-
+concurrency token the write is fenced on.
+
+# Why the values are flat fields rather than a map
+
+The mask is the allowlist, and adminProfileMaskablePaths pairs each path name
+with the ACCESSOR for its value, so every name is written down exactly once on
+the server. A map&lt;string,string&gt; would move the key space onto the wire, where
+an unlisted key would have to be rejected by a second check rather than being
+inexpressible in the first place.
+
+It carries NO role, grant, permission or capability field, now or ever:
+TestAdminCharacterMessagesCarryNoRoleBearingField walks this message&#39;s
+descriptor and fails if one is ever added.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header, resolved server-side. |
+| character_id | [string](#string) |  | character_id is the ULID to edit. It names SOMEONE ELSE&#39;S character — this is the cross-owner surface, which is why a stale expected_version is refused rather than answered. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller composed this edit against. AdminPortalServer refuses an absent, zero or negative value with InvalidArgument BEFORE any domain call: zero is never read as &#34;write without the guard&#34; and never defaulted to the row&#39;s current version. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | update_mask names which of the thirteen paths to apply. Paths are compared by EXACT string: no prefix, no wildcard, no glob, no dotted-subtree expansion — `profile` MUST NOT reach `profile.rp_preferences`. An unlisted path is REJECTED, not ignored. An EMPTY mask changes nothing and returns success carrying current state (§9.5 rule 4), after the guards have run. |
+| description | [string](#string) |  | description is characters.description, the in-world `look` text. It is a COLUMN on characters rather than a property row, which is why the twelve below are twelve and the writable set is thirteen. Its cap is enforced in the domain by world.Character.SetDescription, in BYTES. |
+| pronouns | [string](#string) |  | pronouns is the `profile.pronouns` property row. Its cap and the six short fields&#39; below is world.MaxNameLength, measured in BYTES so a CJK value that looks short is refused at the same boundary an ASCII one is. |
+| concept | [string](#string) |  | concept is the `profile.concept` property row: the one-line character premise the roster renders. |
+| species | [string](#string) |  | species is the `profile.species` property row. |
+| age | [string](#string) |  | age is the `profile.age` property row. It is FREE TEXT, not a number: the server stores whatever prose the operator typed. |
+| faction | [string](#string) |  | faction is the `profile.faction` property row. |
+| currently | [string](#string) |  | currently is the `profile.currently` property row: the short &#34;what this character is up to&#34; line. |
+| timezone | [string](#string) |  | timezone is the `profile.timezone` property row. It is free text the server does not resolve against any zone database. |
+| appearance | [string](#string) |  | appearance is the `profile.appearance` property row. Its cap and the four long fields&#39; below is world.MaxDescriptionLength, also in BYTES. |
+| personality | [string](#string) |  | personality is the `profile.personality` property row. |
+| biography | [string](#string) |  | biography is the `profile.biography` property row. |
+| rumors | [string](#string) |  | rumors is the `profile.rumors` property row: in-character hearsay others may know. |
+| rp_preferences | [string](#string) |  | rp_preferences is the `profile.rp_preferences` property row: the out-of-character play preferences the profile surfaces. |
+
+
+
+
+
+
+<a name="holomush-adminportal-v1-AdminUpdateCharacterResponse"></a>
+
+### AdminUpdateCharacterResponse
+AdminUpdateCharacterResponse carries the post-write row so the admin table can
+update in place.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the §11.3 projection re-read after the write, carrying the NEW version the client sends as its next expected_version. Guessing that number client-side is how a correct client becomes a stale one after its first successful edit. On the empty-mask no-op it carries the UNCHANGED current version. |
+
+
+
+
+
+ 
+
+
+<a name="holomush-adminportal-v1-AdminCharacterSortField"></a>
+
+### AdminCharacterSortField
+AdminCharacterSortField is the CLOSED ordering vocabulary of the admin
+character list — 01-SPEC §11.3&#39;s five rows marked Sort=Yes.
+
+Encoding the permitted set as an enum rather than a string is what makes &#34;an
+unlisted key is rejected, not ignored&#34; STRUCTURAL: a client cannot express
+the request at all. AdminPortalServer maps each value through a closed switch
+with a denying default, so a value added here without a handler arm is
+refused rather than silently ordered by something else.
+
+| Name | Number | Description |
+| ---- | ------ | ----------- |
+| ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED | 0 | ADMIN_CHARACTER_SORT_FIELD_UNSPECIFIED is REJECTED with codes.InvalidArgument, not defaulted. A silently-defaulted ordering is indistinguishable from an honoured one at the call site, and §11.3&#39;s closed field list would then be advisory rather than enforced. |
+| ADMIN_CHARACTER_SORT_FIELD_NAME | 1 | ADMIN_CHARACTER_SORT_FIELD_NAME orders on characters.normalized_name, the stored normal form of §6.1.3 — NOT on characters.name. The two orderings differ observably under case and NFKC folding, and §11.3&#39;s name row names the stored form. |
+| ADMIN_CHARACTER_SORT_FIELD_CREATED_AT | 2 | ADMIN_CHARACTER_SORT_FIELD_CREATED_AT orders on characters.created_at. |
+| ADMIN_CHARACTER_SORT_FIELD_STATUS | 3 | ADMIN_CHARACTER_SORT_FIELD_STATUS orders on characters.status. |
+| ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT | 4 | ADMIN_CHARACTER_SORT_FIELD_LAST_ACTIVE_AT orders on characters.last_active_at, with the 0 &#34;never active&#34; sentinel forced LAST in BOTH directions by a leading (last_active_at = 0) clause — descending gets that for free as the column minimum, ascending does not. |
+| ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME | 5 | ADMIN_CHARACTER_SORT_FIELD_PLAYER_USERNAME orders on the joined players.username.
+
+There is deliberately NO value for characters.player_id. §11.3 marks it Sort=No / Filter=Yes and §14 row 12 re-asserts that an ordering on it would leak creation sequence; it stays reachable as AdminListCharactersRequest.player_id, the equality filter behind click-to-filter. Filterability and sortability are different §11.3 columns. |
+
+
+
+<a name="holomush-adminportal-v1-AdminCharacterStatusFilter"></a>
+
+### AdminCharacterStatusFilter
+AdminCharacterStatusFilter is the CLOSED lifecycle filter vocabulary.
+
+It is an enum rather than free text so an unrecognised value cannot be
+expressed on the wire at all: §9.3&#39;s lifecycle vocabulary does not re-enter
+the API as a string parameter, and a typo cannot be answered with a silent
+zero-row page.
+
+| Name | Number | Description |
+| ---- | ------ | ----------- |
+| ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED | 0 | ADMIN_CHARACTER_STATUS_FILTER_UNSPECIFIED means NO FILTER — every lifecycle state is returned. It is the one enum zero value on this service that is not a rejection, because &#34;I did not choose a filter&#34; is a legitimate request and rejecting it would make the unfiltered list unrequestable. |
+| ADMIN_CHARACTER_STATUS_FILTER_ACTIVE | 1 | ADMIN_CHARACTER_STATUS_FILTER_ACTIVE selects world.StatusActive. |
+| ADMIN_CHARACTER_STATUS_FILTER_IDLE | 2 | ADMIN_CHARACTER_STATUS_FILTER_IDLE selects world.StatusIdle. |
+| ADMIN_CHARACTER_STATUS_FILTER_RETIRED | 3 | ADMIN_CHARACTER_STATUS_FILTER_RETIRED selects world.StatusRetired. |
+
+
+ 
+
+ 
+
+
+<a name="holomush-adminportal-v1-AdminPortalService"></a>
+
+### AdminPortalService
+AdminPortalService is the PLAYER-SESSION admin portal surface: the RPCs the
+browser&#39;s /admin routes reach, gated by `admin_section:` ABAC over the
+network. Its identity is resolved server-side from the request&#39;s
+player_session_token, and NewAdminSectionInterceptor
+(internal/grpc/admin_interceptor.go) authorizes every method under this
+package prefix from a fail-closed method-to-section descriptor table before
+any handler runs.
+
+It is deliberately a DIFFERENT package and a DIFFERENT trust boundary from
+holomush.admin.v1.AdminService, the break-glass operator control plane. That
+service is served over a UNIX domain socket by internal/admin/socket/ under
+AssertOperatorAdmin, never over the core gRPC server, and no RPC declared
+here is reachable from it or it from here.
+
+Implemented by AdminPortalServer in internal/grpc/admin_service.go and
+registered on the core gRPC server in cmd/holomush/sub_grpc.go.
+
+| Method Name | Request Type | Response Type | Description |
+| ----------- | ------------ | ------------- | ------------|
+| AdminListSections | [AdminListSectionsRequest](#holomush-adminportal-v1-AdminListSectionsRequest) | [AdminListSectionsResponse](#holomush-adminportal-v1-AdminListSectionsResponse) | AdminListSections enumerates the admin sections the calling player may reach, in the shipped registry&#39;s row order.
+
+AdminPortalServer.AdminListSections runs DOWNSTREAM of the interceptor&#39;s admission check: a caller holding no `admin_section:` access is already refused with PermissionDenied and never reaches the handler, so an empty list means &#34;admitted, but nothing permitted&#34; rather than &#34;not an admin&#34;. The per-entry filter is section.AssertSectionAdmission, not AssertSectionAccess, so sections that are registered but not yet implemented are still listed and carry their status as data. |
+| AdminGetSection | [AdminGetSectionRequest](#holomush-adminportal-v1-AdminGetSectionRequest) | [AdminGetSectionResponse](#holomush-adminportal-v1-AdminGetSectionResponse) | AdminGetSection returns ONE registry entry, named by the caller.
+
+It is the only method on this service whose section is supplied by the request rather than fixed by its descriptor, so NewAdminSectionInterceptor extracts section_id, runs section.AssertSectionAccess against it, and stashes the resolved entry on the context; AdminPortalServer.AdminGetSection then projects that entry and evaluates nothing.
+
+Because the gate runs first, a caller with no `admin_section:` access receives the same PermissionDenied for a registered id and an unregistered one — the registry is not enumerable through this parameter. A caller the gate PERMITTED who names a section that is registered but not yet implemented receives FailedPrecondition instead, carrying a static message and no body. |
+| AdminListCharacters | [AdminListCharactersRequest](#holomush-adminportal-v1-AdminListCharactersRequest) | [AdminListCharactersResponse](#holomush-adminportal-v1-AdminListCharactersResponse) | AdminListCharacters returns one page of the cross-player character list the `characters` section&#39;s table renders.
+
+AdminPortalServer.AdminListCharacters runs DOWNSTREAM of the interceptor&#39;s fixed-section gate: its descriptor names `characters` / read, so a caller holding no such access is refused before the handler and never learns whether any character exists. The handler clamps the page, maps the closed sort and status enums through denying switches, and reads CharacterRepository.AdminListCharacters; it evaluates no policy of its own. |
+| AdminSearchCharacters | [AdminSearchCharactersRequest](#holomush-adminportal-v1-AdminSearchCharactersRequest) | [AdminSearchCharactersResponse](#holomush-adminportal-v1-AdminSearchCharactersResponse) | AdminSearchCharacters is AdminListCharacters with a substring filter over two columns and only two: the stored characters.normalized_name and the joined players.username.
+
+AdminPortalServer.AdminSearchCharacters normalizes the caller&#39;s raw query through the same charname pipeline that produced the stored normal form, then hands the result to CharacterRepository.AdminSearchCharacters. A query that is blank after trimming bypasses both normalization and the predicate and returns the unfiltered page; one that normalizes to nothing returns an empty page rather than an error. No profile prose column is reachable through it. |
+| AdminGetCharacter | [AdminGetCharacterRequest](#holomush-adminportal-v1-AdminGetCharacterRequest) | [AdminGetCharacterResponse](#holomush-adminportal-v1-AdminGetCharacterResponse) | AdminGetCharacter returns ONE character with the thirteen values the admin edit surface writes back.
+
+AdminPortalServer.AdminGetCharacter composes it from CharacterRepository.Get and a name-closed projection of PropertyRepository.ListByParent. An unknown id is codes.NotFound with a static message that names no id, so the RPC is not an existence oracle for a caller the gate already permitted. |
+| AdminUpdateCharacter | [AdminUpdateCharacterRequest](#holomush-adminportal-v1-AdminUpdateCharacterRequest) | [AdminUpdateCharacterResponse](#holomush-adminportal-v1-AdminUpdateCharacterResponse) | AdminUpdateCharacter applies a partial edit to ONE character&#39;s thirteen §10.6-writable values under a closed update_mask allowlist.
+
+AdminPortalServer.AdminUpdateCharacter resolves each mask path by EXACT map lookup against adminProfileMaskablePaths — `description` plus the twelve `profile.*` names — and refuses an unlisted path with InvalidArgument rather than ignoring it. `roles` is not among them and no admin RPC mutates a role. The whole edit is ONE call to world.Service.UpdateCharacterProfileAttributes with a WithDescription option, so a mask naming `description` alongside `profile.*` paths is one transaction, one version bump and one envelope. An EMPTY mask is a no-op success carrying current state, after the authorization, existence and expected_version guards have all run. |
+| AdminRetireCharacter | [AdminRetireCharacterRequest](#holomush-adminportal-v1-AdminRetireCharacterRequest) | [AdminRetireCharacterResponse](#holomush-adminportal-v1-AdminRetireCharacterResponse) | AdminRetireCharacter soft-retires ONE character through the canonical world.Service.RetireCharacter, so an admin transition and any future player-initiated one cannot diverge.
+
+It destroys nothing: the row, its entity properties and its name reservation all survive, and AdminUnretireCharacter reverses it. There is deliberately NO AdminDeleteCharacter — retire is the only admin-reachable lifecycle exit, and world.Service.DeleteCharacter is reachable from no admin RPC and denied to a player-principal admin by seed policy. A second call on an already-retired character is refused by the shipped lifecycle guard before any write, so it emits no second envelope. |
+| AdminUnretireCharacter | [AdminUnretireCharacterRequest](#holomush-adminportal-v1-AdminUnretireCharacterRequest) | [AdminUnretireCharacterResponse](#holomush-adminportal-v1-AdminUnretireCharacterResponse) | AdminUnretireCharacter returns ONE retired character to play through the canonical world.Service.UnretireCharacter.
+
+AdminPortalServer.AdminUnretireCharacter reaches the same guard chain retire does — the version precheck ahead of the lifecycle guard — so a caller racing a completed unretire sees the conflict rather than the racing writer&#39;s outcome. It does not restore players.default_character_id; retire cleared it in its own transaction and the old value is preserved nowhere. |
+
+ 
+
+
+
 <a name="holomush_channel_v1_channel-proto"></a>
 <p align="right"><a href="#top">Top</a></p>
 
@@ -2906,6 +3520,507 @@ delegates to any of these methods.
 | BanMember | [BanMemberRequest](#holomush-channel-v1-BanMemberRequest) | [BanMemberResponse](#holomush-channel-v1-BanMemberResponse) | BanMember marks a target member as banned, removing them from the channel and preventing any future rejoin until unbanned (owner-or-admin only via ABAC). The channel owner cannot be banned (codes.FailedPrecondition). |
 | KickMember | [KickMemberRequest](#holomush-channel-v1-KickMemberRequest) | [KickMemberResponse](#holomush-channel-v1-KickMemberResponse) | KickMember removes a target member from the channel and unsubscribes their live stream, without the permanent block a ban imposes (owner-or-admin only via ABAC). The channel owner cannot be kicked (codes.FailedPrecondition). Emits a leave notice recording the removal. |
 | TransferOwnership | [TransferOwnershipRequest](#holomush-channel-v1-TransferOwnershipRequest) | [TransferOwnershipResponse](#holomush-channel-v1-TransferOwnershipResponse) | TransferOwnership reassigns channel ownership from the calling owner to a target who MUST already be a member (owner-only via ABAC). The former owner is demoted to member in the same transaction. |
+
+ 
+
+
+
+<a name="holomush_characteraccess_v1_characteraccess-proto"></a>
+<p align="right"><a href="#top">Top</a></p>
+
+## holomush/characteraccess/v1/characteraccess.proto
+
+
+
+<a name="holomush-characteraccess-v1-CreateCharacterRequest"></a>
+
+### CreateCharacterRequest
+CreateCharacterRequest is the structured identity card a creation form
+submits: the name, plus the five short prose values the form collects
+alongside it.
+
+IT CARRIES NO expected_version FIELD, AND THE ABSENCE IS STRUCTURAL. A
+version guard predicates a write on a characters.version the caller last
+read; a create has no row to have read, so 01-SPEC §9.4.2 makes creation the
+one carve-out from the guard the two edit RPCs obey.
+CharacterAccessServer.CreateCharacter calls requireGuardedVersion nowhere,
+and a reviewer looking for the guard here should not add one.
+
+The five prose values are OPTIONAL: a field left empty is not written at all,
+so a name-only submission makes no profile write. Each is capped in BYTES by
+the same validateProfileValue and world.MaxNameLength pair the mask-driven
+edit surface uses (internal/grpc/characteraccess_write.go), so the create
+path and the edit path cannot disagree about where the boundary sits.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header. Which player owns the new character follows from it, so there is deliberately no player-id field a caller could point at someone else. |
+| name | [string](#string) |  | name is the submitted character name, forwarded to auth.CharacterService.CreateBound verbatim. The server, not the client, normalizes it: NFKC, format-rune strip, whitespace collapse and case fold produce the §6.1.1 uniqueness key, and what is STORED is the display form that pipeline yields — which is why the response echoes the name back rather than the client keeping its own copy. Admission is on RUNE count (internal/charname/syntax: 2 to 32), not bytes. |
+| pronouns | [string](#string) |  | pronouns seeds the `profile.pronouns` row — half of §8.8&#39;s minimum public identity, and the one profile field seeded at the anonymous floor. |
+| concept | [string](#string) |  | concept seeds the `profile.concept` row: the one-line &#34;what this character is&#34; pitch. |
+| species | [string](#string) |  | species seeds the `profile.species` row. Free text — the platform ships no species vocabulary, because the setting owns that word. |
+| age | [string](#string) |  | age seeds the `profile.age` row. Free text rather than an integer: settings routinely want &#34;ageless&#34;, &#34;early 30s&#34;, or a century. |
+| faction | [string](#string) |  | faction seeds the `profile.faction` row: affiliation, house, crew or allegiance. Free text; there is no faction registry. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-CreateCharacterResponse"></a>
+
+### CreateCharacterResponse
+CreateCharacterResponse carries the character that was created, in the owner
+audience&#39;s shape, read back through the same owned-character path
+GetMyCharacter uses and projected by projectOwner — never assembled from the
+request the caller sent.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the newly seated character. Its `name` is the SERVER-stored display form, which may differ from the submitted bytes wherever normalization changed them; a client that echoes the submission back to the player instead would show a name the grid does not use. Its `profile` map holds whichever of the five supplied values were written — a value the caller left empty is absent, and so is one whose second-transaction write failed. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-GetCharacterProfileRequest"></a>
+
+### GetCharacterProfileRequest
+GetCharacterProfileRequest names the character to resolve and carries the
+caller&#39;s optional session token.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the target character&#39;s ULID. A value that does not parse takes the same opaque outcome as one that names no row. |
+| player_session_token | [string](#string) |  | player_session_token is the raw session token the gateway lifted from the X-Session-Token header. It is OPTIONAL: an empty, expired or otherwise unresolvable value resolves the least-privileged rung rather than an authentication error, so a logged-out visitor still reaches the public page. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-GetCharacterProfileResponse"></a>
+
+### GetCharacterProfileResponse
+GetCharacterProfileResponse carries the projected profile.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [PublicCharacter](#holomush-characteraccess-v1-PublicCharacter) |  | character is the projection projectPublic built for this viewer. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-GetMyCharacterRequest"></a>
+
+### GetMyCharacterRequest
+GetMyCharacterRequest names one owned character to read in full.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the target character&#39;s ULID. Ownership is verified against the session&#39;s player, and a character the caller does not own resolves the same not-found outcome as one that does not exist. |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token; see ListMyCharactersRequest. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-GetMyCharacterResponse"></a>
+
+### GetMyCharacterResponse
+GetMyCharacterResponse carries one character in the owner audience&#39;s shape.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the projection projectOwner built for the owning player. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-ListCharacterDirectoryRequest"></a>
+
+### ListCharacterDirectoryRequest
+ListCharacterDirectoryRequest carries the caller&#39;s optional session token and
+nothing else: which characters are listed follows from the rung that token
+resolves to, so there is no field with which a caller could name a viewer, a
+page or a filter the facade did not authorize.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw session token the gateway lifted from the X-Session-Token header. It is OPTIONAL exactly as on GetCharacterProfileRequest: an empty, expired or otherwise unresolvable value resolves the least-privileged rung rather than an authentication error, so a logged-out visitor still reaches the public directory. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-ListCharacterDirectoryResponse"></a>
+
+### ListCharacterDirectoryResponse
+ListCharacterDirectoryResponse carries the reachable subset of the directory.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [PublicCharacterSummary](#holomush-characteraccess-v1-PublicCharacterSummary) | repeated | characters is every character whose profile this viewer can reach, sorted by id by CharacterAccessServer.ListCharacterDirectory so enumeration order never varies between two identical calls. An empty directory is an empty list and a success status, never a not-found. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-ListMyCharactersRequest"></a>
+
+### ListMyCharactersRequest
+ListMyCharactersRequest asks for the caller&#39;s own roster; the session token is
+the only input, because whose roster it is follows from who is asking.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the request header. The player is resolved from it server-side; there is deliberately no player-id field a caller could point at someone else. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-ListMyCharactersResponse"></a>
+
+### ListMyCharactersResponse
+ListMyCharactersResponse carries the roster in the owner audience&#39;s shape.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) | repeated | characters is every character the resolved player owns, retired ones included (01-SPEC §4.5) — a roster that hid them would make un-retire unreachable from the UI. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-OwnCharacter"></a>
+
+### OwnCharacter
+OwnCharacter is the character shape the `owner` audience receives, and it is
+a DISTINCT MESSAGE rather than PublicCharacter plus extra fields (01-SPEC
+§2.2). The two are never interchanged: reusing one for the other audience
+would put the absence guarantee back on per-field runtime discipline, which
+is the arrangement the per-audience split exists to replace.
+
+It will be constructed only by projectOwner (§2.3), the owner-audience
+counterpart of projectPublic in
+internal/grpc/characteraccess_projection.go. It carries the owner&#39;s FULL
+profile map — no tier floor is evaluated on this path, because a floor
+governs what a VIEWER may read, not what an owner may see of their own row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the stable characters.id ULID, the same key the public profile URL is built on and the key every mutation targets. |
+| name | [string](#string) |  | name is characters.name, forwarded as the stored bytes with no normalization, casefolding or re-encoding. |
+| description | [string](#string) |  | description is the in-world `look` text (characters.description) that UpdateCharacterDescription writes. |
+| profile | [OwnCharacter.ProfileEntry](#holomush-characteraccess-v1-OwnCharacter-ProfileEntry) | repeated | profile holds every stored `profile.*` attribute keyed by its governed name, unfiltered — the owner&#39;s own edit surface reads the values it is about to write back. |
+| primary_image | [ProfileImage](#holomush-characteraccess-v1-ProfileImage) |  | primary_image is the `profile.image.primary` row when one exists. v0.13 mints no media identifier, so it is always absent. |
+| gallery | [ProfileImage](#holomush-characteraccess-v1-ProfileImage) | repeated | gallery holds the `profile.image.gallery.00`…`.09` rows, capped at the ten names the storage schema fixes. Always empty in v0.13. |
+| status | [string](#string) |  | status is characters.status, one of exactly `active`, `retired` or `idle`, compared as an exact lowercase literal (01-SPEC §4.2). A reader MUST switch over all three with a denying default; `idle` has no transition into it in v0.13, which is precisely why the default arm may not fall through to permit. |
+| version | [int32](#int32) |  | version is characters.version, the optimistic-concurrency counter a client reads here and sends back as expected_version on its next mutation. Transcribed from the INTEGER column added by migration 000049 and from world.Character.Version. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-OwnCharacter-ProfileEntry"></a>
+
+### OwnCharacter.ProfileEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-ProfileImage"></a>
+
+### ProfileImage
+ProfileImage is one stored image reference on a profile. The shape ships in
+v0.13 so alt text and content warnings have somewhere to live before any
+upload path exists; projectPublic
+(internal/grpc/characteraccess_projection.go) emits none of these in v0.13,
+because nothing in v0.13 mints a media identifier.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| media_id | [string](#string) |  | media_id is an opaque handle to stored bytes. Its format is deliberately unfixed in v0.13 — no host code parses, validates or generates one. |
+| alt_text | [string](#string) |  | alt_text is the operator-authored textual substitute a screen reader announces in place of the image. |
+| content_warning | [string](#string) |  | content_warning is the advisory a client renders BEFORE revealing the image, so a viewer can decline to see it. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-PublicCharacter"></a>
+
+### PublicCharacter
+PublicCharacter is the character shape the `public` audience receives. It is
+the only message projectPublic constructs, and it carries neither the owning
+player&#39;s identifier nor the character&#39;s current location: an owner-only or
+position-revealing value has no field to land in, so the absence is checked by
+the Go compiler rather than by a handler remembering to clear a field.
+
+Those two field names are deliberately not spelled out here. A plan
+acceptance criterion greps this file for them, and it must stay able to fail
+on a field that was ADDED rather than on a comment describing what is absent.
+
+It carries no visibility hint, mask, flag map or hidden-field list either. A
+value this viewer may not see is absent from the marshaled bytes, and the
+client is not told a decision was made.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the stable characters.id ULID the profile URL is keyed on; it survives rename, which a name-keyed key would not. |
+| name | [string](#string) |  | name is the display name world.Service.GetCharacterDescription read from characters.name, forwarded as the stored bytes with no normalization, casefolding or re-encoding. |
+| description | [string](#string) |  | description is the in-world `look` text (characters.description), gated by the read_description action rather than by any per-attribute floor. |
+| profile | [PublicCharacter.ProfileEntry](#holomush-characteraccess-v1-PublicCharacter-ProfileEntry) | repeated | profile holds the viewer-permitted `profile.*` attributes keyed by their governed names. An attribute whose floor this viewer does not clear is absent from the map, never present-and-empty. |
+| primary_image | [ProfileImage](#holomush-characteraccess-v1-ProfileImage) |  | primary_image is the single `profile.image.primary` row when one is both present and permitted. v0.13 always omits it. |
+| gallery | [ProfileImage](#holomush-characteraccess-v1-ProfileImage) | repeated | gallery holds the permitted `profile.image.gallery.00`…`.09` rows, capped at the ten names the storage schema fixes. v0.13 always leaves it empty. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-PublicCharacter-ProfileEntry"></a>
+
+### PublicCharacter.ProfileEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-PublicCharacterSummary"></a>
+
+### PublicCharacterSummary
+PublicCharacterSummary is the list row projectPublicSummary
+(internal/grpc/characteraccess_projection.go) builds: PublicCharacter cut
+down to what a directory row needs. It is produced by the `public` projection
+family because a list is not a fourth audience — it publishes strictly less
+than the detail view of the same character, never something the detail view
+withholds.
+
+IT CARRIES NO PRESENCE TELEMETRY. The roster shape the retired web directory
+RPC re-exported reported whether a character held a live game session, that
+session&#39;s status string, the display label of its most recent location and the
+epoch timestamp of its last play activity. None of those has a field to occupy
+here, so their exclusion is a property of the descriptor rather than a
+discipline a handler has to remember.
+
+It carries no visibility hint, mask or withheld-field list either: a character
+this viewer may not reach is absent from the repeated field, and the client is
+not told a decision was made.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | id is the stable characters.id ULID the profile URL is keyed on, and the key CharacterAccessServer.ListCharacterDirectory sorts the listing by so two identical calls agree byte for byte. |
+| name | [string](#string) |  | name is the display name auth.CharacterRepository.ListAll read out of characters.name, forwarded as the stored bytes with no normalization, casefolding or re-encoding. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-SetDefaultCharacterRequest"></a>
+
+### SetDefaultCharacterRequest
+SetDefaultCharacterRequest names the owned character to point the caller&#39;s
+`players.default_character_id` column at.
+
+IT CARRIES NO expected_version FIELD, AND THE ABSENCE IS DELIBERATE. The
+optimistic-concurrency rule the two edits above obey governs a `characters`
+row; this write targets a `players` row, which carries no version column and
+which requireGuardedVersion is therefore never called for. A reviewer looking
+for the guard here should not add one.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the target character&#39;s ULID. It is compared as a ULID and never as a name: an unparseable value, an id naming no row and a well-formed id the caller does not own all take the single opaque ownership refusal ownedCharacterForMutation returns. |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the X-Session-Token header. Whose column is written follows from it, so there is no player-id field a caller could point at someone else. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-SetDefaultCharacterResponse"></a>
+
+### SetDefaultCharacterResponse
+SetDefaultCharacterResponse returns the caller&#39;s whole roster rather than an
+acknowledgement, so the browser re-renders its cards from server truth instead
+of patching a local copy. The shape is ListMyCharactersResponse&#39;s, built by
+the same projectOwner loop CharacterAccessServer.ListMyCharacters uses.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) | repeated | characters is every character the resolved player owns, retired ones included, exactly as the roster read returns them. Which one is now the default is the character_id the caller just asked for, which a success status makes true; OwnCharacter deliberately carries no is-default flag. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-UpdateCharacterDescriptionRequest"></a>
+
+### UpdateCharacterDescriptionRequest
+UpdateCharacterDescriptionRequest replaces the in-world `look` text. It is
+deliberately its own RPC rather than a mask path on the profile edit: the
+description is the intrinsic characters.description COLUMN, reached through
+the shipped world.Service.UpdateCharacterDescription, while every profile
+field is an entity_properties row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character whose column is rewritten; ownership is verified server-side. |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the request header. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller last read; absent and zero are both rejected. See UpdateCharacterProfileRequest for why the scalar carriage costs nothing. |
+| description | [string](#string) |  | description is the replacement `look` text. An empty value CLEARS the column — there is no mask on this RPC, so the field is always applied. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-UpdateCharacterDescriptionResponse"></a>
+
+### UpdateCharacterDescriptionResponse
+UpdateCharacterDescriptionResponse returns the character after the rewrite.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the post-write projection projectOwner built. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-UpdateCharacterProfileRequest"></a>
+
+### UpdateCharacterProfileRequest
+UpdateCharacterProfileRequest is a partial edit of the stored `profile.*`
+rows (01-SPEC §7.2). Every prose field below is applied ONLY when its
+snake_case path appears in update_mask; the value carried by a field outside
+the mask is immaterial and MUST be ignored rather than written.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character whose rows are edited; ownership is verified server-side before the mask is applied. |
+| player_session_token | [string](#string) |  | player_session_token is the raw bearer token the gateway lifted from the request header. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the caller last read. It is a plain scalar rather than an `optional` field or a wrapper message on purpose: absent and explicit zero take the SAME rejection branch (§9.4.2), so proto3&#39;s inability to tell them apart costs nothing here. Zero is never a legal input, and it MUST NOT be read as &#34;write without the guard&#34; — the repository layer below does accept zero as an unversioned write, which is exactly why this boundary rejects it first. |
+| pronouns | [string](#string) |  | pronouns replaces the `profile.pronouns` row — half of §8.8&#39;s minimum public identity, and the one profile field seeded at the anonymous floor. |
+| concept | [string](#string) |  | concept replaces the `profile.concept` row: the one-line &#34;what this character is&#34; pitch. |
+| species | [string](#string) |  | species replaces the `profile.species` row. Free text — the platform ships no species vocabulary, because the setting owns that word. |
+| age | [string](#string) |  | age replaces the `profile.age` row. Free text rather than an integer: settings routinely want &#34;ageless&#34;, &#34;early 30s&#34;, or a century. |
+| faction | [string](#string) |  | faction replaces the `profile.faction` row: affiliation, house, crew or allegiance. Free text; there is no faction registry. |
+| appearance | [string](#string) |  | appearance replaces the `profile.appearance` row — extended detail beyond what a single in-world `look` would give a viewer. |
+| personality | [string](#string) |  | personality replaces the `profile.personality` row: disposition and manner. |
+| biography | [string](#string) |  | biography replaces the `profile.biography` row: history and background. |
+| rumors | [string](#string) |  | rumors replaces the `profile.rumors` row — the RP hooks block, the &#34;reasons to approach this character&#34; prose. |
+| currently | [string](#string) |  | currently replaces the `profile.currently` row: the volatile status line for what the character is up to right now. It carries no history and is expected to change often. |
+| rp_preferences | [string](#string) |  | rp_preferences replaces the `profile.rp_preferences` row — the OUT-OF-CHARACTER block about the player&#39;s style, availability and content limits. It is NOT the `characters.preferences` JSONB settings column; the `rp_` qualifier exists so the two cannot be conflated by name alone. |
+| timezone | [string](#string) |  | timezone replaces the `profile.timezone` row, supporting the availability half of the OOC block. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | update_mask is the SET of snake_case field paths to apply. Paths are matched as exact strings against a closed allowlist — no prefix, wildcard, glob or dotted-subtree expansion — and an unlisted path is rejected rather than ignored. Evaluation is order-independent and duplicate paths are idempotent. An EMPTY mask is a no-op success, never &#34;apply every field&#34;, which would turn an under-populated client request into a silent full-row overwrite. Field 99 mirrors the placement UpdateSceneRequest already uses. |
+
+
+
+
+
+
+<a name="holomush-characteraccess-v1-UpdateCharacterProfileResponse"></a>
+
+### UpdateCharacterProfileResponse
+UpdateCharacterProfileResponse returns the character as it stands after the
+partial edit, so a client re-reads its new version rather than guessing it.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the post-write projection projectOwner built. |
+
+
+
+
+
+ 
+
+ 
+
+ 
+
+
+<a name="holomush-characteraccess-v1-CharacterAccessService"></a>
+
+### CharacterAccessService
+CharacterAccessService is the host-side facade for the web character surface.
+It constructs the viewer principal itself — resolving the optional player
+session token through auth.PlayerSessionRepository and auth.PlayerRepository —
+and owns every reachability and per-attribute visibility decision, so the
+gateway proxies bytes and computes nothing.
+
+Implemented by CharacterAccessServer in
+internal/grpc/characteraccess_service.go. Registered on the core gRPC server
+(not the plugin proxy) in cmd/holomush/sub_grpc.go, beside
+SceneAccessService.
+
+| Method Name | Request Type | Response Type | Description |
+| ----------- | ------------ | ------------- | ------------|
+| GetCharacterProfile | [GetCharacterProfileRequest](#holomush-characteraccess-v1-GetCharacterProfileRequest) | [GetCharacterProfileResponse](#holomush-characteraccess-v1-GetCharacterProfileResponse) | GetCharacterProfile resolves one character&#39;s public profile for whichever viewer rung the request&#39;s token resolves to, including no token at all. CharacterAccessServer.GetCharacterProfile evaluates profile reachability first and independently; a viewer below that floor receives exactly the response a character id naming no row receives, so a withheld profile cannot be distinguished from a nonexistent one. |
+| ListMyCharacters | [ListMyCharactersRequest](#holomush-characteraccess-v1-ListMyCharactersRequest) | [ListMyCharactersResponse](#holomush-characteraccess-v1-ListMyCharactersResponse) | ListMyCharacters returns the authenticated player&#39;s own roster, retired characters included, so the web edit surface can offer un-retire without a second lookup. Its handler lands in plan 04-05 and resolves the player from the session token before reading; until then the embedded UnimplementedCharacterAccessServiceServer answers Unimplemented. |
+| GetMyCharacter | [GetMyCharacterRequest](#holomush-characteraccess-v1-GetMyCharacterRequest) | [GetMyCharacterResponse](#holomush-characteraccess-v1-GetMyCharacterResponse) | GetMyCharacter returns one owned character in the shape the edit forms write back, so a client never has to reconstruct the owner view by merging a public projection with a second read. Ownership is verified server-side against the session&#39;s player; handler in plan 04-05. |
+| CreateCharacter | [CreateCharacterRequest](#holomush-characteraccess-v1-CreateCharacterRequest) | [CreateCharacterResponse](#holomush-characteraccess-v1-CreateCharacterResponse) | CreateCharacter seats a new character on the authenticated player from a structured identity card — the name plus the five short profile values a creation form collects — and answers with the character it created. CharacterAccessServer.CreateCharacter (internal/grpc/characteraccess_create.go) resolves the session, refuses guests, and hands the name to auth.CharacterService.CreateBound, which runs the §6.1.1 normalization, the name-admission gate and the uniqueness checks before committing the character row, its player binding and its genesis envelope in ONE transaction. The supplied profile values are a SECOND write through world.Service.UpdateCharacterProfileAttributes: the character is authoritative, so a profile-write failure leaves those keys simply absent from the response rather than failing a create whose name is already reserved.
+
+It is NOT holomush.core.v1.CoreService.CreateCharacter, which still exists and still answers with a bare name scalar because the telnet CREATE verb drives it through internal/telnet/gateway_handler.go. |
+| UpdateCharacterProfile | [UpdateCharacterProfileRequest](#holomush-characteraccess-v1-UpdateCharacterProfileRequest) | [UpdateCharacterProfileResponse](#holomush-characteraccess-v1-UpdateCharacterProfileResponse) | UpdateCharacterProfile applies a partial edit to the character&#39;s stored profile.* rows, driven by an update mask evaluated against a closed allowlist (01-SPEC §9.5) and guarded by the caller&#39;s expected_version. Handler in plan 04-06; the write reaches entity_properties through the world write executor&#39;s same-transaction outbox seam, never a parallel path. |
+| UpdateCharacterDescription | [UpdateCharacterDescriptionRequest](#holomush-characteraccess-v1-UpdateCharacterDescriptionRequest) | [UpdateCharacterDescriptionResponse](#holomush-characteraccess-v1-UpdateCharacterDescriptionResponse) | UpdateCharacterDescription replaces the in-world `look` text — the characters.description column itself, not a profile.* row — by reaching the shipped world.Service.UpdateCharacterDescription. Handler in plan 04-06. |
+| SetDefaultCharacter | [SetDefaultCharacterRequest](#holomush-characteraccess-v1-SetDefaultCharacterRequest) | [SetDefaultCharacterResponse](#holomush-characteraccess-v1-SetDefaultCharacterResponse) | SetDefaultCharacter points the caller&#39;s `players.default_character_id` column at one owned, playable character — the character the login and session-restore paths preselect. CharacterAccessServer.SetDefaultCharacter (internal/grpc/characteraccess_write.go) resolves the session, proves ownership, refuses a non-`active` target, and then reaches auth.PlayerRepository.UpdateDefaultCharacter, a single-column UPDATE that leaves every other players column alone. It is the ONLY write path to that column: the value is read at login and cleared when a character retires, and before this RPC nothing in the tree ever set it. |
+| ListCharacterDirectory | [ListCharacterDirectoryRequest](#holomush-characteraccess-v1-ListCharacterDirectoryRequest) | [ListCharacterDirectoryResponse](#holomush-characteraccess-v1-ListCharacterDirectoryResponse) | ListCharacterDirectory enumerates, as identity rows, the characters whose profiles the calling viewer can reach. CharacterAccessServer.ListCharacterDirectory (internal/grpc/characteraccess_directory.go) makes ONE ABAC decision on the singleton character_directory:all resource BEFORE reading any row — a viewer below that floor learns nothing, not even the corpus size — and then includes a character only when profilevis.Reachable permits this viewer for that character&#39;s profile. An unreachable character is simply absent, so its absence is indistinguishable from it not existing. |
 
  
 
@@ -5724,6 +6839,7 @@ Init.
 | required_services | [ServiceConfig.RequiredServicesEntry](#holomush-plugin-v1-ServiceConfig-RequiredServicesEntry) | repeated | Network addresses of the proto services the plugin declared in requires, keyed by service name, for the plugin to dial. (Reserved for future service-to-service wiring.) |
 | plugin_config | [ServiceConfig.PluginConfigEntry](#holomush-plugin-v1-ServiceConfig-PluginConfigEntry) | repeated | Opaque plugin-owned runtime config: the effective (manifest-default &lt; server-override) map the host delivers at init. The host does NOT interpret keys/values; the plugin decodes them per its own schema. |
 | declared_capabilities | [string](#string) | repeated | Capability tokens the plugin declared in its manifest `requires:` (manifest.RequiredCapabilities()). The plugin SDK validates, at Init, that every non-exempt host capability its code can consume (via an implemented *Aware interface) appears here, failing load otherwise (INV-PLUGIN-54). |
+| game_id | [string](#string) |  | The game id the host resolved via gameIDProvider (cmd/holomush/core.go) for this boot, the same value eventbus.Subsystem qualifies every host-side subject with. Plugins that construct fully-qualified &#34;events.&lt;game_id&gt;.…&#34; subjects directly (rather than emitting a domain-relative reference for the host to qualify) MUST use this value instead of a hardcoded literal, or their publishes silently diverge from every subscriber&#39;s qualified filter subjects. Empty when the caller constructed ServiceConfig without setting it (e.g. a test harness); a plugin SHOULD fall back to &#34;main&#34; (eventbus.Config&#39;s own default) in that case. Populated by goplugin.Host.Init from Host.GameID(). |
 
 
 
@@ -5922,6 +7038,7 @@ recent-activity metadata for workspace badge rendering.
 | role | [string](#string) |  | This character&#39;s participant role in the scene (owner/member/observer). |
 | last_activity_ms | [int64](#int64) |  | Epoch-ms timestamp of the newest scene_log row on the scene&#39;s IC subject; 0 when the log is empty. |
 | entry_count | [int64](#int64) |  | Total scene_log rows on the IC subject (workspace activity panel). |
+| muted | [bool](#bool) |  | true when this character has muted this scene (a scene_notify_prefs row read via SceneStore.ListMutedScenes); false otherwise. The persisted per-scene mute the workspace re-renders on reload/reconnect. |
 
 
 
@@ -6257,6 +7374,42 @@ timestamps, and (only when PUBLISHED) its frozen content.
 
 
 
+<a name="holomush-scene-v1-GetSceneNotifyPrefRequest"></a>
+
+### GetSceneNotifyPrefRequest
+GetSceneNotifyPrefRequest names the acting character whose global notify
+preference to read. service.go::GetSceneNotifyPref cross-checks character_id
+against the actor metadata (character-self scope); it carries no scene id.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character&#39;s ID; required (cross-checked against actor metadata). |
+
+
+
+
+
+
+<a name="holomush-scene-v1-GetSceneNotifyPrefResponse"></a>
+
+### GetSceneNotifyPrefResponse
+GetSceneNotifyPrefResponse carries the character&#39;s persisted global notify
+preference as read by SceneStore.GetSceneNotifyPref (default enabled=true,
+mode=&#34;realtime&#34; when the character has no row). The core mute-suppression
+checker consults enabled to honor a notifications-off preference.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| enabled | [bool](#bool) |  | true when scene notifications are on globally for this character; false when the character has turned them off. |
+| mode | [string](#string) |  | The delivery mode for the global pref (the D-05 digest seam); &#34;realtime&#34; by default until digest delivery lands. |
+
+
+
+
+
+
 <a name="holomush-scene-v1-GetSceneRequest"></a>
 
 ### GetSceneRequest
@@ -6427,6 +7580,40 @@ most recently active first.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | scenes | [CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | The character&#39;s scenes, most recently active first. |
+| global_notify_enabled | [bool](#bool) |  | The character&#39;s persisted global notify preference read via SceneStore.GetSceneNotifyPref (default true); false when the character turned scene notifications off. Lets the workspace render the global notify toggle state on reload. |
+
+
+
+
+
+
+<a name="holomush-scene-v1-ListMutedScenesRequest"></a>
+
+### ListMutedScenesRequest
+ListMutedScenesRequest names the acting character whose muted scene ids to
+list. service.go::ListMutedScenes cross-checks character_id against the actor
+metadata (character-self scope); it carries no scene id.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character&#39;s ID; required (cross-checked against actor metadata). |
+
+
+
+
+
+
+<a name="holomush-scene-v1-ListMutedScenesResponse"></a>
+
+### ListMutedScenesResponse
+ListMutedScenesResponse carries the scene ids the character has muted, as
+read by SceneStore.ListMutedScenes.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| scene_ids | [string](#string) | repeated | The muted scene ids for the calling character; empty when none are muted. |
 
 
 
@@ -6530,6 +7717,37 @@ ListScenesResponse is the scene-board discovery result page.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | scenes | [SceneInfo](#holomush-scene-v1-SceneInfo) | repeated | The matching scenes for this page. |
+
+
+
+
+
+
+<a name="holomush-scene-v1-MuteSceneRequest"></a>
+
+### MuteSceneRequest
+MuteSceneRequest names the acting character, the scene whose mute flag to
+change, and the target flag value. service.go::MuteScene cross-checks
+character_id against the host-vouched actor metadata, then participant-gates
+on &#34;scene:&#34;&#43;scene_id before persisting via SceneStore.SetSceneMute.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character&#39;s ID; required (cross-checked against actor metadata). |
+| scene_id | [string](#string) |  | The scene to mute or unmute for this character; required. |
+| muted | [bool](#bool) |  | true persists a mute (scene notifications suppressed for this character), false clears it; drives the `scene mute` vs `scene unmute` subcommands. |
+
+
+
+
+
+
+<a name="holomush-scene-v1-MuteSceneResponse"></a>
+
+### MuteSceneResponse
+MuteSceneResponse is the empty acknowledgement of a persisted mute change;
+SceneStore.SetSceneMute is idempotent so no post-state row is returned.
 
 
 
@@ -6870,6 +8088,36 @@ withdrawal from a vote failure). Emitted as scene_publish_withdrawn.
 
 
 
+<a name="holomush-scene-v1-SetSceneNotifyPrefRequest"></a>
+
+### SetSceneNotifyPrefRequest
+SetSceneNotifyPrefRequest names the acting character and the desired global
+notify state. service.go::SetSceneNotifyPref cross-checks character_id
+against the actor metadata (character-self scope) then persists via
+SceneStore.SetSceneNotifyPref; it carries no scene id.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | The acting character&#39;s ID; required (cross-checked against actor metadata). |
+| enabled | [bool](#bool) |  | true keeps scene notifications on globally, false turns them off; persisted as the NULL-scene_id global row&#39;s inverse-muted flag by the store. |
+
+
+
+
+
+
+<a name="holomush-scene-v1-SetSceneNotifyPrefResponse"></a>
+
+### SetSceneNotifyPrefResponse
+SetSceneNotifyPrefResponse is the empty acknowledgement of a persisted global
+notify-pref write.
+
+
+
+
+
+
 <a name="holomush-scene-v1-StartScenePublishRequest"></a>
 
 ### StartScenePublishRequest
@@ -7061,14 +8309,22 @@ and persists to its own `plugin_core_scenes` schema; it emits IC notice
 events on events.&lt;game_id&gt;.scene.&lt;scene_id&gt;.ic and audits lifecycle
 operations to its plugin-owned audit table.
 
-Authorization model: every mutating RPC trusts that the host&#39;s ABAC engine
-has already authorized the command-execute action at dispatch time
-(owner-only for end/pause/resume/update/invite/kick/transfer, admin-only for
-the publish-attempt-budget extension). The plugin itself runs NO ABAC engine
-(SceneServiceImpl holds no policy engine). The sole exceptions are the
-participant-gate reads (GetPoseOrder and the publish reads), which enforce a
-direct plugin-code participation check (INV-SCENE-60) precisely because it is a
-hard privacy boundary that must not be delegable.
+Authorization model: the host&#39;s ABAC engine authorizes the command-execute
+action at dispatch time, and the plugin additionally runs a host-injected
+ABAC evaluator (SceneServiceImpl.evaluator, wired via SetHostEvaluator) that
+gates several transitions in-handler by calling evaluator.Evaluate(action,
+&#34;scene:&#34;&#43;scene_id) and failing closed on an evaluator error: EndScene and
+PauseScene evaluate the owner-only end/pause actions, ResumeScene the
+participant-wide resume, and MuteScene the participant-gated mute action.
+Owner-only membership operations (update/invite/kick/transfer) and the
+admin-only publish-attempt-budget extension rely on the dispatch-time
+command gate alone. The participant-gate reads (GetPoseOrder and the publish
+reads) enforce a direct plugin-code participation check (INV-SCENE-60)
+because that is a hard privacy boundary that must not be delegable. The
+character-self notify-pref RPCs (SetSceneNotifyPref/GetSceneNotifyPref/
+ListMutedScenes) carry no scene id; they are scoped by a request
+character_id cross-checked against the host-vouched actor metadata rather
+than a scene ABAC policy.
 
 Implemented by SceneServiceImpl in plugins/core-scenes/service.go and
 plugins/core-scenes/publish_service.go.
@@ -7081,6 +8337,10 @@ plugins/core-scenes/publish_service.go.
 | EndScene | [EndSceneRequest](#holomush-scene-v1-EndSceneRequest) | [EndSceneResponse](#holomush-scene-v1-EndSceneResponse) | EndScene transitions a scene to the terminal `ended` state (owner-only via ABAC). Rejected with codes.FailedPrecondition when the scene is already ended or archived. Returns the post-transition scene row. See service.go::EndScene. |
 | PauseScene | [PauseSceneRequest](#holomush-scene-v1-PauseSceneRequest) | [PauseSceneResponse](#holomush-scene-v1-PauseSceneResponse) | PauseScene transitions an `active` scene to `paused` (owner-only via ABAC). Rejected with codes.FailedPrecondition from any non-active state. See service.go::PauseScene. |
 | ResumeScene | [ResumeSceneRequest](#holomush-scene-v1-ResumeSceneRequest) | [ResumeSceneResponse](#holomush-scene-v1-ResumeSceneResponse) | ResumeScene transitions a `paused` scene back to `active` (participant-wide via ABAC — any participant may resume (spec D6)). Rejected with codes.FailedPrecondition from any non-paused state. See service.go::ResumeScene. |
+| MuteScene | [MuteSceneRequest](#holomush-scene-v1-MuteSceneRequest) | [MuteSceneResponse](#holomush-scene-v1-MuteSceneResponse) | MuteScene sets or clears the calling character&#39;s per-scene mute flag, persisting it via SceneStore.SetSceneMute. Participant-gated: the handler evaluates the &#34;mute&#34; action against &#34;scene:&#34;&#43;scene_id and fails closed (PermissionDenied) for a non-participant or an evaluator error, after cross-checking the request character_id against the host-vouched actor metadata. Both the `scene mute` and `scene unmute` telnet subcommands and the web mute control drive this RPC; the muted flag selects mute vs unmute. See service.go::MuteScene. |
+| SetSceneNotifyPref | [SetSceneNotifyPrefRequest](#holomush-scene-v1-SetSceneNotifyPrefRequest) | [SetSceneNotifyPrefResponse](#holomush-scene-v1-SetSceneNotifyPrefResponse) | SetSceneNotifyPref writes the calling character&#39;s global (all-scenes) notify preference via SceneStore.SetSceneNotifyPref. Character-self-scoped: the only authorization is the request character_id matching the host-vouched actor metadata (a caller may write only its own pref); there is no scene id and no scene ABAC evaluation. See service.go::SetSceneNotifyPref. |
+| GetSceneNotifyPref | [GetSceneNotifyPrefRequest](#holomush-scene-v1-GetSceneNotifyPrefRequest) | [GetSceneNotifyPrefResponse](#holomush-scene-v1-GetSceneNotifyPrefResponse) | GetSceneNotifyPref reads the calling character&#39;s persisted global notify preference (default enabled=true when no row exists) via SceneStore.GetSceneNotifyPref. This is the read the core mute-suppression checker consults to honor a character&#39;s notifications-off preference. Character-self-scoped by the request character_id / actor-metadata match. See service.go::GetSceneNotifyPref. |
+| ListMutedScenes | [ListMutedScenesRequest](#holomush-scene-v1-ListMutedScenesRequest) | [ListMutedScenesResponse](#holomush-scene-v1-ListMutedScenesResponse) | ListMutedScenes returns the scene ids the calling character has muted via SceneStore.ListMutedScenes. Character-self-scoped by the request character_id / actor-metadata match; no scene ABAC evaluation. See service.go::ListMutedScenes. |
 | UpdateScene | [UpdateSceneRequest](#holomush-scene-v1-UpdateSceneRequest) | [UpdateSceneResponse](#holomush-scene-v1-UpdateSceneResponse) | UpdateScene applies a partial update to mutable scene metadata, driven by the request&#39;s FieldMask (owner-only via ABAC). An empty mask is a no-op success. A pose-order-mode change auto-emits a pose-order-changed IC notice. See service.go::UpdateScene. |
 | JoinScene | [JoinSceneRequest](#holomush-scene-v1-JoinSceneRequest) | [JoinSceneResponse](#holomush-scene-v1-JoinSceneResponse) | JoinScene adds the calling character to a scene as a `member`. Open scenes accept any join; private scenes require a pre-existing invitation (the invited row is promoted to member). Idempotent: a repeat join by an existing member succeeds without re-emitting a join notice. See service.go::JoinScene. |
 | WatchScene | [WatchSceneRequest](#holomush-scene-v1-WatchSceneRequest) | [WatchSceneResponse](#holomush-scene-v1-WatchSceneResponse) | WatchScene auto-joins the requesting character into an OPEN scene as a role=observer participant and registers the focus membership for the supplied session, so focus/Subscribe/history gates admit the watcher. Gate order is fail-closed per INV-SCENE-61: the plugin-code visibility==open and state checks run BEFORE the ABAC spectate action is evaluated; non-open scenes are rejected without consulting ABAC. See service.go::WatchScene. |
@@ -7089,7 +8349,7 @@ plugins/core-scenes/publish_service.go.
 | KickFromScene | [KickFromSceneRequest](#holomush-scene-v1-KickFromSceneRequest) | [KickFromSceneResponse](#holomush-scene-v1-KickFromSceneResponse) | KickFromScene removes a target character from a scene (owner-only via ABAC). The scene owner cannot be kicked (codes.FailedPrecondition, enforced both at the service layer and by a store WHERE filter). Emits a leave IC notice with reason=kicked. See service.go::KickFromScene. |
 | TransferOwnership | [TransferOwnershipRequest](#holomush-scene-v1-TransferOwnershipRequest) | [TransferOwnershipResponse](#holomush-scene-v1-TransferOwnershipResponse) | TransferOwnership reassigns scene ownership from the calling owner to a target who MUST already be a member (owner-only via ABAC). The former owner is demoted to member. See service.go::TransferOwnership. |
 | CastPublishVote | [CastPublishVoteRequest](#holomush-scene-v1-CastPublishVoteRequest) | [CastPublishVoteResponse](#holomush-scene-v1-CastPublishVoteResponse) | CastPublishVote is DECLARED BUT NOT SERVED. It is the legacy scene-keyed publish-vote shape, superseded by CastPublishSceneVote (which is keyed by published_scene_id and is the served vote RPC). The plugin provides no handler, so a call returns codes.Unimplemented. |
-| GetPoseOrder | [GetPoseOrderRequest](#holomush-scene-v1-GetPoseOrderRequest) | [GetPoseOrderResponse](#holomush-scene-v1-GetPoseOrderResponse) | GetPoseOrder returns the computed pose-order roster for a scene. Enforces the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member, NOT merely invited; NO ABAC engine is consulted). The PermissionDenied gate fires before any existence check so a non-participant cannot distinguish a missing scene from one they may not see. See service.go::GetPoseOrder. |
+| GetPoseOrder | [GetPoseOrderRequest](#holomush-scene-v1-GetPoseOrderRequest) | [GetPoseOrderResponse](#holomush-scene-v1-GetPoseOrderResponse) | GetPoseOrder returns the computed pose-order roster for a scene. Enforces the INV-SCENE-60 plugin-code participant gate (caller MUST be an owner or member, NOT merely invited; the host ABAC evaluator is not consulted for this read). The PermissionDenied gate fires before any existence check so a non-participant cannot distinguish a missing scene from one they may not see. See service.go::GetPoseOrder. |
 | StartScenePublish | [StartScenePublishRequest](#holomush-scene-v1-StartScenePublishRequest) | [StartScenePublishResponse](#holomush-scene-v1-StartScenePublishResponse) | StartScenePublish opens a publication attempt for an `ended` scene (publish.go §5 precondition ladder). The scene must be ended, must not already have a published archive (one-and-done) nor an active attempt, and must not have exhausted its attempt budget. Seeds a COLLECTING attempt with a frozen vote roster. See publish_service.go::StartScenePublish. |
 | CastPublishSceneVote | [CastPublishSceneVoteRequest](#holomush-scene-v1-CastPublishSceneVoteRequest) | [CastPublishSceneVoteResponse](#holomush-scene-v1-CastPublishSceneVoteResponse) | CastPublishSceneVote records a roster member&#39;s yes/no vote on an active publication attempt and runs the §4.3 resolution check, which may transition the attempt (COLLECTING→COOLOFF on all-yes, COLLECTING→ ATTEMPT_FAILED on any-no-after-all-voted, or COOLOFF→COLLECTING on a flip to no). A vote on a terminal attempt is rejected. The recorded vote is the durable effect; a failed resolution or emit is logged but does not fail the cast. See publish_service.go::CastPublishSceneVote. |
 | WithdrawScenePublish | [WithdrawScenePublishRequest](#holomush-scene-v1-WithdrawScenePublishRequest) | [WithdrawScenePublishResponse](#holomush-scene-v1-WithdrawScenePublishResponse) | WithdrawScenePublish lets the scene owner abandon an active publication attempt (COLLECTING or COOLOFF), transitioning it to ATTEMPT_FAILED with failure_reason WITHDRAWN. Owner-gated by ABAC AND a defense-in-depth in-handler owner check (the plugin holds the owner attribute, so this closes the direct-RPC gap). See publish_service.go::WithdrawScenePublish. |
@@ -7529,7 +8789,8 @@ ListMyScenesResponse wraps the plugin&#39;s character-scene participations list.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| scenes | [holomush.scene.v1.CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | scenes is the character&#39;s scene participations, most recently active first. |
+| scenes | [holomush.scene.v1.CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | scenes is the character&#39;s scene participations, most recently active first. Each CharacterSceneInfo carries the per-scene `muted` flag read from the plugin&#39;s ListCharacterScenes (SceneStore.ListMutedScenes), so the workspace renders persisted mute state on reload. |
+| global_notify_enabled | [bool](#bool) |  | global_notify_enabled is the character&#39;s persisted global notify preference, forwarded verbatim from the plugin ListCharacterScenes read (SceneStore.GetSceneNotifyPref); default true, false when the character turned scene notifications off. Lets the workspace render the global notify toggle state on reload. |
 
 
 
@@ -7606,6 +8867,39 @@ ListScenesForViewerResponse wraps the plugin&#39;s scene-board result page.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | scenes | [holomush.scene.v1.SceneInfo](#holomush-scene-v1-SceneInfo) | repeated | scenes is the matching public scenes for this page. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-MuteSceneRequest"></a>
+
+### MuteSceneRequest
+MuteSceneRequest is the facade request to toggle a per-scene mute; fields
+mirror ResumeSceneRequest plus the target mute flag. The facade verifies
+ownership of character_id server-side (INV-SCENE-63) and stamps the verified
+id on the forwarded plugin SceneService.MuteScene call.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller (see EndSceneRequest). |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (ownership verified server-side). |
+| scene_id | [string](#string) |  | scene_id identifies the scene whose mute flag to change; required. |
+| muted | [bool](#bool) |  | muted is the target flag: true suppresses this character&#39;s scene notifications, false clears the mute. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-MuteSceneResponse"></a>
+
+### MuteSceneResponse
+MuteSceneResponse is the empty acknowledgement of a persisted mute change;
+the plugin&#39;s SetSceneMute is idempotent so no post-state row is returned.
 
 
 
@@ -7707,6 +9001,39 @@ SetConnectionFocus (INV-SCENE-63).
 ### SetSceneFocusResponse
 SetSceneFocusResponse is intentionally empty — a successful focus set
 carries no body; the client may update its local focus state optimistically.
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-SetSceneNotifyPrefRequest"></a>
+
+### SetSceneNotifyPrefRequest
+SetSceneNotifyPrefRequest is the facade request to write the character&#39;s
+global notify preference (character-self scope, NO scene_id). Fields mirror
+EndSceneRequest minus scene_id, plus the desired enabled flag. The facade
+verifies ownership of character_id server-side (INV-SCENE-63) and stamps the
+verified id on the forwarded plugin SceneService.SetSceneNotifyPref call.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID (hint only). |
+| player_session_token | [string](#string) |  | player_session_token authenticates the caller (see EndSceneRequest). |
+| character_id | [string](#string) |  | character_id selects the acting owned alt (ownership verified server-side). |
+| enabled | [bool](#bool) |  | enabled is the target global preference: true keeps scene notifications on, false turns them off for this character. |
+
+
+
+
+
+
+<a name="holomush-sceneaccess-v1-SetSceneNotifyPrefResponse"></a>
+
+### SetSceneNotifyPrefResponse
+SetSceneNotifyPrefResponse is the empty acknowledgement of a persisted global
+notify-pref write.
 
 
 
@@ -7917,6 +9244,8 @@ cmd/holomush/sub_grpc.go.
 | EndScene | [EndSceneRequest](#holomush-sceneaccess-v1-EndSceneRequest) | [EndSceneResponse](#holomush-sceneaccess-v1-EndSceneResponse) | EndScene transitions the verified owner&#39;s scene to `ended`. The facade resolves the acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.EndScene, which self-enforces the ABAC `end` policy (INV-SCENE-65). Returns the post-transition scene row. |
 | PauseScene | [PauseSceneRequest](#holomush-sceneaccess-v1-PauseSceneRequest) | [PauseSceneResponse](#holomush-sceneaccess-v1-PauseSceneResponse) | PauseScene transitions the verified owner&#39;s active scene to `paused`. Same identity/guest gating as EndScene; forwards to SceneService.PauseScene which self-enforces the ABAC `pause` policy (INV-SCENE-65). |
 | ResumeScene | [ResumeSceneRequest](#holomush-sceneaccess-v1-ResumeSceneRequest) | [ResumeSceneResponse](#holomush-sceneaccess-v1-ResumeSceneResponse) | ResumeScene transitions the verified participant&#39;s paused scene to `active`. Same identity/guest gating as EndScene; forwards to SceneService.ResumeScene which self-enforces the ABAC `resume` policy (participant-wide, INV-SCENE-65). |
+| MuteScene | [MuteSceneRequest](#holomush-sceneaccess-v1-MuteSceneRequest) | [MuteSceneResponse](#holomush-sceneaccess-v1-MuteSceneResponse) | MuteScene toggles the verified character&#39;s per-scene notification mute. The facade resolves the acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.MuteScene with the server-verified character_id; the plugin cross-checks that id against the host-vouched actor metadata and participant-gates on the scene&#39;s `mute` ABAC policy before persisting via SceneStore.SetSceneMute. |
+| SetSceneNotifyPref | [SetSceneNotifyPrefRequest](#holomush-sceneaccess-v1-SetSceneNotifyPrefRequest) | [SetSceneNotifyPrefResponse](#holomush-sceneaccess-v1-SetSceneNotifyPrefResponse) | SetSceneNotifyPref writes the verified character&#39;s global scene-notification preference (character-self scope, no scene). Same identity/guest gating as MuteScene; forwards to SceneService.SetSceneNotifyPref with the server- verified character_id, which the plugin cross-checks against the host-vouched actor metadata before persisting the NULL-scene_id global row. |
 | UpdateScene | [UpdateSceneRequest](#holomush-sceneaccess-v1-UpdateSceneRequest) | [UpdateSceneResponse](#holomush-sceneaccess-v1-UpdateSceneResponse) | UpdateScene applies an owner&#39;s partial edit to mutable scene metadata. The facade resolves the acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.UpdateScene, which self-enforces the ABAC `update` policy (owner-only, INV-SCENE-65) and applies only the fields named in update_mask (AIP-134). Returns the post-update scene row. |
 | InviteToScene | [InviteToSceneRequest](#holomush-sceneaccess-v1-InviteToSceneRequest) | [InviteToSceneResponse](#holomush-sceneaccess-v1-InviteToSceneResponse) | InviteToScene resolves the verified acting character from the player session (INV-SCENE-63), rejects guests (INV-SCENE-64), then forwards to SceneService.InviteToScene, which self-enforces the ABAC `invite` policy (participant-wide per the relaxation, INV-SCENE-65). |
 | KickFromScene | [KickFromSceneRequest](#holomush-sceneaccess-v1-KickFromSceneRequest) | [KickFromSceneResponse](#holomush-sceneaccess-v1-KickFromSceneResponse) | KickFromScene forwards to SceneService.KickFromScene, which self-enforces the owner-only `kick` policy (INV-SCENE-65). Same identity/guest gating as above. |
@@ -8143,6 +9472,286 @@ an in-band game event or an out-of-band control message, never both.
 
 
 
+<a name="holomush-web-v1-WebAdminGetCharacterRequest"></a>
+
+### WebAdminGetCharacterRequest
+WebAdminGetCharacterRequest names the character to read and NOTHING else, for
+the same reason its section peer does: the token comes from the header.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is forwarded verbatim to AdminPortalService.AdminGetCharacter. The gateway neither validates nor parses it; the core answers an unparseable and an absent id identically. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminGetCharacterResponse"></a>
+
+### WebAdminGetCharacterResponse
+WebAdminGetCharacterResponse re-exports the portal&#39;s detail row verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.adminportal.v1.AdminCharacterDetail](#holomush-adminportal-v1-AdminCharacterDetail) |  | character is the detail message AdminPortalService returned, forwarded unmodified — including its closed twelve-key profile map. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminGetSectionRequest"></a>
+
+### WebAdminGetSectionRequest
+WebAdminGetSectionRequest names the section to fetch and NOTHING else. It
+carries no session token on purpose: Handler.WebAdminGetSection reads the
+bearer token from the X-Session-Token header, so a browser cannot assert an
+identity the gateway did not authenticate. A token field copied from the core
+request would be a second, client-supplied identity on the same call.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| section_id | [string](#string) |  | section_id is forwarded verbatim to AdminPortalService.AdminGetSection. The gateway neither trims nor case-folds it; the core interceptor matches it exactly and refuses a miss. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminGetSectionResponse"></a>
+
+### WebAdminGetSectionResponse
+WebAdminGetSectionResponse re-exports the portal&#39;s single row verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| section | [holomush.adminportal.v1.AdminSection](#holomush-adminportal-v1-AdminSection) |  | section is the entry AdminPortalService returned, forwarded unmodified. Reusing the portal&#39;s own message type is what keeps a second, drifting web-side section shape from existing. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminListCharactersRequest"></a>
+
+### WebAdminListCharactersRequest
+WebAdminListCharactersRequest carries the page and ordering fields and NO
+session token: Handler.WebAdminListCharacters reads the bearer token from the
+X-Session-Token header, so a browser cannot assert an identity the gateway
+did not authenticate.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| sort_field | [holomush.adminportal.v1.AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField) |  | sort_field is forwarded verbatim; the core refuses its unspecified value. |
+| descending | [bool](#bool) |  | descending is forwarded verbatim. |
+| status_filter | [holomush.adminportal.v1.AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter) |  | status_filter is forwarded verbatim; unspecified means no filter. |
+| player_id | [string](#string) |  | player_id is forwarded verbatim — the click-to-filter equality field. |
+| page | [int32](#int32) |  | page is the 1-based page number, forwarded verbatim; the core refuses a value below 1. |
+| page_size | [int32](#int32) |  | page_size is forwarded verbatim; the core clamps it to at most 50. The gateway does NOT clamp, because a clamp here would be bypassable by any caller speaking gRPC to core directly. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminListCharactersResponse"></a>
+
+### WebAdminListCharactersResponse
+WebAdminListCharactersResponse re-exports the portal&#39;s page verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) | repeated | characters is the page AdminPortalService returned, in its order; the gateway neither filters nor re-sorts it. Reusing the portal&#39;s own message type is what keeps a second, drifting web-side character shape from existing. |
+| total_count | [int64](#int64) |  | total_count is forwarded unmodified. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminListSectionsRequest"></a>
+
+### WebAdminListSectionsRequest
+WebAdminListSectionsRequest carries NO fields, and the emptiness is the
+point: Handler.WebAdminListSections reads the bearer token from the
+X-Session-Token header, so a browser cannot assert an identity the gateway
+did not authenticate.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminListSectionsResponse"></a>
+
+### WebAdminListSectionsResponse
+WebAdminListSectionsResponse re-exports the portal&#39;s projection verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| sections | [holomush.adminportal.v1.AdminSection](#holomush-adminportal-v1-AdminSection) | repeated | sections is the server-filtered section list AdminPortalService returned, in its order; the gateway neither filters nor re-sorts it. Reusing the portal&#39;s own message type is what keeps a second, drifting web-side section shape from existing. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminRetireCharacterRequest"></a>
+
+### WebAdminRetireCharacterRequest
+WebAdminRetireCharacterRequest names the character to soft-retire and the
+version the operator read it at.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is forwarded verbatim to AdminPortalService.AdminRetireCharacter. |
+| expected_version | [int32](#int32) |  | expected_version is forwarded verbatim; the core refuses an absent or zero value and answers a stale one with Aborted. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminRetireCharacterResponse"></a>
+
+### WebAdminRetireCharacterResponse
+WebAdminRetireCharacterResponse re-exports the portal&#39;s post-transition row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the row AdminPortalService returned, with status `retired`. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminSearchCharactersRequest"></a>
+
+### WebAdminSearchCharactersRequest
+WebAdminSearchCharactersRequest adds the raw search term to the page fields.
+It carries no session token, for the same reason its list peer does not.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| sort_field | [holomush.adminportal.v1.AdminCharacterSortField](#holomush-adminportal-v1-AdminCharacterSortField) |  | sort_field is forwarded verbatim. |
+| descending | [bool](#bool) |  | descending is forwarded verbatim. |
+| status_filter | [holomush.adminportal.v1.AdminCharacterStatusFilter](#holomush-adminportal-v1-AdminCharacterStatusFilter) |  | status_filter is forwarded verbatim. |
+| player_id | [string](#string) |  | player_id is forwarded verbatim. |
+| page | [int32](#int32) |  | page is the 1-based page number, forwarded verbatim. |
+| page_size | [int32](#int32) |  | page_size is forwarded verbatim and clamped core-side. |
+| query | [string](#string) |  | query is the RAW STRING THE OPERATOR TYPED, forwarded byte-for-byte. The gateway does not trim, lower-case or NFKC-fold it; the core normalizes it through the single charname pipeline that produced the stored normal form. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminSearchCharactersResponse"></a>
+
+### WebAdminSearchCharactersResponse
+WebAdminSearchCharactersResponse re-exports the portal&#39;s matching page
+verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) | repeated | characters is the matching page AdminPortalService returned, in its order. |
+| total_count | [int64](#int64) |  | total_count is forwarded unmodified. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminUnretireCharacterRequest"></a>
+
+### WebAdminUnretireCharacterRequest
+WebAdminUnretireCharacterRequest names the retired character to return to play.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is forwarded verbatim to AdminPortalService.AdminUnretireCharacter. |
+| expected_version | [int32](#int32) |  | expected_version is forwarded verbatim, under the same guard rules retire applies. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminUnretireCharacterResponse"></a>
+
+### WebAdminUnretireCharacterResponse
+WebAdminUnretireCharacterResponse re-exports the portal&#39;s post-transition row.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the row AdminPortalService returned, with status `active`. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminUpdateCharacterRequest"></a>
+
+### WebAdminUpdateCharacterRequest
+WebAdminUpdateCharacterRequest mirrors the portal&#39;s edit request minus the
+token, which the gateway lifts from the X-Session-Token header.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is forwarded verbatim to AdminPortalService.AdminUpdateCharacter. |
+| expected_version | [int32](#int32) |  | expected_version is the optimistic-concurrency token the write is fenced on, forwarded verbatim. The gateway does not default or clamp it; the core refuses an absent or zero value. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | update_mask names which of the thirteen writable paths to apply, forwarded verbatim. The gateway neither validates nor expands it: the closed exact-string allowlist is core-side. |
+| description | [string](#string) |  | description is the in-world `look` text, applied when update_mask names it. |
+| pronouns | [string](#string) |  | pronouns is the `profile.pronouns` value, applied when update_mask names it. |
+| concept | [string](#string) |  | concept is the `profile.concept` value, applied when update_mask names it. |
+| species | [string](#string) |  | species is the `profile.species` value, applied when update_mask names it. |
+| age | [string](#string) |  | age is the `profile.age` free-text value, applied when update_mask names it. |
+| faction | [string](#string) |  | faction is the `profile.faction` value, applied when update_mask names it. |
+| currently | [string](#string) |  | currently is the `profile.currently` value, applied when update_mask names it. |
+| timezone | [string](#string) |  | timezone is the `profile.timezone` free-text value, applied when update_mask names it. |
+| appearance | [string](#string) |  | appearance is the `profile.appearance` value, applied when update_mask names it. |
+| personality | [string](#string) |  | personality is the `profile.personality` value, applied when update_mask names it. |
+| biography | [string](#string) |  | biography is the `profile.biography` value, applied when update_mask names it. |
+| rumors | [string](#string) |  | rumors is the `profile.rumors` value, applied when update_mask names it. |
+| rp_preferences | [string](#string) |  | rp_preferences is the `profile.rp_preferences` value, applied when update_mask names it. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebAdminUpdateCharacterResponse"></a>
+
+### WebAdminUpdateCharacterResponse
+WebAdminUpdateCharacterResponse re-exports the portal&#39;s post-write row verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.adminportal.v1.AdminCharacter](#holomush-adminportal-v1-AdminCharacter) |  | character is the row AdminPortalService returned, carrying the version the client sends as its next expected_version. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebAuthenticatePlayerRequest"></a>
 
 ### WebAuthenticatePlayerRequest
@@ -8259,6 +9868,14 @@ CodeUnauthenticated error instead of this message.
 | player_id | [string](#string) |  | player_id is the authenticated player&#39;s ULID identity. Additive on the success path; the failure path still returns CodeUnauthenticated so the web client&#39;s authed layout continues to redirect on throw (no contract break). |
 | is_guest | [bool](#bool) |  | is_guest is true when the session belongs to an ephemeral guest player. |
 | characters | [CharacterSummary](#holomush-web-v1-CharacterSummary) | repeated | characters is the player&#39;s character roster, returned so the client can restore character-selection state on reload. |
+| default_character_id | [string](#string) |  | default_character_id is the core response&#39;s field of the same name, forwarded verbatim by Handler.WebCheckSession. The web client&#39;s authed layout reads it to mark which roster card is the default without a second round trip; OwnCharacter carries no is-default flag, so this is the only server-side source for that marker. Empty means the player has set no default. |
+| roles | [string](#string) | repeated | roles are the core response&#39;s roles, forwarded verbatim by Handler.WebCheckSession. The gateway neither looks them up nor derives them: it reads the field and copies it.
+
+It exists so the section rail can decide whether to draw the `/admin` entrance without a WebAdminListSections round trip on every authed layout load. It is player-scoped and SINGULAR, never a per-character map.
+
+It is NEVER the authorization boundary. Every admin RPC still evaluates ABAC on an `admin_section:` resource and denies independently of what this field said, so a browser holding &#34;admin&#34; here can still be refused — and a browser that forges it gains nothing, because identity is resolved server-side from the hashed session token and no admin request message carries a roles field. Drawing a link the viewer may not use is a cosmetic error; treating this field as permission is a security one.
+
+A player holding no roles receives a zero-length list. On the wire absence and empty are the SAME answer — a zero-element repeated scalar is omitted from the serialized bytes — and no client may distinguish them. (D-102 / ADMIN-08 / §10.5.1.1.) |
 
 
 
@@ -8336,14 +9953,25 @@ entry, forwarded field-for-field from contentv1.ContentItem.
 <a name="holomush-web-v1-WebCreateCharacterRequest"></a>
 
 ### WebCreateCharacterRequest
-WebCreateCharacterRequest names the new character to add to the authenticated
-player. The player is identified by the cookie session token, not a body
-field.
+WebCreateCharacterRequest is the structured identity card a creation form
+submits. The player is identified by the cookie session token, never a body
+field — field 1 stays retired from the cookie cutover for exactly that
+reason.
+
+The five prose values are OPTIONAL and their names match
+CreateCharacterRequest&#39;s, because web.Handler.WebCreateCharacter forwards
+them one-for-one. A value left empty is not written at all, so a name-only
+submission seeds no profile rows.
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| character_name | [string](#string) |  | character_name is the desired display name for the new character. Field number is 2 (field 1 retired with the cookie cutover). |
+| name | [string](#string) |  | name is the submitted character name, forwarded verbatim. CharacterAccessServer.CreateCharacter hands it to auth.CharacterService.CreateBound, which normalizes it server-side; the gateway neither normalizes nor pre-checks it, so there is one normalizer. Field number is 2 (field 1 retired with the cookie cutover). |
+| pronouns | [string](#string) |  | pronouns seeds the `profile.pronouns` row. |
+| concept | [string](#string) |  | concept seeds the `profile.concept` row. |
+| species | [string](#string) |  | species seeds the `profile.species` row. |
+| age | [string](#string) |  | age seeds the `profile.age` row. |
+| faction | [string](#string) |  | faction seeds the `profile.faction` row. |
 
 
 
@@ -8353,15 +9981,21 @@ field.
 <a name="holomush-web-v1-WebCreateCharacterResponse"></a>
 
 ### WebCreateCharacterResponse
-WebCreateCharacterResponse reports the result of creating a character.
+WebCreateCharacterResponse carries the created character in the owner
+audience&#39;s shape, forwarded verbatim from
+CharacterAccessServer.CreateCharacter.
+
+IT CARRIES NO success/error_message PAIR, and the absence is the contract
+change. The gateway no longer synthesises a boolean from a downstream
+outcome: a refusal is the facade&#39;s own gRPC status — AlreadyExists for a
+taken name, InvalidArgument for a name the admission gate declined,
+FailedPrecondition for a reached character limit — which the client
+classifies directly.
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| success | [bool](#bool) |  | success is true when the character was created. |
-| character_id | [string](#string) |  | character_id is the new character&#39;s ULID identity. |
-| character_name | [string](#string) |  | character_name is the created character&#39;s display name. |
-| error_message | [string](#string) |  | error_message is a human-readable failure detail on the non-success path. |
+| character | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the newly seated character. Its `name` is the SERVER-stored display form, which is what the post-submit echo shows the player; its `profile` map holds whichever of the five supplied values were written. |
 
 
 
@@ -8578,6 +10212,39 @@ WebExportSceneResponse re-exports the rendered scene-log document from the facad
 
 
 
+<a name="holomush-web-v1-WebGetCharacterProfileRequest"></a>
+
+### WebGetCharacterProfileRequest
+WebGetCharacterProfileRequest names the character whose public profile the
+browser is rendering. It carries NO session-token field: the gateway reads
+the token from the request header rather than the body, so a client cannot
+assert one Handler.WebGetCharacterProfile did not authenticate.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the target character&#39;s ULID, taken from the profile URL. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebGetCharacterProfileResponse"></a>
+
+### WebGetCharacterProfileResponse
+WebGetCharacterProfileResponse re-exports the facade&#39;s projection verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.characteraccess.v1.PublicCharacter](#holomush-characteraccess-v1-PublicCharacter) |  | character is the projection the facade built; the gateway forwards it unmodified and computes nothing. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebGetContentRequest"></a>
 
 ### WebGetContentRequest
@@ -8604,6 +10271,38 @@ when no item exists for the key.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | item | [WebContentItem](#holomush-web-v1-WebContentItem) |  | item is the matched content item; unset when the key was not found. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebGetMyCharacterRequest"></a>
+
+### WebGetMyCharacterRequest
+WebGetMyCharacterRequest names one owned character. It carries no
+session-token field: Handler.WebGetMyCharacter reads the token from the
+request header rather than the body.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the target character&#39;s ULID, taken from the edit-page URL. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebGetMyCharacterResponse"></a>
+
+### WebGetMyCharacterResponse
+WebGetMyCharacterResponse re-exports the facade&#39;s owner projection verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the projection the facade built for the owning player. |
 
 
 
@@ -8799,31 +10498,30 @@ WebLeaveSceneResponse is empty.
 
 
 
-<a name="holomush-web-v1-WebListAllCharactersRequest"></a>
+<a name="holomush-web-v1-WebListCharacterDirectoryRequest"></a>
 
-### WebListAllCharactersRequest
-WebListAllCharactersRequest proxies to CoreService.ListAllCharacters; token
-is injected from the X-Session-Token cookie.
+### WebListCharacterDirectoryRequest
+WebListCharacterDirectoryRequest carries NO fields at all, and the emptiness
+is the point: the viewer rung follows entirely from the header token
+Handler.WebListCharacterDirectory reads, so a client cannot name an acting
+character, a page or a filter the facade did not authorize. The retired RPC
+this one replaces took a character id in the body; this surface is
+viewer-scoped and needs none.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebListCharacterDirectoryResponse"></a>
+
+### WebListCharacterDirectoryResponse
+WebListCharacterDirectoryResponse re-exports the facade&#39;s listing verbatim.
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| character_id | [string](#string) |  | character_id is the acting alt (forwarded as the ABAC subject). Required. |
-
-
-
-
-
-
-<a name="holomush-web-v1-WebListAllCharactersResponse"></a>
-
-### WebListAllCharactersResponse
-WebListAllCharactersResponse re-exports the directory page from core.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| characters | [holomush.core.v1.CharacterDirectoryEntry](#holomush-core-v1-CharacterDirectoryEntry) | repeated | characters is the id&#43;name list from CoreService.ListAllCharacters. |
+| characters | [holomush.characteraccess.v1.PublicCharacterSummary](#holomush-characteraccess-v1-PublicCharacterSummary) | repeated | characters is the reachable identity rows the facade projected, in the order it produced them; the gateway forwards them unmodified. |
 
 
 
@@ -8974,6 +10672,34 @@ current focus context.
 
 
 
+<a name="holomush-web-v1-WebListMyCharactersRequest"></a>
+
+### WebListMyCharactersRequest
+WebListMyCharactersRequest carries NO fields at all, and the emptiness is the
+point: the roster&#39;s owner is the player the session token resolves to, and
+Handler.WebListMyCharacters reads that token from the request header. A
+player-id field here would let a client name a roster it does not own.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebListMyCharactersResponse"></a>
+
+### WebListMyCharactersResponse
+WebListMyCharactersResponse re-exports the facade&#39;s roster verbatim.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) | repeated | characters is the owner-audience roster the facade projected, retired entries included; the gateway forwards it unmodified. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebListMyScenesRequest"></a>
 
 ### WebListMyScenesRequest
@@ -8999,7 +10725,8 @@ WebListMyScenesResponse re-exports the character&#39;s scene participations from
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| scenes | [holomush.scene.v1.CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | scenes is the character&#39;s scene participations, most recently active first. |
+| scenes | [holomush.scene.v1.CharacterSceneInfo](#holomush-scene-v1-CharacterSceneInfo) | repeated | scenes is the character&#39;s scene participations, most recently active first. Each CharacterSceneInfo carries the per-scene `muted` flag from the facade ListMyScenes read, so the workspace renders persisted mute state on reload. |
+| global_notify_enabled | [bool](#bool) |  | global_notify_enabled is the character&#39;s persisted global notify preference, forwarded verbatim from SceneAccessService.ListMyScenes (default true; false when the character turned scene notifications off). Lets the web workspace render the global notify toggle state on reload. |
 
 
 
@@ -9154,6 +10881,36 @@ to end is identified by the cookie token.
 WebLogoutResponse is the empty acknowledgement of logout. The meaningful
 effect — clearing the session cookie — is delivered as a response header by
 the gateway, so this body carries no fields.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebMuteSceneRequest"></a>
+
+### WebMuteSceneRequest
+WebMuteSceneRequest proxies to SceneAccessService.MuteScene.
+player_session_token is injected from the X-Session-Token cookie.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| scene_id | [string](#string) |  | scene_id identifies the scene whose mute flag to change; required. |
+| muted | [bool](#bool) |  | muted is the target flag: true suppresses this character&#39;s scene notifications, false clears the mute. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebMuteSceneResponse"></a>
+
+### WebMuteSceneResponse
+WebMuteSceneResponse is empty — the facade MuteScene carries no body; a
+successful mute change is signaled by the absence of error.
 
 
 
@@ -9434,6 +11191,40 @@ reattached rather than freshly created.
 
 
 
+<a name="holomush-web-v1-WebSetDefaultCharacterRequest"></a>
+
+### WebSetDefaultCharacterRequest
+WebSetDefaultCharacterRequest names the character to make the caller&#39;s
+default. It carries no session-token field: Handler.WebSetDefaultCharacter
+reads the token from the request header, so a body-supplied identity is not
+representable.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character the roster card&#39;s control named. The gateway forwards it unread; whether the caller owns it and whether it is playable are the facade&#39;s decisions. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebSetDefaultCharacterResponse"></a>
+
+### WebSetDefaultCharacterResponse
+WebSetDefaultCharacterResponse re-exports the facade&#39;s post-write roster
+verbatim, so the browser re-renders its cards from server truth.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) | repeated | characters is the owner-audience roster the facade projected after the column moved, retired entries included; the gateway forwards it unmodified. |
+
+
+
+
+
+
 <a name="holomush-web-v1-WebSetSceneFocusRequest"></a>
 
 ### WebSetSceneFocusRequest
@@ -9457,6 +11248,36 @@ player_session_token is injected from the X-Session-Token cookie.
 ### WebSetSceneFocusResponse
 WebSetSceneFocusResponse is intentionally empty — a successful focus set
 carries no body; the client may update its local focus state optimistically.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebSetSceneNotifyPrefRequest"></a>
+
+### WebSetSceneNotifyPrefRequest
+WebSetSceneNotifyPrefRequest proxies to SceneAccessService.SetSceneNotifyPref
+(character-self scope, no scene_id). player_session_token is injected from the
+X-Session-Token cookie.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_id | [string](#string) |  | session_id is the client-declared player-session ULID forwarded to the facade. |
+| character_id | [string](#string) |  | character_id selects which owned alt acts (server-side ownership verified). |
+| enabled | [bool](#bool) |  | enabled is the target global preference: true keeps scene notifications on, false turns them off for this character. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebSetSceneNotifyPrefResponse"></a>
+
+### WebSetSceneNotifyPrefResponse
+WebSetSceneNotifyPrefResponse is empty — the facade SetSceneNotifyPref carries
+no body; success is signaled by the absence of error.
 
 
 
@@ -9518,6 +11339,86 @@ WebTransferOwnershipRequest proxies to SceneAccessService.TransferOwnership.
 
 ### WebTransferOwnershipResponse
 WebTransferOwnershipResponse is empty.
+
+
+
+
+
+
+<a name="holomush-web-v1-WebUpdateCharacterDescriptionRequest"></a>
+
+### WebUpdateCharacterDescriptionRequest
+WebUpdateCharacterDescriptionRequest rewrites the in-world `look` text. It
+carries no session-token field; the token travels in the request header.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character whose description column is rewritten. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the browser last read. |
+| description | [string](#string) |  | description is the replacement `look` text; an empty value clears it. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebUpdateCharacterDescriptionResponse"></a>
+
+### WebUpdateCharacterDescriptionResponse
+WebUpdateCharacterDescriptionResponse re-exports the post-write projection.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the character as it stands after the rewrite. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebUpdateCharacterProfileRequest"></a>
+
+### WebUpdateCharacterProfileRequest
+WebUpdateCharacterProfileRequest mirrors the facade&#39;s partial-edit request
+minus its session-token field, which travels in the request header. Every
+prose field is forwarded verbatim; whether it is APPLIED is decided by the
+facade against update_mask, never by the gateway.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character_id | [string](#string) |  | character_id is the character whose profile rows are edited. |
+| expected_version | [int32](#int32) |  | expected_version is the characters.version the browser last read; the facade rejects an absent or zero value rather than writing unguarded. |
+| pronouns | [string](#string) |  | pronouns is forwarded to the facade&#39;s `profile.pronouns` edit. |
+| concept | [string](#string) |  | concept is forwarded to the facade&#39;s `profile.concept` edit. |
+| species | [string](#string) |  | species is forwarded to the facade&#39;s `profile.species` edit. |
+| age | [string](#string) |  | age is forwarded to the facade&#39;s `profile.age` edit. |
+| faction | [string](#string) |  | faction is forwarded to the facade&#39;s `profile.faction` edit. |
+| appearance | [string](#string) |  | appearance is forwarded to the facade&#39;s `profile.appearance` edit. |
+| personality | [string](#string) |  | personality is forwarded to the facade&#39;s `profile.personality` edit. |
+| biography | [string](#string) |  | biography is forwarded to the facade&#39;s `profile.biography` edit. |
+| rumors | [string](#string) |  | rumors is forwarded to the facade&#39;s `profile.rumors` edit. |
+| currently | [string](#string) |  | currently is forwarded to the facade&#39;s `profile.currently` edit. |
+| rp_preferences | [string](#string) |  | rp_preferences is forwarded to the facade&#39;s `profile.rp_preferences` edit — the OUT-OF-CHARACTER block, not the characters.preferences settings column. |
+| timezone | [string](#string) |  | timezone is forwarded to the facade&#39;s `profile.timezone` edit. |
+| update_mask | [google.protobuf.FieldMask](https://protobuf.dev/reference/protobuf/google.protobuf/#fieldmask) |  | update_mask is the set of snake_case paths the facade will apply. The gateway forwards it without inspecting it; an empty mask is a no-op success and the web client is expected to skip the round trip entirely. |
+
+
+
+
+
+
+<a name="holomush-web-v1-WebUpdateCharacterProfileResponse"></a>
+
+### WebUpdateCharacterProfileResponse
+WebUpdateCharacterProfileResponse re-exports the post-write projection.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| character | [holomush.characteraccess.v1.OwnCharacter](#holomush-characteraccess-v1-OwnCharacter) |  | character is the character as it stands after the partial edit. |
 
 
 
@@ -9724,9 +11625,8 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebSelectCharacter | [WebSelectCharacterRequest](#holomush-web-v1-WebSelectCharacterRequest) | [WebSelectCharacterResponse](#holomush-web-v1-WebSelectCharacterResponse) | WebSelectCharacter binds a character to a new or reattached game session. Proxies to CoreService.SelectCharacter using the session token read from the X-Session-Token cookie header; returns the resulting session_id. |
 | WebCreatePlayer | [WebCreatePlayerRequest](#holomush-web-v1-WebCreatePlayerRequest) | [WebCreatePlayerResponse](#holomush-web-v1-WebCreatePlayerResponse) | WebCreatePlayer registers a new player account. Proxies to CoreService.CreatePlayer; on success the gateway sets the session cookie. Runs the cookie-collision gate first (ALREADY_AUTHENTICATED short-circuit). |
 | WebCreateGuest | [WebCreateGuestRequest](#holomush-web-v1-WebCreateGuestRequest) | [WebCreateGuestResponse](#holomush-web-v1-WebCreateGuestResponse) | WebCreateGuest provisions an ephemeral guest player and character. Proxies to CoreService.CreateGuest; on success the gateway sets a session cookie whose MaxAge matches the guest session&#39;s shorter TTL. Runs the cookie-collision gate first. |
-| WebCreateCharacter | [WebCreateCharacterRequest](#holomush-web-v1-WebCreateCharacterRequest) | [WebCreateCharacterResponse](#holomush-web-v1-WebCreateCharacterResponse) | WebCreateCharacter adds a character to the authenticated player. Proxies to CoreService.CreateCharacter using the cookie-derived session token. |
+| WebCreateCharacter | [WebCreateCharacterRequest](#holomush-web-v1-WebCreateCharacterRequest) | [WebCreateCharacterResponse](#holomush-web-v1-WebCreateCharacterResponse) | WebCreateCharacter adds a character to the authenticated player from a structured identity card. Proxies to CharacterAccessService.CreateCharacter — NOT CoreService.CreateCharacter, which still serves the telnet CREATE verb and still answers with a bare character_name scalar. web.Handler.WebCreateCharacter forwards the six submitted values plus the cookie-derived session token and computes nothing; a refusal arrives as a gRPC status the client classifies, so there is no gateway-synthesised success boolean. |
 | WebListCharacters | [WebListCharactersRequest](#holomush-web-v1-WebListCharactersRequest) | [WebListCharactersResponse](#holomush-web-v1-WebListCharactersResponse) | WebListCharacters returns the authenticated player&#39;s character roster. Proxies to CoreService.ListCharacters; an RPC failure is surfaced as CodeUnauthenticated (session expired or invalid). |
-| WebListAllCharacters | [WebListAllCharactersRequest](#holomush-web-v1-WebListAllCharactersRequest) | [WebListAllCharactersResponse](#holomush-web-v1-WebListAllCharactersResponse) | WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway reads player_session_token from the X-Session-Token cookie; any authenticated caller (guest included) may list character names. |
 | WebLogout | [WebLogoutRequest](#holomush-web-v1-WebLogoutRequest) | [WebLogoutResponse](#holomush-web-v1-WebLogoutResponse) | WebLogout ends the player session and clears the session cookie. Proxies to CoreService.Logout (best-effort) when a token is present, then always emits the cookie-clear signal regardless of the RPC outcome. |
 | WebRequestPasswordReset | [WebRequestPasswordResetRequest](#holomush-web-v1-WebRequestPasswordResetRequest) | [WebRequestPasswordResetResponse](#holomush-web-v1-WebRequestPasswordResetResponse) | WebRequestPasswordReset initiates the email-based reset flow. Proxies to CoreService.RequestPasswordReset; to avoid leaking account existence the gateway reports success=true even when the underlying RPC errors. |
 | WebConfirmPasswordReset | [WebConfirmPasswordResetRequest](#holomush-web-v1-WebConfirmPasswordResetRequest) | [WebConfirmPasswordResetResponse](#holomush-web-v1-WebConfirmPasswordResetResponse) | WebConfirmPasswordReset completes a reset using the emailed token and a new password. Proxies to CoreService.ConfirmPasswordReset. |
@@ -9748,6 +11648,8 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebEndScene | [WebEndSceneRequest](#holomush-web-v1-WebEndSceneRequest) | [WebEndSceneResponse](#holomush-web-v1-WebEndSceneResponse) | WebEndScene proxies to SceneAccessService.EndScene. The gateway reads player_session_token from the X-Session-Token cookie; the facade owns authorization. Returns the post-transition scene. |
 | WebPauseScene | [WebPauseSceneRequest](#holomush-web-v1-WebPauseSceneRequest) | [WebPauseSceneResponse](#holomush-web-v1-WebPauseSceneResponse) | WebPauseScene proxies to SceneAccessService.PauseScene (see WebEndScene). |
 | WebResumeScene | [WebResumeSceneRequest](#holomush-web-v1-WebResumeSceneRequest) | [WebResumeSceneResponse](#holomush-web-v1-WebResumeSceneResponse) | WebResumeScene proxies to SceneAccessService.ResumeScene (see WebEndScene). |
+| WebMuteScene | [WebMuteSceneRequest](#holomush-web-v1-WebMuteSceneRequest) | [WebMuteSceneResponse](#holomush-web-v1-WebMuteSceneResponse) | WebMuteScene toggles the verified character&#39;s per-scene notification mute. Proxies to SceneAccessService.MuteScene; the gateway reads player_session_token from the X-Session-Token cookie and the facade owns authorization. A structural GUI write — the typed RPC, never the command path (gateway-boundary). |
+| WebSetSceneNotifyPref | [WebSetSceneNotifyPrefRequest](#holomush-web-v1-WebSetSceneNotifyPrefRequest) | [WebSetSceneNotifyPrefResponse](#holomush-web-v1-WebSetSceneNotifyPrefResponse) | WebSetSceneNotifyPref writes the verified character&#39;s global scene-notify preference (character-self, no scene). Proxies to SceneAccessService.SetSceneNotifyPref (see WebMuteScene). |
 | WebUpdateScene | [WebUpdateSceneRequest](#holomush-web-v1-WebUpdateSceneRequest) | [WebUpdateSceneResponse](#holomush-web-v1-WebUpdateSceneResponse) | WebUpdateScene proxies to SceneAccessService.UpdateScene. The gateway reads player_session_token from the X-Session-Token cookie; the facade owns authorization. Returns the post-update scene. |
 | WebInviteToScene | [WebInviteToSceneRequest](#holomush-web-v1-WebInviteToSceneRequest) | [WebInviteToSceneResponse](#holomush-web-v1-WebInviteToSceneResponse) | WebInviteToScene proxies to SceneAccessService.InviteToScene (cookie token). |
 | WebKickFromScene | [WebKickFromSceneRequest](#holomush-web-v1-WebKickFromSceneRequest) | [WebKickFromSceneResponse](#holomush-web-v1-WebKickFromSceneResponse) | WebKickFromScene proxies to SceneAccessService.KickFromScene. |
@@ -9762,6 +11664,23 @@ webv1connect.NewWebServiceHandler in internal/web/server.go.
 | WebCastPublishSceneVote | [WebCastPublishSceneVoteRequest](#holomush-web-v1-WebCastPublishSceneVoteRequest) | [WebCastPublishSceneVoteResponse](#holomush-web-v1-WebCastPublishSceneVoteResponse) | WebCastPublishSceneVote proxies CastPublishSceneVote to the facade. |
 | WebWithdrawScenePublish | [WebWithdrawScenePublishRequest](#holomush-web-v1-WebWithdrawScenePublishRequest) | [WebWithdrawScenePublishResponse](#holomush-web-v1-WebWithdrawScenePublishResponse) | WebWithdrawScenePublish proxies WithdrawScenePublish to the facade. |
 | WebGetPublishedScene | [WebGetPublishedSceneRequest](#holomush-web-v1-WebGetPublishedSceneRequest) | [WebGetPublishedSceneResponse](#holomush-web-v1-WebGetPublishedSceneResponse) | WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot). |
+| WebGetCharacterProfile | [WebGetCharacterProfileRequest](#holomush-web-v1-WebGetCharacterProfileRequest) | [WebGetCharacterProfileResponse](#holomush-web-v1-WebGetCharacterProfileResponse) | WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile. Handler.WebGetCharacterProfile lifts the session token from the X-Session-Token header CookieMiddleware injected and forwards it; a request with no cookie is the ordinary logged-out case, not an error. |
+| WebListMyCharacters | [WebListMyCharactersRequest](#holomush-web-v1-WebListMyCharactersRequest) | [WebListMyCharactersResponse](#holomush-web-v1-WebListMyCharactersResponse) | WebListMyCharacters proxies CharacterAccessService.ListMyCharacters. Handler.WebListMyCharacters lifts the session token from the header and forwards nothing else; whose roster is returned follows from the token. |
+| WebGetMyCharacter | [WebGetMyCharacterRequest](#holomush-web-v1-WebGetMyCharacterRequest) | [WebGetMyCharacterResponse](#holomush-web-v1-WebGetMyCharacterResponse) | WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership is verified in the facade, not here. |
+| WebUpdateCharacterProfile | [WebUpdateCharacterProfileRequest](#holomush-web-v1-WebUpdateCharacterProfileRequest) | [WebUpdateCharacterProfileResponse](#holomush-web-v1-WebUpdateCharacterProfileResponse) | WebUpdateCharacterProfile proxies CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile forwards the mask and every prose field verbatim; the gateway neither validates the mask nor decides which fields it reaches. |
+| WebUpdateCharacterDescription | [WebUpdateCharacterDescriptionRequest](#holomush-web-v1-WebUpdateCharacterDescriptionRequest) | [WebUpdateCharacterDescriptionResponse](#holomush-web-v1-WebUpdateCharacterDescriptionResponse) | WebUpdateCharacterDescription proxies CharacterAccessService.UpdateCharacterDescription. |
+| WebSetDefaultCharacter | [WebSetDefaultCharacterRequest](#holomush-web-v1-WebSetDefaultCharacterRequest) | [WebSetDefaultCharacterResponse](#holomush-web-v1-WebSetDefaultCharacterResponse) | WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter. Handler.WebSetDefaultCharacter lifts the session token from the header and forwards only the character id; whose default is repointed follows from the token, and ownership is proven in the facade rather than here. |
+| WebListCharacterDirectory | [WebListCharacterDirectoryRequest](#holomush-web-v1-WebListCharacterDirectoryRequest) | [WebListCharacterDirectoryResponse](#holomush-web-v1-WebListCharacterDirectoryResponse) | WebListCharacterDirectory proxies CharacterAccessService.ListCharacterDirectory. Handler.WebListCharacterDirectory lifts the session token from the X-Session-Token header and forwards nothing else; a request with no cookie is the ordinary logged-out case rather than an error. The gateway neither filters nor re-sorts the listing — reachability and order are the facade&#39;s. |
+| WebAdminListSections | [WebAdminListSectionsRequest](#holomush-web-v1-WebAdminListSectionsRequest) | [WebAdminListSectionsResponse](#holomush-web-v1-WebAdminListSectionsResponse) | WebAdminListSections proxies AdminPortalService.AdminListSections. Handler.WebAdminListSections lifts the session token from the X-Session-Token header and forwards nothing else. It makes NO authorization decision of its own: the core interceptor already denied a caller with no `admin_section:` access before the core handler ran, so a non-admin&#39;s PermissionDenied reaches the browser unmodified rather than being turned into an empty list here. |
+| WebAdminGetSection | [WebAdminGetSectionRequest](#holomush-web-v1-WebAdminGetSectionRequest) | [WebAdminGetSectionResponse](#holomush-web-v1-WebAdminGetSectionResponse) | WebAdminGetSection proxies AdminPortalService.AdminGetSection. Handler.WebAdminGetSection lifts the session token from the X-Session-Token header and forwards only section_id. It makes NO authorization decision: the core interceptor gates the supplied id before the core handler runs, so both the PermissionDenied a refused caller gets and the FailedPrecondition a permitted caller gets for a planned section reach the browser unmodified.
+
+It has NO browser caller in v0.13, and that is deliberate rather than dead code: D-100 makes both registry RPCs published wire contract and census members, and the wire-level gate tests in test/integration/access are what exercise this path. |
+| WebAdminListCharacters | [WebAdminListCharactersRequest](#holomush-web-v1-WebAdminListCharactersRequest) | [WebAdminListCharactersResponse](#holomush-web-v1-WebAdminListCharactersResponse) | WebAdminListCharacters proxies AdminPortalService.AdminListCharacters. Handler.WebAdminListCharacters lifts the session token from the X-Session-Token header and forwards the page and ordering fields verbatim. It computes nothing: the clamp, the enum switches and the section gate all live core-side, where a caller speaking gRPC directly cannot skip them. |
+| WebAdminSearchCharacters | [WebAdminSearchCharactersRequest](#holomush-web-v1-WebAdminSearchCharactersRequest) | [WebAdminSearchCharactersResponse](#holomush-web-v1-WebAdminSearchCharactersResponse) | WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters. Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING — it does not trim, case-fold or normalize it, because normalization is core-side through the one charname pipeline and a gateway mirror of it would be a second definition of name equality. |
+| WebAdminGetCharacter | [WebAdminGetCharacterRequest](#holomush-web-v1-WebAdminGetCharacterRequest) | [WebAdminGetCharacterResponse](#holomush-web-v1-WebAdminGetCharacterResponse) | WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter. Handler.WebAdminGetCharacter forwards character_id and returns the detail message unmodified; the core&#39;s static NotFound reaches the browser as-is. |
+| WebAdminUpdateCharacter | [WebAdminUpdateCharacterRequest](#holomush-web-v1-WebAdminUpdateCharacterRequest) | [WebAdminUpdateCharacterResponse](#holomush-web-v1-WebAdminUpdateCharacterResponse) | WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter. Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and the expected_version verbatim and computes nothing: the closed allowlist, the byte caps, the version guard and the section gate all live core-side, where a caller speaking gRPC directly cannot skip them. |
+| WebAdminRetireCharacter | [WebAdminRetireCharacterRequest](#holomush-web-v1-WebAdminRetireCharacterRequest) | [WebAdminRetireCharacterResponse](#holomush-web-v1-WebAdminRetireCharacterResponse) | WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter. Handler.WebAdminRetireCharacter forwards character_id and expected_version; the core&#39;s Aborted for a stale version and FailedPrecondition for an already-retired character both reach the browser unmodified. |
+| WebAdminUnretireCharacter | [WebAdminUnretireCharacterRequest](#holomush-web-v1-WebAdminUnretireCharacterRequest) | [WebAdminUnretireCharacterResponse](#holomush-web-v1-WebAdminUnretireCharacterResponse) | WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter, with the same forward-verbatim shape its retire peer has. There is no WebAdminDeleteCharacter: no admin delete RPC exists to proxy. |
 
  
 

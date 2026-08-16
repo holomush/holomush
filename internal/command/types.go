@@ -37,50 +37,50 @@ type SystemBroadcaster interface {
 // depend only on the methods they actually use rather than the full world.Service.
 type WorldService interface {
 	// GetLocation retrieves a location by ID after checking read authorization.
-	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
+	GetLocation(ctx context.Context, subjectID world.Caller, id ulid.ULID) (*world.Location, error)
 
 	// GetExitsByLocation retrieves all exits from a location after checking read authorization.
-	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
+	GetExitsByLocation(ctx context.Context, subjectID world.Caller, locationID ulid.ULID) ([]*world.Exit, error)
 
 	// CreateExit creates a new exit after checking write authorization.
-	CreateExit(ctx context.Context, subjectID string, exit *world.Exit) error
+	CreateExit(ctx context.Context, subjectID world.Caller, exit *world.Exit) error
 
 	// MoveCharacter moves a character to a new location.
-	MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error
+	MoveCharacter(ctx context.Context, subjectID world.Caller, characterID, toLocationID ulid.ULID) error
 
 	// GetCharacter retrieves a character by ID after checking read authorization.
-	GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*world.Character, error)
+	GetCharacter(ctx context.Context, subjectID world.Caller, id ulid.ULID) (*world.Character, error)
 
 	// CreateLocation creates a new location after checking write authorization.
-	CreateLocation(ctx context.Context, subjectID string, loc *world.Location) error
+	CreateLocation(ctx context.Context, subjectID world.Caller, loc *world.Location) error
 
 	// UpdateLocation updates an existing location after checking write authorization.
-	UpdateLocation(ctx context.Context, subjectID string, loc *world.Location) error
+	UpdateLocation(ctx context.Context, subjectID world.Caller, loc *world.Location) error
 
 	// CreateObject creates a new object after checking write authorization.
-	CreateObject(ctx context.Context, subjectID string, obj *world.Object) error
+	CreateObject(ctx context.Context, subjectID world.Caller, obj *world.Object) error
 
 	// GetObject retrieves an object by ID after checking read authorization.
-	GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*world.Object, error)
+	GetObject(ctx context.Context, subjectID world.Caller, id ulid.ULID) (*world.Object, error)
 
 	// UpdateObject updates an existing object after checking write authorization.
-	UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error
+	UpdateObject(ctx context.Context, subjectID world.Caller, obj *world.Object) error
 
 	// UpdateCharacterDescription sets a character's description after checking authorization.
-	UpdateCharacterDescription(ctx context.Context, subjectID string, characterID ulid.ULID, description string) error
+	UpdateCharacterDescription(ctx context.Context, subjectID world.Caller, characterID ulid.ULID, description string) error
 
 	// FindLocationByName searches for a location by name after checking read authorization.
-	FindLocationByName(ctx context.Context, subjectID, name string) (*world.Location, error)
+	FindLocationByName(ctx context.Context, subjectID world.Caller, name string) (*world.Location, error)
 
 	// GetCharactersByLocation returns characters at a location after checking authorization.
-	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
+	GetCharactersByLocation(ctx context.Context, subjectID world.Caller, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
 
 	// GetObjectsByLocation returns objects at a location after checking authorization.
-	GetObjectsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Object, error)
+	GetObjectsByLocation(ctx context.Context, subjectID world.Caller, locationID ulid.ULID) ([]*world.Object, error)
 
 	// ListPropertiesByParent returns all properties for the given parent entity
 	// after checking read authorization on the parent.
-	ListPropertiesByParent(ctx context.Context, subjectID string, parentType string, parentID ulid.ULID) ([]*world.EntityProperty, error)
+	ListPropertiesByParent(ctx context.Context, subjectID world.Caller, parentType string, parentID ulid.ULID) ([]*world.EntityProperty, error)
 }
 
 // AliasWriter defines write-only persistence operations for alias management.

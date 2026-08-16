@@ -24,6 +24,8 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	holoGRPC "github.com/holomush/holomush/internal/grpcclient"
 	"github.com/holomush/holomush/internal/observability"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
+	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
@@ -294,6 +296,70 @@ func (m *mockGRPCClient) WithdrawScenePublish(_ context.Context, _ *sceneaccessv
 }
 
 func (m *mockGRPCClient) GetPublishedScene(_ context.Context, _ *sceneaccessv1.GetPublishedSceneRequest) (*sceneaccessv1.GetPublishedSceneResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) GetCharacterProfile(_ context.Context, _ *characteraccessv1.GetCharacterProfileRequest) (*characteraccessv1.GetCharacterProfileResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ListMyCharacters(_ context.Context, _ *characteraccessv1.ListMyCharactersRequest) (*characteraccessv1.ListMyCharactersResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) GetMyCharacter(_ context.Context, _ *characteraccessv1.GetMyCharacterRequest) (*characteraccessv1.GetMyCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) UpdateCharacterProfile(_ context.Context, _ *characteraccessv1.UpdateCharacterProfileRequest) (*characteraccessv1.UpdateCharacterProfileResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) UpdateCharacterDescription(_ context.Context, _ *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) SetDefaultCharacter(_ context.Context, _ *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ListCharacterDirectory(_ context.Context, _ *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) CreateOwnCharacter(_ context.Context, _ *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminListSections(_ context.Context, _ *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminGetSection(_ context.Context, _ *adminportalv1.AdminGetSectionRequest) (*adminportalv1.AdminGetSectionResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminListCharacters(_ context.Context, _ *adminportalv1.AdminListCharactersRequest) (*adminportalv1.AdminListCharactersResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminSearchCharacters(_ context.Context, _ *adminportalv1.AdminSearchCharactersRequest) (*adminportalv1.AdminSearchCharactersResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminGetCharacter(_ context.Context, _ *adminportalv1.AdminGetCharacterRequest) (*adminportalv1.AdminGetCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminUpdateCharacter(_ context.Context, _ *adminportalv1.AdminUpdateCharacterRequest) (*adminportalv1.AdminUpdateCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminRetireCharacter(_ context.Context, _ *adminportalv1.AdminRetireCharacterRequest) (*adminportalv1.AdminRetireCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) AdminUnretireCharacter(_ context.Context, _ *adminportalv1.AdminUnretireCharacterRequest) (*adminportalv1.AdminUnretireCharacterResponse, error) {
 	return nil, nil
 }
 

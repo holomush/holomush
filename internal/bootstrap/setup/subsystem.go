@@ -16,8 +16,8 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/attribute"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
-	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/admin/section"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/auth"
@@ -190,8 +190,28 @@ func (s *BootstrapSubsystem) Prepare(ctx context.Context) error {
 	policyBootstrapFn := func(ctx context.Context, skipSeedMigrations bool) error {
 		partitions := audit.NewPostgresPartitionCreator(pool)
 		ps := s.cfg.ABAC.PolicyStore()
-		schema := types.NewAttributeSchema()
-		compiler := policy.NewCompiler(schema)
+
+		// This closure compiles the SEED corpus on its way into the database, so
+		// the `action` gate MUST be live here (02.2-04, D-66 site 2). Compiled
+		// against a never-populated schema — as it was until 02.2-04 — a seed with
+		// a typo'd action.* key installs cleanly and only fails later, at the
+		// first cache.Reload, with the bad row already persisted.
+		//
+		// An action-only registry is the correct scope, not a lossy stand-in for
+		// the full production provider set. The compiler validates by DSL ROOT
+		// (principal | resource | action | env), never by provider name, so the
+		// roots this registry does not carry are simply skipped and every
+		// reference under them passes untouched. `action` validation is therefore
+		// IDENTICAL here to every other compilation site, which is the whole
+		// reason to use it.
+		//
+		// The alternative — an ABACSubsystem.SchemaRegistry() accessor threaded
+		// through s.cfg.ABAC — was NOT taken: it would couple seed installation to
+		// provider-registration ordering across two subsystems, for a namespace
+		// that depends on no repo, no pool and no provider. attribute
+		// .ActionNamespaceSchema() is a static, caller-supplied declaration; it
+		// needs none of that machinery.
+		compiler := policy.NewCompiler(attribute.NewActionOnlySchemaRegistry().Schema())
 		opts := policy.BootstrapOptions{SkipSeedMigrations: skipSeedMigrations}
 		return policy.Bootstrap(ctx, partitions, ps, compiler, slog.Default(), opts)
 	}

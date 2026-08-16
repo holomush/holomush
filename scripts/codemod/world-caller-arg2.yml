@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# scripts/codemod/world-caller-arg2.yml — rewrite argument 2 of a world command
+# call from a bare subject string to world.HumanCaller(<subject>), in packages
+# that qualify the world package (everything EXCEPT `package world`).
+#
+# Prerequisite: ast-grep 0.45.1 or later. It is NOT installed by `task setup`
+# and is NOT present in CI — this is a local developer step, never a CI gate.
+#
+# Preview:  ast-grep scan -r scripts/codemod/world-caller-arg2.yml .
+# Apply:    ast-grep scan -r scripts/codemod/world-caller-arg2.yml -U .
+#
+# IDEMPOTENT: re-running against the migrated tree yields an empty diff. The
+# three-clause SUBJ guard below is what makes that true against all three
+# post-flip shapes argument 2 can take (constructor call, composite literal,
+# bare identifier).
+#
+# SUBJ guard, clause by clause:
+#   1. regex '(?i)subj|^"' — positive ALLOWLIST. Every one of the 355 true
+#      arg-2 sites on the pre-flip tree spells argument 2 with a `subj`-ish
+#      identifier or a string literal (13 distinct expressions, measured).
+#      FAILURE MODE, and it fails in the dangerous direction: a call site added
+#      later whose argument 2 is spelled neither `subj`-ish nor a string literal
+#      — say `s.actorID` or `req.GetPlayerId()` — matches neither pattern and is
+#      SILENTLY SKIPPED. No hunk, no warning, and a clean re-run diff, which is
+#      exactly the signal the re-run review contract reads as "nothing left to
+#      do". The durable backstops are the compiler (an unmigrated site fails to
+#      build once the signature is world.Caller) and probe-subject-param.yml,
+#      whose post-flip count must be 8. This allowlist is a convenience for the
+#      mechanical bulk, never the completeness proof.
+#   2. not regex '(HumanCaller|SystemCaller)\(' — do not re-wrap a constructor
+#      call that is already a Caller.
+#   3. not kind composite_literal — do not wrap `world.Caller{…}` written inline
+#      at the call site.
+#   The bare-identifier shape is NOT closed by the constraint (the declaration
+#   rules keep the parameter name, so a forwarded caller is often still spelled
+#   `subjectID`); it is closed by the `ignores:` paths below.
+#
+# STANDING REMEDY: if a post-flip re-run produces ANY hunk, add that file to
+# this rule's `ignores:` or spell the constructor inline at the call site.
+# Never accept the double-wrap, and never hand-revert the hunk.
+#
+# RECV blocklist — verified false positives that `ignores:` CANNOT express,
+# because each sits in a file that ALSO holds genuine migration targets:
+#   .EXPECT()      mockery expectation builders (5 sites)
+#
+# NOTE on internal/world/caller_test.go: Plan 01 landed it as `package world_test`
+# (NOT `package world` as originally planned) because policy.NewEngine needs a
+# concrete *attribute.Resolver and internal/access/policy/attribute imports
+# internal/world — so an in-package test file cannot build a real engine. It is
+# therefore scanned by THIS rule, not the -internal one, and is ignored here.
+# It holds an attribute-carrying Caller built via world.NewCallerWithAttrsForTest.
+#
+#   querier        internal/plugin/hostcap/world.go:143, hostfunc/world.go:119
+#   adapter        internal/plugin/hostfunc/adapter_test.go (6 sites)
+#   repo           internal/world/postgres/character_repo_test.go (6 sites)
+#   characterWriter internal/world/mutator.go:231 (package world → -internal variant)
+#
+# Counting: this rule carries a `fix:`, so ast-grep prints a unified diff rather
+# than the `┌─ ` frame. Count hunks with `| rg -c '│\+'`, NOT `| rg -c '┌─ '`.
+id: world-caller-arg2
+language: go
+severity: hint
+ignores:
+  - internal/grpc/location_follow.go
+  - internal/world/caller_test.go
+  - internal/property/**
+  - internal/plugin/hostfunc/world_write.go
+  - internal/plugin/hostfunc/cap_property*.go
+  - internal/plugin/hostfunc/cap_world_query*.go
+rule:
+  pattern: $RECV.$METHOD($CTX, $SUBJ, $$$REST)
+  not:
+    inside:
+      kind: source_file
+      stopBy: end
+      has:
+        kind: package_clause
+        regex: '^package world$'
+constraints:
+  METHOD:
+    regex: '^(GetLocation|CreateLocation|UpdateLocation|DeleteLocation|GetExit|CreateExit|UpdateExit|DeleteExit|GetExitsByLocation|GetObject|CreateObject|UpdateObject|DeleteObject|MoveObject|DeleteCharacter|GetCharacter|UpdateCharacterDescription|GetCharactersByLocation|ListSceneParticipants|MoveCharacter|FindLocationByName|GetObjectsByLocation|ListPropertiesByParent)$'
+  SUBJ:
+    all:
+      - regex: '(?i)subj|^"'
+      - not:
+          regex: '(HumanCaller|SystemCaller)\('
+      - not:
+          kind: composite_literal
+  RECV:
+    not:
+      regex: '(\.EXPECT\(\)|^querier|^adapter|^repo|characterWriter)$'
+fix: '$RECV.$METHOD($CTX, world.HumanCaller($SUBJ), $$$REST)'

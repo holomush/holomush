@@ -694,18 +694,155 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 
 	// The complete pre-Phase-2 set. Each is CONDITIONED (self-access, and
 	// colocation); neither is the unconditional shape D-29 defers.
+	//
+	// seed:job-fixture-instance-scoped (v0.13 phase 02.2, AUTHZ-02) is the one
+	// addition, and it does not instantiate the risk D-29 names. That risk has
+	// three parts and this seed misses all three:
+	//
+	//   - PRINCIPAL. D-29's concern is `principal is character`, which admits
+	//     every ephemeral guest. This seed's principal is `job` — a disjoint
+	//     namespace (D-48) whose subjects are constructible only via
+	//     access.JobSubject / world.JobCaller. No human, guest or otherwise,
+	//     can hold a job: subject.
+	//   - ACTION. The leak D-29 describes is through world.Service.GetCharacter,
+	//     which checks `read`. This seed permits `write` only, so it gates no
+	//     read path and reaches no characterToProto projection.
+	//   - MATCHABILITY. The `when` clause pins principal.job.name == "fixture",
+	//     and no job by that name is registered in production, so the liveness
+	//     gate in attribute.JobProvider leaves principal.job.* absent and the
+	//     permit cannot match at all.
+	//
+	// The gate keeps its teeth on all three counts, but NOT from one assertion:
+	// the name-set equality below turns RED only when the MEMBERSHIP of the
+	// `resource is character` family changes, so it alone would stay GREEN if
+	// this seed's action list were widened to `read` or its principal swapped to
+	// `character` (neither edit changes a name or a resource type). The
+	// per-entry target-shape equality that follows it is what pins PRINCIPAL and
+	// ACTION, and the exact-DSL assertion after that is what pins MATCHABILITY —
+	// the `principal.job.name == "fixture"` clause. All three assertions are
+	// load-bearing; deleting any one re-opens the corresponding half of D-29.
+	//
+	// seed:job-retirement-instance-scoped (v0.13 phase 03, IDENT-04) is the
+	// second addition and it is a DIFFERENT argument, not a copy of the
+	// fixture's. State the difference plainly: it is a LIVE grant, so the
+	// fixture's third leg (unmatchability) does not apply to it, and it does
+	// permit `read`, which the paragraph above names as a widening. What makes
+	// that safe is the leg the fixture shares — the instance fence:
+	//
+	//   - PRINCIPAL is still `job`. Same disjoint namespace; still no human,
+	//     guest or otherwise, can hold a job: subject.
+	//   - THE READ IS NOT AN ENUMERATION PRIMITIVE, which is the actual risk
+	//     D-29 defers. `action.job.trigger_subject == resource.id` binds the
+	//     readable character to the one the TRIGGERING event names, and
+	//     `action.job.trigger_event_type == "character_retired"` binds which
+	//     event may do the triggering. The reactor can therefore read exactly
+	//     the character that has just been retired, one per delivered message,
+	//     and no other — it cannot walk the roster, and there is no request on
+	//     whose behalf it could render what it read. characterToProto is not on
+	//     this path: the caller is an in-process host subsystem, not a gRPC
+	//     handler.
+	//   - THE PROVENANCE IS NOT CALLER-CHOSEN. world.JobCaller derives the
+	//     triple from the delivered message and exposes no attribute-map
+	//     parameter, and the reactor derives the RESOURCE independently (from
+	//     the message body, while the provenance comes from the transport
+	//     subject). A handler that derives the wrong aggregate is therefore
+	//     denied by this very clause rather than authorized by it.
+	//   - LIVENESS still gates it (D-49): principal.job.name resolves only
+	//     while internal/jobs.Registry reports "retirement" running, which the
+	//     reactor declares in Activate and retracts in Stop.
+	//
+	// Its own exact-DSL pin below is what keeps that fence from being relaxed.
+	// If a future edit drops either `when` conjunct, this seed becomes a job-
+	// wide character read — which IS the D-29 risk, reached by a door the name
+	// set and the shape map would both stay green for.
+	// v0.13 phase 04 plan 01 is the phase this test's own doc comment names, and
+	// these two entries are the discharge. Read them against the three-part risk
+	// above: the PRINCIPAL of the second one is `viewer` and of the first is
+	// `character` — so unlike the job seeds, D-29's "every ephemeral guest"
+	// concern DOES apply to the principal. What answers it is the ACTION.
+	//
+	// `read_description` is a token no other policy and no other call site
+	// carries. It reaches exactly one method, world.Service.GetCharacterDescription,
+	// whose return type world.CharacterDescription has exactly two fields, Name
+	// and Description. The leak D-29 describes runs through
+	// world.Service.GetCharacter → characterToProto → {Id, PlayerId, Name,
+	// Description, LocationId}; that method still checks `read`, and both
+	// `read`-carrying character-resource seeds below are still the conditioned
+	// pre-Phase-2 pair. So the roster-enumeration primitive D-29 defers is not
+	// reachable from either new entry: there is no field for a player id or a
+	// location id to land in, and the compiler enforces that rather than a
+	// reviewer.
+	//
+	// THE ACTION IS THE WHOLE FENCE, so it is pinned twice — in wantShapes below
+	// (compiled target) and in the exact-DSL assertions after it. Widening either
+	// entry's action list to include "read" IS the D-29 leak, and it would leave
+	// this family's name set unchanged.
+	// v0.13 phase 06 plan 05 adds the SIXTH argument to this family, and it is a
+	// different one again: seed:admin-character-administration. Read it against
+	// the three-part risk above.
+	//
+	//   - PRINCIPAL is `player`, not `character` — so D-29's "every ephemeral
+	//     guest" concern does not reach it at all. A guest holds no player:
+	//     subject on this surface, and the `when` clause narrows further to
+	//     players carrying the `admin` role.
+	//   - It is the WORLD-LAYER half of a gate the caller has ALREADY passed. An
+	//     admin portal RPC is authorized by the section interceptor against
+	//     `admin_section:characters` before any handler runs; this policy is what
+	//     lets the same caller then pass world.Service's own checkAccess on
+	//     `character:<id>`, which every reused world method runs. Without it the
+	//     admin write path is default-denied one layer down.
+	//   - `delete` IS ABSENT, deliberately, and its own test asserts both that
+	//     the action list has exactly three members and that a real engine denies
+	//     a player-admin `delete` on a character. world.Service.DeleteCharacter
+	//     is irreversible and cascades entity_properties (§4.4), so the RPC-level
+	//     absence of AdminDeleteCharacter is backed at the policy layer too.
+	//
+	// It does NOT carry `read`, and an earlier revision of this comment was wrong
+	// about why it might: it claimed `read` "does reach world.Service.GetCharacter"
+	// for this principal. It does not. Every production caller of GetCharacter
+	// stamps a character, job or plugin subject, and the admin portal's own reads
+	// bypass world policy entirely via AdminGetCharacterRow, a bounded repository
+	// projection. The arm was a dead grant that pre-authorised GetCharacter's full
+	// projection — PlayerId and LocationId, the fields D-75 narrowed away — for
+	// whichever player-flavoured read caller landed next. Removed on abac-reviewer's
+	// adjudication over the finished Phase 6 surface. The action list is pinned in
+	// wantShapes below, so re-adding it turns this RED by shape even though the name
+	// set is unchanged.
 	want := []string{
+		"seed:admin-character-administration",
+		"seed:character-description-read",
+		"seed:job-fixture-instance-scoped",
+		"seed:job-retirement-instance-scoped",
 		"seed:player-character-colocation",
 		"seed:player-self-access",
+		"seed:viewer-character-description-read",
+	}
+
+	// The compiled target shape of every member, so a widening of an EXISTING
+	// member is caught even though the name set is unchanged.
+	wantShapes := map[string]characterSeedTargetShape{
+		"seed:admin-character-administration":    {principal: "player", actions: []string{"write", "retire", "unretire"}},
+		"seed:character-description-read":        {principal: "character", actions: []string{"read_description"}},
+		"seed:job-fixture-instance-scoped":       {principal: "job", actions: []string{"write"}},
+		"seed:job-retirement-instance-scoped":    {principal: "job", actions: []string{"read", "write"}},
+		"seed:player-character-colocation":       {principal: "character", actions: []string{"read"}},
+		"seed:player-self-access":                {principal: "character", actions: []string{"read", "write"}},
+		"seed:viewer-character-description-read": {principal: "viewer", actions: []string{"read_description"}},
 	}
 
 	compiler := NewCompiler(emptySchema())
 	var got []string
+	gotShapes := map[string]characterSeedTargetShape{}
 	for _, s := range SeedPolicies() {
 		compiled, _, err := compiler.Compile(s.DSLText)
 		require.NoError(t, err, "seed %q MUST compile", s.Name)
 		if compiled.Target.ResourceType != nil && *compiled.Target.ResourceType == "character" {
 			got = append(got, s.Name)
+			shape := characterSeedTargetShape{actions: compiled.Target.ActionList}
+			if compiled.Target.PrincipalType != nil {
+				shape.principal = *compiled.Target.PrincipalType
+			}
+			gotShapes[s.Name] = shape
 		}
 	}
 	sort.Strings(got)
@@ -719,9 +856,104 @@ func TestNoPhase2SeedIntroducesACharacterResourceTypePermit(t *testing.T) {
 			"D-10/D-11: `characters` has no `visibility` column, so D-11's mandated remedy does not exist "+
 			"for that resource.")
 
+	assert.Equal(t, wantShapes, gotShapes,
+		"D-29's exemption for seed:job-fixture-instance-scoped was granted on PRINCIPAL (`job`, a namespace "+
+			"no human can hold) and ACTION (`write` only, so it gates no read path and reaches no "+
+			"characterToProto projection). Widening either — action to include `read`, or principal to "+
+			"`character` — instantiates exactly the risk D-29 defers to Phase 4, WITHOUT changing this "+
+			"family's name set. That is why the shape is pinned here and not left to the name-set equality "+
+			"above. The same pin covers the two shipped seeds: widening either of those is the same leak "+
+			"by a different door. seed:job-retirement-instance-scoped is the ONE member permitted to carry "+
+			"`read`, and only because its instance fence makes it a single-row lookup rather than an "+
+			"enumeration primitive (see this test's doc comment); a THIRD job seed carrying `read` is not "+
+			"covered by that reasoning and must argue its own case here.")
+
+	// MATCHABILITY, the third leg of the exemption. Pinned as exact DSL because
+	// the clause that makes the permit unmatchable in production
+	// (`principal.job.name == "fixture"`, no such job registered) lives in the
+	// `when` body, which the compiled Target does not carry. SeedVersion rides
+	// along for the same reason the `untouched` table above pins it: a bump on a
+	// shipped policy triggers the upgrade path.
+	jobSeed := requireSeedPolicy(t, "seed:job-fixture-instance-scoped")
+	const wantJobDSL = `permit(principal is job, action in ["write"], resource is character) ` +
+		`when { principal.job.name == "fixture" && principal.job.writes.containsAll(["character"]) && ` +
+		`action.job.trigger_event_type == "fixture_triggered" && action.job.trigger_subject == resource.id };`
+	assert.Equal(t, wantJobDSL, jobSeed.DSLText,
+		"the fixture seed's third exemption leg is that it cannot match in production: no job named "+
+			"\"fixture\" is registered, so attribute.JobProvider's liveness gate leaves principal.job.* "+
+			"absent and the permit default-denies. Relaxing or deleting the name clause makes this seed "+
+			"live against whatever job IS registered — an unreviewed grant of character writes.")
+	assert.Equal(t, 1, jobSeed.SeedVersion,
+		"seed:job-fixture-instance-scoped ships at SeedVersion 1 (v0.13 phase 02.2, AUTHZ-02)")
+
+	// The retirement grant's exemption rests ENTIRELY on its instance fence
+	// (it is live, so it has no unmatchability leg to fall back on), and the
+	// fence lives in the `when` body the compiled Target does not carry. Pinned
+	// as exact DSL for that reason: dropping `action.job.trigger_subject ==
+	// resource.id` turns a single-row lookup into a job-wide character read,
+	// and dropping `action.job.trigger_event_type == "character_retired"` lets
+	// every other character event the consumer's filter delivers carry the same
+	// authority.
+	retirementSeed := requireSeedPolicy(t, "seed:job-retirement-instance-scoped")
+	const wantRetirementDSL = `permit(principal is job, action in ["read", "write"], resource is character) ` +
+		`when { principal.job.name == "retirement" && principal.job.writes.containsAll(["character"]) && ` +
+		`action.job.trigger_event_type == "character_retired" && action.job.trigger_subject == resource.id };`
+	assert.Equal(t, wantRetirementDSL, retirementSeed.DSLText,
+		"seed:job-retirement-instance-scoped is a LIVE grant whose only fence is its `when` clause. Both "+
+			"action.job.* conjuncts are load-bearing: trigger_subject bounds WHICH character may be read "+
+			"or written (to the one the triggering event names), and trigger_event_type bounds WHAT may "+
+			"trigger it (the reactor's consumer filter is the whole character aggregate, so without this "+
+			"conjunct a character_created or character_moved delivery would carry retirement's authority). "+
+			"Relaxing either is the D-29 leak by a different door.")
+	assert.Equal(t, 1, retirementSeed.SeedVersion,
+		"seed:job-retirement-instance-scoped ships at SeedVersion 1 (v0.13 phase 03, IDENT-04)")
+
+	// The two Phase-4 read_description permits, pinned as exact DSL for the same
+	// reason the job seeds are: their whole fence is a target-clause detail the
+	// name set does not carry. The viewer twin's `when` body additionally carries
+	// the tier clearing list §7.4 says a game edits to raise the description's
+	// floor — dropping it entirely would make the permit unconditional across
+	// every future rung, and rewriting it as an ordinal comparison would hand a
+	// newly appended fourth rung the highest clearance in the system (§8.2.1).
+	descSeed := requireSeedPolicy(t, "seed:character-description-read")
+	assert.Equal(t,
+		`permit(principal is character, action in ["read_description"], resource is character);`,
+		descSeed.DSLText,
+		"seed:character-description-read is the grid-side off-location description read (D-29's literal "+
+			"deferral, D-75). Its safety rests entirely on the ACTION token: `read_description` reaches only "+
+			"world.Service.GetCharacterDescription, whose return type carries no player id and no location "+
+			"id. Widening it to `read` reaches GetCharacter and its full CharacterInfo projection — which IS "+
+			"the leak D-29 deferred.")
+	assert.Equal(t, 1, descSeed.SeedVersion,
+		"seed:character-description-read ships at SeedVersion 1 (v0.13 phase 04, PROFILE-11's character half)")
+
+	viewerDescSeed := requireSeedPolicy(t, "seed:viewer-character-description-read")
+	assert.Equal(t,
+		`permit(principal is viewer, action in ["read_description"], resource is character) `+
+			`when { principal.viewer.tier in ["anonymous", "guest", "player"] };`,
+		viewerDescSeed.DSLText,
+		"seed:viewer-character-description-read is the D-76 viewer twin. It carries its own tier clearing "+
+			"test because the tier-floor family targets `resource is property` and this resource is a "+
+			"CHARACTER, so no tier-floor policy governs it. SET MEMBERSHIP, never ordinal comparison "+
+			"(§8.2.1). The list is what a game edits to raise the description's floor (§7.4).")
+	assert.Equal(t, 1, viewerDescSeed.SeedVersion,
+		"seed:viewer-character-description-read ships at SeedVersion 1 (v0.13 phase 04, D-76)")
+
 	_, exists := seedPolicyByName("seed:profile-public-read-character")
 	assert.False(t, exists,
-		"seed:profile-public-read-character is DEFERRED TO PHASE 4 by D-29 and MUST NOT be seeded here")
+		"seed:profile-public-read-character — the `action in [\"read\"]` shape D-29 deferred — MUST NOT be "+
+			"seeded. Phase 4 discharged the deferral with the two narrow read_description permits above "+
+			"instead; the deferred NAME must stay absent so a future edit cannot resurrect the deferred SHAPE "+
+			"under cover of \"Phase 4 shipped it\".")
+}
+
+// characterSeedTargetShape is the slice of a compiled Target that D-29 cares
+// about for the `resource is character` family: WHO may act (principal type)
+// and WHAT they may do (action list). Resource type is not a member — every
+// entry in the family has it equal to "character" by construction.
+type characterSeedTargetShape struct {
+	principal string
+	actions   []string
 }
 
 // --- Admin sections (EXT-07, §10.4, §10.5) ---
@@ -756,6 +988,56 @@ func TestSeedAdminSectionAccessIsTypeScopedAndPlayerFlavored(t *testing.T) {
 
 	assert.Equal(t, []string{"read", "write"}, compiled.Target.ActionList,
 		"§10.4: `read` to reach a section, `write` for a mutation within it")
+}
+
+// TestSeedAdminCharacterAdministrationIsCharacterScopedAndExcludesDelete pins
+// the WORLD-LAYER gate that lets the D-104 player-flavoured admin caller reach
+// world.Service's own checkAccess.
+//
+// Without it every admin character write is DEFAULT-DENIED one layer below the
+// section interceptor: seed:admin-full-access requires `principal is character`
+// and never fires for a player principal, and seed:admin-section-access is
+// scoped `resource is admin_section` and does not reach a `character:` resource.
+//
+// `delete` is DELIBERATELY absent from the action list. world.Service's
+// DeleteCharacter is irreversible and cascades entity_properties (§4.4); there is
+// no AdminDeleteCharacter RPC, and this omission makes the same guarantee hold at
+// the POLICY layer, where an RPC-level omission cannot be quietly undone.
+func TestSeedAdminCharacterAdministrationIsCharacterScopedAndExcludesDelete(t *testing.T) {
+	t.Parallel()
+
+	s := requireSeedPolicy(t, "seed:admin-character-administration")
+
+	const want = `permit(principal is player, action in ["write", "retire", "unretire"], resource is character) ` +
+		`when { "admin" in principal.player.roles };`
+	assert.Equal(t, want, s.DSLText)
+
+	compiled, _, err := NewCompiler(emptySchema()).Compile(s.DSLText)
+	require.NoError(t, err)
+
+	require.NotNil(t, compiled.Target.PrincipalType)
+	assert.Equal(t, "player", *compiled.Target.PrincipalType,
+		"D-104 forces a player-flavoured caller so the envelope Actor is player:<id>; a character-flavoured "+
+			"one would put the acting-character id back into the retained audit trail")
+
+	require.NotNil(t, compiled.Target.ResourceType)
+	assert.Equal(t, "character", *compiled.Target.ResourceType,
+		"narrower than seed:admin-full-access's unrestricted resource")
+
+	assert.Nil(t, compiled.Target.ResourceExact,
+		"scoped by resource TYPE, like its admin_section sibling")
+
+	require.Len(t, compiled.Target.ActionList, 3,
+		"exactly the three actions AdminCharacterWriter traverses, and no more")
+	assert.Equal(t, []string{"write", "retire", "unretire"}, compiled.Target.ActionList)
+	assert.NotContains(t, compiled.Target.ActionList, "delete",
+		"world.Service.DeleteCharacter MUST stay unreachable from the admin boundary at the POLICY layer too")
+	assert.NotContains(t, compiled.Target.ActionList, "read",
+		"admin reads use AdminGetCharacterRow, a bounded repository projection that evaluates no policy. "+
+			"A `read` arm here grants nothing today and pre-authorises world.Service.GetCharacter's full "+
+			"projection — PlayerId and LocationId, the fields D-75 narrowed away — for the first "+
+			"player-flavoured read caller added later. It was carried as a dead grant until abac-reviewer "+
+			"adjudicated it over the finished Phase 6 surface; re-adding it needs that same adjudication")
 }
 
 // --- Attribute-reference coverage ---

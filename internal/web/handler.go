@@ -22,6 +22,8 @@ import (
 	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/ulidgen"
 	"github.com/holomush/holomush/pkg/errutil"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
+	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	sceneaccessv1 "github.com/holomush/holomush/pkg/proto/holomush/sceneaccess/v1"
@@ -90,8 +92,6 @@ type CoreClient interface {
 	ListAvailableCommands(ctx context.Context, req *corev1.ListAvailableCommandsRequest) (*corev1.ListAvailableCommandsResponse, error)
 	// Liveness RPCs
 	RefreshConnection(ctx context.Context, req *corev1.RefreshConnectionRequest) (*corev1.RefreshConnectionResponse, error)
-	// Directory RPCs
-	ListAllCharacters(ctx context.Context, req *corev1.ListAllCharactersRequest) (*corev1.ListAllCharactersResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the
@@ -132,6 +132,38 @@ type SceneAccessClient interface {
 	GetPublishedScene(ctx context.Context, req *sceneaccessv1.GetPublishedSceneRequest) (*sceneaccessv1.GetPublishedSceneResponse, error)
 }
 
+// CharacterAccessClient is the gRPC interface used by Handler to reach the
+// core character-access facade. One method per Web* character RPC, all using
+// characteraccessv1 types. The gateway is a pure translation layer — the facade
+// (CharacterAccessService) resolves the viewer rung from the forwarded session
+// token and owns every visibility decision.
+type CharacterAccessClient interface {
+	GetCharacterProfile(ctx context.Context, req *characteraccessv1.GetCharacterProfileRequest) (*characteraccessv1.GetCharacterProfileResponse, error)
+	ListMyCharacters(ctx context.Context, req *characteraccessv1.ListMyCharactersRequest) (*characteraccessv1.ListMyCharactersResponse, error)
+	GetMyCharacter(ctx context.Context, req *characteraccessv1.GetMyCharacterRequest) (*characteraccessv1.GetMyCharacterResponse, error)
+	UpdateCharacterProfile(ctx context.Context, req *characteraccessv1.UpdateCharacterProfileRequest) (*characteraccessv1.UpdateCharacterProfileResponse, error)
+	UpdateCharacterDescription(ctx context.Context, req *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error)
+	SetDefaultCharacter(ctx context.Context, req *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error)
+	ListCharacterDirectory(ctx context.Context, req *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error)
+	CreateCharacter(ctx context.Context, req *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error)
+}
+
+// AdminPortalClient is the narrow slice of AdminPortalServiceClient the gateway
+// forwards to. It is a SEPARATE client from CharacterAccessClient on purpose:
+// the admin portal is its own service behind its own gate, and folding its RPCs
+// into the character facade's client would put an admin surface behind the
+// character audience's proofs.
+type AdminPortalClient interface {
+	AdminListSections(ctx context.Context, req *adminportalv1.AdminListSectionsRequest) (*adminportalv1.AdminListSectionsResponse, error)
+	AdminGetSection(ctx context.Context, req *adminportalv1.AdminGetSectionRequest) (*adminportalv1.AdminGetSectionResponse, error)
+	AdminListCharacters(ctx context.Context, req *adminportalv1.AdminListCharactersRequest) (*adminportalv1.AdminListCharactersResponse, error)
+	AdminSearchCharacters(ctx context.Context, req *adminportalv1.AdminSearchCharactersRequest) (*adminportalv1.AdminSearchCharactersResponse, error)
+	AdminGetCharacter(ctx context.Context, req *adminportalv1.AdminGetCharacterRequest) (*adminportalv1.AdminGetCharacterResponse, error)
+	AdminUpdateCharacter(ctx context.Context, req *adminportalv1.AdminUpdateCharacterRequest) (*adminportalv1.AdminUpdateCharacterResponse, error)
+	AdminRetireCharacter(ctx context.Context, req *adminportalv1.AdminRetireCharacterRequest) (*adminportalv1.AdminRetireCharacterResponse, error)
+	AdminUnretireCharacter(ctx context.Context, req *adminportalv1.AdminUnretireCharacterRequest) (*adminportalv1.AdminUnretireCharacterResponse, error)
+}
+
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
 // The gateway is a protocol translation layer only — it MUST NOT access
 // WorldService or other internal services directly. All game state flows
@@ -139,9 +171,11 @@ type SceneAccessClient interface {
 // database credentials (bd-j2xj); per-connection registration happens
 // inside the core Subscribe RPC.
 type Handler struct {
-	client        CoreClient
-	contentClient ContentClient
-	sceneAccess   SceneAccessClient
+	client          CoreClient
+	contentClient   ContentClient
+	sceneAccess     SceneAccessClient
+	characterAccess CharacterAccessClient
+	adminPortal     AdminPortalClient
 	// heartbeatInterval controls the StreamEvents heartbeat ticker period.
 	// Zero means 15 seconds (production default). Overridable in tests.
 	heartbeatInterval time.Duration
@@ -165,6 +199,17 @@ func WithContentClient(c ContentClient) HandlerOption {
 // WithSceneAccessClient sets the scene-access facade client for scene Web* RPCs.
 func WithSceneAccessClient(c SceneAccessClient) HandlerOption {
 	return func(h *Handler) { h.sceneAccess = c }
+}
+
+// WithCharacterAccessClient sets the character-access facade client for the
+// character Web* RPCs.
+func WithCharacterAccessClient(c CharacterAccessClient) HandlerOption {
+	return func(h *Handler) { h.characterAccess = c }
+}
+
+// WithAdminPortalClient sets the admin-portal client for the WebAdmin* RPCs.
+func WithAdminPortalClient(c AdminPortalClient) HandlerOption {
+	return func(h *Handler) { h.adminPortal = c }
 }
 
 // NewHandler creates a new Handler with the given core client and options.

@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventvocab"
@@ -22,10 +21,6 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
-
-// systemSubjectID is used as the ABAC subject for synthetic location_state
-// queries during location-following.
-const systemSubjectID = "system"
 
 // locationFilterUpdater is the narrow callback locationFollower invokes to
 // add/remove location streams from the bus session's filter set. It replaces
@@ -191,16 +186,18 @@ func (lf *locationFollower) sendSynthetic(
 // buildLocationState queries the world service for location data and builds
 // a location_state proto event.
 func (lf *locationFollower) buildLocationState(ctx context.Context, locationID ulid.ULID) (*corev1.SubscribeResponse, error) {
-	// Use system context for ABAC bypass — these are server-internal queries
-	// not on behalf of a specific character. locationID comes from session.Info
-	// (trusted server-side state), not from client input.
-	sysCtx := access.WithSystemSubject(ctx)
+	// world.SystemCaller() declares system-ness in the caller VALUE — these are
+	// server-internal queries not on behalf of a specific character. locationID
+	// comes from session.Info (trusted server-side state), not from client
+	// input. The caller carries the bare "system" subject AND derives the S1
+	// context marker itself inside world.checkAccess, so this call site passes a
+	// plain ctx and no longer stamps the ambient system marker.
 
 	// Location and exits are best-effort — the location may not exist in the
 	// world model yet (e.g., guest start locations that are only referenced by
 	// ID). We still build the event with whatever data we have.
 	var locInfo eventvocab.LocationStateInfo
-	if loc, err := lf.worldQuerier.GetLocation(sysCtx, systemSubjectID, locationID); err != nil {
+	if loc, err := lf.worldQuerier.GetLocation(ctx, world.SystemCaller(), locationID); err != nil {
 		slog.DebugContext(ctx, "location_state: location not found, using ID only",
 			"location_id", locationID.String())
 		locInfo = eventvocab.LocationStateInfo{ID: locationID.String()}
@@ -213,7 +210,7 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 	}
 
 	var exitList []eventvocab.LocationStateExit
-	if exits, err := lf.worldQuerier.GetExitsByLocation(sysCtx, systemSubjectID, locationID); err == nil {
+	if exits, err := lf.worldQuerier.GetExitsByLocation(ctx, world.SystemCaller(), locationID); err == nil {
 		exitList = convertExits(exits)
 	}
 

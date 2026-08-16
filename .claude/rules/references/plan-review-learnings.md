@@ -13,6 +13,63 @@ and human reviewers. This file is **not** auto-loaded; read it on demand when
 reviewing a plan. jj-specific mechanics from the original notes have been
 converted to native-git equivalents or dropped.
 
+## A criterion phrased as a noun is not a build order (2026-08-10)
+
+> Normative form: engram rule `7zy1161fh1`. Worked case and citations: engram
+> memory `r65waekn3h`.
+
+- **A ROADMAP/SPEC success criterion phrased as a NOUN names a property to
+  establish, not an artifact to author.** "Only after an audit establishes…",
+  "a census with set equality proves…", "a guard test that turns RED at exactly
+  that moment" — the prose supplies a *design brief*, which is far more
+  cognitively available than a search, so the default failure is to skip
+  straight to designing the artifact and then debate only how much ceremony it
+  carries. **Before proposing any new check, gate, audit, census, lint rule,
+  harness or meta-test, search for one that already exists.** Order:
+  prior-phase `.planning/phases/*/` artifacts (`*.sql`, `*AUDIT*`, `*RESULT*`,
+  and each `*-SUMMARY.md`'s `key_files` / `provides` frontmatter) → the tree
+  (`test/meta/`, `.golangci.yaml`, `gorules/`, `Taskfile.yaml`,
+  `internal/testsupport/`) → established OSS tooling. Novel only after stating
+  what it proves that existing coverage does not. **Prefer in-tree > OSS >
+  novel.**
+- **Prior-phase artifacts come FIRST in that order because that is where the
+  duplicate usually is.** The thing you are about to build was frequently built
+  one phase ago, for the other half of the same requirement. Live case
+  (`/gsd-discuss-phase 4`, v0.13): three grades of ceremony were offered for
+  authoring a `characters.description` exposure audit demanded by Phase 4
+  criterion 6 — while
+  `.planning/phases/02-abac-schema-vocabulary/02-AUDIT-profile-public-read.sql`
+  already covered it. Its result sets **(4)** (`:149-160`, non-empty
+  descriptions) and **(5)** (`:163-174`, guest-provisioned characters) read
+  `characters.description` directly, and its own header names "the two
+  `characters`-column rows (name, in-world description)". Phase 2 wrote the
+  audit and deferred only the **policy**; it even shipped an unused
+  `02-REMEDIATION.sql` behind a blocking approval. The maintainer caught it,
+  not the review.
+- **A loaded CONTEXT.md tells you a thing was DECIDED; it does not tell you what
+  got BUILT.** `discuss-phase` had `02-CONTEXT.md` in context, and it names
+  D-12's audit decision — having the deciding `D-NN` available did not trigger
+  looking for the artifact that decision produced. Planning artifacts also live
+  in `.planning/`, outside the code tree, so a code-oriented scout never
+  surfaces them. This is the boundary at which the general "prefer idiomatic,
+  don't invent a bespoke mechanism" preference kept failing: it reads as
+  guidance about *code*.
+- **Do not add a second gate over a property an existing gate already covers.**
+  `01-SPEC.md` §2.6 states the cost directly for the character census: a
+  redundant lint "costs a rule, a suppression vocabulary, and a maintenance
+  surface for coverage the census already has" — and worse, it later becomes
+  the grounds for relaxing the gate that actually works. When a criterion looks
+  like it wants a new gate, first ask which existing gate already fails RED for
+  the case that matters.
+- **Sibling failures already recorded, same family, opposite directions.**
+  Under-scoping: engram `2sgg7pvmbh` — "ALWAYS CHECK BOTH requirement IDs AND
+  success criteria before calling something unneeded" (the D-29 framing error,
+  which is what created Phase 4 criterion 6 in the first place). Vacuity:
+  engram `av7r20vcmg` — six tests in one phase whose assertions sat downstream
+  of the mechanism; ask *what would have to be true for this to fail*. This
+  entry is the over-building direction: an artifact that should not have been
+  authored at all.
+
 ## R2-fix regressions (INV-S5 plan, 2026-05-17 round 3)
 
 - **Global find-replace double-qualification.** When R2 fixes a "bare
@@ -571,10 +628,19 @@ converted to native-git equivalents or dropped.
   (`.golangci.yaml:130`) flag unused params; nolint suppresses by linter name,
   not by individual revive rule. Plans introducing a temporary unused-parameter
   state for staged refactors MUST suppress both: `//nolint:unparam,revive // …`.
-- `task test:int` does NOT accept `--` package args — its package list is
-  hard-coded in `Taskfile.yaml:93-111`. Plans saying `task test:int --
-  ./test/integration/foo/...` are wrong; `task test:int:focus` is the only
-  narrowed variant and it's pinned to `./test/integration/plugin`.
+- `task test:int` **DOES** accept `--` package args. `Taskfile.yaml:289`
+  interpolates `{{.CLI_ARGS | default "./..."}}`, so
+  `task test:int -- ./test/integration/access/...` scopes the run and a bare
+  `task test:int` falls back to `./...`. `task test:int:focus` is a *different*
+  tool — a Ginkgo `-ginkgo.focus=` filter pinned to `./test/integration/plugin`
+  with `-race` hardcoded — not the only narrowing path.
+  > **Corrected 2026-08-08.** This entry previously asserted the opposite and
+  > cited `Taskfile.yaml:93-111`, which is no longer the `test:int` body. The
+  > stale claim survived long enough to re-seed the same defect into a plan, a
+  > planner prompt, and a VALIDATION.md in one session, and to produce a
+  > direct codex-vs-pi contradiction during cross-AI review of Phase 02.1.
+  > **Verify a tooling claim in this file against `Taskfile.yaml` before acting
+  > on it** — line-number citations here drift as the Taskfile moves.
 - **Mocking style varies by package**: `internal/web/` uses hand-rolled struct
   mocks (`mockCoreClient` in `internal/web/handler_test.go:36`); `internal/grpc/`
   uses mockery `EXPECT()` for repos like

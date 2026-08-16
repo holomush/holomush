@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# scripts/codemod/world-caller-decl-internal.yml — rewrite the bare
+# subject-string PARAMETER DECLARATION on a world command to `Caller`,
+# UNQUALIFIED, in files declaring `package world`.
+#
+# Prerequisite: ast-grep 0.45.1 or later. It is NOT installed by `task setup`
+# and is NOT present in CI — this is a local developer step, never a CI gate.
+#
+# Preview:  ast-grep scan -r scripts/codemod/world-caller-decl-internal.yml .
+# Apply:    ast-grep scan -r scripts/codemod/world-caller-decl-internal.yml -U .
+#
+# IDEMPOTENT BY CONSTRUCTION: after the flip the parameter's type text is
+# `Caller`, not `string`, so the `type` regex no longer matches.
+#
+# WHY A SEPARATE FILE AND NOT `ignores:` — internal/world/ mixes `package world`
+# and `package world_test` files and no path glob separates them. The split is
+# structural: this variant asserts the package_clause as a POSITIVE clause in
+# the `all:` list; world-caller-decl.yml wraps the identical block in `not:`.
+# Emitting the `world.`-qualified spelling inside `package world` produces the
+# doubled-package-name failure this repo's plan-review notes catalogue.
+#
+# GROUPED-DECLARATION HAZARD and UNNAMED-PARAMETER BLIND SPOT: identical to
+# world-caller-decl.yml — see that file's header and
+# scripts/codemod/README.md § Hand-migrated surfaces.
+#
+# No `ignores:` — the package-clause scope already restricts this rule to
+# `package world`.
+#
+# Counting: this rule carries a `fix:`, so ast-grep prints a unified diff rather
+# than the `┌─ ` frame. Count hunks with `| rg -c '│\+'`.
+id: world-caller-decl-internal
+language: go
+severity: hint
+rule:
+  kind: parameter_declaration
+  all:
+    # POSITIONAL FENCE (added 02.1-02) — see world-caller-decl.yml for the full
+    # rationale. The subject is ALWAYS parameter 2; without this clause the rule
+    # matches a blank-named `string` parameter at any position once a grouped
+    # declaration has been split by the migration.
+    - nthChild: 2
+    - has: {field: name, pattern: $NAME}
+    - has: {field: type, regex: '^string$'}
+    - not: {regex: ','}
+    - inside:
+        kind: parameter_list
+        inside:
+          any:
+            - kind: method_declaration
+            - kind: function_declaration
+            - kind: method_elem
+          has:
+            field: name
+            regex: '^(GetLocation|CreateLocation|UpdateLocation|DeleteLocation|GetExit|CreateExit|UpdateExit|DeleteExit|GetExitsByLocation|GetObject|CreateObject|UpdateObject|DeleteObject|MoveObject|DeleteCharacter|GetCharacter|UpdateCharacterDescription|GetCharactersByLocation|ListSceneParticipants|MoveCharacter|FindLocationByName|GetObjectsByLocation|ListPropertiesByParent)$'
+    - inside:
+        kind: source_file
+        stopBy: end
+        has:
+          kind: package_clause
+          regex: '^package world$'
+constraints:
+  NAME:
+    regex: '^(subjectID|subject|_)$'
+fix: '$NAME Caller'

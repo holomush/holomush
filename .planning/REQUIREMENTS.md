@@ -93,22 +93,27 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 
 ### Character identity — creation & management (IDENT)
 
-- [ ] **IDENT-01**: A player can create a character through a **structured identity card** (name,
+- [x] **IDENT-01**: A player can create a character through a **structured identity card** (name,
       pronouns as its own field, concept, species, age, faction), replacing the current name-only stub.
 
-- [ ] **IDENT-02**: A player can edit their character's prose fields — appearance, personality,
+- [x] **IDENT-02**: A player can edit their character's prose fields — appearance, personality,
       biography — with **server-enforced length caps**.
 
-- [ ] **IDENT-02a**: A player can edit their character's **in-world description** (the "look at" text) —
+- [x] **IDENT-02a**: A player can edit their character's **in-world description** (the "look at" text) —
       the intrinsic `characters.description` column, already served by
       `world.Service.UpdateCharacterDescription` (`internal/world/service.go:799-836`). This is a
       *column*, not a `profile.*` property row, and is distinct from the profile prose fields above.
 
-- [ ] **IDENT-03**: A player can **rename** their own character.
-- [ ] **IDENT-04**: A player can **soft-retire** their own character; the character leaves active play,
-      its record and name are preserved, and the operation is reversible.
+- [ ] **IDENT-03**: A player can **rename** their own character. **Deferred out of v0.13 on
+      2026-08-06** to backlog Phase 999.20 (linked to 999.6 Rostering): renaming cannot be specified
+      until the identity model gains an approval dimension, which does not exist. Rationale:
+      `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-44.
 
-- [ ] **IDENT-05**: A player can manage **all of their characters from one place** (multi-alt
+- [x] **IDENT-04**: A character can be **soft-retired** (admin-driven in v0.13; player self-retire
+      deferred beyond v0.13); the character leaves active play, its record and name are preserved, and
+      the operation is reversible.
+
+- [x] **IDENT-05**: A player can manage **all of their characters from one place** (multi-alt
       management), including which is default.
 
 - [x] **IDENT-06**: Character names permit non-Latin scripts but are normalized with **NFKC**, stripping
@@ -131,39 +136,39 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       guest path, which provisions characters automatically and at volume. (Amended — see
       `01-SPEC.md` §6.1.3 and §14 row 7.)
 
-- [ ] **IDENT-10**: Every new character mutation carries **`expected_version`** (migration `000049`) and
+- [x] **IDENT-10**: Every new character mutation carries **`expected_version`** (migration `000049`) and
       emits through the **transactional outbox in-transaction**, preserving v0.12's MODEL-03/04
       guarantees.
 
 ### Public profiles & per-field privacy (PROFILE)
 
-- [ ] **PROFILE-01**: A character has a **public profile page at a stable URL** that renders correctly
+- [x] **PROFILE-01**: A character has a **public profile page at a stable URL** that renders correctly
       for a logged-out visitor, with blank fields hiding themselves and an initial-letter avatar
       placeholder.
 
-- [ ] **PROFILE-02**: **Profile and sheet are separate surfaces.** The split ships; the sheet ships
+- [x] **PROFILE-02**: **Profile and sheet are separate surfaces.** The split ships; the sheet ships
       **empty** (mechanical stats require a system that does not exist).
 
-- [ ] **PROFILE-03**: Each profile field carries **server-enforced visibility** of `public` or `private`,
+- [x] **PROFILE-03**: Each profile field carries **server-enforced visibility** of `public` or `private`,
       with sane defaults. Enforcement is by omission from the response, never client-side hiding.
 
-- [ ] **PROFILE-04**: **Profile reachability is its own facet** above the fields: a private profile
+- [x] **PROFILE-04**: **Profile reachability is its own facet** above the fields: a private profile
       returns a not-found-equivalent, never "this profile is private" (which leaks existence).
 
-- [ ] **PROFILE-05**: **Name and pronouns cannot be set private** — they are the minimum public identity.
-- [ ] **PROFILE-06**: The profile carries a **rumors / RP-hooks** field.
-- [ ] **PROFILE-07**: The profile carries a short, volatile **"Currently"** status line.
-- [ ] **PROFILE-08**: The profile carries an **OOC RP-preferences block** (style, availability, content
+- [x] **PROFILE-05**: **Name and pronouns cannot be set private** — they are the minimum public identity.
+- [x] **PROFILE-06**: The profile carries a **rumors / RP-hooks** field.
+- [x] **PROFILE-07**: The profile carries a short, volatile **"Currently"** status line.
+- [x] **PROFILE-08**: The profile carries an **OOC RP-preferences block** (style, availability, content
       limits, walk-up-friendly).
 
-- [ ] **PROFILE-09**: The profile carries a **time zone** field, supporting the availability half of
+- [x] **PROFILE-09**: The profile carries a **time zone** field, supporting the availability half of
       OOC preferences.
 
-- [ ] **PROFILE-10**: The public profile page is built **exclusively** from the viewer-filtered property
+- [x] **PROFILE-10**: The public profile page is built **exclusively** from the viewer-filtered property
       slice; the facade MUST NOT call `PropertyReader.ListByParent` / `PropertyRepository.ListByParent`
       directly (unfiltered by construction).
 
-- [ ] **PROFILE-10a**: The public profile **also renders the character's in-world description** (the
+- [x] **PROFILE-10a**: The public profile **also renders the character's in-world description** (the
       "look at" text, `characters.description`) alongside the `profile.*` property fields — so a web
       visitor sees what someone standing in the same location would see. Because this is an intrinsic
       column with no per-row `visibility`, its visibility handling is a **SPEC decision** (PORTAL-05):
@@ -176,39 +181,44 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
       only after an audit of existing rows where `parent_type='character' AND visibility='public'`, and
       of existing character descriptions, because the policy widens read access to all of them.
 
-- [ ] **PROFILE-12**: The retirement flow and the surface where a player authors profile fields
+- [x] **PROFILE-12**: The retirement flow and the surface where a player authors profile fields
       **state in the UI** that privacy is not retroactive over already-published history. (Amended —
       the visibility toggle this originally named does not exist; visibility is game configuration,
       not an owner control. See `01-SPEC.md` §14 row 3. The retirement half is unchanged.)
 
 ### Admin portal shell & character administration (ADMIN)
 
-- [ ] **ADMIN-01**: `/admin` exists, is **`RoleAdmin`-gated via ABAC** (`admin_section:` resource + seed
+- [x] **ADMIN-01**: `/admin` exists, is **`RoleAdmin`-gated via ABAC** (`admin_section:` resource + seed
       policy) — never a bare `PlayerHasRole` lookup, and never a route-guard or gateway decision.
 
-- [ ] **ADMIN-02**: **Every admin RPC re-asserts its own authorization gate** through one shared helper
+- [x] **ADMIN-02**: **Every admin RPC re-asserts its own authorization gate** through one shared helper
       called first at every entry point, with typed `DENY_*` codes.
 
-- [ ] **ADMIN-03**: An admin can **list and search characters**, view character detail, and edit
+- [x] **ADMIN-03**: An admin can **list and search characters**, view character detail, and edit
       character fields.
 
-- [ ] **ADMIN-04**: The admin character-edit surface uses an explicit **field-mask allowlist that
+- [x] **ADMIN-04**: The admin character-edit surface uses an explicit **field-mask allowlist that
       excludes roles**. Role mutation is out of scope for this milestone (PORTAL-08).
 
-- [ ] **ADMIN-05**: Admin disable/delete reuses the **same lifecycle states** as player-initiated retire;
+- [x] **ADMIN-05**: Admin disable/delete reuses the **same lifecycle states** as player-initiated retire;
       the irreversible `DeleteCharacter` path (which cascades `entity_properties` and emits a tombstone
       in one transaction) is **never wired to a player-facing button**.
 
-- [ ] **ADMIN-06**: **Every admin mutation emits an audit envelope** in the same transaction as its
-      state change, recording **before-values** and the acting **player** id (not only the
-      character). The `events_audit` row is **projected** from that envelope by the asynchronous
-      audit projection, which is the only writer to that table — an admin mutation MUST NOT insert
-      into `events_audit` directly. (Amended — see `01-SPEC.md` §10.7 and §14 row 9.)
+- [x] **ADMIN-06**: **Every admin mutation emits an audit envelope** in the same transaction as its
+      state change, recording the acting **player** id (not only the character); lifecycle
+      transitions additionally record **before-values**, while profile updates are new-values-only
+      by D-103 erasure-safety and record none. An admin mutation MUST NOT insert into
+      `events_audit` directly. (Amended — see `01-SPEC.md` §10.7 and §14 row 9.)
+      (Amended again 2026-08-14 — the **projection** of that envelope into `events_audit` is out of
+      scope: the world outbox relay publishes through a bare `JetStreamPublisher` and the audit
+      projector requires an `App-Rendering` header only `RenderingPublisher` writes, so no relayed
+      world envelope is projected today. Tracked in #4971; ROADMAP phase-6 criterion 3 carries the
+      matching amendment.)
 
-- [ ] **ADMIN-07**: Admin navigation is **permission-filtered by registry contract**, not by template
+- [x] **ADMIN-07**: Admin navigation is **permission-filtered by registry contract**, not by template
       `{#if}` blocks.
 
-- [ ] **ADMIN-08**: `WebCheckSessionResponse` exposes roles for **nav hiding only** — never as the
+- [x] **ADMIN-08**: `WebCheckSessionResponse` exposes roles for **nav hiding only** — never as the
       authorization boundary.
 
 ### Extensibility headroom (EXT)
@@ -216,33 +226,49 @@ Eight of the fourteen catalogued pitfalls are SPEC-phase decisions whose cost ex
 The milestone's defining constraint, made structural. These are separate REQ-IDs specifically so they
 cannot be dropped as "nice to have" during planning.
 
-- [ ] **EXT-01**: The admin section registry ships **seven entries** — `characters` available, and six
+- [x] **EXT-01**: The admin section registry ships **seven entries** — `characters` available, and six
       **`planned`**: stats, players, moderation, audit, config, plugins.
 
-- [ ] **EXT-02**: The six deferred sections ship **registered, role-gated, and returning
+- [x] **EXT-02**: The six deferred sections ship **registered, role-gated, and returning
       `NOT_IMPLEMENTED` *after* the gate**, so wiring one later replaces a handler body rather than
       requiring someone to remember to add a check.
 
-- [ ] **EXT-03**: A registry entry requires an **authorization descriptor with no default and no zero
+- [x] **EXT-03**: A registry entry requires an **authorization descriptor with no default and no zero
       value meaning allow**; a section registered without one fails at compile time or at boot.
 
-- [ ] **EXT-04**: A **meta-test asserts set equality** between the section registry and the descriptor
+- [x] **EXT-04**: A **meta-test asserts set equality** between the section registry and the descriptor
       set, so the extensibility guarantee is non-vacuous from day one.
 
-- [ ] **EXT-05**: The media model is proven by **inserting 1 primary + 10 gallery property rows through
+- [x] **EXT-05**: The media model is proven by **inserting 1 primary + 10 gallery property rows through
       the real schema** in v0.13, with no uploader — demonstrating the "no migration later" claim rather
       than asserting it. `UNIQUE(parent_type,parent_id,name)` enforces exactly-one-primary in the
       database.
 
-- [ ] **EXT-06**: The proto ships the media shape now, empty — `ProfileImage{media_id, alt_text,
+- [x] **EXT-06**: The proto ships the media shape now, empty — `ProfileImage{media_id, alt_text,
       content_warning}` + `primary_image` + `repeated gallery [max_items = 10]` — giving alt-text and
       content-warning somewhere to live before moderation exists.
 
 - [x] **EXT-07**: `seed:admin-section-access` covers all seven sections **and every future section at
       zero additional policy cost**.
 
-- [ ] **EXT-08**: Deferred surfaces get a **named empty slot, not a dead affordance** — specifically, no
+- [x] **EXT-08**: Deferred surfaces get a **named empty slot, not a dead affordance** — specifically, no
       "message this character" button on the profile until web DMs (`qve.17`) exist.
+
+### Authorization model (AUTHZ)
+
+Minted 2026-08-08 during `/gsd-discuss-phase 02.1` (maintainer-authorized). The family covers the
+world caller model (Phase 02.1) and the background-job authorization model (Phase 02.2).
+
+- [x] **AUTHZ-01**: Every public `world.Service` command takes a **typed caller value** carrying
+      the subject and its execution context together — no bare `subjectID string` parameter and no
+      overload/variadic escape hatch — and `checkAccess` forwards that context to
+      `types.NewAccessRequest` (deleting the hardcoded `nil` at `internal/world/service.go:214`),
+      so a world write can be conditioned on `action.*` attributes in the policy DSL.
+
+- [x] **AUTHZ-02**: Background jobs act under a **first-class `job:` principal** with
+      liveness-gated attributes and per-execution provenance (`action.job.*`), so a job's
+      authority is scoped to the work it is currently performing — a job that grows an undeclared
+      write path or derives the wrong resource is **denied**, not granted blanket capability.
 
 ---
 
@@ -327,10 +353,11 @@ Which phases cover which requirements. Filled during roadmap creation.
 |-------|------|--------------|
 | 1 | Portal SPEC | 10 (PORTAL-01..10) |
 | 2 | ABAC & Schema Vocabulary | 6 (IDENT-06..09, PROFILE-11, EXT-07) |
-| 3 | World Character Commands | 3 (IDENT-03, IDENT-04, IDENT-10) |
+| 3 | World Character Commands | 2 (IDENT-04, IDENT-10) — IDENT-03 deferred to 999.20 on 2026-08-06 |
 | 4 | Shared Facade Helpers & `CharacterAccessService` | 7 (IDENT-02, IDENT-02a, PROFILE-03/04/05/10, EXT-06) |
 | 5 | Character Identity UI & Public Profiles | 12 (IDENT-01, IDENT-05, PROFILE-01/02/06/07/08/09/10a/12, EXT-05, EXT-08) |
-| 6 | Admin Portal Shell & Character Administration | 12 (ADMIN-01..08, EXT-01..04) |
+| 6 | Admin Portal Shell & Character Administration | 10 (ADMIN-01, 02, 04, 05, 06, 08, EXT-01..04) |
+| 6.1 | Admin Portal Web Surface | 2 (ADMIN-03, ADMIN-07) |
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -345,42 +372,44 @@ Which phases cover which requirements. Filled during roadmap creation.
 | PORTAL-09 | Phase 1 | Pending |
 | PORTAL-10 | Phase 1 | Pending |
 | IDENT-01 | Phase 5 | Pending |
-| IDENT-02 | Phase 4 | Pending |
-| IDENT-02a | Phase 4 | Pending |
-| IDENT-03 | Phase 3 | Pending |
-| IDENT-04 | Phase 3 | Pending |
+| IDENT-02 | Phase 4 | Complete |
+| IDENT-02a | Phase 4 | Complete |
+| IDENT-03 | Backlog 999.20 | Pending |
+| IDENT-04 | Phase 3 | Complete |
 | IDENT-05 | Phase 5 | Pending |
 | IDENT-06 | Phase 2 | Pending |
 | IDENT-07 | Phase 2 | Pending |
 | IDENT-08 | Phase 2 | Pending |
 | IDENT-09 | Phase 2 | Pending |
-| IDENT-10 | Phase 3 | Pending |
+| IDENT-10 | Phase 3 | Complete |
 | PROFILE-01 | Phase 5 | Pending |
 | PROFILE-02 | Phase 5 | Pending |
-| PROFILE-03 | Phase 4 | Pending |
-| PROFILE-04 | Phase 4 | Pending |
-| PROFILE-05 | Phase 4 | Pending |
+| PROFILE-03 | Phase 4 | Complete |
+| PROFILE-04 | Phase 4 | Complete |
+| PROFILE-05 | Phase 4 | Complete |
 | PROFILE-06 | Phase 5 | Pending |
 | PROFILE-07 | Phase 5 | Pending |
 | PROFILE-08 | Phase 5 | Pending |
 | PROFILE-09 | Phase 5 | Pending |
-| PROFILE-10 | Phase 4 | Pending |
+| PROFILE-10 | Phase 4 | Complete |
 | PROFILE-10a | Phase 5 | Pending |
 | PROFILE-11 | Phase 2 | Pending |
 | PROFILE-12 | Phase 5 | Pending |
 | ADMIN-01 | Phase 6 | Pending |
 | ADMIN-02 | Phase 6 | Pending |
-| ADMIN-03 | Phase 6 | Pending |
+| ADMIN-03 | Phase 6.1 | Pending |
 | ADMIN-04 | Phase 6 | Pending |
 | ADMIN-05 | Phase 6 | Pending |
 | ADMIN-06 | Phase 6 | Pending |
-| ADMIN-07 | Phase 6 | Pending |
+| ADMIN-07 | Phase 6.1 | Pending |
 | ADMIN-08 | Phase 6 | Pending |
 | EXT-01 | Phase 6 | Pending |
 | EXT-02 | Phase 6 | Pending |
 | EXT-03 | Phase 6 | Pending |
 | EXT-04 | Phase 6 | Pending |
 | EXT-05 | Phase 5 | Pending |
-| EXT-06 | Phase 4 | Pending |
+| EXT-06 | Phase 4 | Complete |
 | EXT-07 | Phase 2 | Pending |
 | EXT-08 | Phase 5 | Pending |
+| AUTHZ-01 | Phase 02.1 | Pending |
+| AUTHZ-02 | Phase 02.2 | Complete |

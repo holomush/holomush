@@ -36,6 +36,7 @@ type ABACStack struct {
 	AuditLogger     *audit.Logger
 	PolicyInstaller *plugins.PolicyInstaller
 	PluginProvider  *attribute.PluginProvider
+	JobProvider     *attribute.JobProvider
 	sqlDB           *sql.DB
 }
 
@@ -129,12 +130,38 @@ type ABACConfig struct {
 	// and no failing test (RESEARCH P-7's failure mode). Production wiring at
 	// internal/access/setup/subsystem.go passes roleStore.PlayerRoles.
 	PlayerRoleLookup attribute.PlayerRoleLookup
+	// JobRegistry is the liveness registry for background jobs
+	// (internal/jobs.Registry satisfies it). It feeds JobProvider, which
+	// populates principal.job.* for job:<name> subjects.
+	//
+	// NIL IS TOLERATED AND FAILS CLOSED, which is the difference between this
+	// field and the repo fields above: a nil registry makes the provider answer
+	// "not running" for every job, so principal.job.* is absent, every
+	// job-gating seed default-denies, and an entrypoint that runs no background
+	// jobs needs no wiring. The provider still registers, so the `job`
+	// namespace is known to the resolver either way. Per 02.2-CONTEXT D-49.
+	JobRegistry attribute.JobRegistry
 }
 
-// BuildABACStack constructs and wires all ABAC components in the correct dependency order:
-// policy store, cache (with initial reload), attribute resolver and providers, policy engine,
-// audit logger, health tracker, poller, and policy installer. If cfg.AuditMode is empty it
-// defaults to denials-only.
+// BuildABACStack constructs and wires all ABAC components in the correct
+// dependency order: policy store, attribute schema registry and resolver, every
+// attribute provider, the `action` namespace schema, the compiler (built on that
+// now-populated registry), the cache and its initial reload, the seed-coverage
+// sweep, the audit logger, the policy engine, the health tracker, the poller, and
+// the policy installer. If cfg.AuditMode is empty it defaults to denials-only.
+//
+// The registry-and-registrations-before-compiler-before-reload segment of that
+// order is a correctness constraint, not a preference (02.2-04 / D-66). The
+// compiler validates against the registry the providers and the `action`
+// registration populate, so compiling the boot snapshot ahead of them would
+// validate boot against an empty schema while every later reload validated
+// against a populated one. See the comments at steps 11 and 12.
+//
+// A consequence worth stating at the entry point: THIS FUNCTION NOW FAILS BOOT ON
+// A BAD POLICY. A stored policy referencing an undeclared action.* key fails to
+// compile, which fails the reload, which fails this call — for in-tree seeds and
+// operator-authored database rows alike (D-67). The error names the policy, its
+// id, and the offending key.
 // codecov:ignore — tested by integration and E2E tests
 func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	eb := oops.In("abac_setup")
@@ -146,17 +173,14 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	// 1. Policy store
 	ps := policystore.NewPostgresStore(cfg.Pool)
 
-	// 2-3. Schema and compiler
-	schema := types.NewAttributeSchema()
-	compiler := policy.NewCompiler(schema)
-
-	// 4-5. Cache with initial load
-	cache := policy.NewCache(ps, compiler)
-	if err := cache.Reload(ctx); err != nil {
-		return nil, eb.Wrapf(err, "cache initial reload failed")
-	}
-
-	// 6-7. Attribute resolver
+	// 2-3. Attribute schema registry and resolver.
+	//
+	// These now come FIRST. Until 02.2-04 the compiler at what was step 2 was
+	// built on a separately allocated types.AttributeSchema that nothing ever
+	// populated, so validateAttributes saw an empty schema and every attribute
+	// reference — including the `action` hard-error branch — was skipped. The
+	// compiler is built from schemaReg below instead, which means the whole
+	// ordering of this function is now load-bearing.
 	schemaReg := attribute.NewSchemaRegistry()
 	resolver := attribute.NewResolver(schemaReg)
 
@@ -322,7 +346,100 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		return nil, eb.Wrapf(err, "register plugin provider")
 	}
 
-	// 10a. Seed-coverage validator (holomush-xxel). After all providers are
+	// 10a. Job provider (background-job principals; 02.2 AUTHZ-02). It resolves
+	// principal.job.{name,...} for job:<name> subjects, gated on the liveness
+	// registry. cfg.JobRegistry is nil-tolerant: a nil registry fails closed for
+	// every job, which is correct for an entrypoint that runs none.
+	//
+	// REGISTERING IT IS NOT OPTIONAL once a seed references principal.job.*.
+	// Without this step no provider owns the `job` namespace, so every such seed
+	// silently default-denies with no startup signal — the holomush-g776 / xxel
+	// bug class. Its PLACEMENT is load-bearing too: it must precede
+	// warnOnMissingSeedCoverage below, so `job` is already in
+	// resolver.RegisteredNamespaces() when the corpus sweep runs.
+	jobProvider := attribute.NewJobProvider(cfg.JobRegistry)
+	if err := resolver.RegisterProvider(jobProvider); err != nil {
+		return nil, eb.Wrapf(err, "register job provider")
+	}
+
+	// 10b. Action namespace schema (02.2 D-60). `action` is a caller-supplied
+	// bag, not an entity that gets resolved, so it is registered by a direct
+	// package-level Register call rather than through a synthetic provider whose
+	// ResolveSubject/ResolveResource would return (nil, nil) purely to carry a
+	// Schema(). attribute.ActionNamespaceSchema is the single source of truth for
+	// the key set; its provenance is
+	// .planning/phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md.
+	//
+	// STATUS: LOAD-BEARING as of 02.2-04 (D-66). The compiler built immediately
+	// below is constructed on schemaReg.Schema(), so validateAttributes sees
+	// HasNamespace("action") == true and its hard-error branch is live: a policy
+	// referencing an undeclared action.* key fails to compile, which fails the
+	// reload below, which fails this function, which fails boot. That is
+	// deliberate and applies to EVERY policy source — in-tree seeds,
+	// operator-authored database rows, and plugin-manifest policies alike (D-67).
+	//
+	// Plugin policies reach the same verdict through a DIFFERENT door: they are
+	// compiled under an equivalent action-only gate at INSTALL time
+	// (internal/plugin/policy_installer.go actionGate), so a bad manifest fails
+	// that plugin's load instead of persisting a row that would fail this reload
+	// — and every subsequent one — corpus-wide. Do not read "applies to every
+	// source" as "every source is caught here"; this line catches two of the
+	// three, and the third is caught earlier on purpose.
+	//
+	// (Until 02.2-04 this registration was a documented no-op, because the
+	// compiler was built on a separate, never-populated schema. 02.2-CONTEXT D-59
+	// described both a landmine and a benefit here; its own AMENDED banner records
+	// that research finding F1 falsified both AS MECHANISM. This step is what D-59
+	// intended; the wiring below is what delivers it.)
+	if err := attribute.Register(schemaReg, "action", attribute.ActionNamespaceSchema()); err != nil {
+		return nil, eb.Wrapf(err, "register action namespace schema")
+	}
+
+	// 11. Compiler, built on the registry the steps above populated.
+	//
+	// SchemaRegistry.Schema() returns the LIVE *types.AttributeSchema pointer
+	// (attribute/schema.go:96-99), so relative CONSTRUCTION order against the
+	// registrations does not matter — only relative COMPILE order does, which is
+	// what step 12 is positioned for.
+	//
+	// Sharing the live pointer means this compiler reads the same map that
+	// attribute.Resolver's plugin-driven RegisterProvider/UnregisterProvider
+	// writes, and the poller below compiles on its own goroutine. That is safe by
+	// construction: types.AttributeSchema guards its map internally (see its doc
+	// comment). Do NOT swap this for a snapshot to "avoid sharing" — the sharing
+	// is what makes boot and steady state validate identically, and it is the
+	// whole point of this line.
+	compiler := policy.NewCompiler(schemaReg.Schema())
+
+	// 12. Cache, with the initial load.
+	//
+	// THE RELOAD'S POSITION IS THE POINT, not an accident of layout. It used to
+	// run near the top of this function, before any provider or the `action`
+	// schema had registered. Once the compiler is wired to schemaReg (step 11),
+	// reloading there would compile the BOOT snapshot against a still-empty
+	// registry while every subsequent poller and invalidation reload compiled
+	// against a populated one — different validation behaviour at boot than at
+	// steady state, so a bad policy would sail through boot and then kill the
+	// first reload with no operator anywhere near the console. That is strictly
+	// worse than the uniform no-op it replaced (research Pitfall 2; threat
+	// T-02.2-18). Moving the reload here makes boot and steady state validate
+	// identically.
+	//
+	// Nothing between the registry allocation and this line reads `cache`; the
+	// health tracker, the ps.SetOnMutate invalidation hook and the poller are all
+	// constructed further down (research assumption A4, traced 2026-08-09).
+	// TestBuildABACStackReloadsTheCacheAfterTheActionRegistration pins the order
+	// so a future edit cannot quietly undo it.
+	cache := policy.NewCache(ps, compiler)
+	if err := cache.Reload(ctx); err != nil {
+		return nil, eb.Wrapf(err, "cache initial reload failed")
+	}
+
+	// 13. Seed-coverage validator (holomush-xxel). Renumbered repeatedly as steps
+	// were inserted ahead of it — the job provider took 10a, the `action` schema
+	// registration is 10b, and 02.2-04 moved the compiler and the cache reload to
+	// 11 and 12 — so the labels keep reading in execution order.
+	// After all providers are
 	// registered, walk the seed corpus and WARN per namespace referenced by
 	// any seed but not registered. Catches the holomush-g776 / xxel bug
 	// class at construction time: a missing provider means every seed
@@ -334,29 +451,29 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	// level sweep that catches a missing provider regardless of cause.
 	warnOnMissingSeedCoverage(ctx, resolver.RegisteredNamespaces(), policy.SeedPolicies())
 
-	// 10-11. SQL bridge for audit writer
+	// 14. SQL bridge for audit writer
 	sqlDB := stdlib.OpenDBFromPool(cfg.Pool)
 	if err := sqlDB.PingContext(ctx); err != nil {
 		_ = sqlDB.Close() //nolint:errcheck // best-effort cleanup; ping error takes precedence
 		return nil, eb.Wrapf(err, "sql bridge ping failed")
 	}
 
-	// 12-13. Audit logger
+	// 15. Audit logger
 	writer := audit.NewPostgresWriter(sqlDB)
 	auditLogger := audit.NewLogger(cfg.AuditMode, writer, "")
 
-	// 14. Replay WAL (non-fatal)
+	// 16. Replay WAL (non-fatal)
 	if err := auditLogger.ReplayWAL(ctx); err != nil {
 		slog.WarnContext(ctx, "audit WAL replay failed (non-fatal)", "error", err)
 	}
 
-	// 15. Session resolver (no-op — fails closed)
+	// 17. Session resolver (no-op — fails closed)
 	sessionRes := &noopSessionResolver{}
 
-	// 16. Engine
+	// 18. Engine
 	engine := policy.NewEngine(resolver, cache, sessionRes, auditLogger)
 
-	// 17. Health tracker for policy cache
+	// 19. Health tracker for policy cache
 	healthTracker := lifecycle.NewHealthTracker(lifecycle.TrackerConfig{
 		SubsystemName: "abac.policy-cache",
 		GracePeriod:   60 * time.Second,
@@ -375,7 +492,7 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		},
 	})
 
-	// 18. Wire store → cache invalidation (fast path).
+	// 20. Wire store → cache invalidation (fast path).
 	// Use a detached context so invalidation isn't cancelled if the request context expires.
 	ps.SetOnMutate(func(ctx context.Context) {
 		invalidateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -389,7 +506,7 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		}
 	})
 
-	// 19. Create poller (safety net)
+	// 21. Create poller (safety net)
 	poller, pollerErr := policy.NewPoller(policy.PollerConfig{
 		Querier:  ps,
 		Reloader: cache,
@@ -400,7 +517,7 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		return nil, eb.Wrapf(pollerErr, "create policy poller")
 	}
 
-	// 20. Policy installer
+	// 22. Policy installer
 	installer := plugins.NewPolicyInstaller(ps)
 
 	return &ABACStack{
@@ -413,6 +530,7 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		AuditLogger:     auditLogger,
 		PolicyInstaller: installer,
 		PluginProvider:  pluginProvider,
+		JobProvider:     jobProvider,
 		sqlDB:           sqlDB,
 	}, nil
 }

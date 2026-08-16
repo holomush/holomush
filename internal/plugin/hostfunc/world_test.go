@@ -30,28 +30,28 @@ type mockWorldQuerier struct {
 }
 
 // WorldMutator read methods (with subjectID for ABAC)
-func (m *mockWorldQuerier) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *mockWorldQuerier) GetLocation(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.location, nil
 }
 
-func (m *mockWorldQuerier) GetCharacter(_ context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+func (m *mockWorldQuerier) GetCharacter(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Character, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.character, nil
 }
 
-func (m *mockWorldQuerier) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+func (m *mockWorldQuerier) GetCharactersByLocation(_ context.Context, _ world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.characters, nil
 }
 
-func (m *mockWorldQuerier) GetObject(_ context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+func (m *mockWorldQuerier) GetObject(_ context.Context, _ world.Caller, _ ulid.ULID) (*world.Object, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -59,27 +59,27 @@ func (m *mockWorldQuerier) GetObject(_ context.Context, _ string, _ ulid.ULID) (
 }
 
 // WorldMutator write methods
-func (m *mockWorldQuerier) CreateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *mockWorldQuerier) CreateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (m *mockWorldQuerier) CreateExit(_ context.Context, _ string, _ *world.Exit) error {
+func (m *mockWorldQuerier) CreateExit(_ context.Context, _ world.Caller, _ *world.Exit) error {
 	return nil
 }
 
-func (m *mockWorldQuerier) CreateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *mockWorldQuerier) CreateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (m *mockWorldQuerier) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *mockWorldQuerier) UpdateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (m *mockWorldQuerier) UpdateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *mockWorldQuerier) UpdateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (m *mockWorldQuerier) FindLocationByName(_ context.Context, _, _ string) (*world.Location, error) {
+func (m *mockWorldQuerier) FindLocationByName(_ context.Context, _ world.Caller, _ string) (*world.Location, error) {
 	return nil, world.ErrNotFound
 }
 
@@ -516,7 +516,7 @@ type contextAwareWorldQuerier struct {
 }
 
 // WorldMutator read methods (with subjectID for ABAC)
-func (m *contextAwareWorldQuerier) GetLocation(ctx context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+func (m *contextAwareWorldQuerier) GetLocation(ctx context.Context, _ world.Caller, _ ulid.ULID) (*world.Location, error) {
 	if m.ctxChan != nil {
 		select {
 		case m.ctxChan <- ctx:
@@ -529,7 +529,7 @@ func (m *contextAwareWorldQuerier) GetLocation(ctx context.Context, _ string, _ 
 	return &world.Location{ID: ulid.Make(), Name: "Test"}, nil
 }
 
-func (m *contextAwareWorldQuerier) GetCharacter(ctx context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+func (m *contextAwareWorldQuerier) GetCharacter(ctx context.Context, _ world.Caller, _ ulid.ULID) (*world.Character, error) {
 	if m.ctxChan != nil {
 		select {
 		case m.ctxChan <- ctx:
@@ -542,7 +542,7 @@ func (m *contextAwareWorldQuerier) GetCharacter(ctx context.Context, _ string, _
 	return &world.Character{ID: ulid.Make(), Name: "Test"}, nil
 }
 
-func (m *contextAwareWorldQuerier) GetCharactersByLocation(ctx context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+func (m *contextAwareWorldQuerier) GetCharactersByLocation(ctx context.Context, _ world.Caller, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	if m.ctxChan != nil {
 		select {
 		case m.ctxChan <- ctx:
@@ -555,7 +555,7 @@ func (m *contextAwareWorldQuerier) GetCharactersByLocation(ctx context.Context, 
 	return []*world.Character{}, nil
 }
 
-func (m *contextAwareWorldQuerier) GetObject(ctx context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+func (m *contextAwareWorldQuerier) GetObject(ctx context.Context, _ world.Caller, _ ulid.ULID) (*world.Object, error) {
 	if m.ctxChan != nil {
 		select {
 		case m.ctxChan <- ctx:
@@ -569,27 +569,27 @@ func (m *contextAwareWorldQuerier) GetObject(ctx context.Context, _ string, _ ul
 }
 
 // WorldMutator write methods
-func (m *contextAwareWorldQuerier) CreateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *contextAwareWorldQuerier) CreateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (m *contextAwareWorldQuerier) CreateExit(_ context.Context, _ string, _ *world.Exit) error {
+func (m *contextAwareWorldQuerier) CreateExit(_ context.Context, _ world.Caller, _ *world.Exit) error {
 	return nil
 }
 
-func (m *contextAwareWorldQuerier) CreateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *contextAwareWorldQuerier) CreateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (m *contextAwareWorldQuerier) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+func (m *contextAwareWorldQuerier) UpdateLocation(_ context.Context, _ world.Caller, _ *world.Location) error {
 	return nil
 }
 
-func (m *contextAwareWorldQuerier) UpdateObject(_ context.Context, _ string, _ *world.Object) error {
+func (m *contextAwareWorldQuerier) UpdateObject(_ context.Context, _ world.Caller, _ *world.Object) error {
 	return nil
 }
 
-func (m *contextAwareWorldQuerier) FindLocationByName(_ context.Context, _, _ string) (*world.Location, error) {
+func (m *contextAwareWorldQuerier) FindLocationByName(_ context.Context, _ world.Caller, _ string) (*world.Location, error) {
 	return nil, world.ErrNotFound
 }
 

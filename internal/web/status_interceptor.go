@@ -39,6 +39,12 @@ func grpcToConnectCode(c codes.Code) connect.Code {
 		return connect.CodeDeadlineExceeded
 	case codes.Canceled:
 		return connect.CodeCanceled
+	case codes.Aborted:
+		// The optimistic-concurrency conflict the character mutation surface
+		// returns (01-SPEC §9.6). It MUST stay distinguishable from a server
+		// fault: the client's whole recovery is "re-read and retry", which it
+		// cannot decide to do from a CodeInternal.
+		return connect.CodeAborted
 	default:
 		return connect.CodeInternal
 	}

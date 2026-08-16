@@ -75,6 +75,14 @@
   // Desktop ⇄ mobile: the three-pane Resizable layout is desktop-only. Below the
   // md breakpoint the mobile header + Sheets (shipped in q41kr) take over, so the
   // panes never mount there.
+  //
+  // This hook and the `md:` Tailwind utilities below now resolve against the
+  // same reference (the browser's initial font size), so they flip together.
+  // That pairing was a live unit split until plan 06.1-07 — the hook was px, the
+  // utilities rem — and in the band between the two boundaries the desktop
+  // three-pane and the mobile header bar were both on screen. This file needed
+  // no code change: the fix landed in the shared hook and reached here through
+  // isDesktop(). Do not add a second query here.
   const desktop = isDesktop();
 
   // paneforge imperative handles for the collapsible left/right panes.

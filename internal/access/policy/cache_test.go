@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // --- Mock PolicyStore ---
@@ -507,4 +509,111 @@ func TestCoalescingOverlappingInvalidations(t *testing.T) {
 
 	assert.Equal(t, initialCalls+2, ms.calls.Load(),
 		"overlapping invalidations should coalesce into one re-reload")
+}
+
+// --- The live `action` gate at the action-only compilation sites (02.2-04) ---
+//
+// Sites 2 and 3 of the D-66 inventory — the bootstrap seed installer
+// (internal/bootstrap/setup/subsystem.go) and the WithRealABAC harness
+// (internal/testsupport/integrationtest/real_abac.go) — build their compiler on
+// attribute.NewActionOnlySchemaRegistry().Schema(). Neither has a provider set to
+// draw on: at both, seeding runs before (or independently of) any provider
+// registration. These tests pin what that registry does and, just as importantly,
+// what it does NOT do.
+
+// TestActionOnlyCompilerRejectsAnUndeclaredActionKey pins the seed-installation
+// half of D-67: the compiler sites 2 and 3 build carries the live gate, so a seed
+// with a typo'd action.* key fails at INSTALL rather than installing and only
+// blowing up at a later cache.Reload.
+//
+// Why this asserts the compiler rather than driving policy.Bootstrap with a bad
+// seed: Bootstrap compiles policy.SeedPolicies(), a fixed function with no
+// injection seam, so "a seed set containing one bad policy" is not constructible.
+// The two halves that compose the property are each pinned — that a compile error
+// is FATAL to Bootstrap is TestBootstrapCompilationErrorIsFatal; that this
+// compiler produces one for an undeclared action.* key is here.
+func TestActionOnlyCompilerRejectsAnUndeclaredActionKey(t *testing.T) {
+	t.Parallel()
+
+	compiler := NewCompiler(attribute.NewActionOnlySchemaRegistry().Schema())
+
+	_, _, err := compiler.Compile(
+		`permit(principal, action, resource) when { action.typo_key == "x" };`,
+	)
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "POLICY_UNREGISTERED_ACTION_ATTRIBUTE")
+	assert.Contains(t, err.Error(), "action.typo_key")
+}
+
+// TestCacheReloadRejectsAnOperatorAuthoredRowWithAnUndeclaredActionKey is the
+// whole content of D-67: the branch is fatal for ALL policy sources, not just
+// in-tree seeds.
+//
+// The distinguishing detail is Source — this row did not come from
+// policy.SeedPolicies(), it is the shape an operator's INSERT into the policies
+// table produces, and it is driven through the same Cache.Reload the production
+// poller and invalidation paths use. A deployment carrying such a row fails to
+// boot on upgrade; that consequence was accepted knowingly, and the compensating
+// control is that the failure names the row precisely enough to fix by hand.
+func TestCacheReloadRejectsAnOperatorAuthoredRowWithAnUndeclaredActionKey(t *testing.T) {
+	t.Parallel()
+
+	compiler := NewCompiler(attribute.NewActionOnlySchemaRegistry().Schema())
+	ms := &mockPolicyStore{policies: []*store.StoredPolicy{{
+		ID:      "01JQ00000000000000000000D1",
+		Name:    "operator-authored-audit-grant",
+		Source:  "admin",
+		DSLText: `permit(principal, action, resource) when { action.event_type == "core-comm:whisper" };`,
+		Enabled: true,
+	}}}
+
+	err := NewCache(ms, compiler).Reload(context.Background())
+
+	require.Error(t, err, "an operator-authored row is NOT exempt from the action gate (D-67)")
+	errutil.AssertErrorCode(t, err, "POLICY_UNREGISTERED_ACTION_ATTRIBUTE")
+	got := err.Error()
+	assert.Contains(t, got, "operator-authored-audit-grant", "the failure MUST name the offending policy")
+	assert.Contains(t, got, "01JQ00000000000000000000D1", "the failure MUST name the row's DB id")
+	assert.Contains(t, got, "action.event_type", "the failure MUST name the offending key")
+}
+
+// TestActionOnlyRegistrySkipsEveryRootItDoesNotCarry pins the mechanism that
+// makes an action-only registry the CORRECT scope for sites 2 and 3 rather than a
+// lossy stand-in for the full production stack.
+//
+// The compiler validates by DSL ROOT — the grammar constrains every root to
+// exactly principal | resource | action | env, and collectAttrRefs sets namespace
+// to that root with key as the whole dotted remainder. So
+// `resource.character.anything` is looked up as namespace "resource", key
+// "character.anything"; the mechanism is NOT HasNamespace("character"), and a
+// provider name is never a namespace the compiler looks up at all.
+//
+// Two consequences this test asserts together:
+//
+//	(a) `action` IS a grammar root, so registering it makes the hard-error branch
+//	    live — identically at every compilation site.
+//	(b) Every OTHER root is unregistered here, so references under them are
+//	    skipped, producing neither an error nor a warning. Do not restate this as
+//	    "fatal is uniform across sites, WARN is not" — that is false. WARN fires
+//	    only for an unregistered KEY inside a REGISTERED ROOT (see
+//	    TestCompileUnknownAttributeInRegisteredNamespaceWarns, which registers a
+//	    namespace literally named "resource").
+func TestActionOnlyRegistrySkipsEveryRootItDoesNotCarry(t *testing.T) {
+	t.Parallel()
+
+	reg := attribute.NewActionOnlySchemaRegistry()
+	require.True(t, reg.HasNamespace("action"), "(a) the action root MUST be registered")
+	require.False(t, reg.HasNamespace("resource"),
+		"(b) control: no `resource` ROOT namespace here — the warning path below is unreachable "+
+			"by construction, which is what makes the zero-warning assertion meaningful")
+
+	policy, warnings, err := NewCompiler(reg.Schema()).Compile(
+		`permit(principal, action, resource) when { resource.character.anything == "x" };`,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, policy)
+	assert.Empty(t, warnings,
+		"a reference under an unregistered root is neither rejected nor warned about")
 }

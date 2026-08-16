@@ -5,6 +5,7 @@ package policy
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -12,8 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/dsl"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // helper to build a schema with registered namespaces.
@@ -174,6 +177,75 @@ func TestCompileUnregisteredActionAttributeFails(t *testing.T) {
 	_, _, err = compiler.Compile(`permit(principal, action, resource) when { action.bogus == "read" };`)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "action.bogus")
+}
+
+// --- The live `action` gate (02.2-04 / D-66 + D-67) ---
+//
+// These three tests pin the branch that 02.2-04 turned from dead code into a
+// boot-time gate. They are built on attribute.NewActionOnlySchemaRegistry() —
+// the SAME constructor the seed-installer and the WithRealABAC harness now use —
+// rather than a hand-rolled schemaWith() literal, so a change to the declared key
+// set reaches these assertions instead of drifting past a local mirror.
+
+// TestCompileUnregisteredActionAttributeFailsWithTypedCode asserts the oops code
+// AND the operator-facing message text.
+//
+// On the code assertion: errutil.AssertErrorCode resolves the DEEPEST oops code
+// in the chain. Here that is exactly the code under test, because
+// validateAttributes returns its oops error and Compile returns it unwrapped, so
+// there is only one oops node. The assertion therefore proves the compiler's code
+// is present and survives; it does NOT and CANNOT prove the absence of an outer
+// coded wrapper (OopsError.code is unexported and no exported oops API can answer
+// that). The paired substring check covers what the operator actually reads.
+func TestCompileUnregisteredActionAttributeFailsWithTypedCode(t *testing.T) {
+	compiler := NewCompiler(attribute.NewActionOnlySchemaRegistry().Schema())
+
+	_, _, err := compiler.Compile(`permit(principal, action, resource) when { action.bogus == "x" };`)
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "POLICY_UNREGISTERED_ACTION_ATTRIBUTE")
+	assert.Contains(t, err.Error(), "action.bogus",
+		"the message MUST name the offending key — an operator fixes the policy from this text alone")
+}
+
+// TestCompileAcceptsEveryDeclaredActionAttribute drives its subtests FROM
+// attribute.ActionNamespaceSchema()'s key set rather than from a literal list, so
+// a key added there is covered here automatically instead of silently untested.
+func TestCompileAcceptsEveryDeclaredActionAttribute(t *testing.T) {
+	declared := attribute.ActionNamespaceSchema().Attributes
+	keys := make([]string, 0, len(declared))
+	for k := range declared {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	require.NotEmpty(t, keys, "control: an empty declared set would make every subtest vacuous")
+
+	compiler := NewCompiler(attribute.NewActionOnlySchemaRegistry().Schema())
+	for _, key := range keys {
+		t.Run(key, func(t *testing.T) {
+			policy, warnings, err := compiler.Compile(
+				`permit(principal, action, resource) when { action.` + key + ` == "x" };`,
+			)
+			require.NoError(t, err, "a DECLARED action key MUST compile clean")
+			require.NotNil(t, policy)
+			assert.Empty(t, warnings)
+		})
+	}
+}
+
+// TestCompileWithEmptySchemaSkipsActionValidationEntirely preserves the
+// pre-02.2-04 behaviour for any caller holding no registry: HasNamespace("action")
+// is false, so the hard-error branch is never reached. This is the property that
+// made the gate a no-op before the wiring landed, and it must stay true — a
+// compiler with no schema is not a compiler with a strict schema.
+func TestCompileWithEmptySchemaSkipsActionValidationEntirely(t *testing.T) {
+	compiler := NewCompiler(emptySchema())
+
+	policy, warnings, err := compiler.Compile(`permit(principal, action, resource) when { action.bogus == "x" };`)
+
+	require.NoError(t, err)
+	require.NotNil(t, policy)
+	assert.Empty(t, warnings)
 }
 
 // --- Validation warnings ---

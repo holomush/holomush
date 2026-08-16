@@ -71,6 +71,7 @@
 :root {
   --topbar-h: 44px;
   --rail-w: 48px;
+  --adminnav-w: 232px;
   --sidebar-w-default: 280px;
   --sidebar-w-min: 200px;
   --sidebar-w-max: 520px;

@@ -13,6 +13,7 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/jobs"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -95,7 +96,7 @@ func TestRealABAC_PluginAttrSourcesUsesEngineInstances(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(evStore.Close)
 
-	abacSub := startRealABAC(t, ctx, evStore.Pool())
+	abacSub := startRealABAC(t, ctx, evStore.Pool(), jobs.NewRegistry())
 	res, pp, aud := pluginAttrSources(abacSub)
 
 	require.Same(t, abacSub.AttributeResolver(), res,

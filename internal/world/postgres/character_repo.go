@@ -201,8 +201,11 @@ func (r *CharacterRepository) Update(ctx context.Context, char *world.Character)
 // The consequence is a rule callers must honour: Rename MUST NOT be routed
 // through worldMutator.mutate(). mutate() writes an envelope of its own from
 // the returned delta, so routing Rename through it would emit TWO envelopes for
-// one rename and break the exactly-one-envelope-per-command property. Phase 3's
-// RenameCharacter calls this method directly and supplies the intent.
+// one rename and break the exactly-one-envelope-per-command property. The
+// shipped operator CLI `holomush character name set` is the caller that calls
+// this method directly and supplies the intent. (There is no RenameCharacter
+// world command: it was removed from the v0.13 milestone by D-44 and moved to
+// the backlog, so the CLI is the sole direct caller today.)
 //
 // # Self-exclusion
 //
@@ -419,6 +422,126 @@ func (r *CharacterRepository) UpdatePreferences(ctx context.Context, characterID
 		}
 		if err != nil {
 			return oops.Code("CHARACTER_PREFERENCES_UPDATE_FAILED").With("character_id", characterID.String()).Wrap(err)
+		}
+		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, characterID, false, newVersion-1, newVersion)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+	return delta, nil
+}
+
+// SetStatus writes a character's lifecycle status with a version-predicated CAS
+// (MODEL-03). It is shaped on UpdateLocation/UpdatePreferences: one
+// version-predicated statement, classifyCASZeroRow for the zero-row case,
+// primaryDeltaVersioned for the delta, and the expectedVersion == 0 means
+// unversioned convention.
+//
+// status is a TYPED world.Status const bound as parameter $2 — no caller text
+// is ever interpolated, and the column's CHECK constraint is the second fence.
+// The name reservation columns (name, normalized_name, name_skeleton) are not
+// in the statement, so a retire cannot free a name (INV-WORLD-6, retire half).
+//
+// # Why the envelope is NOT written here (contrast Rename)
+//
+// Every caller of this method reaches it through worldMutator.mutate(), which
+// writes exactly one envelope from the returned delta in the same transaction.
+// Rename owns its envelope because it has an out-of-Service caller (the
+// operator CLI); SetStatus has none, so writing one here would emit TWO
+// envelopes per command.
+//
+// # D-34: the same-transaction default-character clear
+//
+// On a RETIRE the method also clears players.default_character_id for any
+// player pointing at this character, inside the SAME transaction as the status
+// write. The FK is ON DELETE SET NULL, so it self-heals on a hard delete only;
+// a soft retire would otherwise leave the login paths (the telnet gateway
+// handler and the web auth handlers) reading a pointer to a retired character.
+// The statement is idempotent — no read-modify-write — so a retry or a
+// redelivery is safe, and a refused CAS aborts the transaction before it runs,
+// so a stale writer never moves the pointer. Unretire does NOT restore it: the
+// old value is not preserved anywhere, and the player re-selects a default.
+//
+// This is a WRITE to the auth players table on the world tx connection, and it
+// deliberately WIDENS an exception that already exists: the reaping guard
+// (internal/world/postgres/reaping_guard.go) takes a locking READ of the same
+// table on the same connection, documented in the doc block of
+// test/meta/world_sql_fence_test.go as an intentional, durable
+// auth-table-on-the-world-conn exception. D-34 extends that precedent from a
+// read to a write. It is deliberate, not accidental layering drift; players is
+// not a fenced world table, so no fence allowlist entry is involved. The write
+// MUST stay on the world tx connection (txFromContext) and MUST NOT reach for
+// the auth pool — the two-pool boundary claims no atomicity across it.
+//
+// LOCK ORDER — READ THIS BEFORE ADDING A STATEMENT TO EITHER TRANSACTION.
+// This transaction takes its locks in the order characters -> players (the CAS
+// UPDATE below, then the players clear). The character-genesis transaction
+// takes them in the OPPOSITE order: PlayerReapingGuard.EnsureNotReaping does
+// `SELECT reaping_at FROM players ... FOR UPDATE` (reaping_guard.go:67) and
+// only then inserts into characters (internal/auth/character_genesis.go:189-192).
+// That is a genuine lock-order inversion on the same two tables.
+//
+// It is LATENT, not live. The cycle does not close today because the genesis
+// side never waits on a lock this transaction holds: it INSERTS a new
+// characters row rather than locking an existing one, and the
+// characters.player_id FK check takes only FOR KEY SHARE on the players row
+// genesis already holds. So a concurrent retire merely WAITS on genesis's
+// players lock and proceeds when genesis commits.
+//
+// It becomes a real deadlock (SQLSTATE 40P01, surfacing as an opaque
+// CHARACTER_RETIRE_DEFAULT_CLEAR_FAILED or CHARACTER_CREATE_FAILED) the moment
+// the genesis transaction acquires a lock on an EXISTING characters row —
+// e.g. a uniqueness or sibling-character check that does SELECT ... FOR UPDATE,
+// or any UPDATE of another character. If you add such a statement, fix the
+// order rather than the symptom: take the players lock first here, before the
+// CAS. That is deliberately NOT done pre-emptively because
+// `WHERE default_character_id = $1` has no supporting index
+// (migrations/000001_baseline.sql:64) and would seq-scan players on every
+// retire to defend against a cycle that cannot currently form.
+func (r *CharacterRepository) SetStatus(
+	ctx context.Context,
+	characterID ulid.ULID,
+	status world.Status,
+	expectedVersion int,
+) (*wmodel.MutationDelta, error) {
+	query := `UPDATE characters SET status = $2, version = version + 1 WHERE id = $1`
+	args := []any{characterID.String(), string(status)}
+	if expectedVersion > 0 {
+		// Numeric SQL equality on the INTEGER version column — never a string
+		// comparison; the bound arg stays an int.
+		query += ` AND version = $3`
+		args = append(args, expectedVersion)
+	}
+	query += ` RETURNING version`
+
+	var delta *wmodel.MutationDelta
+	txErr := withTx(ctx, r.pool, func(txCtx context.Context) error {
+		tx := txFromContext(txCtx)
+		var newVersion int
+		err := tx.QueryRow(txCtx, query, args...).Scan(&newVersion)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return classifyCASZeroRow(txCtx, tx,
+				`SELECT version FROM characters WHERE id = $1 FOR UPDATE`,
+				characterID,
+				oops.Code("CHARACTER_NOT_FOUND").With("character_id", characterID.String()).Wrap(world.ErrNotFound))
+		}
+		if err != nil {
+			return oops.Code("CHARACTER_STATUS_UPDATE_FAILED").
+				With("character_id", characterID.String()).
+				With("status", string(status)).
+				Wrap(err)
+		}
+		// D-34: clear the default-character pointer in the SAME transaction as
+		// the status write, on a retire only.
+		if status == world.StatusRetired {
+			if _, clearErr := tx.Exec(txCtx,
+				`UPDATE players SET default_character_id = NULL WHERE default_character_id = $1`,
+				characterID.String()); clearErr != nil {
+				return oops.Code("CHARACTER_RETIRE_DEFAULT_CLEAR_FAILED").
+					With("character_id", characterID.String()).
+					Wrap(clearErr)
+			}
 		}
 		delta = primaryDeltaVersioned(wmodel.AggregateCharacter, characterID, false, newVersion-1, newVersion)
 		return nil

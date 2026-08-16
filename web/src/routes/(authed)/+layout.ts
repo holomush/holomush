@@ -22,7 +22,14 @@ export async function load() {
       playerName: resp.playerName,
       isGuest: resp.isGuest,
       characters: resp.characters.map((c) => ({ characterId: c.characterId, name: c.characterName })),
+      roles: resp.roles,
     });
+    // The default character comes from THIS response, not a third round trip.
+    // OwnCharacter (what the roster read and the default write return) carries
+    // no is-default flag, so a child route has no other server-side source for
+    // it — but webCheckSession already carries default_character_id and this
+    // layout already calls it, so propagating it here costs nothing.
+    return { defaultCharacterId: resp.defaultCharacterId };
   } catch (e) {
     if (isRedirect(e)) throw e;
     clearAuth();

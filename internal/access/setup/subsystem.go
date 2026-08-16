@@ -42,6 +42,24 @@ type ABACSubsystemConfig struct {
 	// validated/deduplicated slice to ABACConfig / PlayerAttributeProvider.
 	// Empty / nil → no operators (break-glass disabled). Sub-epic B (Phase 5).
 	CryptoOperators []string
+	// JobRegistry is the background-job liveness registry the ABAC job
+	// attribute provider reads (internal/jobs.Registry satisfies it). It is
+	// forwarded verbatim into ABACConfig.JobRegistry, so the provider and any
+	// future job subsystem observe ONE registry instance.
+	//
+	// INJECTED THROUGH CONFIG, NOT VIA A TWO-PHASE SetRegistry — a deliberate
+	// deviation from the PluginProvider precedent. PluginProvider needs
+	// two-phase init because its registry IS plugin.Manager, a subsystem built
+	// AFTER BuildABACStack runs. jobs.Registry has zero dependencies, so it can
+	// be constructed before subsystem assembly and passed in: one mechanism
+	// instead of two, and no window in which the provider holds a nil registry
+	// in production.
+	//
+	// NIL IS TOLERATED AND FAILS CLOSED: a nil registry reports every job as
+	// not running, so principal.job.* is absent and every job-gating seed
+	// default-denies. That is the correct state for an entrypoint that runs no
+	// background jobs. Per 02.2-CONTEXT D-49.
+	JobRegistry attribute.JobRegistry
 }
 
 // ABACSubsystem manages the ABAC policy engine, cache, and health tracker.
@@ -117,6 +135,9 @@ func (s *ABACSubsystem) Prepare(ctx context.Context) error {
 		PlayerRoleLookup: roleStore.PlayerRoles,
 		AuditMode:        s.cfg.AuditMode,
 		CryptoOperators:  operators,
+		// Forwarded verbatim: cmd/holomush constructs exactly one
+		// jobs.Registry and it reaches attribute.JobProvider through here.
+		JobRegistry: s.cfg.JobRegistry,
 		PlayerKindLookup: func(ctx context.Context, playerID string) (bool, error) {
 			id, err := ulid.Parse(playerID)
 			if err != nil {
@@ -218,6 +239,15 @@ func (s *ABACSubsystem) PluginProvider() *attribute.PluginProvider {
 		panic("setup: PluginProvider() called before Prepare()")
 	}
 	return s.stack.PluginProvider
+}
+
+// JobProvider returns the ABAC background-job attribute provider. Panics if
+// called before Prepare().
+func (s *ABACSubsystem) JobProvider() *attribute.JobProvider {
+	if s.stack == nil {
+		panic("setup: JobProvider() called before Prepare()")
+	}
+	return s.stack.JobProvider
 }
 
 // HealthTracker returns the health tracker. Panics if called before Prepare().

@@ -163,6 +163,33 @@ func TestPlayerSubjectPanicsOnEmpty(t *testing.T) {
 	)
 }
 
+func TestSubjectJobConstant(t *testing.T) {
+	assert.Equal(t, "job:", access.SubjectJob)
+}
+
+func TestJobSubject(t *testing.T) {
+	assert.Equal(t, access.SubjectJob+"retirement", access.JobSubject("retirement"))
+}
+
+// TestJobSubjectPanicsOnEmpty pins JobSubject into the 3-for-3 panic-on-empty
+// convention PluginSubject / CharacterSubject / PlayerSubject share. A bare
+// "job:" is a subject whose id half is empty, and world.JobCaller inherits this
+// guard — which is the one place a nameless job would otherwise slip through.
+func TestJobSubjectPanicsOnEmpty(t *testing.T) {
+	assert.PanicsWithValue(
+		t,
+		"access.JobSubject: empty name would bypass access control",
+		func() { _ = access.JobSubject("") },
+	)
+}
+
+func TestParseEntityRefAcceptsJobNamespace(t *testing.T) {
+	typeName, id, err := access.ParseEntityRef("job:retirement")
+	require.NoError(t, err)
+	assert.Equal(t, "job", typeName)
+	assert.Equal(t, "retirement", id)
+}
+
 func TestParseEntityRefAcceptsPlayerNamespace(t *testing.T) {
 	typeName, id, err := access.ParseEntityRef("player:01HZAVGE83MGFEXQQH5SP9NXKF")
 	require.NoError(t, err)
@@ -600,6 +627,12 @@ func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
 			name:     "resource admin section prefix",
 			constant: access.ResourceAdminSection,
 			desc:     "ResourceAdminSection",
+		},
+		// Background-job principal (v0.13 phase 02.2, D-48)
+		{
+			name:     "subject job prefix",
+			constant: access.SubjectJob,
+			desc:     "SubjectJob",
 		},
 	}
 

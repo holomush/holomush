@@ -76,11 +76,33 @@ func TestEveryEntryCarriesADescriptorDerivedFromItsOwnID(t *testing.T) {
 	}
 }
 
-func TestTheCharactersSectionCarriesSpec101sReadDescriptor(t *testing.T) {
-	entry, ok := Lookup("characters")
+// TestTheCharactersSectionDeclaresWriteAndEveryOtherSectionDeclaresRead pins
+// which section offers which MAXIMUM operation class.
+//
+// `characters` moved from read to write in v0.13 phase-06 plan 05, when it
+// gained three write RPCs (§10.4, §10.6). The six planned sections stay at read:
+// a declared maximum is what a reviewer reads as a section's intended blast
+// radius, and widening one before it has a write surface would declare an
+// operation class nothing implements.
+//
+// Both halves are asserted together on purpose. The characters half alone would
+// stay green if `entry` itself were changed to build every row with write.
+func TestTheCharactersSectionDeclaresWriteAndEveryOtherSectionDeclaresRead(t *testing.T) {
+	characters, ok := Lookup("characters")
 	require.True(t, ok)
+	assert.Equal(t, Descriptor{Action: "write", Resource: "admin_section:characters"}, characters.Descriptor)
 
-	assert.Equal(t, Descriptor{Action: "read", Resource: "admin_section:characters"}, entry.Descriptor)
+	others := 0
+	for _, s := range All() {
+		if s.ID == "characters" {
+			continue
+		}
+		others++
+		assert.Equal(t, ActionRead, s.Descriptor.Action,
+			"section %q has no write surface, so it MUST NOT declare one", s.ID)
+	}
+	require.Equal(t, 6, others,
+		"six sections must actually have been inspected, or the read half passes vacuously")
 }
 
 func TestLookupResolvesARegisteredSectionAndMissesAnUnregisteredOne(t *testing.T) {

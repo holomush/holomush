@@ -16,10 +16,13 @@
   // and palette share the same registry gate (ADR holomush-stds8). The /scenes
   // route + scene-access facade (INV-SCENE-64) remain the server-side guard.
   let isGuest = $derived($authState.isGuest);
+  // Nav hint only — the rail draws an Admin entry from it. Every admin RPC
+  // denies independently, so a forged role buys a link and nothing more.
+  let roles = $derived($authState.roles);
 </script>
 
 <div class="shell">
-  <SectionRail {pathname} {isGuest} variant="rail" />
+  <SectionRail {pathname} {isGuest} {roles} variant="rail" />
   <div class="section-col">
     <div class="section-slot">{@render children()}</div>
     <ShellFooter {pathname} />
@@ -32,7 +35,7 @@
   <SheetContent side="left" class="p-0 w-[260px]">
     <SheetTitle class="sr-only">Navigation</SheetTitle>
     <SheetDescription class="sr-only">Switch workspace section</SheetDescription>
-    <SectionRail {pathname} {isGuest} variant="drawer" onnavigate={closeMobileNav} />
+    <SectionRail {pathname} {isGuest} {roles} variant="drawer" onnavigate={closeMobileNav} />
   </SheetContent>
 </Sheet>
 

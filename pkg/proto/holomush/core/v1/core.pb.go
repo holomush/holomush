@@ -3403,7 +3403,36 @@ type CheckPlayerSessionResponse struct {
 	// is_guest is true when the session belongs to an ephemeral guest player.
 	IsGuest bool `protobuf:"varint,3,opt,name=is_guest,json=isGuest,proto3" json:"is_guest,omitempty"`
 	// characters is the player's roster (enriched with session status).
-	Characters    []*CharacterSummary `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
+	Characters []*CharacterSummary `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
+	// default_character_id is players.default_character_id, forwarded by
+	// CoreServer.CheckPlayerSession from the player row it already loaded. It is
+	// EMPTY when the player has set no default, which is the state a fresh
+	// account is in — an empty value is "no preference", never "the first
+	// character". It matches the field of the same name on
+	// AuthenticatePlayerResponse; a session-restoring client needs it for the
+	// same reason a logging-in one does, and reading it here costs no extra
+	// round trip.
+	DefaultCharacterId string `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
+	// roles are the role names this PLAYER holds, as
+	// store.PostgresRoleStore.PlayerRoles returns them: the deduplicated, sorted
+	// union across all of the player's characters. CoreServer.CheckPlayerSession
+	// reads them through the optional WithPlayerRoleLookup seam.
+	//
+	// It is a NAV HINT and never an authorization boundary. Every admin RPC
+	// evaluates ABAC on an `admin_section:` resource and denies independently of
+	// what this field said, so a client that lies about it on the way back gains
+	// nothing.
+	//
+	// It is player-scoped and SINGULAR — never a per-character map — so it cannot
+	// leak which characters belong to one player (§10.5.1.1).
+	//
+	// A CoreServer with no lookup wired, and a lookup that fails, both yield an
+	// EMPTY list and never an error: this field decides what is DRAWN and must not
+	// be able to break session restore. Empty is fail-closed, because an empty
+	// list draws no admin entrance. On the wire absence and empty are the same
+	// answer — a zero-element repeated scalar is omitted from the serialized
+	// bytes — and no client may distinguish them.
+	Roles         []string `protobuf:"bytes,6,rep,name=roles,proto3" json:"roles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3462,6 +3491,20 @@ func (x *CheckPlayerSessionResponse) GetIsGuest() bool {
 func (x *CheckPlayerSessionResponse) GetCharacters() []*CharacterSummary {
 	if x != nil {
 		return x.Characters
+	}
+	return nil
+}
+
+func (x *CheckPlayerSessionResponse) GetDefaultCharacterId() string {
+	if x != nil {
+		return x.DefaultCharacterId
+	}
+	return ""
+}
+
+func (x *CheckPlayerSessionResponse) GetRoles() []string {
+	if x != nil {
+		return x.Roles
 	}
 	return nil
 }
@@ -4406,7 +4449,7 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\x10\n" +
 	"\x0eLogoutResponse\"M\n" +
 	"\x19CheckPlayerSessionRequest\x120\n" +
-	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\xb9\x01\n" +
+	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\x81\x02\n" +
 	"\x1aCheckPlayerSessionResponse\x12\x1f\n" +
 	"\vplayer_name\x18\x01 \x01(\tR\n" +
 	"playerName\x12\x1b\n" +
@@ -4414,7 +4457,9 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\bis_guest\x18\x03 \x01(\bR\aisGuest\x12B\n" +
 	"\n" +
 	"characters\x18\x04 \x03(\v2\".holomush.core.v1.CharacterSummaryR\n" +
-	"characters\"M\n" +
+	"characters\x120\n" +
+	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\x12\x14\n" +
+	"\x05roles\x18\x06 \x03(\tR\x05roles\"M\n" +
 	"\x19ListPlayerSessionsRequest\x120\n" +
 	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\xf8\x01\n" +
 	"\x11PlayerSessionInfo\x12\x0e\n" +

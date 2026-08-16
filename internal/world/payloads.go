@@ -5,6 +5,7 @@ package world
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/oklog/ulid/v2"
 
@@ -303,6 +304,76 @@ type CharacterUpdateChangePayload struct {
 	Description string `json:"description"`
 }
 
+// AuditContext is the evaluated admin section and action a world write was
+// authorized under (01-SPEC §10.7), carried into the write's envelope payload so
+// an auditor learns not only WHAT changed but through which admin surface.
+//
+// The ZERO value is the PLAYER path: a player-initiated write supplies no admin
+// context, so both fields are empty. That is correct rather than a gap — the
+// envelope Actor already distinguishes who acted, and one payload shape for "a
+// character changed" is a better audit model than two split by actor flavour.
+//
+// It carries no player id and no acting-character id. Caller.subject already
+// carries `player:<id>` verbatim into the envelope Actor (D-104), and recording
+// the acting character would put a durable player-to-alt linkage into the
+// RETAINED events_audit table, which D-104 exists to prevent.
+type AuditContext struct {
+	// Section is the admin section id the call was gated under (e.g.
+	// "characters"), or empty for a player-initiated write.
+	Section string
+	// Action is the admin action evaluated for it ("read" / "write"), or empty
+	// for a player-initiated write.
+	Action string
+}
+
+// CharacterLifecycleChangePayload is the payload for the character lifecycle
+// envelopes (character_retired / character_unretired). It carries the character
+// id, the COMMITTED new status, the status the character LEFT, and the admin
+// section/action the transition was evaluated under.
+//
+// BEFORE-STATUS IS A DELIBERATE EXCEPTION to the registry's new-values-only
+// rule, and the exception is exactly as wide as its justification (D-103). A
+// lifecycle status is a closed enum the server assigns — not player-authored
+// content — so recording the value it left is not a durable copy of anything a
+// player wrote, and an auditor reviewing a retire needs to know what state it
+// interrupted. The PROSE half of the same decision goes the other way: see
+// CharacterProfileUpdateChangePayload, which records names and never values.
+//
+// It is a distinct shape from CharacterUpdateChangePayload rather than a reuse:
+// that payload declares a description field a lifecycle change never carries.
+type CharacterLifecycleChangePayload struct {
+	CharacterID string `json:"character_id"`
+	Status      string `json:"status"`
+	// BeforeStatus is the status the character held before the transition. It
+	// always DIFFERS from Status in an emitted payload: the lifecycle guard
+	// refuses an already-in-that-state transition before any payload is built,
+	// and BuildCharacterLifecyclePayload refuses to describe one anyway.
+	BeforeStatus string `json:"before_status"`
+	// Section and Action are the evaluated admin context (§10.7). Both are
+	// EMPTY for a player-initiated transition — see AuditContext.
+	Section string `json:"section"`
+	Action  string `json:"action"`
+}
+
+// CharacterProfileUpdateChangePayload is the new-values-only payload for a
+// character_profile_update envelope. It carries the character id, the SORTED
+// names of the profile attributes the write changed — creates, updates and
+// clears alike — and the admin section/action the write was evaluated under.
+// Never the values themselves.
+//
+// The four fields below are the WHOLE shape, and
+// TestCharacterProfileUpdatePayloadExposesNoValueBearingField asserts both the
+// marshalled key set and these reflected json tags against exactly that list. A
+// value-bearing field added here fails that test immediately, which is the point.
+type CharacterProfileUpdateChangePayload struct {
+	CharacterID       string   `json:"character_id"`
+	ChangedAttributes []string `json:"changed_attributes"`
+	// Section and Action are the evaluated admin context (§10.7). Both are
+	// EMPTY for a player-initiated write — see AuditContext.
+	Section string `json:"section"`
+	Action  string `json:"action"`
+}
+
 // TombstonePayload is the payload for a delete envelope: only the id of the
 // deleted aggregate. Cascaded aggregates (a location's exits, a bidirectional
 // exit's reverse) are represented in the envelope's affected-aggregates manifest
@@ -402,6 +473,93 @@ func BuildCharacterUpdatePayload(characterID ulid.ULID, description string) ([]b
 	})
 	if err != nil {
 		return nil, oops.Wrapf(err, "marshal character update payload")
+	}
+	return payload, nil
+}
+
+// BuildCharacterLifecyclePayload marshals the character lifecycle payload
+// (character id + the status left + the committed new status + the evaluated
+// admin context) for a character_retired / character_unretired envelope.
+//
+// auditCtx is the ZERO AuditContext for a player-initiated transition, which
+// yields empty section and action.
+//
+// IT REFUSES AN EQUAL-VALUED TRANSITION. The lifecycle guard in
+// RetireCharacter / UnretireCharacter already refuses a character that is
+// ALREADY in the requested state, so reaching here with beforeStatus == status
+// means that guard was bypassed or a caller passed the wrong read. Emitting the
+// payload anyway would write a durable audit row into a RETAINED table claiming
+// a change nobody made, and a retained row cannot be recalled — so the builder
+// refuses rather than describing a transition that did not happen.
+func BuildCharacterLifecyclePayload(characterID ulid.ULID, beforeStatus, status Status, auditCtx AuditContext) ([]byte, error) {
+	if beforeStatus == status {
+		return nil, oops.Code("CHARACTER_LIFECYCLE_PAYLOAD_NO_TRANSITION").
+			With("character_id", characterID.String()).
+			With("status", string(status)).
+			Errorf("refusing to build a lifecycle payload whose before-status equals its status")
+	}
+	payload, err := json.Marshal(CharacterLifecycleChangePayload{
+		CharacterID:  characterID.String(),
+		Status:       string(status),
+		BeforeStatus: string(beforeStatus),
+		Section:      auditCtx.Section,
+		Action:       auditCtx.Action,
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal character lifecycle payload")
+	}
+	return payload, nil
+}
+
+// BuildCharacterProfileUpdatePayload marshals the new-values-only character
+// profile payload (character id + the NAMES of the profile attributes the write
+// changed + the evaluated admin context) for a character_profile_update
+// envelope.
+//
+// The VALUES are deliberately absent. Profile prose is player-authored personal
+// content and the taxonomy's payload rule is new-values-only AND erasure-safe: a
+// consumer needs to know that a profile changed and which fields did, and reads
+// the current values through the authorized read path where the per-attribute
+// tier floor (01-SPEC §8.6) still applies.
+//
+// # Why not encrypt the values instead (D-103)
+//
+// It was considered and rejected. events_audit is a RETAINED table: encrypting a
+// row does not make it erasable, because retained-is-still-retained and
+// encryption is not erasure. Crypto-shredding — dropping the key so the
+// ciphertext becomes unreadable — IS a real answer to that, and it is a separate
+// mechanism this milestone does not ship. Widening this payload later is
+// additive and cheap; NARROWING it is not, because prose already written into a
+// retained partition cannot be recalled. An auditor still learns who, when,
+// which character and which fields.
+//
+// # description travels here as a NAME
+//
+// When an admin edits the in-world `characters.description` alongside the twelve
+// `profile.*` fields, "description" appears in changedAttributes as a bare NAME
+// like any other. Its VALUE reaches no field of this payload. That is why the
+// admin write routes through UpdateCharacterProfileAttributes rather than
+// UpdateCharacterDescription, whose kindCharacterUpdated payload declares a
+// `description` STRING — the prose value itself.
+//
+// auditCtx is the ZERO AuditContext for a player-initiated write, which yields
+// empty section and action.
+//
+// AN EMPTY changedAttributes IS ACCEPTED, deliberately. The shipped player path
+// emits one on an all-identical resubmit and documents it as both representable
+// and honest; erroring here would convert a live player success into a failure.
+func BuildCharacterProfileUpdatePayload(characterID ulid.ULID, changedAttributes []string, auditCtx AuditContext) ([]byte, error) {
+	names := make([]string, len(changedAttributes))
+	copy(names, changedAttributes)
+	slices.Sort(names)
+	payload, err := json.Marshal(CharacterProfileUpdateChangePayload{
+		CharacterID:       characterID.String(),
+		ChangedAttributes: names,
+		Section:           auditCtx.Section,
+		Action:            auditCtx.Action,
+	})
+	if err != nil {
+		return nil, oops.Wrapf(err, "marshal character profile update payload")
 	}
 	return payload, nil
 }

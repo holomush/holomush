@@ -40,7 +40,7 @@ describe('mediaQuery', () => {
   it('reflects the initial match state synchronously', () => {
     installMatchMedia(true);
     const cleanup = $effect.root(() => {
-      const mq = mediaQuery('(min-width: 768px)');
+      const mq = mediaQuery('(min-width: 500px)');
       expect(mq.current).toBe(true);
     });
     cleanup();
@@ -49,7 +49,7 @@ describe('mediaQuery', () => {
   it('updates reactively when the media query changes', () => {
     const { mql } = installMatchMedia(false);
     const cleanup = $effect.root(() => {
-      const mq = mediaQuery('(min-width: 768px)');
+      const mq = mediaQuery('(min-width: 500px)');
       flushSync();
       expect(mq.current).toBe(false);
       mql.emit(true);
@@ -68,11 +68,31 @@ describe('mediaQuery', () => {
       orig(t, cb);
     };
     const cleanup = $effect.root(() => {
-      mediaQuery('(min-width: 768px)');
+      mediaQuery('(min-width: 500px)');
       flushSync();
     });
     cleanup();
     expect(removed).toBe(true);
+  });
+
+  it('reports false and does not throw when matchMedia is absent', () => {
+    // Deliberately NO stub: this jsdom has no matchMedia at all, and
+    // vi.unstubAllGlobals in afterEach has already cleared any earlier one.
+    const cleanup = $effect.root(() => {
+      const mq = mediaQuery('(min-width: 500px)');
+      flushSync();
+      expect(mq.current).toBe(false);
+    });
+    cleanup();
+  });
+
+  it('reports the explicit fallback when matchMedia is absent', () => {
+    const cleanup = $effect.root(() => {
+      const mq = mediaQuery('(min-width: 500px)', true);
+      flushSync();
+      expect(mq.current).toBe(true);
+    });
+    cleanup();
   });
 
   it('isDesktop tracks the Tailwind md breakpoint', () => {
@@ -82,7 +102,7 @@ describe('mediaQuery', () => {
       expect(d.current).toBe(true);
     });
     cleanup();
-    expect(DESKTOP_MEDIA_QUERY).toBe('(min-width: 768px)');
+    expect(DESKTOP_MEDIA_QUERY).toBe('(min-width: 48rem)');
     expect(queries).toContain(DESKTOP_MEDIA_QUERY);
   });
 });

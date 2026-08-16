@@ -10,7 +10,6 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/plugin/hostcap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1134,40 +1133,213 @@ func TestSeedSmokePluginStreamReadConcreteNonSystemPermitted(t *testing.T) {
 		decision.Effect(), decision.Reason())
 }
 
-// Verifies: INV-PLUGIN-50
-func TestEverySeededCapabilityResourceHasDefaultPermit(t *testing.T) {
-	// Drift guard: every served, non-exempt, NON-scope-eligible capability method
-	// in hostcap.Descriptors MUST be authorized by a default-permit seed at the
-	// type level (resource "<type>:*", exactly how the interceptor evaluates a
-	// non-scoped call). A capability added later without its seed would fail
-	// closed at runtime; this test catches that at build time — the seed-side
-	// analogue of the INV-PLUGIN-52 extractor-completeness meta-test.
-	//
-	// Scope-eligible methods are intentionally skipped: they are gated by the
-	// own-location seed and proven by the scoped smoke tests, which require a
-	// concrete resource + dispatch_location this type-level probe does not supply.
-	// Exempt (self-gated) capabilities short-circuit before the ABAC gate.
-	engine := createSeedEngine(t, nil) // unconditional permits resolve without providers
+// TestEverySeededCapabilityResourceHasDefaultPermit (INV-PLUGIN-50) MOVED to
+// seed_capability_permit_test.go, which is `package policy_test`.
+//
+// It is the only test in this file that needed internal/plugin/hostcap, and
+// hostcap imports internal/plugin. Once internal/plugin gained an import of
+// internal/access/policy (the install-time `action` gate in
+// internal/plugin/policy_installer.go), that made this IN-PACKAGE test file
+// import a package that depends on the package under test — which Go rejects
+// outright with `import cycle not allowed in test`. An external test package is
+// exempt because it compiles separately; seed_profile_smoke_test.go documents
+// the same manoeuvre for the same reason.
 
-	for token, desc := range hostcap.Descriptors {
-		if hostcap.IsDeclarationExempt(token) {
-			continue
-		}
-		for method, md := range desc.Methods {
-			if len(md.Scopes) > 0 {
-				continue
-			}
-			t.Run(token+"/"+method, func(t *testing.T) {
-				decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-					Subject:  access.PluginSubject("drift-probe"),
-					Action:   md.Action,
-					Resource: md.Resource + ":*",
-				})
-				require.NoError(t, err)
-				assert.True(t, decision.IsAllowed(),
-					"non-exempt non-scoped capability %s/%s (action=%q resource=%q) has no default-permit seed — it would fail closed at the interceptor; add a seed:plugin-cap-* permit for resource %q",
-					token, method, md.Action, md.Resource, md.Resource)
-			})
-		}
+// --- Background-job fixture (AUTHZ-02) -------------------------------------
+
+// jobProvider builds a "job"-namespace mock provider with the given subject
+// attributes (e.g. {"name": "fixture", "writes": []string{"character"},
+// "has_writes": true}), mirroring characterProvider / pluginProvider above.
+//
+// Its schema declares exactly the keys attribute.JobProvider declares. A double
+// declaring a key the real provider does not emit would turn every downstream
+// behavioural assertion into a test of the double.
+func jobProvider(subjectAttrs map[string]any) *mockAttributeProvider {
+	return &mockAttributeProvider{
+		namespace:  "job",
+		subjectMap: subjectAttrs,
+		schema: &types.NamespaceSchema{
+			Attributes: map[string]types.AttrType{
+				"name":       types.AttrTypeString,
+				"writes":     types.AttrTypeStringList,
+				"has_writes": types.AttrTypeBool,
+			},
+		},
 	}
+}
+
+// TestSeedSmokeJobFixtureCapabilityClassIsASecondGate proves the declared
+// capability class is a gate the seed ACTUALLY READS, not decoration.
+//
+// The pair is what makes that claim: the two subtests differ ONLY in the job's
+// declared writes. Everything else — subject, action, resource, and all three
+// action.job.* provenance attributes — is identical, so the denial can only be
+// caused by `character` being absent from principal.job.writes.
+//
+// D-51's shape, stated as policy: the DECLARATION narrows and the SEED grants.
+// Both gates must pass, and a declaration alone authorizes nothing.
+// Verifies: INV-ACCESS-13
+func TestSeedSmokeJobFixtureCapabilityClassIsASecondGate(t *testing.T) {
+	const charID = "01ARZ3NDEKTSV4RRFFQ69G5FB1"
+
+	// The provenance triple world.JobCaller stamps, spelled here as the engine
+	// sees it: bare bag keys under the job. prefix, overlaid onto bags.Action.
+	provenance := map[string]any{
+		"job.trigger_event_id":   "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+		"job.trigger_event_type": "fixture_triggered",
+		"job.trigger_subject":    charID,
+	}
+
+	t.Run("permits a job that declared character", func(t *testing.T) {
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name":       "fixture",
+				"writes":     []string{"character"},
+				"has_writes": true,
+			}),
+			characterProvider(nil, map[string]any{"id": charID, "name": "Fixture"}),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:    access.JobSubject("fixture"),
+			Action:     "write",
+			Resource:   access.CharacterResource(charID),
+			Attributes: provenance,
+		})
+		require.NoError(t, err)
+		assert.True(t, decision.IsAllowed(),
+			"a job declaring `character` must be permitted to write the character its provenance names; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
+
+	t.Run("denies a job whose capability class omits character", func(t *testing.T) {
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name": "fixture",
+				// The ONLY difference from the permit case.
+				"writes":     []string{"location"},
+				"has_writes": true,
+			}),
+			characterProvider(nil, map[string]any{"id": charID, "name": "Fixture"}),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:    access.JobSubject("fixture"),
+			Action:     "write",
+			Resource:   access.CharacterResource(charID),
+			Attributes: provenance,
+		})
+		require.NoError(t, err)
+		assert.False(t, decision.IsAllowed(),
+			"a job that did NOT declare `character` must be denied even when its provenance matches the resource; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
+}
+
+// TestSeedSmokeJobPrincipalIsDisjointFromEveryOtherNamespace is D-48's
+// corpus-level proof, in both directions.
+//
+// It runs against the WHOLE shipped corpus rather than an isolated policy,
+// because a corpus-level DENY is the claim D-48 actually makes: the reason for
+// a separate `job:` namespace is that parseEntityType matches the PREFIX ONLY,
+// so any permit written for one principal type would otherwise reach another.
+func TestSeedSmokeJobPrincipalIsDisjointFromEveryOtherNamespace(t *testing.T) {
+	const (
+		charID  = "01ARZ3NDEKTSV4RRFFQ69G5FB1"
+		otherID = "01ARZ3NDEKTSV4RRFFQ69G5FB3"
+		locID   = "01LOC000ZZZZZZZZZZZZZZZZZZ"
+	)
+
+	provenance := map[string]any{
+		"job.trigger_event_id":   "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+		"job.trigger_event_type": "fixture_triggered",
+		"job.trigger_subject":    charID,
+	}
+
+	t.Run("a character subject is not admitted by the job seed", func(t *testing.T) {
+		// A character subject carrying attributes IDENTICAL to the ones the job
+		// seed reads. `principal is job` must not match it — and the character
+		// bag cannot satisfy principal.job.* either way.
+		//
+		// The subject is a DIFFERENT character from the resource and carries no
+		// location, so neither seed:player-self-access (id equality) nor
+		// seed:player-character-colocation (location equality, and read-only)
+		// can produce a false green here.
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name":       "fixture",
+				"writes":     []string{"character"},
+				"has_writes": true,
+			}),
+			characterProvider(
+				map[string]any{"id": otherID, "roles": []string{}},
+				map[string]any{"id": charID, "name": "Fixture"},
+			),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:    access.CharacterSubject(otherID),
+			Action:     "write",
+			Resource:   access.CharacterResource(charID),
+			Attributes: provenance,
+		})
+		require.NoError(t, err)
+		assert.False(t, decision.IsAllowed(),
+			"`principal is job` MUST NOT match a character subject; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
+
+	t.Run("a job subject is not admitted by the system permits", func(t *testing.T) {
+		// seed.go ships exactly two `principal is system` permits, on location
+		// and exit. A location write is therefore the sharpest probe: if
+		// `principal is system` reached a job: subject the way it reaches
+		// system:bootstrap, THIS is where it would show.
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name":       "fixture",
+				"writes":     []string{"character", "location"},
+				"has_writes": true,
+			}),
+			locationProvider(map[string]any{"id": locID, "name": "Workshop"}),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:    access.JobSubject("fixture"),
+			Action:     "write",
+			Resource:   access.LocationResource(locID),
+			Attributes: provenance,
+		})
+		require.NoError(t, err)
+		assert.False(t, decision.IsAllowed(),
+			"the two `principal is system` permits MUST NOT reach a job: subject; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
+
+	t.Run("a job subject is not admitted by the plugin permits", func(t *testing.T) {
+		// The plugin corpus carries eleven default-permit seeds plus an
+		// instance-level location write, so `principal is plugin` is the widest
+		// non-character grant in the tree — and it must not reach a job either.
+		engine := createSeedEngine(t, []attribute.AttributeProvider{
+			jobProvider(map[string]any{
+				"name":       "fixture",
+				"writes":     []string{"character", "location"},
+				"has_writes": true,
+			}),
+			locationProvider(map[string]any{"id": locID, "name": "Workshop"}),
+		})
+
+		decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+			Subject:  access.JobSubject("fixture"),
+			Action:   "write",
+			Resource: access.LocationResource(locID),
+			// The host-vouched key seed:plugin-world-mutation-own-location
+			// reads. A job asserting it must still be denied: the target clause
+			// gates on the principal type, not on the attribute.
+			Attributes: map[string]any{"dispatch_location": locID},
+		})
+		require.NoError(t, err)
+		assert.False(t, decision.IsAllowed(),
+			"`principal is plugin` MUST NOT reach a job: subject; got: %s — %s",
+			decision.Effect(), decision.Reason())
+	})
 }

@@ -29,11 +29,13 @@ func _() {
 	_ = x[SubsystemRekeyCheckpointSweep-15]
 	_ = x[SubsystemOutboxRelay-16]
 	_ = x[SubsystemCharacterNameBlockList-17]
+	_ = x[SubsystemRetirementReactor-18]
+	_ = x[SubsystemCharacterActivity-19]
 }
 
-const _SubsystemID_name = "databasetlsabacauthworldpluginssessionsbootstrapgrpceventbusaudit_projectionclusteradmin_socketcrypto_chain_verifiercrypto_policyrekey_checkpoint_sweepoutbox_relaycharacter_name_blocklist"
+const _SubsystemID_name = "databasetlsabacauthworldpluginssessionsbootstrapgrpceventbusaudit_projectionclusteradmin_socketcrypto_chain_verifiercrypto_policyrekey_checkpoint_sweepoutbox_relaycharacter_name_blocklistretirement_reactorcharacter_activity"
 
-var _SubsystemID_index = [...]uint8{0, 8, 11, 15, 19, 24, 31, 39, 48, 52, 60, 76, 83, 95, 116, 129, 151, 163, 187}
+var _SubsystemID_index = [...]uint8{0, 8, 11, 15, 19, 24, 31, 39, 48, 52, 60, 76, 83, 95, 116, 129, 151, 163, 187, 205, 223}
 
 func (i SubsystemID) String() string {
 	idx := int(i) - 0

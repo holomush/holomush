@@ -34,11 +34,24 @@ return nil, status.Errorf(codes.Internal, "internal error")
 
 **Log with `errutil.LogErrorContext(ctx, msg, err, extraAttrs...)`** (per the
 CLAUDE.md Error Handling rule), not a bare `slog.*Context`. It forwards `ctx`
-for trace/span correlation **and** extracts the oops `code` + context map as
-structured fields — a bare `slog.ErrorContext(ctx, msg, "err", err)` flattens
-the oops error to a plain string, losing the code you would filter on in
-Loki/Sentry. It still takes extra key/value attrs for handler context
-(`"scene_id", id`).
+for trace/span correlation **and** lifts the oops `code` + context map to
+TOP-LEVEL structured fields. It still takes extra key/value attrs for handler
+context (`"scene_id", id`).
+
+> **The difference is nesting, not loss.** An earlier version of this rule said a
+> bare `slog.ErrorContext(ctx, msg, "err", err)` "flattens the oops error to a
+> plain string, losing the code". That is **false**, and believing it produces
+> tests that cannot fail. `oops.OopsError` implements `slog.LogValue()`, which
+> emits `slog.Any("code", code)` (`samber/oops@v1.22.0/error.go:586`), so the
+> bare form still carries the code — nested, as `error.code=<CODE>`, rather than
+> flat as `code=<CODE>`. Both forms therefore satisfy an assertion like
+> `Contains(logged, "code=MY_CODE")`, because `error.code=MY_CODE` contains that
+> substring. A guard that pins this distinction MUST assert the absence of the
+> nested form (`NotContains(logged, "error.code=")`); that is the only clause
+> that discriminates. The conclusion is unchanged — use `errutil` — but the
+> reason is flat-vs-nested plus `ctx` propagation, not data loss.
+> (Found in v0.13 Phase 4 code review: the false mechanism was copied from this
+> rule into a test comment, and the test passed identically under the bug.)
 
 **Return `status.Errorf` with a static string (no format verb):** it is
 wrapcheck-allowlisted, so the opaque return needs no `//nolint`. `status.Error(codes.Internal, "internal error")` is behaviorally identical but is **not** allowlisted, so it requires a line-scoped `//nolint:wrapcheck` (see [Linter compliance](#linter-compliance)). Either is fine; prefer `Errorf` to keep the diff nolint-free.

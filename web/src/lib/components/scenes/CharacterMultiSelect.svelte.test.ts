@@ -15,17 +15,19 @@ vi.mock('$lib/scenes/directoryClient', () => ({
 describe('CharacterMultiSelect', () => {
 	beforeEach(() => vi.clearAllMocks());
 
-	it('loads the directory for the acting alt on mount', async () => {
+	it('loads the viewer-scoped directory on mount, passing no acting alt', async () => {
 		const onChange = vi.fn();
 		const target = document.createElement('div');
 		document.body.appendChild(target);
 		const comp = mount(CharacterMultiSelect, {
 			target,
-			props: { characterId: 'char-me', selected: [], onChange },
+			props: { selected: [], onChange },
 		});
 		flushSync(); // force $effect to run so the on-mount fetch fires deterministically
 		const { listAllCharacters } = await import('$lib/scenes/directoryClient');
-		expect(listAllCharacters).toHaveBeenCalledWith('char-me');
+		// The listing is scoped by the session cookie, never by a client-supplied
+		// character id — asserting the empty argument list is what pins that.
+		expect(listAllCharacters).toHaveBeenCalledWith();
 		unmount(comp);
 		target.remove();
 	});

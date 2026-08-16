@@ -81,10 +81,10 @@ home, with both designed to absorb the deferred portal surfaces without rework.
 
 - [x] **Phase 1: Portal SPEC** — settle every shape decision whose cost explodes after code exists, and discharge PROJECT.md's Out-of-Scope precondition — completed 2026-08-01 (6/6 plans; `01-SPEC.md`, 16 sections; 9 amendments applied; 4 issues opened)
 - [ ] **Phase 2: ABAC & Schema Vocabulary** — admin-section + public-profile policy, name normalization + unique index, character lifecycle column
-- [ ] **Phase 3: World Character Commands** — domain-layer `RenameCharacter` + soft `RetireCharacter`, version-guarded and outbox-emitting
-- [ ] **Phase 4: Shared Facade Helpers & `CharacterAccessService`** — one guest/ownership gate; character read/write BFF with privacy enforced by absence
-- [ ] **Phase 5: Character Identity UI & Public Profiles** — creation identity card, multi-alt management, public profile page, per-field visibility
-- [ ] **Phase 6: Admin Portal Shell & Character Administration** — ABAC-gated `/admin`, character administration, six deferred sections registered and denied-after-gate
+- [x] **Phase 3: World Character Commands** — domain-layer soft `RetireCharacter`/`UnretireCharacter` + the retirement reactor, version-guarded and outbox-emitting (`RenameCharacter` moved to 999.20, 2026-08-06) (completed 2026-08-10)
+- [x] **Phase 4: Shared Facade Helpers & `CharacterAccessService`** — one guest/ownership gate; character read/write BFF with privacy enforced by absence (completed 2026-08-11)
+- [x] **Phase 5: Character Identity UI & Public Profiles** — creation identity card, multi-alt management, public profile page, per-field visibility (completed 2026-08-13)
+- [x] **Phase 6: Admin Portal Shell & Character Administration** — ABAC-gated `/admin`, character administration, six deferred sections registered and denied-after-gate (completed 2026-08-14)
 
 ## Phase Details
 
@@ -99,9 +99,10 @@ before UI** (Phases 3 → 4 → 5) mirrors the shipped scenes path exactly. **Ad
 because it consumes the most and because `internal/web/` contains **zero `RoleAdmin` references today** —
 a net-new trust boundary with no existing test suite that would notice if it were wrong.
 
-Phase 3 is *planning*-parallelizable with Phase 2, but its `Rename` MUST NOT land before Phase 2's
-unique index (adding a second writer to a live check-then-insert race), and its `Retire` needs Phase 2's
-lifecycle column.
+Phase 3 is *planning*-parallelizable with Phase 2, and its `Retire` needs Phase 2's lifecycle column.
+(The former `Rename` ordering constraint — MUST NOT land before Phase 2's unique index, since it adds a
+writer to a live check-then-insert race — moves with `Rename` to Phase 999.20; Phase 2's index has since
+shipped, so it is satisfied either way.)
 
 **Scheduling note (not a dependency):** `WebCheckSessionResponse.roles` (ADMIN-08) can be pulled into
 Phase 4's proto work to avoid a second `web.proto` regeneration cycle in Phase 6. Likewise, Phase 4
@@ -234,27 +235,237 @@ Plans:
 - [x] 02-13-PLAN.md — Row-identity resolution: player-scoped roles, PropertyProvider player-keyed peers, provider registration
 - [x] 02-11-PLAN.md — SPEC amendments, validation map, abac-reviewer routing, phase gate
 
-### Phase 3: World Character Commands
+### Phase 02.1: World Caller Model (INSERTED)
 
-**Goal**: `world.Service` gains `RenameCharacter` and soft `RetireCharacter` at the domain layer, both version-guarded and emitting through the transactional outbox in-transaction, with the `writeCommands` census row and taxonomy kind landed in the same change.
-**Depends on**: Phase 1 (SPEC). Planning parallelizes with Phase 2; execution requires Phase 2's normalized-name unique index before `Rename` and its lifecycle column before `Retire`.
-**Requirements**: IDENT-03, IDENT-04, IDENT-10
+**Why this exists (inserted 2026-08-07):** `world.Service` takes `subjectID string` and internally
+reconstructs a `types.AccessRequest{Subject, Action, Resource, Attributes}` with `Attributes`
+hardcoded `nil` (`internal/world/service.go:214`). The authorization layer has carried a per-call
+attribute channel since Phase 3b — `types.NewAccessRequest`'s 4th parameter
+(`internal/access/policy/types/types.go:143`), overlaid onto `bags.Action` and readable in the DSL
+as `action.*` (`engine.go:252-265`) — and the world API has no way to reach it. That is a
+pre-existing modeling defect in the caller argument, not a gap created by background jobs; jobs are
+simply the first caller that makes it visible. Threading it as a variadic option was rejected: an
+execution context that every call semantically has should not be optional. Full derivation:
+`.planning/phases/02.2-background-job-authorization-model/02.2-CONTEXT.md` D-56.
+
+**Goal**: `world.Service`'s 21 public commands take a typed caller value instead of a bare
+`subjectID string`, so caller identity and the execution context it acts under travel together and
+cannot be supplied half-way. `checkAccess` forwards that context to `types.NewAccessRequest`,
+replacing the hardcoded `nil`.
+**Depends on**: Phase 2 (ABAC vocabulary, attribute-provider substrate)
+**Blocks**: Phase 02.2 (the job model needs this carrier), and transitively Phase 3
+**Requirements**: AUTHZ-01 (minted 2026-08-08 during `/gsd-discuss-phase 02.1`)
+
+**Shape (decided 2026-08-07, `02.2-CONTEXT.md` D-56/D-57):** typed constructors, not a bare struct
+— `world.HumanCaller(subjectID)`, `world.JobCaller(name, provenance)`, `world.SystemCaller()` —
+so invalid combinations (a human carrying job provenance, a job with no provenance) are
+unrepresentable, and the `job.`-namespaced attribute keys are produced in exactly one place.
+*(Amended 2026-08-08, `02.1-CONTEXT.md` D-62: `JobCaller` itself lands in Phase 02.2 once its
+provenance vocabulary settles; 02.1 ships `HumanCaller`/`SystemCaller` plus the caller type's
+internal attribute channel, so adding `JobCaller` later is purely additive — no signature churn,
+no `checkAccess` change.)*
+
+**Verified blast radius (2026-08-07 — grep-confirmed, do not re-estimate from method count):**
+
+- **21 public `Service` methods** take `(ctx context.Context, subjectID string, …)` — a uniform
+  slot on every one, so the change is symmetric rather than per-command.
+
+- **47 production call sites** across 12 files; **347 test call sites** across 13 files.
+- **3+ interfaces redeclare the signatures** and must move in lockstep:
+  `internal/world/mutator.go` (11 methods), `internal/command/types.go` (9+),
+  `internal/grpc/server.go` (2) — plus mockery regeneration for their mocks.
+
+- `subjectID` is positional arg 2 on all 21 methods, so the test-site migration is a structural
+  codemod (`ast-grep`), not 347 judgment calls.
+
 **Success Criteria** (what must be TRUE):
 
-1. A player can rename their own character through the domain layer: the new name passes Phase 2's normalization and block-list policy, the write is version-guarded, and a `character.renamed` event carrying `{id, old_name, new_name}` reaches the outbox in the same transaction as the state change.
-2. A retired character leaves active play with its record intact and **its name still reserved**, and the retirement is reversible — retire, idle-out, and purge stay three distinct operations, and the irreversible `DeleteCharacter` path (which cascades `entity_properties` and emits a tombstone) is untouched by the retire flow.
-3. A stale `expected_version` on any new character mutation is rejected with the typed `WORLD_CONCURRENT_EDIT` signal rather than silently overwriting — v0.12's existing two-replica resilience harness, pointed at the new commands, passes.
-4. The `writeCommands` census and the mutation taxonomy list the new commands in the same change that introduces them; the census meta-test fails if either is missing.
+1. No public `world.Service` command takes a bare `subjectID string`; every one takes a typed
+   caller value, and there is no overload or variadic escape hatch that preserves the old shape.
 
-**Plans**: TBD
+2. `checkAccess` passes the caller's execution context to `types.NewAccessRequest` — the
+   hardcoded `nil` at `service.go:214` is gone — and a world write can reach the DSL as `action.*`.
+
+3. Behavior is unchanged for every existing caller: the 47 production sites migrate to
+   `HumanCaller`/`SystemCaller` with identical authorization outcomes, proven by the existing
+   suites passing without assertion changes.
+
+4. `internal/grpc/location_follow.go:197` — the **single** production `access.WithSystemSubject`
+   call site — is migrated to an explicit `SystemCaller`, so the ambient context marker is no
+   longer how a system operation is declared at the world boundary.
+
+5. `abac-reviewer` returns READY: the refactor changes how the subject and its context reach the
+   engine, which is an access-control surface even though no policy text changes.
+
 **UI hint**: no
-**Research flag**: `--research-phase` recommended — the `writeCommands` census bijection semantics (`internal/world/mutator.go:78-100`) are genuinely unverified, and this repo has a documented history of plans failing on unverified seam assumptions.
+**Research flag**: `--research-phase` recommended — `SystemCaller()` interacts with the S1 defense
+(`engine.go:92-101` requires **both** a bare `"system"` subject **and** `access.IsSystemContext(ctx)`;
+a bare subject without the marker is a hard `SYSTEM_SUBJECT_REJECTED`), so a caller *value* must
+influence the *context*. That seam is unverified.
 
-**Sketch findings** (must be answered in this phase): **Where `last_active_at` is written** — session-store create is the seam; it MUST NOT be the lease-refresh path (`internal/session/session.go:485` `RefreshConnection`), which would make every character a hot write every lease interval. **Can admins rename at all?** §9.3's admin census has update/retire/unretire and no rename — if admins cannot, sketch 004's `Rename…` affordance is a dead end and the locked row must say so; if they can, that is a census addition. Source: `.planning/sketches/002-*/README.md`, `004-*/README.md`. **Rename is load-bearing for 009-A** — sketch 009 corrected "names are permanent" (FALSE; IDENT-03 ships rename) and the create UI's chosen shape depends on it; if rename slips or is gated, revisit 009. **Roster:** a non-`active` lifecycle MUST suppress the shipped session badge (`Active`/`Offline`), which is a *different vocabulary* from `characters.status`. Player self-retire is **not** specified — every retire path sketched is `AdminRetireCharacter`.
+**Plans:** 3/3 plans complete
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 3`)
+- [x] 02.1-01-PLAN.md — Tracer: `world.Caller` type + constructors, the `checkAccess` seam, and the
+  `GetLocation`/`GetExitsByLocation` slice end-to-end (proves criteria 2 and 4); plus the committed
+  ast-grep codemod rules (D-63).
+
+- [x] 02.1-02-PLAN.md — The atomic flip: the remaining 21 command signatures, all six redeclaring
+  interfaces, the 31 production call sites, the `internal/property` chain (D-66), and the codemod
+  over the test tier; gated on `task test` **and** `task test:int`.
+
+- [x] 02.1-03-PLAN.md — `INV-WORLD-8` census binding + registry entry + `INV-WORLD` scope amendment
+  (D-65/D-67/D-68), then the `abac-reviewer` READY gate and `task pr-prep`.
+
+### Phase 02.2: Background Job Authorization Model (INSERTED)
+
+**Why this exists (inserted 2026-08-07, renumbered from 02.1 the same day):** Phase 3's retirement
+reactor surfaced a platform gap rather than creating one. A host subsystem that consumes an event
+and then performs a world write has no honest way to authorize itself today. Three candidate
+answers were examined and all three fail: a synthetic `system:retirement` principal cannot be
+narrowed, because `parseEntityType` (`internal/access/policy/engine.go:542-548`) matches on the
+prefix only, so any permit written for it also grants `system:bootstrap`; borrowing the originating
+actor off the envelope (`Envelope.Actor`, set from the same `subjectID` that passed `checkAccess` —
+`internal/world/service.go:1079`) is wrong on the merits, because a player authorized to retire
+their own character was never authorized to end sessions, emit to a location, or move a character;
+and `access.WithSystemSubject` (`internal/access/context.go:12`) is a total bypass
+(`engine.go:91-105`) that puts every future background consumer outside the default-deny
+chokepoint. Full derivation: `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-45/D-47.
+
+**Goal**: Background jobs — event-driven reactors, flushers, and any future host subsystem that
+acts on the world — get a first-class ABAC identity **plus per-execution attributes the policy
+engine can test**, so a job's authority is scoped to the work it is currently performing rather
+than granted as a blanket capability or borrowed from the human whose command triggered it.
+**Depends on**: Phase 2 (ABAC vocabulary, attribute-provider substrate, schema registry),
+**Phase 02.1 (World Caller Model)** — `JobCaller` is the carrier this phase's attributes ride on.
+**Requirements**: AUTHZ-02 (minted 2026-08-08 during `/gsd-discuss-phase 02.1`)
+**Blocks**: Phase 3 (its retirement reactor consumes this model)
+
+**Substrate already verified (2026-08-07), so this is composition, not invention:**
+
+- **Per-execution attributes already have a carrier.** `types.NewAccessRequest(subject, action,
+  resource, attrs)` (`internal/access/policy/types/types.go:143`) takes per-call attributes,
+  reserved-key-validates them (`:153-159`), deep-clones them (`:160-166`), and the engine overlays
+  them onto `bags.Action` (`engine.go:252-265`) where the DSL reads them as `action.*`. Reaching it
+  from a world write is **Phase 02.1's** job, not this phase's.
+
+- **Instance-scoping is expressible — proven, not assumed.** `Comparison.Left`/`Right` are both
+  `*Expr` and `Expr` may be an `AttrRef` (`internal/access/policy/dsl/ast.go:145-150,208-222`), and
+  16+ shipped seeds already compare across bags (`seed.go:41,47,113,131`). So
+  `when { action.job.trigger_subject == resource.id }` parses and evaluates. This is the concrete
+  reason a grants-only design was rejected — no static grant list can express it.
+
+- **The provider shape has a 15-line template.** `PluginProvider`
+  (`internal/access/policy/attribute/plugin_provider.go:36-58`) is a non-character principal
+  provider gated on a registry — `Namespace()`, `ResolveSubject` returning `nil, nil` for
+  non-matching refs, `ResolveResource` returning `nil, nil`, and `Schema()`. An unknown plugin
+  resolving to `nil, nil` is what makes it fail closed; the job provider copies that property.
+
+- **`action` is the strictest namespace in the compiler — and registering it is load-bearing.**
+  `validateAttributes` (`internal/access/policy/compiler.go:149-170`) skips unregistered
+  namespaces, warns on an undeclared key in a registered namespace, but **hard-errors** for
+  `action` specifically. `seed.go:332` already ships `action.dispatch_location` with no `action`
+  namespace registered, so registering `action` without declaring that key in the same change
+  turns a shipped seed into a boot-time compile error.
+
+**Success Criteria** (what must be TRUE):
+
+1. A background job authorizes its world writes under **its own identity** — not a borrowed
+   human actor's, and not an ABAC bypass. `access.WithSystemSubject` appears on no reactor or
+   flusher path.
+
+2. Authority is scoped by **per-execution runtime attributes**, not static grants alone: policy
+   can express "this job may write only the aggregate whose event it is currently handling", and
+   a test proves the same job is DENIED against a different aggregate.
+
+3. The `action` namespace is registered in the schema registry with **every** key it must carry —
+   the job provenance triple, the already-shipped `dispatch_location`, and the resolver-owned
+   `name` — so a typo'd `action.*` reference is a policy-compile failure at boot (cache reload) rather than a silent
+   default-deny, and no shipped seed regresses.
+
+4. Every background consumer gets a `job:` identity and a **declared capability class**
+   (`principal.job.name`, `principal.job.writes`, via the liveness-gated registry and provider);
+   **only event-driven** consumers additionally get **per-execution instance scoping** (the
+   provenance triple bound against `resource.id`). A timer-driven job's authority is therefore
+   **necessarily coarse**, and the documentation says so plainly rather than implying it is
+   instance-scoped. Existing `WithSystemSubject` / `SystemCaller()` call sites are enumerated,
+   with the note that `rg 'SystemCaller\(\)'` — not `rg WithSystemSubject` — is the enumerating
+   grep after Phase 02.1 (migration itself belonged to Phase 02.1).
+
+5. `abac-reviewer` returns READY on the new principal type, its provider, its schema, and its
+   seeds.
+
+**UI hint**: no
+**Research flag**: `--research-phase` recommended — the reserved-key interaction
+(`IsReservedActionKey`) plus `warnOnMissingSeedCoverage` / `RegisteredNamespaces()` coupling are
+unverified seams, and timer-driven jobs (Phase 3's `last_active_at` flusher) carry no triggering
+event, so what they present as per-execution context is an open question that MUST NOT be invented
+by a planner.
+
+**Plans:** 5/5 plans complete
+
+Plans:
+**Wave 1**
+
+- [x] 02.2-01-PLAN.md — Tracer: the `job:` principal end to end (subject, registry, provider, JobCaller, fixture seed, paired permit/deny)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 02.2-02-PLAN.md — Production ABAC wiring + the D-58 principal-aware deny code
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 02.2-03-PLAN.md — The exhaustive `action.*` audit + D-60 `action` namespace registration
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 02.2-04-PLAN.md — D-66 compiler↔SchemaRegistry wiring (4 sites) + D-67 fatal-for-all-sources
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 02.2-05-PLAN.md — INV-ACCESS-13, the contributor/operator doc, and the criterion-4 amendment
+
+### Phase 3: World Character Commands
+
+**Scope narrowed (2026-08-06):** `RenameCharacter` was **removed from this phase and from the v0.13 milestone** and moved to the backlog as **Phase 999.20**, linked to Phase 999.6 (Character Rostering & Transfer). Reason: rename cannot be specified until the character identity model gains an **approval dimension**, which does not exist — `characters.status` is `active|retired|idle` only, so the intended "rename permitted only before a character is approved for play" rule has no state to read. Designing that dimension touches bound `INV-WORLD-5`, 01-SPEC §4.4, PORTAL-04, character creation's initial state, and an approving actor (an admin surface, Phase 6), which is milestone-scale. Retire has **no** dependency on approval and stays. Full rationale: `.planning/phases/03-world-character-commands/03-CONTEXT.md` D-44.
+
+**Goal**: `world.Service` gains a soft `RetireCharacter` / `UnretireCharacter` pair at the domain layer, version-guarded and emitting through the transactional outbox in-transaction, plus the host-side reactor that makes a retired character actually leave active play, with the `writeCommands` census rows and taxonomy kinds landed in the same change.
+**Depends on**: Phase 1 (SPEC), **Phase 02.2 (Background-Job Authorization Model)** and transitively **Phase 02.1 (World Caller Model)**. Planning parallelizes with Phase 2; execution requires Phase 2's lifecycle column before `Retire`, and the retirement reactor requires 02.2's job-identity model before it can authorize its `MoveCharacter` call at all (see 03-CONTEXT.md D-45, superseded 2026-08-07 by D-47; the job model was renumbered 02.1 → 02.2 on 2026-08-07 when the world caller model was split out ahead of it — see 02.2-CONTEXT.md D-56).
+**Requirements**: IDENT-04, IDENT-10
+**Also lands here**: the `last_active_at` write seam Phase 2 deferred (D-24) — a *separate*, general-purpose character-activity subsystem, unrelated to retirement beyond sharing this phase. Phase 3 therefore adds **two** subsystems (`SubsystemID` 18→20, two 5-site compile cascades).
+**Success Criteria** (what must be TRUE):
+
+1. A retired character leaves active play with its record intact and **its name still reserved**, and the retirement is reversible — retire, idle-out, and purge stay three distinct operations, and the irreversible `DeleteCharacter` path (which cascades `entity_properties` and emits a tombstone) is untouched by the retire flow.
+2. Retirement is *observably* effective, not merely recorded: a host reactor consuming `character_retired` ends the character's live sessions, notifies the location it left, and moves it to the configured starting location.
+3. A stale `expected_version` on any new character mutation is rejected with the typed `WORLD_CONCURRENT_EDIT` signal rather than silently overwriting — v0.12's existing two-replica resilience harness, pointed at the new commands, passes.
+4. The `writeCommands` census and the mutation taxonomy list the new commands in the same change that introduces them; the census meta-test fails if either is missing.
+5. `characters.last_active_at` is actually written — Phase 2 shipped the column and every read path, but nothing writes it. A character's activity updates it without a per-event database write, and `INV-WORLD-4`'s writer enumeration is amended in the same change that adds the writer.
+
+**Plans**: 6/6 plans executed
+**UI hint**: no
+**Research flag**: `--research-phase` recommended — the `writeCommands` census bijection semantics (`internal/world/mutator.go:78-100`) are genuinely unverified, and this repo has a documented history of plans failing on unverified seam assumptions.
+
+**Sketch findings**: **Where `last_active_at` is written** — **resolved 2026-08-06** (03-CONTEXT.md D-42): an event listener over session start/end plus character activity, buffered in a **NATS JetStream KV** bucket (which MUST set `Storage: FileStorage` explicitly — buckets do not inherit the stream's config) and flushed periodically to the column by its **own general-purpose subsystem**, separate from the retirement reactor. The seam MUST NOT be the lease-refresh path (`internal/session/session.go:485` `RefreshConnection`). The flusher is a fourth out-of-world writer and amends `INV-WORLD-4`'s enumeration in the same change. **Can admins rename at all?** — deferred to Phase 999.20 with rename; sketch 004's `Rename…` affordance is **not** live in v0.13. **Sketch 009-A depended on rename existing** — that dependency is now unmet; sketch 009 finding #5 ("names are reserved, not permanent") is **false for v0.13** and the creation copy must be corrected. **Roster:** a non-`active` lifecycle MUST suppress the shipped session badge (`Active`/`Offline`), which is a *different vocabulary* from `characters.status` — note the split is already structural (session status lives on the session row, `internal/session/session.go:21`), so this is a rendering concern, not a missing column. Player self-retire is **not** specified — every retire path sketched is `AdminRetireCharacter`. Source: `.planning/sketches/002-*/README.md`, `004-*/README.md`.
+
+Plans:
+**Wave 1**
+
+- [x] 03-01-PLAN.md — Retire/Unretire domain commands (caller-shaped): tracer through `mutate()`, two taxonomy kinds + census rows, `CharacterRepository.SetStatus` CAS, the D-34 default-character clear (wave 1)
+- [x] 03-02-PLAN.md — Shared substrate: the D-46 consumer-retry relocation, two subsystem skeletons (`internal/retirement`, `internal/charactivity`), and the full 13-site `SubsystemID` 18→20 cascade landed once (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 03-03-PLAN.md — IDENT-10 proof: two-replica stale-version rejection `Describe` in the resilience harness, retire row+envelope atomicity, name-reservation assertion, INV-WORLD-6 defect filed (wave 2)
+- [x] 03-04-PLAN.md — Retirement reactor: sessions-only fanout idempotent under redelivery, `JobCaller` authorization per 02.2's landed model, admin-only retire/unretire surface (user decision 2026-08-07; no player self-retire seed) + conditional `job:retirement` grant (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 03-05-PLAN.md — `last_active_at`: writer-boundary flush function, KV listener/flusher subsystem with revision-conditional deletes, the `INV-WORLD-4` THREE→FOUR enumeration amendment, and the `WithCharacterActivity` harness option + charactivity suite (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 03-06-PLAN.md — Full-stack retirement proof: `WithOutboxRelay`/`WithRetirementReactor` harness StartOptions and the `test/integration/retirement/` suite (fanout, feed order, redelivery idempotency, instance-scope DENY) (wave 4)
 
 ### Phase 4: Shared Facade Helpers & `CharacterAccessService`
 
@@ -270,14 +481,38 @@ Plans:
 5. The profile read path is built **exclusively** from the viewer-filtered property slice — a direct `PropertyReader.ListByParent`/`PropertyRepository.ListByParent` call from the facade fails the build or the test — and the proto ships the media shape now, empty: `ProfileImage{media_id, alt_text, content_warning}` + `primary_image` + `repeated gallery [max_items = 10]`.
 6. An off-location viewer can **read** a character's in-world description where `seed:player-character-colocation` previously **denied** it — the half of Phase 2's criterion 4 deferred here by D-29. It ships only together with the criterion-2 projection narrowing, so the read path returns `description` without `PlayerId` or `LocationId`, and only after an audit establishes exactly which existing character descriptions it exposes. A permit of the bare shape `permit(principal is character, action in ["read"], resource is character)` — unconditional, gating the whole `CharacterInfo` projection — does **not** satisfy this criterion.
 
-**Plans**: TBD
+**Plans**: 9/9 plans executed
 **UI hint**: no
 
-**Sketch findings** (must be answered in this phase): **A3** — `AdminSearchCharacters` (§9.2) currently "searches names" (character names); the admin list needs it extended to player usernames. **A2's RPC half** — the list RPC must accept a sort key for the joined `players.username`. **Admin rename census decision** (see Phase 3). Source: `.planning/sketches/002-*/README.md`.
+**Sketch findings** (must be answered in this phase): **A3** — `AdminSearchCharacters` (§9.2) currently "searches names" (character names); the admin list needs it extended to player usernames. **ACCEPTED** as the design, implemented in **Phase 6** — D-72 defers the admin RPCs; answered 2026-08-10 by D-81, no Phase-4 code. **A2's RPC half** — the list RPC must accept a sort key for the joined `players.username`. **ACCEPTED** as the design, implemented in **Phase 6**; §11.3's row was already amended in Phase 2 by D-26. **Admin rename census decision** (see Phase 3) — **WITHDRAWN.** Phase 3 D-44 removed rename from v0.13, so sketch 004's `Rename…` affordance is not live in v0.13 and sketch 009 finding #5 ("names are reserved, not permanent") is false for v0.13; answered 2026-08-10 by D-81, no code. Source: `.planning/sketches/002-*/README.md`.
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run `/gsd-plan-phase 4`)
+- [x] 04-01-PLAN.md — Tracer: an anonymous off-location visitor reads a character's name and in-world description end to end (proto slice, `read_description` seeds, facade, web proxy, wiring)
+- [x] 04-02-PLAN.md — Extract `resolveAndGate` and `ownedCharacter` onto one embedded `playerGate`
+- [x] 04-03-PLAN.md — Amend 01-SPEC §9.3/§9.4.2 for the struck `RenameCharacter` row; record the three sketch verdicts
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 04-04-PLAN.md — The viewer-filtered property slice, marshaled-bytes absence, tier exhaustiveness, and the remaining Phase-4 proto surface
+- [x] 04-09-PLAN.md — The profile-attribute domain write: taxonomy kind, mutator seam, and the guarded `world.Service` command (runs at wave 2, before 04-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 04-05-PLAN.md — The owner audience (`ListMyCharacters`, `GetMyCharacter`) and the alt-linkage invariant
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 04-06-PLAN.md — The write facade: mask allowlist, byte caps, version guard, and the description edit
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 04-07-PLAN.md — `ListCharacterDirectory` and the removal of `WebListAllCharacters`
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 04-08-PLAN.md — The routing census and the descriptor-derived character-returning RPC census
 
 ### Phase 5: Character Identity UI & Public Profiles
 
@@ -294,35 +529,126 @@ Plans:
 
 **Sketch findings** (design decided in sketches 007, 008, 009; read `.planning/sketches/MANIFEST.md` round-2 findings before planning): **profile = identity card, not a long-form page** (007-C) — a bounded card carrying portrait/name/pronouns/concept/description that is complete at any fill level, with long-form sections growing *below* it and simply absent when withheld. **The page MUST NOT explain its own sparseness** — §7.5 + §8.9 make a blank field and a withheld field indistinguishable, so no counts, no lock icons, no greyed sections; a sign-in invitation is legal only if **unconditional**, and 007-C ships none. **Under the seeded defaults `guest` and `player` render identically** (no §8.6 row seeds `player`), so any tier preview must derive distinct outcomes from the live floor set, not offer a hardcoded three-way toggle. **The gallery never renders in v0.13** — §7.3 ships the media model with zero upload behavior, so build the renderer but ship no empty "coming soon" slots. **Roster is sectioned** (008-B): `Playable` grid first with the create card, then `Not playable`; every card in the top grid is uniformly clickable. **A non-`active` lifecycle MUST suppress the session badge** — the shipped `Active`/`Offline` badge is *session* state and collides with `characters.status`. **Creation is submit-and-report** (009-A), no live availability check — it cannot be honest across check-and-insert. Source: `.planning/sketches/007-*/README.md`, `008-*/README.md`, `009-*/README.md`.
 
-**Plans**: TBD
+**Plans**: 7/8 plans executed
 **UI hint**: yes
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run `/gsd-plan-phase 5`)
+- [x] 05-01-PLAN.md — TRACER: `SetDefaultCharacter` end to end (proto → census → repo → facade → proxy → roster control)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 05-02-PLAN.md — The public profile route `/c/[id]` and the absence contract
+- [x] 05-03-PLAN.md — `CreateCharacter` reshape: proto, census, constructor, facade handler, repointed proxy
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 05-04-PLAN.md — The owner authoring surface `/characters/[id]`, per-section save, PROFILE-12 notice
+- [x] 05-05-PLAN.md — Criteria 4 and 5 integration specs, the INV-ACCESS-10 binding decision, the owed amendments
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 05-06-PLAN.md — The creation route `/characters/new` and the authoritative create flow
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 05-07-PLAN.md — The sectioned roster `/characters` with its badge matrix and default control
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 05-08-PLAN.md — E2E: the logged-out profile visit, the structured create, the roster journey
 
 ### Phase 6: Admin Portal Shell & Character Administration
 
 **Goal**: Stand up `/admin` as an ABAC-gated trust boundary with character administration as its working section, six deferred sections registered / gated / refusing **after** the gate, and audit emission with before-values on every admin mutation.
 **Depends on**: Phase 2 (`admin_section:` vocabulary + `seed:admin-section-access`), Phase 4 (shared facade helpers). The authorization gate is the **first thing built in this phase**, before any section, so every subsequent section inherits it.
-**Requirements**: ADMIN-01, ADMIN-02, ADMIN-03, ADMIN-04, ADMIN-05, ADMIN-06, ADMIN-07, ADMIN-08, EXT-01, EXT-02, EXT-03, EXT-04
+**Requirements**: ADMIN-01, ADMIN-02, ADMIN-03, ADMIN-04, ADMIN-05, ADMIN-06, ADMIN-08, EXT-01, EXT-02, EXT-03, EXT-04
 **Success Criteria** (what must be TRUE):
 
 1. A non-admin calling an admin RPC **directly, bypassing the route entirely**, is denied — the decision is ABAC on an `admin_section:` resource, never a bare `PlayerHasRole` lookup and never a route-guard or gateway decision — with the denial asserted **over the wire** — the mapped `status.Code(err)` plus a generic `status.Convert(err).Message()` in which no internal code string appears — the specific typed `DENY_*` code asserted with `errutil.AssertErrorCode`, and a paired positive control proving an admin would have been permitted.
 2. An admin lists, searches, opens, and edits characters; the edit surface accepts only an explicit **field-mask allowlist that excludes roles**, and admin disable/delete moves a character through the **same lifecycle states** as player-initiated retire — the irreversible `DeleteCharacter` path is reachable from no player-facing button.
-3. Every admin mutation emits its audit envelope **in the same transaction** as the state change, carrying the **before-values** and the acting **player** id, not only the character; the `events_audit` row is projected from that envelope by the asynchronous audit projection, which is the only writer to that table.
+3. Every admin mutation emits its audit envelope **in the same transaction** as the state change, carrying the acting **player** id, not only the character; lifecycle transitions additionally carry **before-values** (profile updates are new-values-only by D-103 erasure-safety, so they carry none). Projection of that envelope into `events_audit` is **out of scope for this phase** — the world outbox relay publishes through a bare `JetStreamPublisher` and the audit projector requires an `App-Rendering` header that only `RenderingPublisher` writes, so no relayed world envelope is projected today; tracked in #4971.
 4. All six deferred sections (stats, players, moderation, audit, config, plugins) are registered, role-gated, and return `NOT_IMPLEMENTED` **after** the gate — a non-admin hitting one is *denied*, not told it is unimplemented — and a meta-test asserts **set equality** between the section registry and the authorization-descriptor set, so a section registered without a descriptor fails at compile time or at boot.
-5. Admin navigation is filtered from the **registry contract**, not template `{#if}` blocks; the roles exposed on `WebCheckSessionResponse` change only what is drawn, and drawing a link the viewer may not use still results in a denial at the RPC.
+5. The `roles` hint exposed on `WebCheckSessionResponse` is **non-authoritative** — it is a drawing aid only, and a caller who acts on a role it names still meets a denial at the admin RPC. (The nav that consumes it is Phase 06.1's; this phase owes only the hint and the denial behind it.)
 
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 4/4 plans executed
+**UI hint**: no — the web surface moved to Phase 06.1 on 2026-08-13; this phase is proto, gate, RPC, SQL and audit only.
 **Research flag**: `--research-phase` recommended — there is no in-repo precedent for the web gateway making an admin decision (`internal/web/` has zero `RoleAdmin` references); `AssertOperatorAdmin`'s shape must be transposed across a different auth model, and the reserved-section descriptor mechanism needs a concrete fail-at-boot design.
 
-**Sketch findings** (design decided in sketches 001–004; read `.planning/sketches/MANIFEST.md` locked-decisions table before planning): three-column frame with the admin nav **merging into the rail** at 768–1023px (001/C2); inline row actions, **no multi-select** (002/A); planned sections **navigable to a minimal empty state**, no gate trace, no scope preview (003/A); edit surface = Sheet with **managed-elsewhere first and collapsed**, `version` as header metadata, status as a **transition picker that never sends a status value** (004/C). **There is no delete in this portal** — §9.3 has no `AdminDeleteCharacter` and §4.4 forbids wiring purge to an admin button. **Open:** `+error.svelte` does not exist (#4903) and the not-found page must stay the *ordinary* one, or `/admin`'s indistinguishability is lost. Ten shadcn components need adding (`table`, `pagination`, `empty`, `alert`, `avatar`, `breadcrumb`, `skeleton`, `select`, `field`, `sonner`). **Round 2 (005, 006, 010):** the edit Sheet is a **380px right overlay** (005-A) at every band **except** `<768`, where one `@container vp (max-width:767px)` block turns it into a **bottom-sheet** (006-B) — `Sheet side="bottom"`, a prop at a breakpoint, not a second component. Its **grab handle promises drag-to-dismiss**: honor it or drop it. The Sheet stays an **overlay, never a route** — that deliberately keeps deep-linkable edit surfaces (and their not-found obligation) out of scope. The mutation loop ends in a **toast naming the RPC**, and the row updates **in place** rather than refetching. **Not-found** (010-B): one page for four kinds of miss, offering the viewer's *own* sections; copy is **`Home`** — never "Back to HoloMUSH" (branding INV-6; the game's name exists as `SettingConfig.DisplayName` but reaches no web surface). Indistinguishability is **per-viewer**, not global. Ship a meta-test asserting **exactly one** `+error.svelte` under `web/src/routes/` — a second boundary kills the property with nothing failing.
+**Sketch findings** (the web-surface findings from sketches 001–006 and 010 moved to Phase 06.1 with the plans that consume them; only the two that constrain this phase's *server* contract remain here — read `.planning/sketches/MANIFEST.md` locked-decisions table before planning): **There is no delete in this portal** — §9.3 has no `AdminDeleteCharacter` and §4.4 forbids wiring purge to an admin button, so this phase MUST NOT ship an admin-reachable irreversible delete RPC. Status is a **transition picker that never sends a status value** (004/C), so the write RPCs take a transition verb, never a client-supplied target status.
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run `/gsd-plan-phase 6`)
+- [x] 06-01-PLAN.md — Tracer: the fail-closed admin section gate, end-to-end from proto to handler
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 06-02-PLAN.md — `AdminGetSection`, the six planned sections refusing after the gate, and the non-authoritative `roles` hint
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 06-04-PLAN.md — Admin character reads: `pg_trgm` migration 000057, the `players` join, both-direction ordering, three read RPCs
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 06-05-PLAN.md — Admin character writes and same-transaction audit emission with before-status
+
+### Phase 06.1: Admin Portal Web Surface (INSERTED)
+
+**Goal**: Ship the operator-facing web surface for the admin portal — the shadcn component set and the single root error boundary, the admin shell with its permission-filtered nav, the character table, and the edit Sheet with its mutation loop — against the gate and RPCs Phase 6 delivers.
+**Depends on**: Phase 6 (the `holomush.adminportal.v1` wire contract, the fail-closed section gate, and the character read/write RPCs). Split out of Phase 6 on 2026-08-13 after three cross-AI convergence cycles showed the combined phase regressing at the seams between its backend and web halves; the four web plans moved here unchanged, carrying their review dispositions.
+**Requirements**: ADMIN-03, ADMIN-07
+**Success Criteria** (what must be TRUE):
+
+1. Admin navigation is filtered from the **registry contract** returned by `AdminListSections`, not from template `{#if}` blocks; the roles on `WebCheckSessionResponse` change only what is drawn, and drawing a link the viewer may not use still ends in a denial at the RPC.
+2. Exactly **one** `+error.svelte` exists under `web/src/routes/`, and `/admin`'s not-found is the *ordinary* one — a second boundary would kill per-viewer indistinguishability with nothing failing.
+3. An admin lists, searches, sorts and opens characters in the table, and edits them through the Sheet; the Sheet's field set is the server's field-mask allowlist, and a denied or absent character renders the ordinary not-found.
+4. The responsive treatment uses the **same viewport mechanism** as the shipped rail (`@media (max-width: 767px)`), so the rail's collapse and the admin shell's collapse fire at the same moment by construction rather than by coincidence.
+
+**Plans**: 10/10 plans executed (6 executed; 4 gap-closure plans added 2026-08-15 for G-06.1-2, G-06.1-4, G-06.1-5 and G-06.1-6 after re-verification returned 3/4 criteria MET)
+
+Plans:
+**Wave 1**
+
+- [x] 06.1-01-PLAN.md — Eleven shadcn components, the single root `+error.svelte` with its count meta-test, and the owed upstream amendments
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 06.1-02-PLAN.md — The admin shell, the server-projected permission-filtered nav, and the planned-section state
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 06.1-03-PLAN.md — The character table: click-header sort, one status filter, coarse `Last active`, four list states
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 06.1-04-PLAN.md — The edit Sheet, the D-110 mutation loop, the retire confirm, and the phone-band + indistinguishability E2E proofs
+
+**Wave 5** *(gap closure — G-06.1-2)*
+
+- [x] 06.1-05-PLAN.md — One phone-band breakpoint: the Sheet through the shared media-query hook, nine `@media` rules onto Tailwind's own tokens, a source census, and the 767/768 boundary sweep
+
+**Wave 6** *(gap closure — G-06.1-3, blocked on Wave 5)*
+
+- [x] 06.1-06-PLAN.md — The Go/TypeScript parity guard over the Sheet's thirteen paths, its two byte caps and its path-to-cap mapping, replacing the self-echoing assertion
+
+**Wave 7** *(gap closure — G-06.1-2, the tracer)*
+
+- [x] 06.1-07-PLAN.md — One unit for both halves of the phone band: the census repaired so it stops licensing the px/rem split and stops rejecting its own fix, `DESKTOP_MEDIA_QUERY` in rem, and a Playwright project proving the two halves agree at a 20px root font size
+
+**Wave 8** *(gap closure — G-06.1-4, G-06.1-5, G-06.1-6; blocked on Wave 7)*
+
+- [x] 06.1-08-PLAN.md — The census's reach: a floor derived from its own occurrence counts, a fail-closed extension set, arbitrary-variant and `innerWidth` clauses, a polled band settle, and a stable stylesheet anchor
+- [x] 06.1-09-PLAN.md — The parity guard reads each path's cap from the `maxBytes` the constructor emits rather than from the constructor's name, and refuses to guess an expression it cannot resolve
+- [x] 06.1-10-PLAN.md — A declared browser floor for the CSS media range syntax the conversion shipped, chosen at a blocking decision checkpoint and pinned by a meta-test
+
+> **Review provenance.** These four plans were reviewed as `06-03`, `06-06`, `06-07` and `06-08` across
+> three cross-AI cycles; `06-REVIEWS.md` in Phase 6 records those cycles under the **old** names and is
+> deliberately left unrewritten, because rewriting it would misattribute what reviewers actually said.
+> Mapping: `06-03`→`06.1-01`, `06-06`→`06.1-02`, `06-07`→`06.1-03`, `06-08`→`06.1-04`.
+> Outstanding at split time: 7 HIGH and ~30 actionable findings from cycle 3, dispositioned per plan.
 
 ## Progress
 
@@ -335,18 +661,18 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1. Channels Subsystem | v0.11 | 6/6 | In Progress|  |
 | 2. Scenes Lineage Completion | v0.11 | 13/13 | In Progress|  |
-| 3. Platform Hardening & Deployment Scaling | v0.11 | 9/9 | Complete | 2026-07-10 |
-| 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 4/4 | Complete    | 2026-07-11 |
-| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 16/16 | Complete    | 2026-07-13 |
-| 6. Operational Hardening & Assurance Gates | v0.12 | 5/5 | Complete    | 2026-07-15 |
+| 3. Platform Hardening & Deployment Scaling | v0.11 | 6/6 | Complete    | 2026-08-10 |
+| 4. World-Model Resilience Investigation & Decision (F1) | v0.12 | 9/9 | In Progress|  |
+| 5. World-Model Integrity Fixes (M2/M12) | v0.12 | 7/8 | In Progress|  |
+| 6. Operational Hardening & Assurance Gates | v0.12 | 4/4 | Complete    | 2026-08-14 |
 | 7. Event-Model & Bootstrap Decomposition | v0.12 | 11/11 | Complete    | 2026-07-18 |
 | 8. God-Object Decomposition | v0.12 | 9/9 | Complete   | 2026-07-19 |
 | 9. Test-Quality & Code-Health Sweep | v0.12 | 21/21 [^p9] | Complete | 2026-07-27 |
 | 1. Portal SPEC | v0.13 | 0/TBD | Not started | - |
 | 2. ABAC & Schema Vocabulary | v0.13 | 0/TBD | Not started | - |
 | 3. World Character Commands | v0.13 | 0/TBD | Not started | - |
-| 4. Shared Facade Helpers & CharacterAccessService | v0.13 | 0/TBD | Not started | - |
-| 5. Character Identity UI & Public Profiles | v0.13 | 0/TBD | Not started | - |
+| 4. Shared Facade Helpers & CharacterAccessService | v0.13 | 9/9 | Complete    | 2026-08-11 |
+| 5. Character Identity UI & Public Profiles | v0.13 | 8/8 | Complete    | 2026-08-13 |
 | 6. Admin Portal Shell & Character Administration | v0.13 | 0/TBD | Not started | - |
 
 [^p9]: All 21 plans executed, but plan 09-21 produced no SUMMARY (it performed the phase's only
@@ -646,6 +972,63 @@ test` cycle for wins (caching, scoping, parallelism). Aim: tighter edit→check 
 day emitted "No lefthook config" warnings on every commit)
 **Requirements:** TBD
 **Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.20: Character Rename & the Approval Dimension (BACKLOG)
+
+**Goal:** Give the character identity model an **approval dimension**, then land
+`world.Service.RenameCharacter` on top of it — renaming permitted only while a character
+is not yet approved for play, with the core name immutable afterwards.
+**Source:** removed from v0.13 Phase 3 on 2026-08-06 during `/gsd-discuss-phase 3`; full
+rationale and evidence in `.planning/phases/03-world-character-commands/03-CONTEXT.md`
+(D-44, plus the deferred-ideas section).
+**Related:** Phase 999.6 (Character Rostering & Transfer) — rostering is defined in
+REQUIREMENTS v2 as "a distinct transition *out of* retired, which is why retire must not
+release the name", so the approval axis and the rostering transition must be designed
+together, not separately.
+**Requirements:** IDENT-03 (moved out of v0.13); the rename half of IDENT-10.
+**Plans:** 0 plans
+
+Design inputs this item MUST carry:
+
+- **The approval dimension does not exist.** `characters.status` is `active|retired|idle`
+  only (`000054_character_identity_and_lifecycle.sql`). "Rename only before approval" has
+  no state to read; the honest substitute — "has this character ever emitted a comm
+  payload" — means querying the audit log to authorize a write.
+
+- **Two naming frictions.** `rostered` collides with 999.6's reserved meaning, and
+  `retired` is a lifecycle value 01-SPEC §4.4 deliberately keeps distinct from `purge` —
+  do not merge the approval axis into the lifecycle axis. Separately, a `session_status`
+  column on `characters` would **duplicate** an existing one: session status already lives
+  on the session row (`internal/session/session.go:21`).
+
+- **Blast radius.** Bound `INV-WORLD-5` (closed vocabulary + exhaustive-switch), 01-SPEC
+  §4.4, PORTAL-04, character creation's initial state, and an approving actor (an admin
+  surface, so it interacts with Phase 6).
+
+- **The substrate is already built.** `CharacterRepository.Rename`
+  (`internal/world/postgres/character_repo.go:212`) is version-guarded, runs `guardSkeleton`
+  with self-exclusion, and writes its outbox envelope inside its own transaction. Its doc
+  comment carries the rule: it MUST NOT be routed through `worldMutator.mutate()` (two
+  envelopes for one rename). No `character_renamed` taxonomy kind exists yet — the shipped
+  operator CLI emits rename as `character_updated`; reconcile rather than duplicate.
+
+- **`INV-WORLD-6` must be resolved here.** Its text claims a name becomes claimable again
+  only via a tombstone-emitting hard delete over exactly two paths, but rename frees the
+  old `normalized_name` — and the shipped operator CLI already does so in production. Its
+  binding test never exercises rename. Options recorded in 03-CONTEXT.md: narrow it to
+  lifecycle transitions, widen the enumeration, or add a former-names reservation table
+  (which closes identity inheritance while still permitting rename).
+
+- **Read `01-SPEC.md` §5 first** — the name-capture surface inventory, six frozen sites vs
+  five live ones, is what makes any rename argument checkable.
+
+- **UI consequences.** Sketch 004's `Rename…` affordance and sketch 009's "names are
+  reserved, not permanent" copy both assume rename ships; both are false for v0.13 and
+  become true again only with this item.
 
 Plans:
 

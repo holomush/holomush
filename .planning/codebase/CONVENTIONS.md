@@ -1,160 +1,263 @@
+---
+last_mapped_commit: 0047100ed380c2135d541d1120dd3a950714d2f1
+last_mapped_at: 2026-08-13
+---
 # Coding Conventions
 
-**Analysis Date:** 2026-07-08
+**Analysis Date:** 2026-08-13
+
+Every entry below names its **enforcement mechanism**. "Convention only" means a
+human/reviewer catches it — nothing fails the build.
+
+## Toolchain gates (what actually runs)
+
+| Gate | Command | Contents |
+|------|---------|----------|
+| Lint umbrella | `task lint` (`Taskfile.yaml:202`) | `lint:go`, `lint:proto`, `lint:markdown`, `lint:yaml`, `lint:actions`, `lint:access-migration`, `lint:test-helpers`, `lint:plugin-manifests`, `lint:docs-symmetry`, `lint:docs-paths-sync`, `lint:adr`, `lint:no-timestamptz`, `lint:no-microsecond-truncate`, `lint:no-unixnano-in-repos`, `lint:no-zensical`, `lint:invariants` |
+| Go lint | `task lint:go` (`Taskfile.yaml:754`) | `bin/custom-gcl` — golangci-lint **v2** built with the `gorules/` module plugin |
+| Format | `task fmt` → `fmt:go` (gofumpt), `fmt:yaml`, `fmt:markdown` (rumdl), `fmt:dprint`, `license:add` |
+| Format check | `task fmt:check` (`Taskfile.yaml:1041`) — dprint, rumdl, `gofumpt -l` drift |
+| Pre-push | `task pr-prep` (fast lane; mandatory before push) |
+
+`task fmt` **mutates files** (SPDX headers, table reflow). Commit its output or CI goes red.
 
 ## Naming Patterns
 
-**Files:**
+**Files:** snake_case Go files; tests co-located as `foo_test.go`; integration tests
+`*_integration_test.go` or under `test/integration/<domain>/`. Migrations are
+`NNNNNN_name.sql` (6-digit, one file carrying both directions).
+*Enforcement:* migration naming/format — `internal/store/migrations_format_test.go`
+(runs in the untagged `task test` lane). File naming otherwise: convention only.
 
-- Snake_case, `foo.go` implementation paired with `foo_test.go` — e.g. `internal/core/character.go` / `internal/core/character_test.go`
-- Ginkgo integration specs live in `test/integration/<domain>/` with a `*_suite_test.go` bootstrap file (e.g. `test/integration/integration_suite_test.go`, `test/integration/settings/settings_suite_test.go`)
-- Migrations: `NNNNNN_snake_case_description.up.sql` / `.down.sql` in `internal/store/migrations/`
+**Functions / variables / types:** standard Go. `revive` rules enabled in
+`.golangci.yaml` (`var-naming`, `exported`, `receiver-naming`, `error-naming`,
+`error-strings`, `package-comments`, `unused-parameter`, `redefines-builtin-id`).
+*Enforcement:* `revive` via `task lint:go`.
 
-**Functions/Types:** standard Go — exported `PascalCase`, unexported `camelCase`. Test function names follow ACE (see TESTING.md).
-
-**Domain terminology (enforced, `.claude/rules/terminology.md`):** use `location` never `room`; `character` never `player`/`user`/`avatar`; `player` never `user`/`account`; `session` never `connection`; `connection` never `socket`/`client`; `presence` never `who's here`. Applies to code, comments, types, events, variable names across `.go`, `.md`, `.proto`, `.lua`, `.svelte`, `.ts`.
+**Descriptive type names** are the house style (`CommandEntry`, not `Entry`), and
+unexported fields are exposed by accessor methods. *Enforcement:* convention only.
 
 ## Code Style
 
-**Linting:** `golangci-lint` v2 config at `.golangci.yaml`. Enabled linters: `errcheck`, `govet`, `staticcheck`, `nilerr` (bugs); `revive`, `misspell` (style); `prealloc`, `unconvert` (performance); `gosec` (security); `errorlint`, `wrapcheck` (error handling); `unparam`, `gocritic`, `nolintlint`, `depguard` (maintenance); `sloglint` (structured-logging discipline); `forbidigo` (custom bans, e.g. `time.Sleep` inside `internal/eventbus/`). Plus repo-authored custom analyzers (`gorules/`): `codeckeybytesallowlist`, `cursorpackageinternal`, `dekmaterialnofmtformatting`, `dekmaterialnogob`, `dekmaterialnojson`, `dekmaterialnolog`, `dekmaterialnoproto`, `dekmaterialnoslog`, `noremoteclockcompare`, `sceneopseventsappendonly`, `ulidmakeforbidden`.
+**Formatting:** `gofumpt` (stricter gofmt) via `task fmt:go`; `dprint` + `rumdl`
+for markdown; yaml via `task fmt:yaml`. *Enforcement:* `task fmt:check`, run inside
+`task pr-prep` and CI's Lint job.
 
-**`depguard` rule (`.golangci.yaml`):** `no-test-only-constructs-in-production` denies `internal/eventbus/eventbustest`, `internal/core/coretest`, and `internal/testsupport/quarantinetest` imports in any file that is not `*_test.go` and not under `internal/testsupport/**` / `internal/cluster/clustertest/**` / `test/testutil/**`.
+**Aligned blocks gotcha:** editing an aligned Go `const`/`var`/`struct` block can pass
+`task build` and unit tests yet fail `fmt:check` — run `task fmt` after touching one.
 
-**Test-file exclusions:** `_test.go` files are exempted from `gocritic`, `wrapcheck`, `errcheck` (blank-identifier), `ulidmakeforbidden`, `cursorpackageinternal`, and a `gosec` G101 (test password-hash literals aren't real credentials).
-
-**No path-level plugin exclusions** — Go binary plugins (`plugins/core-scenes`, `plugins/test-abac-widget`) are linted normally.
-
-**Lint suppression:** `//nolint:<rule>` MUST be line-scoped with an explanatory comment — never widen `.golangci.yaml`. Repo precedent: `internal/web/handler.go:381,418,460,484` use `//nolint:wrapcheck // gRPC status errors pass through as-is` (27+ such directives exist). CLAUDE.md: "MUST NOT disable lint/format rules without explicit user confirmation."
-
-**Formatting:** `task fmt` applies formatting AND SPDX license headers (via `license-eye`) in one pass — mutates files, so its output must be committed.
-
-## License Headers
-
-Every `.go`, `.sh`, `.proto` file MUST carry an SPDX header:
-
-```go
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 HoloMUSH Contributors
-```
-
-YAML configs SHOULD carry one where appropriate. NEVER add to generated files (e.g. `*.pb.go`). Applied by `task fmt`, verified by `task license:check` and CI. Directories checked: `api/`, `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`.
+**Lint suppression policy:** `//nolint` must be **line-scoped and explained** —
+`nolintlint` is configured `require-explanation: true`, `require-specific: true`
+(`.golangci.yaml`). Widening `.golangci.yaml` instead is prohibited by `CLAUDE.md`.
+Repo precedent: `internal/web/handler.go` `//nolint:wrapcheck // gRPC status errors pass through as-is`.
 
 ## Error Handling
 
-Structured errors via `samber/oops`:
+**Structured errors use `samber/oops`.** Construct with `oops.Errorf(...)`,
+`oops.With(k, v).Wrap(err)`, and `oops.Code("CODE").Wrap(err)` at boundaries.
+*Enforcement:* `wrapcheck` + `errorlint` + `errcheck` (with
+`check-type-assertions: true`, `check-blank: true`); `wrapcheck` allowlists the
+`oops` builder via `ignore-sig-regexps` / `ignore-package-globs`.
+
+**Logging an error** — `pkg/errutil/log.go`:
 
 ```go
-return oops.With("scene_id", id).Wrap(err)
-oops.Errorf("invalid state: %s", state)
-oops.Code("STREAM_ACCESS_DENIED").Wrap(err)
+func LogErrorContext(ctx context.Context, msg string, err error, extraAttrs ...any) {
+	attrs := oopsAttrs(err)
+	attrs = append(attrs, extraAttrs...)
+	slog.ErrorContext(ctx, msg, attrs...)
+}
 ```
 
-Log with `errutil.LogError` / `errutil.LogErrorContext` (never bare `slog`/`fmt` around an oops error). Test with `errutil.AssertErrorCode` / `errutil.AssertErrorContext` — but for **wire-opacity** assertions (gRPC boundary), use the top-level code directly: `oops.AsOops(err).Code()`, NOT the chain-walking `errutil.AssertErrorCode`, because chain-walking silently passes on double-wrapped errors (`.claude/rules/grpc-errors.md`).
+`oopsAttrs` lifts the oops `code` and `context` map to **top-level** structured
+fields. A bare `slog.ErrorContext(ctx, msg, "err", err)` still carries the code but
+**nested** as `error.code=…` — the difference is nesting plus ctx propagation, not
+data loss (`.claude/rules/grpc-errors.md` corrects an older, false "data is lost"
+claim). *Enforcement:* the `*Context` half is `sloglint`; preferring `errutil` over
+bare slog is convention only.
 
-**Method-value gotcha:** always call accessor methods with `()` — e.g. `decision.Reason()` not `decision.Reason`. Omitting parens creates a Go method value that compiles silently when passed into an `...any` param (`oops.With`, `slog.*`), silently breaking the log/error payload.
+**Asserting errors in tests** — `pkg/errutil/testing.go` provides
+`AssertErrorCode(t, err, "CODE")` and `AssertErrorContext(t, err, key, value)`.
+Note `AssertErrorCode` chain-walks via `oops.AsOops`; for **opacity** contracts
+assert the top-level code directly (`oops.AsOops(err).Code()`), because a
+double-wrap would otherwise pass. *Enforcement:* convention only.
 
-### gRPC error boundary rules (`.claude/rules/grpc-errors.md`)
+**Method-value gotcha:** accessors must be called with `()`. `oops.With("reason", decision.Reason)`
+compiles silently inside `...any` and logs a func value. *Enforcement:* unenforced —
+`govet` `enable-all` does not catch this shape. (Inference: no analyzer in
+`.golangci.yaml` targets it.)
 
-- **Never leak inner errors past trust boundaries.** Do NOT use `status.Errorf(codes.Internal, "...: %v", err)` on an internal error — the `%v` substitution reaches the client on the wire. Log internally with `errutil.LogErrorContext(ctx, msg, err, ...)`, return a static string: `status.Errorf(codes.Internal, "internal error")` (allowlisted by `wrapcheck`, no nolint needed).
-- **Translate `status` ↔ `oops` at exactly ONE layer** — the outermost call site that crosses the gRPC boundary. Double-translation breaks `status.FromError` chain-walking.
-- Examples in `internal/web/handler.go:381,418,460,484`.
+### gRPC trust boundary (`.claude/rules/grpc-errors.md`)
 
-## Structured Logging (`.claude/rules/logging.md`)
+- **Never** `status.Errorf(codes.Internal, "…: %v", err)` — the inner error text
+  reaches clients. Log internally, return a static message.
+- **Translate status ↔ oops at exactly ONE layer** (the outermost gRPC-crossing
+  call site), never inside helpers — double translation breaks `status.FromError`
+  chain walking.
 
-**MUST use context-carrying variants** whenever a `context.Context` is in scope: `slog.InfoContext(ctx, ...)`, `WarnContext`, `ErrorContext`, `DebugContext`, `errutil.LogErrorContext(ctx, msg, err, ...)`. **MUST NOT** use bare `slog.Info(...)` / `logger.Warn(...)` / `errutil.LogError(...)` when a ctx is reachable — they orphan the log line from `trace_id`/`span_id` correlation.
+*Enforcement:* convention only (rule doc + code review); no analyzer.
 
-```go
-// WRONG
-slog.Info("handling request", "kind", req.Kind)
+## Structured Logging
 
-// RIGHT
-slog.InfoContext(ctx, "handling request", "kind", req.Kind)
-```
+MUST use context-carrying variants (`slog.InfoContext`/`WarnContext`/`ErrorContext`/
+`DebugContext`, `errutil.LogErrorContext`) whenever a `context.Context` is in scope —
+trace/span ids live on the ctx, so bare calls orphan the line.
 
-**MAY use bare variants** only when truly no ctx exists and none can be plumbed (init/`main`, bare goroutines, pure helpers with no caller context).
+*Enforcement — mechanical,* `sloglint` in `.golangci.yaml`:
 
-Enforced mechanically by `sloglint` (`.golangci.yaml`) with:
+| Setting | Effect |
+|---------|--------|
+| `context: scope` | bare `slog.*` flagged only when a ctx is in scope (this IS the "absolutely impossible" carve-out) |
+| `no-mixed-args` | no mixing `slog.Attr` with loose `"k", v` pairs |
+| `static-msg` | message must be a literal/constant |
+| `msg-style: lowercased` | messages start lowercase |
+| `key-naming-case: snake` | attribute keys snake_case |
+| `forbidden-keys` | `time`, `level`, `msg`, `source` banned |
 
-- `context: scope` — bare call flagged only when a ctx is in scope
-- `no-mixed-args` — no mixing `slog.Attr` with loose k/v pairs
-- `static-msg` — message MUST be a string literal
-- `msg-style: lowercased`
-- `key-naming-case: snake`
-- `forbidden-keys` — `time`/`level`/`msg`/`source` banned (collide with slog reserved fields)
+## ID Generation
 
-Logger construction: `internal/logging/handler.go` (`Setup`/`SetDefault`), wraps base JSON/text handler with a `traceHandler` injecting `service`, `version`, `trace_id`, `span_id`.
+Two ULID generators; picking the wrong one is a correctness bug:
 
-## Randomness and ID Generation
+| Use | Generator | Why |
+|-----|-----------|-----|
+| Event IDs, session IDs | `core.NewULID()` (forwards to `internal/ulidgen`) | identity/dedup key; set as `Nats-Msg-Id`. Ordering is JetStream's per-stream `uint64`, **not** ULID lex order |
+| Entity primary keys (players, characters, locations, exits, objects, policies) | `idgen.New()` (`internal/idgen`) | fresh `crypto/rand` entropy per call |
 
-- **Always `crypto/rand`, never `math/rand`.** For random slice picks, use a `crypto/rand` + `math/big` helper (`internal/naming.cryptoIntN(n)` is canonical).
-- **Two ULID generators, not interchangeable:**
+Gateway code (`internal/web`, `internal/telnet`) calls `ulidgen.New()` directly —
+INV-EVENTBUS-1 forbids importing `internal/core` there.
 
-| Use case | Generator | Why |
-|---|---|---|
-| Event IDs (`core.Event.ID`), session IDs | `core.NewULID()` | Identity/dedup key (`Nats-Msg-Id` for JetStream dedup); ordering is JetStream's per-stream `uint64` seq, NOT ULID lex order |
-| Entity primary keys (players, locations, characters, exits, objects, policies) | `idgen.New()` | Identity only, fresh `crypto/rand` entropy per call |
+**Events MUST be constructed via `eventbus.NewEvent(...)`** — never an
+`eventbus.Event{}` literal, never a hand-stamped `ID`, never `idgen.New()`.
+Construction sites: `internal/world/outbox/wire.go`, `internal/presence`,
+`internal/sysbroadcast`, `internal/grpc` (`emitCommandResponse`).
 
-- `core.Event{}` struct literals MUST NOT be built directly — use `core.NewEvent()`, which stamps the monotonic ULID via `core.NewULID()`. Never supply `Event.ID` manually (e.g. from `idgen.New()`, which is for entity keys).
-- `ulidmakeforbidden` custom analyzer bans `ulid.Make()` in production code (tests are exempted, since fixtures legitimately use it).
+**`crypto/rand` always, never `math/rand`.** Slice picks go through a
+`crypto/rand`+`math/big` helper (`internal/naming.cryptoIntN`).
 
-## Event System Conventions (`.claude/rules/event-conventions.md`)
+*Enforcement:* the custom analyzer **`ulidmakeforbidden`** (`gorules/`, enabled in
+`.golangci.yaml`) bans `ulid.Make()` because it uses `math/rand`; it is excluded for
+`_test.go` (fixtures may use it). The `NewEvent`-only rule is convention only.
 
-- Subjects are NATS dot-delimited: `events.<game_id>.<domain>.<entity-id>[.<facet>...]`. Producers emit domain-relative references (`location.<id>`, `character.<id>`, `scene.<id>.ic`); `eventbus.Qualify` prepends `events.<game_id>.` at emit/read boundaries.
-- Colon-style subjects are eradicated (`internal/eventbus/subjectxlate/` is deleted) — the only surviving colon usage is ABAC policy DSL type-prefixes (`character:<id>`, `scene:<id>`), which MUST NOT be changed to dot-style.
-- Plugin-owned event types/verbs belong in the plugin package, never `internal/core/`.
-- Wire type / `verbs[].type` / stored type MUST be plugin-qualified `<plugin>:<verb>`. Registered-emit set (`RegisterEmitTypes`) and `crypto.emits[].event_type` stay bare `<verb>` (INV-PLUGIN-32/40).
-- Sensitive payloads MUST be declared in `crypto.emits` in `plugin.yaml`; gated by the `crypto-reviewer` agent on any change.
+## Crypto material handling
 
-## Invariant Registry (`.claude/rules/invariants.md`)
-
-Single canonical registry of durable system-behavior guarantees: `docs/architecture/invariants.yaml` (source of truth, hand-edited) → `docs/architecture/invariants.md` (generated by `go run ./cmd/inv-render`, never hand-edit inside `<!-- BEGIN GENERATED -->` regions). CI guard: `test/meta/invariant_registry_test.go`.
-
-- Id format: `INV-<SCOPE>-N` (scopes: CRYPTO, SCENE, PLUGIN, EVENTBUS, CLUSTER, ACCESS, SESSION, STORE, TELEMETRY, PRIVACY, PRESENCE, COMMAND).
-- A test proves an invariant via `// Verifies: INV-<SCOPE>-N` immediately above the asserting test/block — this flips `binding: pending` → `bound` in the YAML (plus `asserted_by:`).
-- **MUST NOT fabricate a binding** — if no test genuinely asserts it, file `bd create -t bug` and leave `binding: pending`.
-- New invariants introduced by a spec under `docs/superpowers/specs/` are auto-checked for registry presence; specs under `docs/specs/` or invariants introduced only in code are NOT auto-caught — register by hand.
-
-## Plugin Runtime Symmetry (`.claude/rules/plugin-runtime-symmetry.md`)
-
-Binary and Lua plugins MUST be treated identically by the host for any trust/policy/manifest-gate check. Place gates at the shared code path (e.g. `internal/plugin/event_emitter.go::Emit` is the common emit boundary for both runtimes). Runtime-specific mechanisms (gRPC token auth for binary, Lua VM lifecycle) are fine; differing *policy outcomes* are not. Permitted asymmetry: same ABAC-gated capability reached via different transports (Lua `world.query` host-capability vs. binary `WorldService` service) — NOT a parity gap as long as both hit the same `checkAccess` chokepoint.
+Seven custom `gorules/` analyzers fence `dek.Material` (INV-27):
+`dekmaterialnojson`, `…nogob`, `…noproto`, `…nolog`, `…noslog`,
+`…nofmtformatting`, plus `codeckeybytesallowlist`. Also `noremoteclockcompare`
+(INV-58), `sceneopseventsappendonly`, `cursorpackageinternal`.
+*Enforcement:* golangci-lint module plugin built by `task lint:build-custom-gcl`
+into `bin/custom-gcl`; the analyzers have their own tests (`task test:gorules`).
 
 ## Import Organization
 
-Standard Go grouping: stdlib, then third-party, then `github.com/holomush/holomush/...` internal imports — see any file in `internal/core/*_test.go` for the pattern (stdlib blank line, then module imports).
+Standard Go grouping: stdlib / third-party / `github.com/holomush/holomush/...`,
+enforced only by gofumpt's ordering within existing groups. Dot-imports are banned by
+revive `dot-imports` **except** Ginkgo/Gomega in integration tests, which carry
+`//nolint:revive // ginkgo convention`.
 
-## Build/Test/Lint Discipline
+**Depguard bans (`.golangci.yaml` → `no-test-only-constructs-in-production`)** —
+production files (`!$test`, excluding `internal/testsupport/**`,
+`internal/cluster/clustertest/**`, `test/testutil/**`) MUST NOT import:
+`internal/eventbus/eventbustest`, `internal/core/coretest`,
+`internal/testsupport/quarantinetest`, `internal/testsupport/natstest`,
+`internal/testsupport/integrationtest`. A companion shell gate
+`task lint:test-helpers` (`Taskfile.yaml:818`) bans `policytest` imports from
+production `internal/`/`pkg/`. `test/meta/depguard_config_test.go` guards the config itself.
 
-**MUST use `task` for all build/test/lint/format** — never invoke `go build`, `go test`, `golangci-lint` directly.
+## License Headers
 
-```bash
-task lint      # core loop
-task fmt
-task test
-task build
-task dev
-task test -- ./internal/command/                        # scope to a package
-task test -- -run TestCapability ./internal/command/     # scope to a test
-task test:int                                            # integration (needs Docker)
+SPDX Apache-2.0 header on `.go`, `.sh`, `.proto` (and yaml where appropriate);
+**never** on generated `*.pb.go`. Applied by `task fmt` → `license:add`
+(`license-eye header fix`); verified by `task license:check` and CI.
+Config: `.licenserc.yaml` (`paths` / `paths-ignore`).
+
+## Proto Doc Comments
+
+Every message, field, RPC, service, enum and enum value MUST carry a leading doc
+comment that describes purpose/contract, **grounded in the Go handler** — never a
+restatement of the name. *Enforcement:* buf `COMMENTS` lint category **plus** the
+name-echo quality gate `test/meta/proto_doc_comments_test.go`; both run under
+`task lint:proto`. There is no exemption mechanism.
+
+Regenerate + commit together after any `api/proto/**` change:
+`task proto && task web:generate` → commit `pkg/proto/**/*.pb.go` + web `*_pb.ts`
+(CI has a stale-diff check).
+
+## Terminology (`.claude/rules/terminology.md`)
+
+`location` (never room/area/zone), `exit`, `character` (the in-game entity) vs
+`player` (the human), `session` vs `connection`, `presence`, `grid present`, `scene`.
+*Enforcement:* a shell gate in `Taskfile.yaml:~810` rejects the legacy `"char:`
+ABAC prefix in production Go; the rest of the vocabulary is convention only.
+
+## Invariant Registry
+
+Named system invariants live in `docs/architecture/invariants.yaml` (source of
+truth) → `docs/architecture/invariants.md` (generated by `go run ./cmd/inv-render`,
+never hand-edited). A test proves an invariant by carrying an annotation
+immediately above it:
+
+```go
+// Verifies: INV-CRYPTO-28
+func TestDecryptPluginRowFailClosedWithoutAuditEmitter(t *testing.T) { ... }
 ```
 
-`task test` does NOT compile `//go:build integration` files — refactors of shared types/interfaces MUST also run `task test:int` or breakage is silent.
+which flips the registry entry from `binding: pending` to `bound` (with
+`asserted_by:` listing the files).
 
-## Database Migrations (`.claude/rules/database-migrations.md`)
+*Enforcement:* `test/meta/invariant_registry_test.go` — generate-and-diff drift,
+provenance/ownership, binding presence, spec-orphan detection, plus
+`TestBoundInvariantsAreGenuinelyAsserted` which fails a `bound` entry whose only
+`// Verifies:` sites are Skip-only placeholders. `task lint:invariants` runs
+`inv-render -check`. Limits: the orphan walk covers only
+`docs/superpowers/specs/` — invariants born in `docs/specs/`, in
+`.planning/phases/**/*-SPEC.md`, or in code must be registered **by hand**.
 
-`internal/store/migrations/`, embedded at compile time. Sequential 6-digit-padded numbering, always paired up/down, idempotent (`IF NOT EXISTS`/`IF EXISTS`), **no triggers/functions/stored procedures** — all logic in Go. New columns nullable or defaulted, never `NOT NULL` without backfill. No long-running backfills inside a migration. Down migrations MUST cleanly and fully revert the up.
+## Database Migrations
 
-## Proto Doc Comments (`.claude/rules/proto-doc-comments.md`)
+`internal/store/migrations/`, embedded, applied by goose. One `NNNNNN_name.sql` per
+version carrying `-- +goose Up` and `-- +goose Down`; idempotent; no triggers or
+functions; timestamps are `BIGINT` epoch-nanoseconds.
 
-Every proto message/field/RPC/service/enum/enum-value MUST carry a leading doc comment describing purpose/contract/units/invariants/failure modes — never a name-echo (enforced unconditionally by buf `COMMENTS` + `test/meta/proto_doc_comments_test.go`, run via `task lint:proto`). Ground every comment in the implementing Go handler (core→`internal/grpc`, world→`internal/world`, scene→`plugins/core-scenes`, web→`internal/web`).
+*Enforcement:*
+- `TestEveryDollarQuotedMigrationBodyIsWrappedInStatementBeginEnd`
+  (`internal/store/migrations_format_test.go`) — also rejects `ENVSUB` annotations.
+- Go migrations: `TestGoMigrationRegistrationHoldsAcrossTheMigrationsCorpus` and
+  `TestExactlyOneBlankImportWiresTheMigrationsPackageIntoStore`
+  (`internal/store/migrations_register_test.go`), INV-STORE-11.
+- `task lint:no-timestamptz`, `lint:no-unixnano-in-repos`,
+  `lint:no-microsecond-truncate`, `lint:access-migration`.
 
-## Gateway Boundary (`.claude/rules/gateway-boundary.md`)
+## Gateway Boundary
 
-`cmd/holomush/gateway.go` and `internal/web/` are protocol-translation only — MUST NOT access `WorldService`, `SessionStore`, repositories, or the DB directly; all game-state queries flow through core-server gRPC RPCs. Structural writes (create/set/end/invite/kick/transfer) from GUI/web MUST use a typed RPC on the BFF facade, never the human `HandleCommand`/`sendCommand` conversational-verb path (ADR `holomush-v4qmu`).
+The gateway (`cmd/holomush/gateway.go`, `internal/web/`) is protocol translation
+only: gRPC clients, never repositories or DB access. GUI **structural** writes go
+through typed BFF RPCs; `HandleCommand`/`sendCommand` is reserved for human
+conversational verbs. *Enforcement:* `test/meta/gateway_status_code_census_test.go`
+and `world_import_graph_test.go` / `world_caller_census_test.go` cover parts of it;
+the general rule is convention + code review.
 
-## AttributeProvider Optional-Attribute Convention (`.claude/rules/abac-providers.md`)
+## Function & Module Design
 
-`internal/access/policy/attribute/**` providers MUST **omit** an optional attribute key entirely when unresolved — never emit an empty-string sentinel (the DSL's fail-safe treats MISSING as `false`, but `"" == ""` is `true`, so a sentinel fail-opens). Pair every optional attribute with a `has_X` boolean witness that is always present. Reference: `internal/access/policy/attribute/stream.go:40-48`.
+- `gocritic` (diagnostic + style + performance tags; `hugeParam` disabled because
+  `Event` is passed by value by design), `prealloc`, `unconvert`, `unparam`,
+  `nilerr`, `gosec`, `misspell` all enabled.
+- `//nolint:unparam` does **not** suppress revive's `unused-parameter` — suppress
+  both: `//nolint:unparam,revive // …`.
+- `time.Sleep` is banned inside `internal/eventbus/**` and
+  `test/integration/eventbus_e2e/**` via `forbidigo` (scoped by a `path-except`
+  exclusion); use `eventbustest.Await*` helpers instead.
+
+## Web (SvelteKit) — `web/CLAUDE.md`
+
+- Svelte 5 + SvelteKit 2, shadcn-svelte (nova) on bits-ui, Tailwind v4, ConnectRPC.
+- Theme tokens: `--color-*` for everything except MUSH message colors, which use
+  `--mush-*`; `--radius` is the only unprefixed token. Bare names (`--primary`) are
+  forbidden.
+- Tailwind v4 `@theme` compiles `var()` at **build time** — never put a runtime-
+  varying `var()` inside `@theme`; register a static value and override on `.app-root`.
+- *Enforcement:* `task web:test` runs `pnpm test:unit` (vitest) + `pnpm check`
+  (`svelte-check`). Theme-token rules are convention only.
 
 ---
 
-*Convention analysis: 2026-07-08*
+*Convention analysis: 2026-08-13*

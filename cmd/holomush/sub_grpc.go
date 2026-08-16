@@ -14,13 +14,12 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/keepalive"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/holomush/holomush/internal/access/profilevis"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
@@ -57,6 +56,8 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
+	adminportalv1 "github.com/holomush/holomush/pkg/proto/holomush/adminportal/v1"
+	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -170,6 +171,12 @@ type grpcSubsystem struct {
 	reaperCancel  context.CancelFunc
 	guestReaper   *auth.GuestReaper
 	sessionReaper *session.Reaper
+	// presenceEmitter is the ONE arrive/leave/session_ended emitter, built in
+	// Prepare over the rendering-wrapped publisher. Retained so the retirement
+	// reactor's fanout emits over the same emitter rather than constructing a
+	// second one — a second emitter built over the RAW publisher would omit the
+	// App-Rendering header the audit projection fails closed without.
+	presenceEmitter *presence.Emitter
 }
 
 // sceneMuteNotifyCacheTTL bounds how long a character's {globalNotifyEnabled,
@@ -203,6 +210,19 @@ func (s *grpcSubsystem) wrapPublisher(raw eventbus.Publisher) (eventbus.Publishe
 	}
 	return eventbus.NewRenderingPublisher(raw, s.cfg.VerbRegistry), nil
 }
+
+// PresenceEmitter returns the process's single presence emitter, or nil before
+// Prepare has run.
+//
+// It returns nil rather than panicking (unlike WorldSubsystem.Service and
+// SessionSubsystem.Store) because its one consumer — the retirement reactor —
+// resolves it LAZILY, per delivered message, through a provider closure. The
+// reactor is topologically BEFORE gRPC, so an eager read at its Prepare would
+// legitimately find nothing; but the orchestrator's global barrier means every
+// Prepare has returned before any Activate, so by the time the reactor's
+// consume loop can deliver a message this is populated. Nil-tolerance keeps
+// that ordering fact from turning a construction-order detail into a boot panic.
+func (s *grpcSubsystem) PresenceEmitter() *presence.Emitter { return s.presenceEmitter }
 
 // ID returns SubsystemGRPC.
 func (s *grpcSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemGRPC }
@@ -390,6 +410,7 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	// App-Rendering header the wrapper stamps), plus the bus's own GameID
 	// as the qualification source (FINDING-5).
 	presenceEmitter := presence.NewEmitter(publisher, s.cfg.EventBus.GameID)
+	s.presenceEmitter = presenceEmitter
 
 	// Wire game-session fanout into the auth service so evictions emit
 	// session_ended events for child game sessions before FK cascade removes them.
@@ -401,21 +422,23 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	serviceRegistry := s.cfg.Plugins.ServiceRegistry()
 	grpcProxy := plugins.NewGRPCServiceProxy(serviceRegistry)
 
-	creds := credentials.NewTLS(s.cfg.TLSConfig)
-	s.grpcServer = grpc.NewServer(
-		grpc.Creds(creds),
-		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             10 * time.Second,
-			PermitWithoutStream: true,
-		}),
-		// Resource limits — see internal/grpc package constants for rationale.
-		// Bounds memory per request and caps concurrent streams per connection
-		// so a single client cannot open unlimited Subscribe streams.
-		grpc.MaxRecvMsgSize(holoGRPC.MaxRecvMsgSize),
-		grpc.MaxSendMsgSize(holoGRPC.MaxSendMsgSize),
-		grpc.MaxConcurrentStreams(holoGRPC.MaxConcurrentStreams),
-		grpcProxy.Handler(),
-	)
+	// The server comes from the ONE factory, which refuses to build without the
+	// admin gate — so the /admin trust boundary cannot be lost by an edit here.
+	// grpcProxy.Handler() rides through Extra: the plugin unknown-service proxy
+	// is load-bearing and its loss would be silent.
+	adminInterceptor := holoGRPC.NewAdminSectionInterceptor(holoGRPC.AdminInterceptorDeps{
+		Engine:      policyEngine,
+		SessionRepo: authPlayerSessionRepo,
+	})
+	grpcServer, grpcServerErr := holoGRPC.NewGRPCServer(holoGRPC.GRPCServerConfig{
+		TLS:              s.cfg.TLSConfig,
+		AdminInterceptor: adminInterceptor,
+		Extra:            []grpc.ServerOption{grpcProxy.Handler()},
+	})
+	if grpcServerErr != nil {
+		return oops.Code("GRPC_SERVER_BUILD_FAILED").Wrap(grpcServerErr)
+	}
+	s.grpcServer = grpcServer
 
 	// 3. Create guest authenticator (using start location from bootstrap).
 	guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocationID)
@@ -471,10 +494,15 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 	// (MarkReaping + DeleteGuestPlayer, own pool). Both guest-deletion paths — the
 	// reaper and failed-guest cleanup — route through it.
 	reapPlayerRepo := authpostgres.NewPlayerRepository(pool)
+	// ONE property repository over this pool, shared by its two consumers: the
+	// reaping service below and the admin portal's detail read (step 9c). A
+	// second construction over the same pool would be two objects with one
+	// meaning.
+	propertyRepo := worldpostgres.NewPropertyRepository(pool)
 	reapingService, reapErr := auth.NewCharacterReapingService(
 		charRepo, // version-scanning ListByPlayer (R6-1)
 		charRepo, // guarded tombstone-delta Delete
-		worldpostgres.NewPropertyRepository(pool),
+		propertyRepo,
 		bindingRepo, // hard-deletes guest bindings in-tx (RESTRICT FK, guest teardown)
 		transactor,
 		worldpostgres.NewOutboxStore(pool),
@@ -654,6 +682,12 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		holoGRPC.WithCryptoActive(cryptoActiveFor(s.cfg)),
 		holoGRPC.WithStreamContributor(pluginManager),
 		holoGRPC.WithAccessEngine(policyEngine),
+		// The ADMIN-08 nav hint on CheckPlayerSession. PlayerRoles is
+		// deliberately not on the store.RoleStore interface, so this crosses the
+		// gap the same way internal/access/setup does: a shared func field, not a
+		// widened interface. Unwired it would report no roles and draw no /admin
+		// entrance — which is why the harness wires it too.
+		holoGRPC.WithPlayerRoleLookup(store.NewPostgresRoleStore(pool).PlayerRoles),
 		holoGRPC.WithCommandQuerier(s.cfg.Plugins.CommandQuerier()),
 		holoGRPC.WithSubscriber(subscriber),
 		holoGRPC.WithHistoryReader(historyReader),
@@ -827,6 +861,61 @@ func (s *grpcSubsystem) Prepare(ctx context.Context) error {
 		sceneAccessSrv = &sceneaccessv1.UnimplementedSceneAccessServiceServer{}
 	}
 	sceneaccessv1.RegisterSceneAccessServiceServer(s.grpcServer, sceneAccessSrv)
+
+	// 9b. Create CharacterAccessService facade, register with gRPC.
+	// Unlike the scene facade this one has no plugin dependency: it reads the
+	// world model and the ABAC engine directly, and it resolves the viewer rung
+	// itself from the request's optional session token (D-83 — the facade is the
+	// only layer holding the session). The auth repositories are the SAME two
+	// handed to NewSceneAccessServer above, and the profile-visibility evaluator
+	// is built over policyEngine, the engine already in scope — a new dependency
+	// here adds an argument, never a second construction site.
+	characteraccessv1.RegisterCharacterAccessServiceServer(s.grpcServer, holoGRPC.NewCharacterAccessServer(
+		worldService,
+		worldService,
+		&profilevis.Evaluator{Engine: policyEngine},
+		// The §9.2 directory gate's evaluator: the SAME engine the
+		// profilevis.Evaluator a line above is built over. The facade makes one
+		// raw ABAC decision of its own and it is made against the production
+		// corpus, not a second engine.
+		policyEngine,
+		// The directory enumeration: the SAME adapter handed to charRepo below.
+		// It is the seam the retired directory RPC already read through — id and
+		// name only, no connection state.
+		authCharRepo,
+		authPlayerSessionRepo,
+		authPlayerRepo,
+		authCharRepo,
+		// The create pipeline: the SAME *auth.CharacterService built above for
+		// the telnet CREATE path. One pipeline, one set of refusal codes, one
+		// name-admission gate — a second CharacterService here would be a second
+		// composition root and could drift onto a different block list.
+		characterService,
+	))
+	slog.InfoContext(ctx, "characterAccessService facade registered")
+
+	// 9c. Register the admin portal on the SAME server, whose factory already
+	// chained the section interceptor above. Every method of this service is
+	// gated there from section.AdminDescriptors before its handler runs, so the
+	// receiver below carries no gate of its own — it is handed policyEngine, the
+	// engine already in scope, purely for the per-section enumeration filter.
+	//
+	// The two readers it is handed are REPOSITORIES, not world.Service: the
+	// admin character reads run downstream of the interceptor's decision and
+	// evaluate no second policy. admin_characters_read.go's file doc block
+	// carries the authorization argument and names the rejected alternative.
+	//
+	// The WRITER is world.Service, not a repository, and that asymmetry is the
+	// point: the reads evaluate no second policy, while every write runs
+	// world.Service's own checkAccess on `character:<id>` — satisfied by exactly
+	// one seed policy, seed:admin-character-administration. There is no raw
+	// repository write path on this surface.
+	adminportalv1.RegisterAdminPortalServiceServer(s.grpcServer,
+		holoGRPC.NewAdminPortalServer(policyEngine,
+			holoGRPC.WithAdminCharacterReader(charRepo),
+			holoGRPC.WithAdminProfileReader(propertyRepo),
+			holoGRPC.WithAdminCharacterWriter(worldService)))
+	slog.InfoContext(ctx, "adminPortalService registered")
 
 	// 10. Construct the session reaper (launch deferred to Activate — row 16).
 	reaperCtx, reaperCancel := context.WithCancel(context.Background())

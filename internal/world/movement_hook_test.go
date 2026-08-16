@@ -103,7 +103,7 @@ func TestMoveCharacter_FiresMovementHook(t *testing.T) {
 	fix := newTestServiceWithHook(t, hook)
 	charID, toLocID := seedCharacterAndTwoLocations(t, fix, subjectID)
 
-	require.NoError(t, fix.svc.MoveCharacter(ctx, subjectID, charID, toLocID))
+	require.NoError(t, fix.svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID))
 
 	require.True(t, hookFired)
 	assert.Equal(t, charID, captured.charID)
@@ -129,7 +129,7 @@ func TestMoveCharacter_HookFailureIsOperationalDegradation(t *testing.T) {
 	charID, toLocID := seedCharacterAndTwoLocations(t, fix, subjectID)
 
 	// A failing post-commit hook does NOT surface a command error.
-	require.NoError(t, fix.svc.MoveCharacter(ctx, subjectID, charID, toLocID),
+	require.NoError(t, fix.svc.MoveCharacter(ctx, world.HumanCaller(subjectID), charID, toLocID),
 		"a post-commit movement-hook failure must not fail the command (no CHARACTER_MOVE_FAILED after commit)")
 
 	// The move envelope WAS emitted in the committed transaction.

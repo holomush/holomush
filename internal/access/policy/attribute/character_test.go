@@ -75,6 +75,10 @@ func (m *mockCharacterRepository) UpdatePreferences(_ context.Context, _ ulid.UL
 	return nil, errors.New("not implemented")
 }
 
+func (m *mockCharacterRepository) SetStatus(_ context.Context, _ ulid.ULID, _ world.Status, _ int) (*wmodel.MutationDelta, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (m *mockCharacterRepository) IsOwnedByPlayer(_ context.Context, _, _ ulid.ULID) (bool, error) {
 	return false, errors.New("not implemented")
 }

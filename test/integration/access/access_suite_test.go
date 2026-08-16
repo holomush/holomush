@@ -364,3 +364,18 @@ func uniqueCharFixtureName(base string, id ulid.ULID) string {
 	// minted in the same millisecond.
 	return base + " " + id.String()[20:]
 }
+
+// failOnCallCreator satisfies the character facade's create dependency for the
+// specs in this package that never create — the public read, the directory and
+// the two edit surfaces.
+//
+// It FAILS rather than returning a zero value. A double that quietly answered
+// (nil, nil) would let a regression which routed one of those surfaces through
+// the create pipeline pass as a spec reading an empty character, which is
+// exactly the shape a reader would mistake for a legitimately sparse fixture.
+type failOnCallCreator struct{}
+
+func (failOnCallCreator) CreateBound(context.Context, ulid.ULID, string, string) (*world.Character, error) {
+	Fail("this surface MUST NOT seat a character: CreateBound was called")
+	return nil, nil
+}

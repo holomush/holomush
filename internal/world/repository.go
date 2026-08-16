@@ -242,4 +242,28 @@ type CharacterRepository interface {
 	// moves into the sanctioned writer boundary and returns a MutationDelta so the
 	// caller emits one character_preferences_update envelope in the same tx.
 	UpdatePreferences(ctx context.Context, characterID ulid.ULID, prefs []byte, expectedVersion int) (*wmodel.MutationDelta, error)
+
+	// SetStatus writes a character's lifecycle status with a version-predicated
+	// CAS (MODEL-03). status is a typed world.Status const bound as a query
+	// PARAMETER — no caller-supplied text ever reaches the statement.
+	//
+	// When expectedVersion > 0 the UPDATE matches id + version, so a stale
+	// writer affects zero rows and the locked follow-up read classifies the
+	// zero-row result into WORLD_CONCURRENT_EDIT (the row exists at a moved
+	// version) or CHARACTER_NOT_FOUND (the row is absent). expectedVersion == 0
+	// is an unversioned (id-only) write. That affordance is REPO-ONLY: the
+	// Retire/Unretire commands reject a zero or negative caller version before
+	// any read (INV-WORLD-7), so it is unreachable through them.
+	//
+	// It writes NO envelope — mutate() writes exactly one from the returned
+	// delta in the same transaction (contrast Rename, which owns its envelope
+	// because it has an out-of-Service caller).
+	//
+	// On a retire (status == StatusRetired) it ALSO clears
+	// players.default_character_id for any player pointing at this character,
+	// in the SAME transaction (D-34). The FK is ON DELETE SET NULL, so it
+	// self-heals on hard delete only; a soft retire would otherwise leave the
+	// login paths reading a pointer to a retired character. Unretire does NOT
+	// restore the pointer — the old value is gone by design.
+	SetStatus(ctx context.Context, characterID ulid.ULID, status Status, expectedVersion int) (*wmodel.MutationDelta, error)
 }

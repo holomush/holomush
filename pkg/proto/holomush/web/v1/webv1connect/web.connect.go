@@ -63,9 +63,6 @@ const (
 	// WebServiceWebListCharactersProcedure is the fully-qualified name of the WebService's
 	// WebListCharacters RPC.
 	WebServiceWebListCharactersProcedure = "/holomush.web.v1.WebService/WebListCharacters"
-	// WebServiceWebListAllCharactersProcedure is the fully-qualified name of the WebService's
-	// WebListAllCharacters RPC.
-	WebServiceWebListAllCharactersProcedure = "/holomush.web.v1.WebService/WebListAllCharacters"
 	// WebServiceWebLogoutProcedure is the fully-qualified name of the WebService's WebLogout RPC.
 	WebServiceWebLogoutProcedure = "/holomush.web.v1.WebService/WebLogout"
 	// WebServiceWebRequestPasswordResetProcedure is the fully-qualified name of the WebService's
@@ -173,6 +170,51 @@ const (
 	// WebServiceWebGetPublishedSceneProcedure is the fully-qualified name of the WebService's
 	// WebGetPublishedScene RPC.
 	WebServiceWebGetPublishedSceneProcedure = "/holomush.web.v1.WebService/WebGetPublishedScene"
+	// WebServiceWebGetCharacterProfileProcedure is the fully-qualified name of the WebService's
+	// WebGetCharacterProfile RPC.
+	WebServiceWebGetCharacterProfileProcedure = "/holomush.web.v1.WebService/WebGetCharacterProfile"
+	// WebServiceWebListMyCharactersProcedure is the fully-qualified name of the WebService's
+	// WebListMyCharacters RPC.
+	WebServiceWebListMyCharactersProcedure = "/holomush.web.v1.WebService/WebListMyCharacters"
+	// WebServiceWebGetMyCharacterProcedure is the fully-qualified name of the WebService's
+	// WebGetMyCharacter RPC.
+	WebServiceWebGetMyCharacterProcedure = "/holomush.web.v1.WebService/WebGetMyCharacter"
+	// WebServiceWebUpdateCharacterProfileProcedure is the fully-qualified name of the WebService's
+	// WebUpdateCharacterProfile RPC.
+	WebServiceWebUpdateCharacterProfileProcedure = "/holomush.web.v1.WebService/WebUpdateCharacterProfile"
+	// WebServiceWebUpdateCharacterDescriptionProcedure is the fully-qualified name of the WebService's
+	// WebUpdateCharacterDescription RPC.
+	WebServiceWebUpdateCharacterDescriptionProcedure = "/holomush.web.v1.WebService/WebUpdateCharacterDescription"
+	// WebServiceWebSetDefaultCharacterProcedure is the fully-qualified name of the WebService's
+	// WebSetDefaultCharacter RPC.
+	WebServiceWebSetDefaultCharacterProcedure = "/holomush.web.v1.WebService/WebSetDefaultCharacter"
+	// WebServiceWebListCharacterDirectoryProcedure is the fully-qualified name of the WebService's
+	// WebListCharacterDirectory RPC.
+	WebServiceWebListCharacterDirectoryProcedure = "/holomush.web.v1.WebService/WebListCharacterDirectory"
+	// WebServiceWebAdminListSectionsProcedure is the fully-qualified name of the WebService's
+	// WebAdminListSections RPC.
+	WebServiceWebAdminListSectionsProcedure = "/holomush.web.v1.WebService/WebAdminListSections"
+	// WebServiceWebAdminGetSectionProcedure is the fully-qualified name of the WebService's
+	// WebAdminGetSection RPC.
+	WebServiceWebAdminGetSectionProcedure = "/holomush.web.v1.WebService/WebAdminGetSection"
+	// WebServiceWebAdminListCharactersProcedure is the fully-qualified name of the WebService's
+	// WebAdminListCharacters RPC.
+	WebServiceWebAdminListCharactersProcedure = "/holomush.web.v1.WebService/WebAdminListCharacters"
+	// WebServiceWebAdminSearchCharactersProcedure is the fully-qualified name of the WebService's
+	// WebAdminSearchCharacters RPC.
+	WebServiceWebAdminSearchCharactersProcedure = "/holomush.web.v1.WebService/WebAdminSearchCharacters"
+	// WebServiceWebAdminGetCharacterProcedure is the fully-qualified name of the WebService's
+	// WebAdminGetCharacter RPC.
+	WebServiceWebAdminGetCharacterProcedure = "/holomush.web.v1.WebService/WebAdminGetCharacter"
+	// WebServiceWebAdminUpdateCharacterProcedure is the fully-qualified name of the WebService's
+	// WebAdminUpdateCharacter RPC.
+	WebServiceWebAdminUpdateCharacterProcedure = "/holomush.web.v1.WebService/WebAdminUpdateCharacter"
+	// WebServiceWebAdminRetireCharacterProcedure is the fully-qualified name of the WebService's
+	// WebAdminRetireCharacter RPC.
+	WebServiceWebAdminRetireCharacterProcedure = "/holomush.web.v1.WebService/WebAdminRetireCharacter"
+	// WebServiceWebAdminUnretireCharacterProcedure is the fully-qualified name of the WebService's
+	// WebAdminUnretireCharacter RPC.
+	WebServiceWebAdminUnretireCharacterProcedure = "/holomush.web.v1.WebService/WebAdminUnretireCharacter"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -219,17 +261,19 @@ type WebServiceClient interface {
 	// cookie whose MaxAge matches the guest session's shorter TTL. Runs the
 	// cookie-collision gate first.
 	WebCreateGuest(context.Context, *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error)
-	// WebCreateCharacter adds a character to the authenticated player. Proxies
-	// to CoreService.CreateCharacter using the cookie-derived session token.
+	// WebCreateCharacter adds a character to the authenticated player from a
+	// structured identity card. Proxies to
+	// CharacterAccessService.CreateCharacter — NOT CoreService.CreateCharacter,
+	// which still serves the telnet CREATE verb and still answers with a bare
+	// character_name scalar. web.Handler.WebCreateCharacter forwards the six
+	// submitted values plus the cookie-derived session token and computes
+	// nothing; a refusal arrives as a gRPC status the client classifies, so
+	// there is no gateway-synthesised success boolean.
 	WebCreateCharacter(context.Context, *connect.Request[v1.WebCreateCharacterRequest]) (*connect.Response[v1.WebCreateCharacterResponse], error)
 	// WebListCharacters returns the authenticated player's character roster.
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
-	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-	// reads player_session_token from the X-Session-Token cookie; any
-	// authenticated caller (guest included) may list character names.
-	WebListAllCharacters(context.Context, *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -372,6 +416,90 @@ type WebServiceClient interface {
 	WebWithdrawScenePublish(context.Context, *connect.Request[v1.WebWithdrawScenePublishRequest]) (*connect.Response[v1.WebWithdrawScenePublishResponse], error)
 	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
 	WebGetPublishedScene(context.Context, *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error)
+	// WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+	// Handler.WebGetCharacterProfile lifts the session token from the
+	// X-Session-Token header CookieMiddleware injected and forwards it; a request
+	// with no cookie is the ordinary logged-out case, not an error.
+	WebGetCharacterProfile(context.Context, *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error)
+	// WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+	// Handler.WebListMyCharacters lifts the session token from the header and
+	// forwards nothing else; whose roster is returned follows from the token.
+	WebListMyCharacters(context.Context, *connect.Request[v1.WebListMyCharactersRequest]) (*connect.Response[v1.WebListMyCharactersResponse], error)
+	// WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+	// is verified in the facade, not here.
+	WebGetMyCharacter(context.Context, *connect.Request[v1.WebGetMyCharacterRequest]) (*connect.Response[v1.WebGetMyCharacterResponse], error)
+	// WebUpdateCharacterProfile proxies
+	// CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+	// forwards the mask and every prose field verbatim; the gateway neither
+	// validates the mask nor decides which fields it reaches.
+	WebUpdateCharacterProfile(context.Context, *connect.Request[v1.WebUpdateCharacterProfileRequest]) (*connect.Response[v1.WebUpdateCharacterProfileResponse], error)
+	// WebUpdateCharacterDescription proxies
+	// CharacterAccessService.UpdateCharacterDescription.
+	WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error)
+	// WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+	// Handler.WebSetDefaultCharacter lifts the session token from the header and
+	// forwards only the character id; whose default is repointed follows from the
+	// token, and ownership is proven in the facade rather than here.
+	WebSetDefaultCharacter(context.Context, *connect.Request[v1.WebSetDefaultCharacterRequest]) (*connect.Response[v1.WebSetDefaultCharacterResponse], error)
+	// WebListCharacterDirectory proxies
+	// CharacterAccessService.ListCharacterDirectory.
+	// Handler.WebListCharacterDirectory lifts the session token from the
+	// X-Session-Token header and forwards nothing else; a request with no cookie
+	// is the ordinary logged-out case rather than an error. The gateway neither
+	// filters nor re-sorts the listing — reachability and order are the facade's.
+	WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error)
+	// WebAdminListSections proxies AdminPortalService.AdminListSections.
+	// Handler.WebAdminListSections lifts the session token from the
+	// X-Session-Token header and forwards nothing else. It makes NO
+	// authorization decision of its own: the core interceptor already denied a
+	// caller with no `admin_section:` access before the core handler ran, so a
+	// non-admin's PermissionDenied reaches the browser unmodified rather than
+	// being turned into an empty list here.
+	WebAdminListSections(context.Context, *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error)
+	// WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+	// Handler.WebAdminGetSection lifts the session token from the
+	// X-Session-Token header and forwards only section_id. It makes NO
+	// authorization decision: the core interceptor gates the supplied id before
+	// the core handler runs, so both the PermissionDenied a refused caller gets
+	// and the FailedPrecondition a permitted caller gets for a planned section
+	// reach the browser unmodified.
+	//
+	// It has NO browser caller in v0.13, and that is deliberate rather than dead
+	// code: D-100 makes both registry RPCs published wire contract and census
+	// members, and the wire-level gate tests in test/integration/access are what
+	// exercise this path.
+	WebAdminGetSection(context.Context, *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error)
+	// WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+	// Handler.WebAdminListCharacters lifts the session token from the
+	// X-Session-Token header and forwards the page and ordering fields verbatim.
+	// It computes nothing: the clamp, the enum switches and the section gate all
+	// live core-side, where a caller speaking gRPC directly cannot skip them.
+	WebAdminListCharacters(context.Context, *connect.Request[v1.WebAdminListCharactersRequest]) (*connect.Response[v1.WebAdminListCharactersResponse], error)
+	// WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+	// Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+	// it does not trim, case-fold or normalize it, because normalization is
+	// core-side through the one charname pipeline and a gateway mirror of it
+	// would be a second definition of name equality.
+	WebAdminSearchCharacters(context.Context, *connect.Request[v1.WebAdminSearchCharactersRequest]) (*connect.Response[v1.WebAdminSearchCharactersResponse], error)
+	// WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
+	// message unmodified; the core's static NotFound reaches the browser as-is.
+	WebAdminGetCharacter(context.Context, *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error)
+	// WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+	// Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+	// the expected_version verbatim and computes nothing: the closed allowlist,
+	// the byte caps, the version guard and the section gate all live core-side,
+	// where a caller speaking gRPC directly cannot skip them.
+	WebAdminUpdateCharacter(context.Context, *connect.Request[v1.WebAdminUpdateCharacterRequest]) (*connect.Response[v1.WebAdminUpdateCharacterResponse], error)
+	// WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+	// Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+	// the core's Aborted for a stale version and FailedPrecondition for an
+	// already-retired character both reach the browser unmodified.
+	WebAdminRetireCharacter(context.Context, *connect.Request[v1.WebAdminRetireCharacterRequest]) (*connect.Response[v1.WebAdminRetireCharacterResponse], error)
+	// WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+	// with the same forward-verbatim shape its retire peer has. There is no
+	// WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+	WebAdminUnretireCharacter(context.Context, *connect.Request[v1.WebAdminUnretireCharacterRequest]) (*connect.Response[v1.WebAdminUnretireCharacterResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -443,12 +571,6 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+WebServiceWebListCharactersProcedure,
 			connect.WithSchema(webServiceMethods.ByName("WebListCharacters")),
-			connect.WithClientOptions(opts...),
-		),
-		webListAllCharacters: connect.NewClient[v1.WebListAllCharactersRequest, v1.WebListAllCharactersResponse](
-			httpClient,
-			baseURL+WebServiceWebListAllCharactersProcedure,
-			connect.WithSchema(webServiceMethods.ByName("WebListAllCharacters")),
 			connect.WithClientOptions(opts...),
 		),
 		webLogout: connect.NewClient[v1.WebLogoutRequest, v1.WebLogoutResponse](
@@ -673,6 +795,96 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebGetPublishedScene")),
 			connect.WithClientOptions(opts...),
 		),
+		webGetCharacterProfile: connect.NewClient[v1.WebGetCharacterProfileRequest, v1.WebGetCharacterProfileResponse](
+			httpClient,
+			baseURL+WebServiceWebGetCharacterProfileProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebGetCharacterProfile")),
+			connect.WithClientOptions(opts...),
+		),
+		webListMyCharacters: connect.NewClient[v1.WebListMyCharactersRequest, v1.WebListMyCharactersResponse](
+			httpClient,
+			baseURL+WebServiceWebListMyCharactersProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListMyCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		webGetMyCharacter: connect.NewClient[v1.WebGetMyCharacterRequest, v1.WebGetMyCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebGetMyCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebGetMyCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		webUpdateCharacterProfile: connect.NewClient[v1.WebUpdateCharacterProfileRequest, v1.WebUpdateCharacterProfileResponse](
+			httpClient,
+			baseURL+WebServiceWebUpdateCharacterProfileProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterProfile")),
+			connect.WithClientOptions(opts...),
+		),
+		webUpdateCharacterDescription: connect.NewClient[v1.WebUpdateCharacterDescriptionRequest, v1.WebUpdateCharacterDescriptionResponse](
+			httpClient,
+			baseURL+WebServiceWebUpdateCharacterDescriptionProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterDescription")),
+			connect.WithClientOptions(opts...),
+		),
+		webSetDefaultCharacter: connect.NewClient[v1.WebSetDefaultCharacterRequest, v1.WebSetDefaultCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebSetDefaultCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebSetDefaultCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		webListCharacterDirectory: connect.NewClient[v1.WebListCharacterDirectoryRequest, v1.WebListCharacterDirectoryResponse](
+			httpClient,
+			baseURL+WebServiceWebListCharacterDirectoryProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListCharacterDirectory")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminListSections: connect.NewClient[v1.WebAdminListSectionsRequest, v1.WebAdminListSectionsResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminListSectionsProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminListSections")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminGetSection: connect.NewClient[v1.WebAdminGetSectionRequest, v1.WebAdminGetSectionResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminGetSectionProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminGetSection")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminListCharacters: connect.NewClient[v1.WebAdminListCharactersRequest, v1.WebAdminListCharactersResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminListCharactersProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminListCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminSearchCharacters: connect.NewClient[v1.WebAdminSearchCharactersRequest, v1.WebAdminSearchCharactersResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminSearchCharactersProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminSearchCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminGetCharacter: connect.NewClient[v1.WebAdminGetCharacterRequest, v1.WebAdminGetCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminGetCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminGetCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminUpdateCharacter: connect.NewClient[v1.WebAdminUpdateCharacterRequest, v1.WebAdminUpdateCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminUpdateCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminUpdateCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminRetireCharacter: connect.NewClient[v1.WebAdminRetireCharacterRequest, v1.WebAdminRetireCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminRetireCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminRetireCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		webAdminUnretireCharacter: connect.NewClient[v1.WebAdminUnretireCharacterRequest, v1.WebAdminUnretireCharacterResponse](
+			httpClient,
+			baseURL+WebServiceWebAdminUnretireCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebAdminUnretireCharacter")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -688,7 +900,6 @@ type webServiceClient struct {
 	webCreateGuest                *connect.Client[v1.WebCreateGuestRequest, v1.WebCreateGuestResponse]
 	webCreateCharacter            *connect.Client[v1.WebCreateCharacterRequest, v1.WebCreateCharacterResponse]
 	webListCharacters             *connect.Client[v1.WebListCharactersRequest, v1.WebListCharactersResponse]
-	webListAllCharacters          *connect.Client[v1.WebListAllCharactersRequest, v1.WebListAllCharactersResponse]
 	webLogout                     *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
 	webRequestPasswordReset       *connect.Client[v1.WebRequestPasswordResetRequest, v1.WebRequestPasswordResetResponse]
 	webConfirmPasswordReset       *connect.Client[v1.WebConfirmPasswordResetRequest, v1.WebConfirmPasswordResetResponse]
@@ -726,6 +937,21 @@ type webServiceClient struct {
 	webCastPublishSceneVote       *connect.Client[v1.WebCastPublishSceneVoteRequest, v1.WebCastPublishSceneVoteResponse]
 	webWithdrawScenePublish       *connect.Client[v1.WebWithdrawScenePublishRequest, v1.WebWithdrawScenePublishResponse]
 	webGetPublishedScene          *connect.Client[v1.WebGetPublishedSceneRequest, v1.WebGetPublishedSceneResponse]
+	webGetCharacterProfile        *connect.Client[v1.WebGetCharacterProfileRequest, v1.WebGetCharacterProfileResponse]
+	webListMyCharacters           *connect.Client[v1.WebListMyCharactersRequest, v1.WebListMyCharactersResponse]
+	webGetMyCharacter             *connect.Client[v1.WebGetMyCharacterRequest, v1.WebGetMyCharacterResponse]
+	webUpdateCharacterProfile     *connect.Client[v1.WebUpdateCharacterProfileRequest, v1.WebUpdateCharacterProfileResponse]
+	webUpdateCharacterDescription *connect.Client[v1.WebUpdateCharacterDescriptionRequest, v1.WebUpdateCharacterDescriptionResponse]
+	webSetDefaultCharacter        *connect.Client[v1.WebSetDefaultCharacterRequest, v1.WebSetDefaultCharacterResponse]
+	webListCharacterDirectory     *connect.Client[v1.WebListCharacterDirectoryRequest, v1.WebListCharacterDirectoryResponse]
+	webAdminListSections          *connect.Client[v1.WebAdminListSectionsRequest, v1.WebAdminListSectionsResponse]
+	webAdminGetSection            *connect.Client[v1.WebAdminGetSectionRequest, v1.WebAdminGetSectionResponse]
+	webAdminListCharacters        *connect.Client[v1.WebAdminListCharactersRequest, v1.WebAdminListCharactersResponse]
+	webAdminSearchCharacters      *connect.Client[v1.WebAdminSearchCharactersRequest, v1.WebAdminSearchCharactersResponse]
+	webAdminGetCharacter          *connect.Client[v1.WebAdminGetCharacterRequest, v1.WebAdminGetCharacterResponse]
+	webAdminUpdateCharacter       *connect.Client[v1.WebAdminUpdateCharacterRequest, v1.WebAdminUpdateCharacterResponse]
+	webAdminRetireCharacter       *connect.Client[v1.WebAdminRetireCharacterRequest, v1.WebAdminRetireCharacterResponse]
+	webAdminUnretireCharacter     *connect.Client[v1.WebAdminUnretireCharacterRequest, v1.WebAdminUnretireCharacterResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -776,11 +1002,6 @@ func (c *webServiceClient) WebCreateCharacter(ctx context.Context, req *connect.
 // WebListCharacters calls holomush.web.v1.WebService.WebListCharacters.
 func (c *webServiceClient) WebListCharacters(ctx context.Context, req *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error) {
 	return c.webListCharacters.CallUnary(ctx, req)
-}
-
-// WebListAllCharacters calls holomush.web.v1.WebService.WebListAllCharacters.
-func (c *webServiceClient) WebListAllCharacters(ctx context.Context, req *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error) {
-	return c.webListAllCharacters.CallUnary(ctx, req)
 }
 
 // WebLogout calls holomush.web.v1.WebService.WebLogout.
@@ -968,6 +1189,81 @@ func (c *webServiceClient) WebGetPublishedScene(ctx context.Context, req *connec
 	return c.webGetPublishedScene.CallUnary(ctx, req)
 }
 
+// WebGetCharacterProfile calls holomush.web.v1.WebService.WebGetCharacterProfile.
+func (c *webServiceClient) WebGetCharacterProfile(ctx context.Context, req *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error) {
+	return c.webGetCharacterProfile.CallUnary(ctx, req)
+}
+
+// WebListMyCharacters calls holomush.web.v1.WebService.WebListMyCharacters.
+func (c *webServiceClient) WebListMyCharacters(ctx context.Context, req *connect.Request[v1.WebListMyCharactersRequest]) (*connect.Response[v1.WebListMyCharactersResponse], error) {
+	return c.webListMyCharacters.CallUnary(ctx, req)
+}
+
+// WebGetMyCharacter calls holomush.web.v1.WebService.WebGetMyCharacter.
+func (c *webServiceClient) WebGetMyCharacter(ctx context.Context, req *connect.Request[v1.WebGetMyCharacterRequest]) (*connect.Response[v1.WebGetMyCharacterResponse], error) {
+	return c.webGetMyCharacter.CallUnary(ctx, req)
+}
+
+// WebUpdateCharacterProfile calls holomush.web.v1.WebService.WebUpdateCharacterProfile.
+func (c *webServiceClient) WebUpdateCharacterProfile(ctx context.Context, req *connect.Request[v1.WebUpdateCharacterProfileRequest]) (*connect.Response[v1.WebUpdateCharacterProfileResponse], error) {
+	return c.webUpdateCharacterProfile.CallUnary(ctx, req)
+}
+
+// WebUpdateCharacterDescription calls holomush.web.v1.WebService.WebUpdateCharacterDescription.
+func (c *webServiceClient) WebUpdateCharacterDescription(ctx context.Context, req *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error) {
+	return c.webUpdateCharacterDescription.CallUnary(ctx, req)
+}
+
+// WebSetDefaultCharacter calls holomush.web.v1.WebService.WebSetDefaultCharacter.
+func (c *webServiceClient) WebSetDefaultCharacter(ctx context.Context, req *connect.Request[v1.WebSetDefaultCharacterRequest]) (*connect.Response[v1.WebSetDefaultCharacterResponse], error) {
+	return c.webSetDefaultCharacter.CallUnary(ctx, req)
+}
+
+// WebListCharacterDirectory calls holomush.web.v1.WebService.WebListCharacterDirectory.
+func (c *webServiceClient) WebListCharacterDirectory(ctx context.Context, req *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error) {
+	return c.webListCharacterDirectory.CallUnary(ctx, req)
+}
+
+// WebAdminListSections calls holomush.web.v1.WebService.WebAdminListSections.
+func (c *webServiceClient) WebAdminListSections(ctx context.Context, req *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error) {
+	return c.webAdminListSections.CallUnary(ctx, req)
+}
+
+// WebAdminGetSection calls holomush.web.v1.WebService.WebAdminGetSection.
+func (c *webServiceClient) WebAdminGetSection(ctx context.Context, req *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error) {
+	return c.webAdminGetSection.CallUnary(ctx, req)
+}
+
+// WebAdminListCharacters calls holomush.web.v1.WebService.WebAdminListCharacters.
+func (c *webServiceClient) WebAdminListCharacters(ctx context.Context, req *connect.Request[v1.WebAdminListCharactersRequest]) (*connect.Response[v1.WebAdminListCharactersResponse], error) {
+	return c.webAdminListCharacters.CallUnary(ctx, req)
+}
+
+// WebAdminSearchCharacters calls holomush.web.v1.WebService.WebAdminSearchCharacters.
+func (c *webServiceClient) WebAdminSearchCharacters(ctx context.Context, req *connect.Request[v1.WebAdminSearchCharactersRequest]) (*connect.Response[v1.WebAdminSearchCharactersResponse], error) {
+	return c.webAdminSearchCharacters.CallUnary(ctx, req)
+}
+
+// WebAdminGetCharacter calls holomush.web.v1.WebService.WebAdminGetCharacter.
+func (c *webServiceClient) WebAdminGetCharacter(ctx context.Context, req *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error) {
+	return c.webAdminGetCharacter.CallUnary(ctx, req)
+}
+
+// WebAdminUpdateCharacter calls holomush.web.v1.WebService.WebAdminUpdateCharacter.
+func (c *webServiceClient) WebAdminUpdateCharacter(ctx context.Context, req *connect.Request[v1.WebAdminUpdateCharacterRequest]) (*connect.Response[v1.WebAdminUpdateCharacterResponse], error) {
+	return c.webAdminUpdateCharacter.CallUnary(ctx, req)
+}
+
+// WebAdminRetireCharacter calls holomush.web.v1.WebService.WebAdminRetireCharacter.
+func (c *webServiceClient) WebAdminRetireCharacter(ctx context.Context, req *connect.Request[v1.WebAdminRetireCharacterRequest]) (*connect.Response[v1.WebAdminRetireCharacterResponse], error) {
+	return c.webAdminRetireCharacter.CallUnary(ctx, req)
+}
+
+// WebAdminUnretireCharacter calls holomush.web.v1.WebService.WebAdminUnretireCharacter.
+func (c *webServiceClient) WebAdminUnretireCharacter(ctx context.Context, req *connect.Request[v1.WebAdminUnretireCharacterRequest]) (*connect.Response[v1.WebAdminUnretireCharacterResponse], error) {
+	return c.webAdminUnretireCharacter.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// SendCommand submits a player's raw command line (say, pose, quit, ...)
@@ -1012,17 +1308,19 @@ type WebServiceHandler interface {
 	// cookie whose MaxAge matches the guest session's shorter TTL. Runs the
 	// cookie-collision gate first.
 	WebCreateGuest(context.Context, *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error)
-	// WebCreateCharacter adds a character to the authenticated player. Proxies
-	// to CoreService.CreateCharacter using the cookie-derived session token.
+	// WebCreateCharacter adds a character to the authenticated player from a
+	// structured identity card. Proxies to
+	// CharacterAccessService.CreateCharacter — NOT CoreService.CreateCharacter,
+	// which still serves the telnet CREATE verb and still answers with a bare
+	// character_name scalar. web.Handler.WebCreateCharacter forwards the six
+	// submitted values plus the cookie-derived session token and computes
+	// nothing; a refusal arrives as a gRPC status the client classifies, so
+	// there is no gateway-synthesised success boolean.
 	WebCreateCharacter(context.Context, *connect.Request[v1.WebCreateCharacterRequest]) (*connect.Response[v1.WebCreateCharacterResponse], error)
 	// WebListCharacters returns the authenticated player's character roster.
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
-	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-	// reads player_session_token from the X-Session-Token cookie; any
-	// authenticated caller (guest included) may list character names.
-	WebListAllCharacters(context.Context, *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -1165,6 +1463,90 @@ type WebServiceHandler interface {
 	WebWithdrawScenePublish(context.Context, *connect.Request[v1.WebWithdrawScenePublishRequest]) (*connect.Response[v1.WebWithdrawScenePublishResponse], error)
 	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
 	WebGetPublishedScene(context.Context, *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error)
+	// WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+	// Handler.WebGetCharacterProfile lifts the session token from the
+	// X-Session-Token header CookieMiddleware injected and forwards it; a request
+	// with no cookie is the ordinary logged-out case, not an error.
+	WebGetCharacterProfile(context.Context, *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error)
+	// WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+	// Handler.WebListMyCharacters lifts the session token from the header and
+	// forwards nothing else; whose roster is returned follows from the token.
+	WebListMyCharacters(context.Context, *connect.Request[v1.WebListMyCharactersRequest]) (*connect.Response[v1.WebListMyCharactersResponse], error)
+	// WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+	// is verified in the facade, not here.
+	WebGetMyCharacter(context.Context, *connect.Request[v1.WebGetMyCharacterRequest]) (*connect.Response[v1.WebGetMyCharacterResponse], error)
+	// WebUpdateCharacterProfile proxies
+	// CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+	// forwards the mask and every prose field verbatim; the gateway neither
+	// validates the mask nor decides which fields it reaches.
+	WebUpdateCharacterProfile(context.Context, *connect.Request[v1.WebUpdateCharacterProfileRequest]) (*connect.Response[v1.WebUpdateCharacterProfileResponse], error)
+	// WebUpdateCharacterDescription proxies
+	// CharacterAccessService.UpdateCharacterDescription.
+	WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error)
+	// WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+	// Handler.WebSetDefaultCharacter lifts the session token from the header and
+	// forwards only the character id; whose default is repointed follows from the
+	// token, and ownership is proven in the facade rather than here.
+	WebSetDefaultCharacter(context.Context, *connect.Request[v1.WebSetDefaultCharacterRequest]) (*connect.Response[v1.WebSetDefaultCharacterResponse], error)
+	// WebListCharacterDirectory proxies
+	// CharacterAccessService.ListCharacterDirectory.
+	// Handler.WebListCharacterDirectory lifts the session token from the
+	// X-Session-Token header and forwards nothing else; a request with no cookie
+	// is the ordinary logged-out case rather than an error. The gateway neither
+	// filters nor re-sorts the listing — reachability and order are the facade's.
+	WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error)
+	// WebAdminListSections proxies AdminPortalService.AdminListSections.
+	// Handler.WebAdminListSections lifts the session token from the
+	// X-Session-Token header and forwards nothing else. It makes NO
+	// authorization decision of its own: the core interceptor already denied a
+	// caller with no `admin_section:` access before the core handler ran, so a
+	// non-admin's PermissionDenied reaches the browser unmodified rather than
+	// being turned into an empty list here.
+	WebAdminListSections(context.Context, *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error)
+	// WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+	// Handler.WebAdminGetSection lifts the session token from the
+	// X-Session-Token header and forwards only section_id. It makes NO
+	// authorization decision: the core interceptor gates the supplied id before
+	// the core handler runs, so both the PermissionDenied a refused caller gets
+	// and the FailedPrecondition a permitted caller gets for a planned section
+	// reach the browser unmodified.
+	//
+	// It has NO browser caller in v0.13, and that is deliberate rather than dead
+	// code: D-100 makes both registry RPCs published wire contract and census
+	// members, and the wire-level gate tests in test/integration/access are what
+	// exercise this path.
+	WebAdminGetSection(context.Context, *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error)
+	// WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+	// Handler.WebAdminListCharacters lifts the session token from the
+	// X-Session-Token header and forwards the page and ordering fields verbatim.
+	// It computes nothing: the clamp, the enum switches and the section gate all
+	// live core-side, where a caller speaking gRPC directly cannot skip them.
+	WebAdminListCharacters(context.Context, *connect.Request[v1.WebAdminListCharactersRequest]) (*connect.Response[v1.WebAdminListCharactersResponse], error)
+	// WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+	// Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+	// it does not trim, case-fold or normalize it, because normalization is
+	// core-side through the one charname pipeline and a gateway mirror of it
+	// would be a second definition of name equality.
+	WebAdminSearchCharacters(context.Context, *connect.Request[v1.WebAdminSearchCharactersRequest]) (*connect.Response[v1.WebAdminSearchCharactersResponse], error)
+	// WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
+	// message unmodified; the core's static NotFound reaches the browser as-is.
+	WebAdminGetCharacter(context.Context, *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error)
+	// WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+	// Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+	// the expected_version verbatim and computes nothing: the closed allowlist,
+	// the byte caps, the version guard and the section gate all live core-side,
+	// where a caller speaking gRPC directly cannot skip them.
+	WebAdminUpdateCharacter(context.Context, *connect.Request[v1.WebAdminUpdateCharacterRequest]) (*connect.Response[v1.WebAdminUpdateCharacterResponse], error)
+	// WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+	// Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+	// the core's Aborted for a stale version and FailedPrecondition for an
+	// already-retired character both reach the browser unmodified.
+	WebAdminRetireCharacter(context.Context, *connect.Request[v1.WebAdminRetireCharacterRequest]) (*connect.Response[v1.WebAdminRetireCharacterResponse], error)
+	// WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+	// with the same forward-verbatim shape its retire peer has. There is no
+	// WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+	WebAdminUnretireCharacter(context.Context, *connect.Request[v1.WebAdminUnretireCharacterRequest]) (*connect.Response[v1.WebAdminUnretireCharacterResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1232,12 +1614,6 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		WebServiceWebListCharactersProcedure,
 		svc.WebListCharacters,
 		connect.WithSchema(webServiceMethods.ByName("WebListCharacters")),
-		connect.WithHandlerOptions(opts...),
-	)
-	webServiceWebListAllCharactersHandler := connect.NewUnaryHandler(
-		WebServiceWebListAllCharactersProcedure,
-		svc.WebListAllCharacters,
-		connect.WithSchema(webServiceMethods.ByName("WebListAllCharacters")),
 		connect.WithHandlerOptions(opts...),
 	)
 	webServiceWebLogoutHandler := connect.NewUnaryHandler(
@@ -1462,6 +1838,96 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebGetPublishedScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebGetCharacterProfileHandler := connect.NewUnaryHandler(
+		WebServiceWebGetCharacterProfileProcedure,
+		svc.WebGetCharacterProfile,
+		connect.WithSchema(webServiceMethods.ByName("WebGetCharacterProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebListMyCharactersHandler := connect.NewUnaryHandler(
+		WebServiceWebListMyCharactersProcedure,
+		svc.WebListMyCharacters,
+		connect.WithSchema(webServiceMethods.ByName("WebListMyCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebGetMyCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebGetMyCharacterProcedure,
+		svc.WebGetMyCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebGetMyCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebUpdateCharacterProfileHandler := connect.NewUnaryHandler(
+		WebServiceWebUpdateCharacterProfileProcedure,
+		svc.WebUpdateCharacterProfile,
+		connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebUpdateCharacterDescriptionHandler := connect.NewUnaryHandler(
+		WebServiceWebUpdateCharacterDescriptionProcedure,
+		svc.WebUpdateCharacterDescription,
+		connect.WithSchema(webServiceMethods.ByName("WebUpdateCharacterDescription")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebSetDefaultCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebSetDefaultCharacterProcedure,
+		svc.WebSetDefaultCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebSetDefaultCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebListCharacterDirectoryHandler := connect.NewUnaryHandler(
+		WebServiceWebListCharacterDirectoryProcedure,
+		svc.WebListCharacterDirectory,
+		connect.WithSchema(webServiceMethods.ByName("WebListCharacterDirectory")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminListSectionsHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminListSectionsProcedure,
+		svc.WebAdminListSections,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminListSections")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminGetSectionHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminGetSectionProcedure,
+		svc.WebAdminGetSection,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminGetSection")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminListCharactersHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminListCharactersProcedure,
+		svc.WebAdminListCharacters,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminListCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminSearchCharactersHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminSearchCharactersProcedure,
+		svc.WebAdminSearchCharacters,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminSearchCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminGetCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminGetCharacterProcedure,
+		svc.WebAdminGetCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminGetCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminUpdateCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminUpdateCharacterProcedure,
+		svc.WebAdminUpdateCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminUpdateCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminRetireCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminRetireCharacterProcedure,
+		svc.WebAdminRetireCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminRetireCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebAdminUnretireCharacterHandler := connect.NewUnaryHandler(
+		WebServiceWebAdminUnretireCharacterProcedure,
+		svc.WebAdminUnretireCharacter,
+		connect.WithSchema(webServiceMethods.ByName("WebAdminUnretireCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -1484,8 +1950,6 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebCreateCharacterHandler.ServeHTTP(w, r)
 		case WebServiceWebListCharactersProcedure:
 			webServiceWebListCharactersHandler.ServeHTTP(w, r)
-		case WebServiceWebListAllCharactersProcedure:
-			webServiceWebListAllCharactersHandler.ServeHTTP(w, r)
 		case WebServiceWebLogoutProcedure:
 			webServiceWebLogoutHandler.ServeHTTP(w, r)
 		case WebServiceWebRequestPasswordResetProcedure:
@@ -1560,6 +2024,36 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebWithdrawScenePublishHandler.ServeHTTP(w, r)
 		case WebServiceWebGetPublishedSceneProcedure:
 			webServiceWebGetPublishedSceneHandler.ServeHTTP(w, r)
+		case WebServiceWebGetCharacterProfileProcedure:
+			webServiceWebGetCharacterProfileHandler.ServeHTTP(w, r)
+		case WebServiceWebListMyCharactersProcedure:
+			webServiceWebListMyCharactersHandler.ServeHTTP(w, r)
+		case WebServiceWebGetMyCharacterProcedure:
+			webServiceWebGetMyCharacterHandler.ServeHTTP(w, r)
+		case WebServiceWebUpdateCharacterProfileProcedure:
+			webServiceWebUpdateCharacterProfileHandler.ServeHTTP(w, r)
+		case WebServiceWebUpdateCharacterDescriptionProcedure:
+			webServiceWebUpdateCharacterDescriptionHandler.ServeHTTP(w, r)
+		case WebServiceWebSetDefaultCharacterProcedure:
+			webServiceWebSetDefaultCharacterHandler.ServeHTTP(w, r)
+		case WebServiceWebListCharacterDirectoryProcedure:
+			webServiceWebListCharacterDirectoryHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminListSectionsProcedure:
+			webServiceWebAdminListSectionsHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminGetSectionProcedure:
+			webServiceWebAdminGetSectionHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminListCharactersProcedure:
+			webServiceWebAdminListCharactersHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminSearchCharactersProcedure:
+			webServiceWebAdminSearchCharactersHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminGetCharacterProcedure:
+			webServiceWebAdminGetCharacterHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminUpdateCharacterProcedure:
+			webServiceWebAdminUpdateCharacterHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminRetireCharacterProcedure:
+			webServiceWebAdminRetireCharacterHandler.ServeHTTP(w, r)
+		case WebServiceWebAdminUnretireCharacterProcedure:
+			webServiceWebAdminUnretireCharacterHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1607,10 +2101,6 @@ func (UnimplementedWebServiceHandler) WebCreateCharacter(context.Context, *conne
 
 func (UnimplementedWebServiceHandler) WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListCharacters is not implemented"))
-}
-
-func (UnimplementedWebServiceHandler) WebListAllCharacters(context.Context, *connect.Request[v1.WebListAllCharactersRequest]) (*connect.Response[v1.WebListAllCharactersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListAllCharacters is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error) {
@@ -1759,4 +2249,64 @@ func (UnimplementedWebServiceHandler) WebWithdrawScenePublish(context.Context, *
 
 func (UnimplementedWebServiceHandler) WebGetPublishedScene(context.Context, *connect.Request[v1.WebGetPublishedSceneRequest]) (*connect.Response[v1.WebGetPublishedSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetPublishedScene is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebGetCharacterProfile(context.Context, *connect.Request[v1.WebGetCharacterProfileRequest]) (*connect.Response[v1.WebGetCharacterProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetCharacterProfile is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListMyCharacters(context.Context, *connect.Request[v1.WebListMyCharactersRequest]) (*connect.Response[v1.WebListMyCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListMyCharacters is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebGetMyCharacter(context.Context, *connect.Request[v1.WebGetMyCharacterRequest]) (*connect.Response[v1.WebGetMyCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetMyCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebUpdateCharacterProfile(context.Context, *connect.Request[v1.WebUpdateCharacterProfileRequest]) (*connect.Response[v1.WebUpdateCharacterProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebUpdateCharacterProfile is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebUpdateCharacterDescription(context.Context, *connect.Request[v1.WebUpdateCharacterDescriptionRequest]) (*connect.Response[v1.WebUpdateCharacterDescriptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebUpdateCharacterDescription is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebSetDefaultCharacter(context.Context, *connect.Request[v1.WebSetDefaultCharacterRequest]) (*connect.Response[v1.WebSetDefaultCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebSetDefaultCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListCharacterDirectory(context.Context, *connect.Request[v1.WebListCharacterDirectoryRequest]) (*connect.Response[v1.WebListCharacterDirectoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListCharacterDirectory is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminListSections(context.Context, *connect.Request[v1.WebAdminListSectionsRequest]) (*connect.Response[v1.WebAdminListSectionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminListSections is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminGetSection(context.Context, *connect.Request[v1.WebAdminGetSectionRequest]) (*connect.Response[v1.WebAdminGetSectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminGetSection is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminListCharacters(context.Context, *connect.Request[v1.WebAdminListCharactersRequest]) (*connect.Response[v1.WebAdminListCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminListCharacters is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminSearchCharacters(context.Context, *connect.Request[v1.WebAdminSearchCharactersRequest]) (*connect.Response[v1.WebAdminSearchCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminSearchCharacters is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminGetCharacter(context.Context, *connect.Request[v1.WebAdminGetCharacterRequest]) (*connect.Response[v1.WebAdminGetCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminGetCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminUpdateCharacter(context.Context, *connect.Request[v1.WebAdminUpdateCharacterRequest]) (*connect.Response[v1.WebAdminUpdateCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminUpdateCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminRetireCharacter(context.Context, *connect.Request[v1.WebAdminRetireCharacterRequest]) (*connect.Response[v1.WebAdminRetireCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminRetireCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebAdminUnretireCharacter(context.Context, *connect.Request[v1.WebAdminUnretireCharacterRequest]) (*connect.Response[v1.WebAdminUnretireCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebAdminUnretireCharacter is not implemented"))
 }

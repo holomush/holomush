@@ -110,6 +110,16 @@ type Session struct {
 	transportConnID ulid.ULID
 }
 
+// PlayerSessionToken returns the raw bearer token this session authenticates
+// with, for specs that drive a facade RPC directly rather than through a
+// Session helper — the gated gRPC listener in particular, where the token is
+// the request field the admin interceptor resolves its subject from.
+//
+// It is a READ of state the harness already minted, never a mint: a spec that
+// could fabricate a token would be asserting against an identity the production
+// login path never issued.
+func (s *Session) PlayerSessionToken() string { return s.playerSessionToken }
+
 // SendCommand dispatches a text command via HandleCommand. Returns the RPC
 // transport error if the call itself failed, or a wrapped error if the server
 // rejected the command (resp.Success == false). Tests that expect rejection

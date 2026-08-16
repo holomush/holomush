@@ -41,6 +41,15 @@ func validateAtBoot(ctx context.Context, entries []Section) error {
 		return oops.Code("ADMIN_SECTION_REGISTRY_INVALID").
 			Errorf("admin section registry is invalid: %w", err)
 	}
-	slog.DebugContext(ctx, "admin section registry validated", "sections", len(entries))
+	// The METHOD table is validated by the same startup step, for the same
+	// reason: a malformed method declaration is either an ungated admin RPC or
+	// one that can never be served, and both are programming errors that should
+	// stop the boot rather than be discovered by the first caller they mis-gate.
+	if err := validateAdminDescriptors(AdminDescriptors); err != nil {
+		return oops.Code("ADMIN_METHOD_DESCRIPTORS_INVALID").
+			Errorf("admin method descriptor table is invalid: %w", err)
+	}
+	slog.DebugContext(ctx, "admin section registry validated",
+		"sections", len(entries), "admin_methods", len(AdminDescriptors))
 	return nil
 }

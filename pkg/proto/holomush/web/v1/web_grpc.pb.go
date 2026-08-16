@@ -32,7 +32,6 @@ const (
 	WebService_WebCreateGuest_FullMethodName                = "/holomush.web.v1.WebService/WebCreateGuest"
 	WebService_WebCreateCharacter_FullMethodName            = "/holomush.web.v1.WebService/WebCreateCharacter"
 	WebService_WebListCharacters_FullMethodName             = "/holomush.web.v1.WebService/WebListCharacters"
-	WebService_WebListAllCharacters_FullMethodName          = "/holomush.web.v1.WebService/WebListAllCharacters"
 	WebService_WebLogout_FullMethodName                     = "/holomush.web.v1.WebService/WebLogout"
 	WebService_WebRequestPasswordReset_FullMethodName       = "/holomush.web.v1.WebService/WebRequestPasswordReset"
 	WebService_WebConfirmPasswordReset_FullMethodName       = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
@@ -70,6 +69,21 @@ const (
 	WebService_WebCastPublishSceneVote_FullMethodName       = "/holomush.web.v1.WebService/WebCastPublishSceneVote"
 	WebService_WebWithdrawScenePublish_FullMethodName       = "/holomush.web.v1.WebService/WebWithdrawScenePublish"
 	WebService_WebGetPublishedScene_FullMethodName          = "/holomush.web.v1.WebService/WebGetPublishedScene"
+	WebService_WebGetCharacterProfile_FullMethodName        = "/holomush.web.v1.WebService/WebGetCharacterProfile"
+	WebService_WebListMyCharacters_FullMethodName           = "/holomush.web.v1.WebService/WebListMyCharacters"
+	WebService_WebGetMyCharacter_FullMethodName             = "/holomush.web.v1.WebService/WebGetMyCharacter"
+	WebService_WebUpdateCharacterProfile_FullMethodName     = "/holomush.web.v1.WebService/WebUpdateCharacterProfile"
+	WebService_WebUpdateCharacterDescription_FullMethodName = "/holomush.web.v1.WebService/WebUpdateCharacterDescription"
+	WebService_WebSetDefaultCharacter_FullMethodName        = "/holomush.web.v1.WebService/WebSetDefaultCharacter"
+	WebService_WebListCharacterDirectory_FullMethodName     = "/holomush.web.v1.WebService/WebListCharacterDirectory"
+	WebService_WebAdminListSections_FullMethodName          = "/holomush.web.v1.WebService/WebAdminListSections"
+	WebService_WebAdminGetSection_FullMethodName            = "/holomush.web.v1.WebService/WebAdminGetSection"
+	WebService_WebAdminListCharacters_FullMethodName        = "/holomush.web.v1.WebService/WebAdminListCharacters"
+	WebService_WebAdminSearchCharacters_FullMethodName      = "/holomush.web.v1.WebService/WebAdminSearchCharacters"
+	WebService_WebAdminGetCharacter_FullMethodName          = "/holomush.web.v1.WebService/WebAdminGetCharacter"
+	WebService_WebAdminUpdateCharacter_FullMethodName       = "/holomush.web.v1.WebService/WebAdminUpdateCharacter"
+	WebService_WebAdminRetireCharacter_FullMethodName       = "/holomush.web.v1.WebService/WebAdminRetireCharacter"
+	WebService_WebAdminUnretireCharacter_FullMethodName     = "/holomush.web.v1.WebService/WebAdminUnretireCharacter"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -128,17 +142,19 @@ type WebServiceClient interface {
 	// cookie whose MaxAge matches the guest session's shorter TTL. Runs the
 	// cookie-collision gate first.
 	WebCreateGuest(ctx context.Context, in *WebCreateGuestRequest, opts ...grpc.CallOption) (*WebCreateGuestResponse, error)
-	// WebCreateCharacter adds a character to the authenticated player. Proxies
-	// to CoreService.CreateCharacter using the cookie-derived session token.
+	// WebCreateCharacter adds a character to the authenticated player from a
+	// structured identity card. Proxies to
+	// CharacterAccessService.CreateCharacter — NOT CoreService.CreateCharacter,
+	// which still serves the telnet CREATE verb and still answers with a bare
+	// character_name scalar. web.Handler.WebCreateCharacter forwards the six
+	// submitted values plus the cookie-derived session token and computes
+	// nothing; a refusal arrives as a gRPC status the client classifies, so
+	// there is no gateway-synthesised success boolean.
 	WebCreateCharacter(ctx context.Context, in *WebCreateCharacterRequest, opts ...grpc.CallOption) (*WebCreateCharacterResponse, error)
 	// WebListCharacters returns the authenticated player's character roster.
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(ctx context.Context, in *WebListCharactersRequest, opts ...grpc.CallOption) (*WebListCharactersResponse, error)
-	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-	// reads player_session_token from the X-Session-Token cookie; any
-	// authenticated caller (guest included) may list character names.
-	WebListAllCharacters(ctx context.Context, in *WebListAllCharactersRequest, opts ...grpc.CallOption) (*WebListAllCharactersResponse, error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -281,6 +297,90 @@ type WebServiceClient interface {
 	WebWithdrawScenePublish(ctx context.Context, in *WebWithdrawScenePublishRequest, opts ...grpc.CallOption) (*WebWithdrawScenePublishResponse, error)
 	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
 	WebGetPublishedScene(ctx context.Context, in *WebGetPublishedSceneRequest, opts ...grpc.CallOption) (*WebGetPublishedSceneResponse, error)
+	// WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+	// Handler.WebGetCharacterProfile lifts the session token from the
+	// X-Session-Token header CookieMiddleware injected and forwards it; a request
+	// with no cookie is the ordinary logged-out case, not an error.
+	WebGetCharacterProfile(ctx context.Context, in *WebGetCharacterProfileRequest, opts ...grpc.CallOption) (*WebGetCharacterProfileResponse, error)
+	// WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+	// Handler.WebListMyCharacters lifts the session token from the header and
+	// forwards nothing else; whose roster is returned follows from the token.
+	WebListMyCharacters(ctx context.Context, in *WebListMyCharactersRequest, opts ...grpc.CallOption) (*WebListMyCharactersResponse, error)
+	// WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+	// is verified in the facade, not here.
+	WebGetMyCharacter(ctx context.Context, in *WebGetMyCharacterRequest, opts ...grpc.CallOption) (*WebGetMyCharacterResponse, error)
+	// WebUpdateCharacterProfile proxies
+	// CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+	// forwards the mask and every prose field verbatim; the gateway neither
+	// validates the mask nor decides which fields it reaches.
+	WebUpdateCharacterProfile(ctx context.Context, in *WebUpdateCharacterProfileRequest, opts ...grpc.CallOption) (*WebUpdateCharacterProfileResponse, error)
+	// WebUpdateCharacterDescription proxies
+	// CharacterAccessService.UpdateCharacterDescription.
+	WebUpdateCharacterDescription(ctx context.Context, in *WebUpdateCharacterDescriptionRequest, opts ...grpc.CallOption) (*WebUpdateCharacterDescriptionResponse, error)
+	// WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+	// Handler.WebSetDefaultCharacter lifts the session token from the header and
+	// forwards only the character id; whose default is repointed follows from the
+	// token, and ownership is proven in the facade rather than here.
+	WebSetDefaultCharacter(ctx context.Context, in *WebSetDefaultCharacterRequest, opts ...grpc.CallOption) (*WebSetDefaultCharacterResponse, error)
+	// WebListCharacterDirectory proxies
+	// CharacterAccessService.ListCharacterDirectory.
+	// Handler.WebListCharacterDirectory lifts the session token from the
+	// X-Session-Token header and forwards nothing else; a request with no cookie
+	// is the ordinary logged-out case rather than an error. The gateway neither
+	// filters nor re-sorts the listing — reachability and order are the facade's.
+	WebListCharacterDirectory(ctx context.Context, in *WebListCharacterDirectoryRequest, opts ...grpc.CallOption) (*WebListCharacterDirectoryResponse, error)
+	// WebAdminListSections proxies AdminPortalService.AdminListSections.
+	// Handler.WebAdminListSections lifts the session token from the
+	// X-Session-Token header and forwards nothing else. It makes NO
+	// authorization decision of its own: the core interceptor already denied a
+	// caller with no `admin_section:` access before the core handler ran, so a
+	// non-admin's PermissionDenied reaches the browser unmodified rather than
+	// being turned into an empty list here.
+	WebAdminListSections(ctx context.Context, in *WebAdminListSectionsRequest, opts ...grpc.CallOption) (*WebAdminListSectionsResponse, error)
+	// WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+	// Handler.WebAdminGetSection lifts the session token from the
+	// X-Session-Token header and forwards only section_id. It makes NO
+	// authorization decision: the core interceptor gates the supplied id before
+	// the core handler runs, so both the PermissionDenied a refused caller gets
+	// and the FailedPrecondition a permitted caller gets for a planned section
+	// reach the browser unmodified.
+	//
+	// It has NO browser caller in v0.13, and that is deliberate rather than dead
+	// code: D-100 makes both registry RPCs published wire contract and census
+	// members, and the wire-level gate tests in test/integration/access are what
+	// exercise this path.
+	WebAdminGetSection(ctx context.Context, in *WebAdminGetSectionRequest, opts ...grpc.CallOption) (*WebAdminGetSectionResponse, error)
+	// WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+	// Handler.WebAdminListCharacters lifts the session token from the
+	// X-Session-Token header and forwards the page and ordering fields verbatim.
+	// It computes nothing: the clamp, the enum switches and the section gate all
+	// live core-side, where a caller speaking gRPC directly cannot skip them.
+	WebAdminListCharacters(ctx context.Context, in *WebAdminListCharactersRequest, opts ...grpc.CallOption) (*WebAdminListCharactersResponse, error)
+	// WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+	// Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+	// it does not trim, case-fold or normalize it, because normalization is
+	// core-side through the one charname pipeline and a gateway mirror of it
+	// would be a second definition of name equality.
+	WebAdminSearchCharacters(ctx context.Context, in *WebAdminSearchCharactersRequest, opts ...grpc.CallOption) (*WebAdminSearchCharactersResponse, error)
+	// WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
+	// message unmodified; the core's static NotFound reaches the browser as-is.
+	WebAdminGetCharacter(ctx context.Context, in *WebAdminGetCharacterRequest, opts ...grpc.CallOption) (*WebAdminGetCharacterResponse, error)
+	// WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+	// Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+	// the expected_version verbatim and computes nothing: the closed allowlist,
+	// the byte caps, the version guard and the section gate all live core-side,
+	// where a caller speaking gRPC directly cannot skip them.
+	WebAdminUpdateCharacter(ctx context.Context, in *WebAdminUpdateCharacterRequest, opts ...grpc.CallOption) (*WebAdminUpdateCharacterResponse, error)
+	// WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+	// Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+	// the core's Aborted for a stale version and FailedPrecondition for an
+	// already-retired character both reach the browser unmodified.
+	WebAdminRetireCharacter(ctx context.Context, in *WebAdminRetireCharacterRequest, opts ...grpc.CallOption) (*WebAdminRetireCharacterResponse, error)
+	// WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+	// with the same forward-verbatim shape its retire peer has. There is no
+	// WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+	WebAdminUnretireCharacter(ctx context.Context, in *WebAdminUnretireCharacterRequest, opts ...grpc.CallOption) (*WebAdminUnretireCharacterResponse, error)
 }
 
 type webServiceClient struct {
@@ -394,16 +494,6 @@ func (c *webServiceClient) WebListCharacters(ctx context.Context, in *WebListCha
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebListCharactersResponse)
 	err := c.cc.Invoke(ctx, WebService_WebListCharacters_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *webServiceClient) WebListAllCharacters(ctx context.Context, in *WebListAllCharactersRequest, opts ...grpc.CallOption) (*WebListAllCharactersResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(WebListAllCharactersResponse)
-	err := c.cc.Invoke(ctx, WebService_WebListAllCharacters_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -780,6 +870,156 @@ func (c *webServiceClient) WebGetPublishedScene(ctx context.Context, in *WebGetP
 	return out, nil
 }
 
+func (c *webServiceClient) WebGetCharacterProfile(ctx context.Context, in *WebGetCharacterProfileRequest, opts ...grpc.CallOption) (*WebGetCharacterProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebGetCharacterProfileResponse)
+	err := c.cc.Invoke(ctx, WebService_WebGetCharacterProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebListMyCharacters(ctx context.Context, in *WebListMyCharactersRequest, opts ...grpc.CallOption) (*WebListMyCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListMyCharactersResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListMyCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebGetMyCharacter(ctx context.Context, in *WebGetMyCharacterRequest, opts ...grpc.CallOption) (*WebGetMyCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebGetMyCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebGetMyCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebUpdateCharacterProfile(ctx context.Context, in *WebUpdateCharacterProfileRequest, opts ...grpc.CallOption) (*WebUpdateCharacterProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebUpdateCharacterProfileResponse)
+	err := c.cc.Invoke(ctx, WebService_WebUpdateCharacterProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebUpdateCharacterDescription(ctx context.Context, in *WebUpdateCharacterDescriptionRequest, opts ...grpc.CallOption) (*WebUpdateCharacterDescriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebUpdateCharacterDescriptionResponse)
+	err := c.cc.Invoke(ctx, WebService_WebUpdateCharacterDescription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebSetDefaultCharacter(ctx context.Context, in *WebSetDefaultCharacterRequest, opts ...grpc.CallOption) (*WebSetDefaultCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebSetDefaultCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebSetDefaultCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebListCharacterDirectory(ctx context.Context, in *WebListCharacterDirectoryRequest, opts ...grpc.CallOption) (*WebListCharacterDirectoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListCharacterDirectoryResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListCharacterDirectory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminListSections(ctx context.Context, in *WebAdminListSectionsRequest, opts ...grpc.CallOption) (*WebAdminListSectionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminListSectionsResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminListSections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminGetSection(ctx context.Context, in *WebAdminGetSectionRequest, opts ...grpc.CallOption) (*WebAdminGetSectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminGetSectionResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminGetSection_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminListCharacters(ctx context.Context, in *WebAdminListCharactersRequest, opts ...grpc.CallOption) (*WebAdminListCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminListCharactersResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminListCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminSearchCharacters(ctx context.Context, in *WebAdminSearchCharactersRequest, opts ...grpc.CallOption) (*WebAdminSearchCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminSearchCharactersResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminSearchCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminGetCharacter(ctx context.Context, in *WebAdminGetCharacterRequest, opts ...grpc.CallOption) (*WebAdminGetCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminGetCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminGetCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminUpdateCharacter(ctx context.Context, in *WebAdminUpdateCharacterRequest, opts ...grpc.CallOption) (*WebAdminUpdateCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminUpdateCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminUpdateCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminRetireCharacter(ctx context.Context, in *WebAdminRetireCharacterRequest, opts ...grpc.CallOption) (*WebAdminRetireCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminRetireCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminRetireCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAdminUnretireCharacter(ctx context.Context, in *WebAdminUnretireCharacterRequest, opts ...grpc.CallOption) (*WebAdminUnretireCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAdminUnretireCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAdminUnretireCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -836,17 +1076,19 @@ type WebServiceServer interface {
 	// cookie whose MaxAge matches the guest session's shorter TTL. Runs the
 	// cookie-collision gate first.
 	WebCreateGuest(context.Context, *WebCreateGuestRequest) (*WebCreateGuestResponse, error)
-	// WebCreateCharacter adds a character to the authenticated player. Proxies
-	// to CoreService.CreateCharacter using the cookie-derived session token.
+	// WebCreateCharacter adds a character to the authenticated player from a
+	// structured identity card. Proxies to
+	// CharacterAccessService.CreateCharacter — NOT CoreService.CreateCharacter,
+	// which still serves the telnet CREATE verb and still answers with a bare
+	// character_name scalar. web.Handler.WebCreateCharacter forwards the six
+	// submitted values plus the cookie-derived session token and computes
+	// nothing; a refusal arrives as a gRPC status the client classifies, so
+	// there is no gateway-synthesised success boolean.
 	WebCreateCharacter(context.Context, *WebCreateCharacterRequest) (*WebCreateCharacterResponse, error)
 	// WebListCharacters returns the authenticated player's character roster.
 	// Proxies to CoreService.ListCharacters; an RPC failure is surfaced as
 	// CodeUnauthenticated (session expired or invalid).
 	WebListCharacters(context.Context, *WebListCharactersRequest) (*WebListCharactersResponse, error)
-	// WebListAllCharacters proxies to CoreService.ListAllCharacters. The gateway
-	// reads player_session_token from the X-Session-Token cookie; any
-	// authenticated caller (guest included) may list character names.
-	WebListAllCharacters(context.Context, *WebListAllCharactersRequest) (*WebListAllCharactersResponse, error)
 	// WebLogout ends the player session and clears the session cookie. Proxies
 	// to CoreService.Logout (best-effort) when a token is present, then always
 	// emits the cookie-clear signal regardless of the RPC outcome.
@@ -989,6 +1231,90 @@ type WebServiceServer interface {
 	WebWithdrawScenePublish(context.Context, *WebWithdrawScenePublishRequest) (*WebWithdrawScenePublishResponse, error)
 	// WebGetPublishedScene proxies GetPublishedScene (cold-start tally snapshot).
 	WebGetPublishedScene(context.Context, *WebGetPublishedSceneRequest) (*WebGetPublishedSceneResponse, error)
+	// WebGetCharacterProfile proxies CharacterAccessService.GetCharacterProfile.
+	// Handler.WebGetCharacterProfile lifts the session token from the
+	// X-Session-Token header CookieMiddleware injected and forwards it; a request
+	// with no cookie is the ordinary logged-out case, not an error.
+	WebGetCharacterProfile(context.Context, *WebGetCharacterProfileRequest) (*WebGetCharacterProfileResponse, error)
+	// WebListMyCharacters proxies CharacterAccessService.ListMyCharacters.
+	// Handler.WebListMyCharacters lifts the session token from the header and
+	// forwards nothing else; whose roster is returned follows from the token.
+	WebListMyCharacters(context.Context, *WebListMyCharactersRequest) (*WebListMyCharactersResponse, error)
+	// WebGetMyCharacter proxies CharacterAccessService.GetMyCharacter. Ownership
+	// is verified in the facade, not here.
+	WebGetMyCharacter(context.Context, *WebGetMyCharacterRequest) (*WebGetMyCharacterResponse, error)
+	// WebUpdateCharacterProfile proxies
+	// CharacterAccessService.UpdateCharacterProfile. Handler.WebUpdateCharacterProfile
+	// forwards the mask and every prose field verbatim; the gateway neither
+	// validates the mask nor decides which fields it reaches.
+	WebUpdateCharacterProfile(context.Context, *WebUpdateCharacterProfileRequest) (*WebUpdateCharacterProfileResponse, error)
+	// WebUpdateCharacterDescription proxies
+	// CharacterAccessService.UpdateCharacterDescription.
+	WebUpdateCharacterDescription(context.Context, *WebUpdateCharacterDescriptionRequest) (*WebUpdateCharacterDescriptionResponse, error)
+	// WebSetDefaultCharacter proxies CharacterAccessService.SetDefaultCharacter.
+	// Handler.WebSetDefaultCharacter lifts the session token from the header and
+	// forwards only the character id; whose default is repointed follows from the
+	// token, and ownership is proven in the facade rather than here.
+	WebSetDefaultCharacter(context.Context, *WebSetDefaultCharacterRequest) (*WebSetDefaultCharacterResponse, error)
+	// WebListCharacterDirectory proxies
+	// CharacterAccessService.ListCharacterDirectory.
+	// Handler.WebListCharacterDirectory lifts the session token from the
+	// X-Session-Token header and forwards nothing else; a request with no cookie
+	// is the ordinary logged-out case rather than an error. The gateway neither
+	// filters nor re-sorts the listing — reachability and order are the facade's.
+	WebListCharacterDirectory(context.Context, *WebListCharacterDirectoryRequest) (*WebListCharacterDirectoryResponse, error)
+	// WebAdminListSections proxies AdminPortalService.AdminListSections.
+	// Handler.WebAdminListSections lifts the session token from the
+	// X-Session-Token header and forwards nothing else. It makes NO
+	// authorization decision of its own: the core interceptor already denied a
+	// caller with no `admin_section:` access before the core handler ran, so a
+	// non-admin's PermissionDenied reaches the browser unmodified rather than
+	// being turned into an empty list here.
+	WebAdminListSections(context.Context, *WebAdminListSectionsRequest) (*WebAdminListSectionsResponse, error)
+	// WebAdminGetSection proxies AdminPortalService.AdminGetSection.
+	// Handler.WebAdminGetSection lifts the session token from the
+	// X-Session-Token header and forwards only section_id. It makes NO
+	// authorization decision: the core interceptor gates the supplied id before
+	// the core handler runs, so both the PermissionDenied a refused caller gets
+	// and the FailedPrecondition a permitted caller gets for a planned section
+	// reach the browser unmodified.
+	//
+	// It has NO browser caller in v0.13, and that is deliberate rather than dead
+	// code: D-100 makes both registry RPCs published wire contract and census
+	// members, and the wire-level gate tests in test/integration/access are what
+	// exercise this path.
+	WebAdminGetSection(context.Context, *WebAdminGetSectionRequest) (*WebAdminGetSectionResponse, error)
+	// WebAdminListCharacters proxies AdminPortalService.AdminListCharacters.
+	// Handler.WebAdminListCharacters lifts the session token from the
+	// X-Session-Token header and forwards the page and ordering fields verbatim.
+	// It computes nothing: the clamp, the enum switches and the section gate all
+	// live core-side, where a caller speaking gRPC directly cannot skip them.
+	WebAdminListCharacters(context.Context, *WebAdminListCharactersRequest) (*WebAdminListCharactersResponse, error)
+	// WebAdminSearchCharacters proxies AdminPortalService.AdminSearchCharacters.
+	// Handler.WebAdminSearchCharacters forwards `query` as the RAW TYPED STRING —
+	// it does not trim, case-fold or normalize it, because normalization is
+	// core-side through the one charname pipeline and a gateway mirror of it
+	// would be a second definition of name equality.
+	WebAdminSearchCharacters(context.Context, *WebAdminSearchCharactersRequest) (*WebAdminSearchCharactersResponse, error)
+	// WebAdminGetCharacter proxies AdminPortalService.AdminGetCharacter.
+	// Handler.WebAdminGetCharacter forwards character_id and returns the detail
+	// message unmodified; the core's static NotFound reaches the browser as-is.
+	WebAdminGetCharacter(context.Context, *WebAdminGetCharacterRequest) (*WebAdminGetCharacterResponse, error)
+	// WebAdminUpdateCharacter proxies AdminPortalService.AdminUpdateCharacter.
+	// Handler.WebAdminUpdateCharacter forwards the mask, the thirteen values and
+	// the expected_version verbatim and computes nothing: the closed allowlist,
+	// the byte caps, the version guard and the section gate all live core-side,
+	// where a caller speaking gRPC directly cannot skip them.
+	WebAdminUpdateCharacter(context.Context, *WebAdminUpdateCharacterRequest) (*WebAdminUpdateCharacterResponse, error)
+	// WebAdminRetireCharacter proxies AdminPortalService.AdminRetireCharacter.
+	// Handler.WebAdminRetireCharacter forwards character_id and expected_version;
+	// the core's Aborted for a stale version and FailedPrecondition for an
+	// already-retired character both reach the browser unmodified.
+	WebAdminRetireCharacter(context.Context, *WebAdminRetireCharacterRequest) (*WebAdminRetireCharacterResponse, error)
+	// WebAdminUnretireCharacter proxies AdminPortalService.AdminUnretireCharacter,
+	// with the same forward-verbatim shape its retire peer has. There is no
+	// WebAdminDeleteCharacter: no admin delete RPC exists to proxy.
+	WebAdminUnretireCharacter(context.Context, *WebAdminUnretireCharacterRequest) (*WebAdminUnretireCharacterResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -1028,9 +1354,6 @@ func (UnimplementedWebServiceServer) WebCreateCharacter(context.Context, *WebCre
 }
 func (UnimplementedWebServiceServer) WebListCharacters(context.Context, *WebListCharactersRequest) (*WebListCharactersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebListCharacters not implemented")
-}
-func (UnimplementedWebServiceServer) WebListAllCharacters(context.Context, *WebListAllCharactersRequest) (*WebListAllCharactersResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method WebListAllCharacters not implemented")
 }
 func (UnimplementedWebServiceServer) WebLogout(context.Context, *WebLogoutRequest) (*WebLogoutResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebLogout not implemented")
@@ -1142,6 +1465,51 @@ func (UnimplementedWebServiceServer) WebWithdrawScenePublish(context.Context, *W
 }
 func (UnimplementedWebServiceServer) WebGetPublishedScene(context.Context, *WebGetPublishedSceneRequest) (*WebGetPublishedSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebGetPublishedScene not implemented")
+}
+func (UnimplementedWebServiceServer) WebGetCharacterProfile(context.Context, *WebGetCharacterProfileRequest) (*WebGetCharacterProfileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebGetCharacterProfile not implemented")
+}
+func (UnimplementedWebServiceServer) WebListMyCharacters(context.Context, *WebListMyCharactersRequest) (*WebListMyCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListMyCharacters not implemented")
+}
+func (UnimplementedWebServiceServer) WebGetMyCharacter(context.Context, *WebGetMyCharacterRequest) (*WebGetMyCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebGetMyCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebUpdateCharacterProfile(context.Context, *WebUpdateCharacterProfileRequest) (*WebUpdateCharacterProfileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebUpdateCharacterProfile not implemented")
+}
+func (UnimplementedWebServiceServer) WebUpdateCharacterDescription(context.Context, *WebUpdateCharacterDescriptionRequest) (*WebUpdateCharacterDescriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebUpdateCharacterDescription not implemented")
+}
+func (UnimplementedWebServiceServer) WebSetDefaultCharacter(context.Context, *WebSetDefaultCharacterRequest) (*WebSetDefaultCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebSetDefaultCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebListCharacterDirectory(context.Context, *WebListCharacterDirectoryRequest) (*WebListCharacterDirectoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListCharacterDirectory not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminListSections(context.Context, *WebAdminListSectionsRequest) (*WebAdminListSectionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminListSections not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminGetSection(context.Context, *WebAdminGetSectionRequest) (*WebAdminGetSectionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminGetSection not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminListCharacters(context.Context, *WebAdminListCharactersRequest) (*WebAdminListCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminListCharacters not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminSearchCharacters(context.Context, *WebAdminSearchCharactersRequest) (*WebAdminSearchCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminSearchCharacters not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminGetCharacter(context.Context, *WebAdminGetCharacterRequest) (*WebAdminGetCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminGetCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminUpdateCharacter(context.Context, *WebAdminUpdateCharacterRequest) (*WebAdminUpdateCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminUpdateCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminRetireCharacter(context.Context, *WebAdminRetireCharacterRequest) (*WebAdminRetireCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminRetireCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebAdminUnretireCharacter(context.Context, *WebAdminUnretireCharacterRequest) (*WebAdminUnretireCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAdminUnretireCharacter not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -1333,24 +1701,6 @@ func _WebService_WebListCharacters_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WebServiceServer).WebListCharacters(ctx, req.(*WebListCharactersRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WebService_WebListAllCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WebListAllCharactersRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WebServiceServer).WebListAllCharacters(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WebService_WebListAllCharacters_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WebServiceServer).WebListAllCharacters(ctx, req.(*WebListAllCharactersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2021,6 +2371,276 @@ func _WebService_WebGetPublishedScene_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebGetCharacterProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebGetCharacterProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebGetCharacterProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebGetCharacterProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebGetCharacterProfile(ctx, req.(*WebGetCharacterProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebListMyCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListMyCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListMyCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListMyCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListMyCharacters(ctx, req.(*WebListMyCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebGetMyCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebGetMyCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebGetMyCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebGetMyCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebGetMyCharacter(ctx, req.(*WebGetMyCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebUpdateCharacterProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebUpdateCharacterProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebUpdateCharacterProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebUpdateCharacterProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebUpdateCharacterProfile(ctx, req.(*WebUpdateCharacterProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebUpdateCharacterDescription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebUpdateCharacterDescriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebUpdateCharacterDescription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebUpdateCharacterDescription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebUpdateCharacterDescription(ctx, req.(*WebUpdateCharacterDescriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebSetDefaultCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebSetDefaultCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebSetDefaultCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebSetDefaultCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebSetDefaultCharacter(ctx, req.(*WebSetDefaultCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebListCharacterDirectory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListCharacterDirectoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListCharacterDirectory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListCharacterDirectory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListCharacterDirectory(ctx, req.(*WebListCharacterDirectoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminListSections_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminListSectionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminListSections(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminListSections_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminListSections(ctx, req.(*WebAdminListSectionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminGetSection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminGetSectionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminGetSection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminGetSection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminGetSection(ctx, req.(*WebAdminGetSectionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminListCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminListCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminListCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminListCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminListCharacters(ctx, req.(*WebAdminListCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminSearchCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminSearchCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminSearchCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminSearchCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminSearchCharacters(ctx, req.(*WebAdminSearchCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminGetCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminGetCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminGetCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminGetCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminGetCharacter(ctx, req.(*WebAdminGetCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminUpdateCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminUpdateCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminUpdateCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminUpdateCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminUpdateCharacter(ctx, req.(*WebAdminUpdateCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminRetireCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminRetireCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminRetireCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminRetireCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminRetireCharacter(ctx, req.(*WebAdminRetireCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAdminUnretireCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAdminUnretireCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAdminUnretireCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAdminUnretireCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAdminUnretireCharacter(ctx, req.(*WebAdminUnretireCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2063,10 +2683,6 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebListCharacters",
 			Handler:    _WebService_WebListCharacters_Handler,
-		},
-		{
-			MethodName: "WebListAllCharacters",
-			Handler:    _WebService_WebListAllCharacters_Handler,
 		},
 		{
 			MethodName: "WebLogout",
@@ -2215,6 +2831,66 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebGetPublishedScene",
 			Handler:    _WebService_WebGetPublishedScene_Handler,
+		},
+		{
+			MethodName: "WebGetCharacterProfile",
+			Handler:    _WebService_WebGetCharacterProfile_Handler,
+		},
+		{
+			MethodName: "WebListMyCharacters",
+			Handler:    _WebService_WebListMyCharacters_Handler,
+		},
+		{
+			MethodName: "WebGetMyCharacter",
+			Handler:    _WebService_WebGetMyCharacter_Handler,
+		},
+		{
+			MethodName: "WebUpdateCharacterProfile",
+			Handler:    _WebService_WebUpdateCharacterProfile_Handler,
+		},
+		{
+			MethodName: "WebUpdateCharacterDescription",
+			Handler:    _WebService_WebUpdateCharacterDescription_Handler,
+		},
+		{
+			MethodName: "WebSetDefaultCharacter",
+			Handler:    _WebService_WebSetDefaultCharacter_Handler,
+		},
+		{
+			MethodName: "WebListCharacterDirectory",
+			Handler:    _WebService_WebListCharacterDirectory_Handler,
+		},
+		{
+			MethodName: "WebAdminListSections",
+			Handler:    _WebService_WebAdminListSections_Handler,
+		},
+		{
+			MethodName: "WebAdminGetSection",
+			Handler:    _WebService_WebAdminGetSection_Handler,
+		},
+		{
+			MethodName: "WebAdminListCharacters",
+			Handler:    _WebService_WebAdminListCharacters_Handler,
+		},
+		{
+			MethodName: "WebAdminSearchCharacters",
+			Handler:    _WebService_WebAdminSearchCharacters_Handler,
+		},
+		{
+			MethodName: "WebAdminGetCharacter",
+			Handler:    _WebService_WebAdminGetCharacter_Handler,
+		},
+		{
+			MethodName: "WebAdminUpdateCharacter",
+			Handler:    _WebService_WebAdminUpdateCharacter_Handler,
+		},
+		{
+			MethodName: "WebAdminRetireCharacter",
+			Handler:    _WebService_WebAdminRetireCharacter_Handler,
+		},
+		{
+			MethodName: "WebAdminUnretireCharacter",
+			Handler:    _WebService_WebAdminUnretireCharacter_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

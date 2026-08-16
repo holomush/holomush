@@ -775,12 +775,59 @@ func (s *CoreServer) CheckPlayerSession(ctx context.Context, req *corev1.CheckPl
 		return nil, oops.Code("CHARACTER_LOOKUP_FAILED").Wrap(err)
 	}
 
+	// The default is read off the player row already loaded above, so restoring
+	// a session learns which character is the default without a second query.
+	// A nil column renders as the empty string — "no preference", never a
+	// substituted first character.
+	defaultCharacterID := ""
+	if player.DefaultCharacterID != nil {
+		defaultCharacterID = player.DefaultCharacterID.String()
+	}
+
 	return &corev1.CheckPlayerSessionResponse{
-		PlayerName: player.Username,
-		PlayerId:   player.ID.String(),
-		IsGuest:    player.IsGuest,
-		Characters: characters,
+		PlayerName:         player.Username,
+		PlayerId:           player.ID.String(),
+		IsGuest:            player.IsGuest,
+		Characters:         characters,
+		DefaultCharacterId: defaultCharacterID,
+		Roles:              s.navRolesFor(ctx, player.ID.String()),
 	}, nil
+}
+
+// navRolesFor answers the ADMIN-08 nav hint: which roles this PLAYER holds, so
+// the section rail can decide whether to draw the /admin entrance without an
+// AdminListSections round trip on every authed layout load.
+//
+// It is NOT an authorization decision and its result is not one either. Every
+// admin RPC evaluates ABAC on an `admin_section:` resource and denies
+// independently of what this returned.
+//
+// # It fails QUIET, and quiet here is closed
+//
+// A nil lookup (a composition root that never wired one) and a lookup that
+// errors both yield an EMPTY, initialised slice plus a logged warning — never an
+// error return. This field decides what is DRAWN; letting it fail a session
+// check would trade a missing nav link for a player who cannot restore their
+// session at all. An empty list draws no admin entrance, so the quiet answer is
+// also the closed one, and it neither hides an admin nor grants one.
+//
+// The slice is always initialised rather than left nil so the SERVER's own
+// answer is unambiguous — while noting that on the wire absence and empty are
+// the same bytes and no client may distinguish them.
+func (s *CoreServer) navRolesFor(ctx context.Context, playerID string) []string {
+	if s.playerRoleLookup == nil {
+		return []string{}
+	}
+	roles, err := s.playerRoleLookup(ctx, playerID)
+	if err != nil {
+		slog.WarnContext(ctx, "check player session: role lookup failed; reporting no roles",
+			"player_id", playerID, "error", err.Error())
+		return []string{}
+	}
+	if roles == nil {
+		return []string{}
+	}
+	return roles
 }
 
 // CreateGuest creates an ephemeral guest player and character.
@@ -969,7 +1016,7 @@ func (s *CoreServer) buildCharacterSummaries(ctx context.Context, playerID ulid.
 
 		if c.LocationID != nil && s.worldQuerier != nil {
 			subj := access.CharacterSubject(c.ID.String())
-			if loc, locErr := s.worldQuerier.GetLocation(ctx, subj, *c.LocationID); locErr == nil && loc != nil {
+			if loc, locErr := s.worldQuerier.GetLocation(ctx, world.HumanCaller(subj), *c.LocationID); locErr == nil && loc != nil {
 				summary.LastLocation = loc.Name
 			}
 		}

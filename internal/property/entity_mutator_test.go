@@ -41,7 +41,7 @@ type fakeVersionMutator struct {
 	conflict           bool
 }
 
-func (f *fakeVersionMutator) UpdateLocation(_ context.Context, _ string, loc *world.Location) error {
+func (f *fakeVersionMutator) UpdateLocation(_ context.Context, _ world.Caller, loc *world.Location) error {
 	f.gotLocationVersion = loc.Version
 	f.locationUpdates++
 	if f.conflict {
@@ -50,7 +50,7 @@ func (f *fakeVersionMutator) UpdateLocation(_ context.Context, _ string, loc *wo
 	return nil
 }
 
-func (f *fakeVersionMutator) UpdateObject(_ context.Context, _ string, obj *world.Object) error {
+func (f *fakeVersionMutator) UpdateObject(_ context.Context, _ world.Caller, obj *world.Object) error {
 	f.gotObjectVersion = obj.Version
 	f.objectUpdates++
 	if f.conflict {
@@ -70,14 +70,14 @@ func TestEntityMutator_PropertyWriteFunnelsToExactlyOneParentUpdate(t *testing.T
 	t.Run("location SetName -> exactly one UpdateLocation", func(t *testing.T) {
 		q := &fakeVersionQuerier{loc: &world.Location{Name: "Old", Version: 7}}
 		m := &fakeVersionMutator{}
-		require.NoError(t, locationEntityMutator{}.SetName(context.Background(), q, m, "subject", ulid.Make(), "New"))
+		require.NoError(t, locationEntityMutator{}.SetName(context.Background(), q, m, world.HumanCaller("subject"), ulid.Make(), "New"))
 		assert.Equal(t, 1, m.locationUpdates, "one property write funnels to exactly one parent update (no duplicate envelope)")
 		assert.Equal(t, 0, m.objectUpdates)
 	})
 	t.Run("object SetDescription -> exactly one UpdateObject", func(t *testing.T) {
 		q := &fakeVersionQuerier{obj: &world.Object{Description: "Old", Version: 4}}
 		m := &fakeVersionMutator{}
-		require.NoError(t, objectEntityMutator{}.SetDescription(context.Background(), q, m, "subject", ulid.Make(), "New"))
+		require.NoError(t, objectEntityMutator{}.SetDescription(context.Background(), q, m, world.HumanCaller("subject"), ulid.Make(), "New"))
 		assert.Equal(t, 1, m.objectUpdates, "one property write funnels to exactly one parent update (no duplicate envelope)")
 		assert.Equal(t, 0, m.locationUpdates)
 	})
@@ -87,7 +87,7 @@ func TestLocationEntityMutator_SetName_ThreadsReadVersion(t *testing.T) {
 	q := &fakeVersionQuerier{loc: &world.Location{Name: "Old", Version: 7}}
 	m := &fakeVersionMutator{}
 
-	err := locationEntityMutator{}.SetName(context.Background(), q, m, "subject", ulid.Make(), "New")
+	err := locationEntityMutator{}.SetName(context.Background(), q, m, world.HumanCaller("subject"), ulid.Make(), "New")
 	require.NoError(t, err)
 	// The write MUST carry the version read at the start of the RMW, not 0.
 	assert.Equal(t, 7, m.gotLocationVersion)
@@ -97,7 +97,7 @@ func TestLocationEntityMutator_SetDescription_SurfacesConcurrentEdit(t *testing.
 	q := &fakeVersionQuerier{loc: &world.Location{Description: "Old", Version: 7}}
 	m := &fakeVersionMutator{conflict: true}
 
-	err := locationEntityMutator{}.SetDescription(context.Background(), q, m, "subject", ulid.Make(), "New")
+	err := locationEntityMutator{}.SetDescription(context.Background(), q, m, world.HumanCaller("subject"), ulid.Make(), "New")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, world.ErrConcurrentEdit)
 	errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
@@ -107,7 +107,7 @@ func TestObjectEntityMutator_SetName_ThreadsReadVersion(t *testing.T) {
 	q := &fakeVersionQuerier{obj: &world.Object{Name: "Old", Version: 4}}
 	m := &fakeVersionMutator{}
 
-	err := objectEntityMutator{}.SetName(context.Background(), q, m, "subject", ulid.Make(), "New")
+	err := objectEntityMutator{}.SetName(context.Background(), q, m, world.HumanCaller("subject"), ulid.Make(), "New")
 	require.NoError(t, err)
 	assert.Equal(t, 4, m.gotObjectVersion)
 }
@@ -116,7 +116,7 @@ func TestObjectEntityMutator_SetDescription_SurfacesConcurrentEdit(t *testing.T)
 	q := &fakeVersionQuerier{obj: &world.Object{Description: "Old", Version: 4}}
 	m := &fakeVersionMutator{conflict: true}
 
-	err := objectEntityMutator{}.SetDescription(context.Background(), q, m, "subject", ulid.Make(), "New")
+	err := objectEntityMutator{}.SetDescription(context.Background(), q, m, world.HumanCaller("subject"), ulid.Make(), "New")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, world.ErrConcurrentEdit)
 	errutil.AssertErrorCode(t, err, world.CodeConcurrentEdit)
@@ -134,7 +134,7 @@ func (t testEntityMutator) GetName(_ context.Context, _ WorldQuerier, _ ulid.ULI
 	return "", nil
 }
 
-func (t testEntityMutator) SetName(_ context.Context, _ WorldQuerier, _ WorldMutator, _ string, _ ulid.ULID, _ string) error {
+func (t testEntityMutator) SetName(_ context.Context, _ WorldQuerier, _ WorldMutator, _ world.Caller, _ ulid.ULID, _ string) error {
 	return nil
 }
 
@@ -142,7 +142,7 @@ func (t testEntityMutator) GetDescription(_ context.Context, _ WorldQuerier, _ u
 	return "", nil
 }
 
-func (t testEntityMutator) SetDescription(_ context.Context, _ WorldQuerier, _ WorldMutator, _ string, _ ulid.ULID, _ string) error {
+func (t testEntityMutator) SetDescription(_ context.Context, _ WorldQuerier, _ WorldMutator, _ world.Caller, _ ulid.ULID, _ string) error {
 	return nil
 }
 

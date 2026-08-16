@@ -17,6 +17,7 @@ describe('authStore.setPlayerProfile', () => {
       playerName: 'Jasper Iodine',
       isGuest: true,
       characters: [{ characterId: '01KQ', name: 'Jasper Iodine' }],
+      roles: [],
     });
     const s = get(authState);
     expect(s.playerId).toBe('01KQ2Y5ETK5957724MGZ2H2TDB');
@@ -26,12 +27,24 @@ describe('authStore.setPlayerProfile', () => {
     expect(s.isPlayerAuthenticated).toBe(true);
   });
 
+  it('stores the roles nav hint the session response carried', () => {
+    setPlayerProfile({
+      playerId: '01KQ',
+      playerName: 'X',
+      isGuest: false,
+      characters: [],
+      roles: ['admin', 'moderator'],
+    });
+    expect(get(authState).roles).toEqual(['admin', 'moderator']);
+  });
+
   it('clearAuth resets all profile fields', () => {
     setPlayerProfile({
       playerId: '01KQ',
       playerName: 'X',
       isGuest: false,
       characters: [],
+      roles: [],
     });
     clearAuth();
     const s = get(authState);
@@ -40,5 +53,17 @@ describe('authStore.setPlayerProfile', () => {
     expect(s.isGuest).toBe(false);
     expect(s.characters).toEqual([]);
     expect(s.isPlayerAuthenticated).toBe(false);
+  });
+
+  it('clearAuth resets roles, so a stale admin hint cannot outlive the session in one tab', () => {
+    setPlayerProfile({
+      playerId: '01KQ',
+      playerName: 'X',
+      isGuest: false,
+      characters: [],
+      roles: ['admin'],
+    });
+    clearAuth();
+    expect(get(authState).roles).toEqual([]);
   });
 });

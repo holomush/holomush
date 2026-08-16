@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,6 +53,9 @@ const (
 	kindCharacterDeleted           = "character_deleted"
 	kindCharacterMoved             = "character_moved"
 	kindCharacterPreferencesUpdate = "character_preferences_update"
+	kindCharacterRetired           = "character_retired"
+	kindCharacterUnretired         = "character_unretired"
+	kindCharacterProfileUpdate     = "character_profile_update"
 	worldSchemaVersion             = 1
 )
 
@@ -196,6 +200,8 @@ func KnownEntityPrefixes() []string {
 // Returns nil if allowed, or an error with appropriate oops error codes:
 //
 //   - ErrPermissionDenied       → oops.Code("{entityPrefix}_ACCESS_DENIED")
+//   - ErrPermissionDenied       → oops.Code("{principalKind}_{entityPrefix}_ACCESS_DENIED")
+//     when the caller carries a non-zero principalKind (today: JOB)
 //   - ErrAccessEvaluationFailed → oops.Code("{entityPrefix}_ACCESS_EVALUATION_FAILED")
 //   - all other errors          → oops.Code("{entityPrefix}_ACCESS_EVALUATION_FAILED")
 //
@@ -203,27 +209,68 @@ func KnownEntityPrefixes() []string {
 // Unknown errors (context errors, DB failures, etc.) are classified as evaluation
 // failures rather than denials to avoid poisoning metrics and user feedback.
 //
-// Metrics: calls observability.RecordEngineFailure in all error paths. The
-// holomush_engine_failures_total counter uses a package-level Prometheus var
-// that is not exported; metric increments are verified by integration tests.
-func (s *Service) checkAccess(ctx context.Context, subject, action, resource string, prefix entityPrefix) error {
+// The DENY code alone composes both dimensions (02.2-CONTEXT D-58), so alerting
+// can distinguish a job denied on a character from a player denied on a
+// character without parsing log attributes. Two contracts are deliberately
+// preserved by the composition:
+//
+//   - The _ACCESS_DENIED SUFFIX. grpc_server.go:169 classifies on it, so the
+//     principal kind is a prefix; a trailing qualifier would silently downgrade
+//     every job denial to codes.Internal.
+//   - KnownEntityPrefixes() and internal/command/errors.go's exact-match code
+//     maps are NOT extended with JOB_ variants. Those maps drive PLAYER-FACING
+//     message text, and a background job's denial is never rendered to a player.
+//
+// The EVALUATION-FAILURE codes stay unqualified for the same reason: their
+// exact-match map must keep resolving when the engine is unhealthy.
+//
+// Metrics: calls observability.RecordEngineFailure on the evaluation-failure
+// paths ONLY — the malformed-request, engine-error and infra-failure branches.
+// The plain denial return below deliberately does NOT call it: the
+// holomush_engine_failures_total counter counts evaluation failures, so a
+// denial counted there would make a policy-drift incident look like an
+// infrastructure incident and misroute alerting. The counter uses a
+// package-level Prometheus var, reachable for assertions through
+// observability.EngineFailureCounter.
+func (s *Service) checkAccess(ctx context.Context, caller Caller, action, resource string, prefix entityPrefix) error {
 	metricKey := strings.ToLower(string(prefix)) + "_access_check"
 	failCode := string(prefix) + "_ACCESS_EVALUATION_FAILED"
 	denyCode := string(prefix) + "_ACCESS_DENIED"
+	// D-58: qualify the DENY code with the principal kind. The zero-value
+	// principalKind — every HumanCaller and SystemCaller — leaves the code
+	// byte-identical to before, so the six shipped entity codes are unchanged.
+	//
+	// The qualifier is a PREFIX, and the suffix is composed from the single
+	// literal above rather than respelled per principal kind. Both alternatives
+	// were considered and rejected: "CHARACTER_ACCESS_DENIED_JOB" breaks
+	// grpc_server.go:169's suffix classification outright, and carrying the
+	// dimension as a bare oops.With("principal_kind", …) attribute is exactly
+	// the log-attribute parsing D-58 exists to rule out.
+	if caller.principalKind != "" {
+		denyCode = string(caller.principalKind) + "_" + denyCode
+	}
 
-	req, reqErr := types.NewAccessRequest(subject, action, resource, nil)
+	subject := caller.subject
+
+	req, reqErr := types.NewAccessRequest(subject, action, resource, caller.attrs)
 	if reqErr != nil {
-		// Defensive: all call sites should use typed helpers
-		// (access.CharacterSubject, access.LocationResource, etc.) that panic on
-		// empty input, and action strings are hardcoded literals. Kept as defense
-		// in depth against future call sites that might bypass the typed helpers.
+		// LOAD-BEARING, not merely defensive. world.HumanCaller deliberately
+		// accepts an empty subject rather than panicking the way
+		// access.PluginSubject / CharacterSubject / PlayerSubject do, precisely
+		// so the fail-closed classification happens HERE: NewAccessRequest
+		// rejects the empty subject and this branch turns it into
+		// *_ACCESS_EVALUATION_FAILED. TestWorldService_MalformedAccessParams
+		// (internal/world/service_test.go:6079) is the assertion that pins it.
 		errutil.LogErrorContext(ctx, "invalid access request",
 			reqErr, "subject", subject, "action", action, "resource", resource)
 		observability.RecordEngineFailure(metricKey)
 		return oops.Code(failCode).
 			Wrap(errors.Join(ErrAccessEvaluationFailed, reqErr))
 	}
-	decision, err := s.engine.Evaluate(ctx, req)
+	// Evaluate against a DERIVED context: a SystemCaller stamps the S1 marker
+	// there and nowhere else, so it cannot outlive this decision and cannot
+	// reach the repositories or the outbox below.
+	decision, err := s.engine.Evaluate(caller.evalContext(ctx), req)
 	if err != nil {
 		errutil.LogErrorContext(ctx, "access evaluation failed",
 			err, "subject", subject, "action", action, "resource", resource)
@@ -254,7 +301,7 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource str
 }
 
 // GetLocation retrieves a location by ID after checking read authorization.
-func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*Location, error) {
+func (s *Service) GetLocation(ctx context.Context, subjectID Caller, id ulid.ULID) (*Location, error) {
 	if s.locationRepo == nil {
 		return nil, oops.Code("LOCATION_GET_FAILED").Errorf("location repository not configured")
 	}
@@ -275,7 +322,7 @@ func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULI
 // CreateLocation creates a new location after checking write authorization.
 // The location ID is generated if not set.
 // Returns a ValidationError if the name or description is invalid.
-func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Location) error {
+func (s *Service) CreateLocation(ctx context.Context, subjectID Caller, loc *Location) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Errorf("location repository not configured")
 	}
@@ -299,7 +346,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err != nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "build location create payload %s", loc.ID)
 	}
-	intent := s.buildIntent(kindLocationCreated, wmodel.AggregateLocation, loc.ID, subjectID, payload)
+	intent := s.buildIntent(kindLocationCreated, wmodel.AggregateLocation, loc.ID, subjectID.subject, payload)
 	if _, err := s.mutator.createLocation(ctx, intent, loc); err != nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "create location %s", loc.ID)
 	}
@@ -308,7 +355,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 
 // UpdateLocation updates an existing location after checking write authorization.
 // Returns a ValidationError if the name or description is invalid.
-func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Location) error {
+func (s *Service) UpdateLocation(ctx context.Context, subjectID Caller, loc *Location) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_UPDATE_FAILED").Errorf("location repository not configured")
 	}
@@ -329,7 +376,7 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err != nil {
 		return oops.Code("LOCATION_UPDATE_FAILED").Wrapf(err, "build location update payload %s", loc.ID)
 	}
-	intent := s.buildIntent(kindLocationUpdated, wmodel.AggregateLocation, loc.ID, subjectID, payload)
+	intent := s.buildIntent(kindLocationUpdated, wmodel.AggregateLocation, loc.ID, subjectID.subject, payload)
 	if _, err := s.mutator.updateLocation(ctx, intent, loc); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("id", loc.ID.String()).Wrap(err)
@@ -362,7 +409,7 @@ func (s *Service) buildIntent(kind string, aggType wmodel.AggregateType, aggID u
 // DeleteLocation deletes a location and its properties after checking delete authorization.
 // Both deletions occur in the same database transaction per spec (05-storage-audit.md §110-119).
 // Returns an error if PropertyRepo or Transactor are not configured.
-func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.ULID) error {
+func (s *Service) DeleteLocation(ctx context.Context, subjectID Caller, id ulid.ULID) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("location repository not configured")
 	}
@@ -383,7 +430,7 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	if err != nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "build location tombstone payload %s", id)
 	}
-	intent := s.buildIntent(kindLocationDeleted, wmodel.AggregateLocation, id, subjectID, payload)
+	intent := s.buildIntent(kindLocationDeleted, wmodel.AggregateLocation, id, subjectID.subject, payload)
 	// The delete + its property cascade + the tombstone envelope commit in ONE
 	// transaction via the mutate() seam; the envelope manifest carries the
 	// DB-cascaded exits from the repo delta (INV-WORLD-2 parity).
@@ -397,7 +444,7 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 }
 
 // GetExit retrieves an exit by ID after checking read authorization.
-func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (*Exit, error) {
+func (s *Service) GetExit(ctx context.Context, subjectID Caller, id ulid.ULID) (*Exit, error) {
 	if s.exitRepo == nil {
 		return nil, oops.Code("EXIT_GET_FAILED").Errorf("exit repository not configured")
 	}
@@ -421,7 +468,7 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 // Returns a ValidationError if the id, name, aliases, visibility, lock type,
 // lock data, or visible_to are invalid.
 // Returns ErrSelfReferentialExit if from and to locations are the same.
-func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) error {
+func (s *Service) CreateExit(ctx context.Context, subjectID Caller, exit *Exit) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_CREATE_FAILED").Errorf("exit repository not configured")
 	}
@@ -445,7 +492,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err != nil {
 		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "build exit create payload %s", exit.ID)
 	}
-	intent := s.buildIntent(kindExitCreated, wmodel.AggregateExit, exit.ID, subjectID, payload)
+	intent := s.buildIntent(kindExitCreated, wmodel.AggregateExit, exit.ID, subjectID.subject, payload)
 	if _, err := s.mutator.createExit(ctx, intent, exit); err != nil {
 		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "create exit %s", exit.ID)
 	}
@@ -457,7 +504,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 // Returns a ValidationError if the id, name, aliases, visibility, lock type,
 // lock data, or visible_to are invalid.
 // Returns ErrSelfReferentialExit if from and to locations are the same.
-func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) error {
+func (s *Service) UpdateExit(ctx context.Context, subjectID Caller, exit *Exit) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_UPDATE_FAILED").Errorf("exit repository not configured")
 	}
@@ -478,7 +525,7 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err != nil {
 		return oops.Code("EXIT_UPDATE_FAILED").Wrapf(err, "build exit update payload %s", exit.ID)
 	}
-	intent := s.buildIntent(kindExitUpdated, wmodel.AggregateExit, exit.ID, subjectID, payload)
+	intent := s.buildIntent(kindExitUpdated, wmodel.AggregateExit, exit.ID, subjectID.subject, payload)
 	if _, err := s.mutator.updateExit(ctx, intent, exit); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("id", exit.ID.String()).Wrap(err)
@@ -495,7 +542,7 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 // For bidirectional exits, the return exit is deleted atomically.
 // Non-severe cleanup issues (return not found) are logged but don't fail the operation.
 // Severe cleanup issues (find/delete errors) cause a full rollback - the operation fails.
-func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID) error {
+func (s *Service) DeleteExit(ctx context.Context, subjectID Caller, id ulid.ULID) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_DELETE_FAILED").Errorf("exit repository not configured")
 	}
@@ -510,7 +557,7 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	if err != nil {
 		return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "build exit tombstone payload %s", id)
 	}
-	intent := s.buildIntent(kindExitDeleted, wmodel.AggregateExit, id, subjectID, payload)
+	intent := s.buildIntent(kindExitDeleted, wmodel.AggregateExit, id, subjectID.subject, payload)
 	// The delete (incl. the atomic bidirectional reverse-exit cascade) and its
 	// single tombstone envelope commit in ONE transaction via mutate(); the envelope
 	// manifest carries the reverse exit from the repo delta. A non-severe cleanup
@@ -543,7 +590,7 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 }
 
 // GetExitsByLocation retrieves all exits from a location after checking read authorization.
-func (s *Service) GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*Exit, error) {
+func (s *Service) GetExitsByLocation(ctx context.Context, subjectID Caller, locationID ulid.ULID) ([]*Exit, error) {
 	if s.exitRepo == nil {
 		return nil, oops.Code("EXIT_LIST_FAILED").Errorf("exit repository not configured")
 	}
@@ -559,7 +606,7 @@ func (s *Service) GetExitsByLocation(ctx context.Context, subjectID string, loca
 }
 
 // GetObject retrieves an object by ID after checking read authorization.
-func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*Object, error) {
+func (s *Service) GetObject(ctx context.Context, subjectID Caller, id ulid.ULID) (*Object, error) {
 	if s.objectRepo == nil {
 		return nil, oops.Code("OBJECT_GET_FAILED").Errorf("object repository not configured")
 	}
@@ -580,7 +627,7 @@ func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID)
 // CreateObject creates a new object after checking write authorization.
 // The object ID is generated if not set.
 // Returns a ValidationError if the name or description is invalid.
-func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Object) error {
+func (s *Service) CreateObject(ctx context.Context, subjectID Caller, obj *Object) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Errorf("object repository not configured")
 	}
@@ -607,7 +654,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if err != nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "build object create payload %s", obj.ID)
 	}
-	intent := s.buildIntent(kindObjectCreated, wmodel.AggregateObject, obj.ID, subjectID, payload)
+	intent := s.buildIntent(kindObjectCreated, wmodel.AggregateObject, obj.ID, subjectID.subject, payload)
 	if _, err := s.mutator.createObject(ctx, intent, obj); err != nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "create object %s", obj.ID)
 	}
@@ -616,7 +663,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 
 // UpdateObject updates an existing object after checking write authorization.
 // Returns a ValidationError if the name or description is invalid.
-func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Object) error {
+func (s *Service) UpdateObject(ctx context.Context, subjectID Caller, obj *Object) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_UPDATE_FAILED").Errorf("object repository not configured")
 	}
@@ -640,7 +687,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	if err != nil {
 		return oops.Code("OBJECT_UPDATE_FAILED").Wrapf(err, "build object update payload %s", obj.ID)
 	}
-	intent := s.buildIntent(kindObjectUpdated, wmodel.AggregateObject, obj.ID, subjectID, payload)
+	intent := s.buildIntent(kindObjectUpdated, wmodel.AggregateObject, obj.ID, subjectID.subject, payload)
 	if _, err := s.mutator.updateObject(ctx, intent, obj); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("id", obj.ID.String()).Wrap(err)
@@ -656,7 +703,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 // DeleteObject deletes an object and its properties after checking delete authorization.
 // Both deletions occur in the same database transaction per spec (05-storage-audit.md §110-119).
 // Returns an error if PropertyRepo or Transactor are not configured.
-func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.ULID) error {
+func (s *Service) DeleteObject(ctx context.Context, subjectID Caller, id ulid.ULID) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("object repository not configured")
 	}
@@ -677,7 +724,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	if err != nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "build object tombstone payload %s", id)
 	}
-	intent := s.buildIntent(kindObjectDeleted, wmodel.AggregateObject, id, subjectID, payload)
+	intent := s.buildIntent(kindObjectDeleted, wmodel.AggregateObject, id, subjectID.subject, payload)
 	// The delete + its property cascade + the tombstone envelope commit in ONE
 	// transaction via the mutate() seam.
 	if _, err := s.mutator.deleteObject(ctx, intent, id); err != nil {
@@ -696,7 +743,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 // via the write executor's same-tx outbox (05-10) — INV-WORLD-4. The object is read
 // first so the new-values-only payload can carry the source containment; a failed or
 // no-op move (missing object, version conflict) writes no envelope.
-func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
+func (s *Service) MoveObject(ctx context.Context, subjectID Caller, id ulid.ULID, to Containment) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
 	}
@@ -725,7 +772,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	if err != nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "build object move payload %s", id)
 	}
-	intent := s.buildIntent(kindObjectMoved, wmodel.AggregateObject, id, subjectID, payload)
+	intent := s.buildIntent(kindObjectMoved, wmodel.AggregateObject, id, subjectID.subject, payload)
 	if _, err := s.mutator.moveObject(ctx, intent, id, to); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("id", id.String()).Wrap(err)
@@ -742,7 +789,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 // DeleteCharacter deletes a character and its properties after checking delete authorization.
 // Both deletions occur in the same database transaction per spec (05-storage-audit.md §110-119).
 // Returns an error if PropertyRepo or Transactor are not configured.
-func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
+func (s *Service) DeleteCharacter(ctx context.Context, subjectID Caller, id ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("character repository not configured")
 	}
@@ -766,7 +813,7 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	// The delete + its property cascade + the single character_deleted tombstone
 	// envelope commit in ONE transaction via the mutate() seam. The tombstone kind
 	// is the SAME kind the guest CharacterReapingService reuses (05-16/D-06).
-	intent := s.buildIntent(kindCharacterDeleted, wmodel.AggregateCharacter, id, subjectID, payload)
+	intent := s.buildIntent(kindCharacterDeleted, wmodel.AggregateCharacter, id, subjectID.subject, payload)
 	if _, err := s.mutator.deleteCharacter(ctx, intent, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
@@ -777,7 +824,7 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 }
 
 // GetCharacter retrieves a character by ID after checking read authorization.
-func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*Character, error) {
+func (s *Service) GetCharacter(ctx context.Context, subjectID Caller, id ulid.ULID) (*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_GET_FAILED").Errorf("character repository not configured")
 	}
@@ -795,8 +842,81 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 	return char, nil
 }
 
-// UpdateCharacterDescription sets a character's description after checking write authorization.
-func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID string, characterID ulid.ULID, description string) error {
+// GetCharacterDescription retrieves a character's name and in-world description
+// after checking `read_description` authorization on the character resource.
+//
+// IT IS A DIFFERENT QUESTION FROM [Service.GetCharacter], and the difference is
+// the point. GetCharacter keeps requiring the `read` action and keeps its
+// colocation clause (seed:player-character-colocation), and both are left
+// byte-identical by the plan that added this method: the grid path does not
+// move. This method exists so the web profile path can reach the two columns
+// 01-SPEC §7.4 makes public WITHOUT reaching the full CharacterInfo projection
+// that GetCharacter's `read` gate unlocks — which also carries PlayerId and
+// LocationId (D-75).
+//
+// The narrowing is carried by the RETURN TYPE, not by the caller: a
+// [CharacterDescription] has no field for a player id or a location id, so the
+// "without PlayerId or LocationId" guarantee is checked by the compiler rather
+// than by a projection remembering to clear them.
+func (s *Service) GetCharacterDescription(ctx context.Context, subjectID Caller, characterID ulid.ULID) (CharacterDescription, error) {
+	if s.characterRepo == nil {
+		return CharacterDescription{}, oops.Code("CHARACTER_GET_FAILED").Errorf("character repository not configured")
+	}
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, subjectID, "read_description", resource, prefixCharacter); err != nil {
+		return CharacterDescription{}, err
+	}
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return CharacterDescription{}, oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", characterID)
+		}
+		return CharacterDescription{}, oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+	return CharacterDescription{Name: char.Name, Description: char.Description}, nil
+}
+
+// UpdateCharacterDescription sets a character's description after checking write
+// authorization and VALIDATING the new value.
+//
+// # The validation is new, and its absence was a real bug (issue #4954)
+//
+// Until this command routed the assignment through [Character.SetDescription] it
+// performed no validation at all: the freshly-read character took the caller's
+// string by direct field assignment, worldMutator.updateCharacter forwarded it
+// verbatim to characterWriter.Update, and the repository bound it straight into
+// the UPDATE — so an over-cap, invalid-UTF-8 or control-character description
+// reached the column through the shipped command. ValidateDescription was
+// reachable only from Character.Validate and Character.SetDescription, and
+// neither ran here. The sibling commands already had the shape: UpdateLocation
+// validates before its write for the same reason.
+//
+// # Position is load-bearing
+//
+// The setter runs AFTER checkAccess and AFTER the repository read, exactly where
+// the bare assignment used to. Hoisting it to the top as a cheap fast-fail would
+// let an unauthorized caller distinguish a valid payload from an invalid one and
+// turn this command into a rules oracle.
+//
+// # The narrow setter, not Character.Validate
+//
+// Validate() also re-checks the STORED name through ValidateCharacterName, so a
+// legacy or guest-provisioned name that no longer satisfies the current rules
+// would make an unrelated description edit fail. Validate the field being
+// written and nothing else.
+//
+// # Which layer owns this cap
+//
+// THE DESCRIPTION'S CAP LIVES HERE, IN THE DOMAIN, and the facade converts the
+// resulting CodeCharacterInvalid into codes.InvalidArgument rather than
+// re-implementing the rule. That is the opposite of the twelve `profile.*`
+// prose fields, whose caps live in the character-access handler (D-82) because
+// UpdateCharacterProfileAttributes deliberately does not enforce them. Exactly
+// one layer owns each field; do not add a second, divergent check for either.
+//
+// An EMPTY description is legal — ValidateDescription returns early for it — so
+// clearing the column is a supported edit. The cap is measured in BYTES.
+func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID Caller, characterID ulid.ULID, description string) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_UPDATE_FAILED").Errorf("character repository not configured")
 	}
@@ -814,7 +934,9 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID stri
 	if s.mutator == nil {
 		return oops.Code("CHARACTER_UPDATE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
 	}
-	char.Description = description
+	if setErr := char.SetDescription(description); setErr != nil {
+		return oops.Code(CodeCharacterInvalid).Wrap(setErr)
+	}
 	payload, err := BuildCharacterUpdatePayload(characterID, description)
 	if err != nil {
 		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "build character update payload %s", characterID)
@@ -822,7 +944,7 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID stri
 	// Route the guarded character update + its one character_updated envelope
 	// through the same-tx outbox seam. char carries the read Version (05-04) as the
 	// CAS guard so a concurrent conflicting write surfaces WORLD_CONCURRENT_EDIT.
-	intent := s.buildIntent(kindCharacterUpdated, wmodel.AggregateCharacter, characterID, subjectID, payload)
+	intent := s.buildIntent(kindCharacterUpdated, wmodel.AggregateCharacter, characterID, subjectID.subject, payload)
 	if _, err := s.mutator.updateCharacter(ctx, intent, char); err != nil {
 		if errors.Is(err, ErrConcurrentEdit) {
 			return oops.Code(CodeConcurrentEdit).With("character_id", characterID.String()).Wrap(err)
@@ -831,6 +953,612 @@ func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID stri
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update character %s", characterID)
 		}
 		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "update character %s", characterID)
+	}
+	return nil
+}
+
+// profileAttributeNames is the CLOSED set of character profile attribute names
+// 01-SPEC §7.2 declares (D-82 enumerates the twelve). Every profile field is an
+// entity_properties row addressed as parent_type='character', parent_id=<id>,
+// name='profile.<field>' (§7.1) — the names below are those property names
+// verbatim, not bare field names.
+//
+// It is enforced HERE, at the domain command, so the write surface is closed at
+// the domain layer and not only at the facade: without it, an ABAC-gated write
+// would accept ANY property name on the character, which is an unbounded write
+// surface rather than a missing feature. A facade allowlist is defense in depth
+// on top of this, never the only gate.
+var profileAttributeNames = map[string]struct{}{
+	"profile.pronouns":       {},
+	"profile.concept":        {},
+	"profile.species":        {},
+	"profile.age":            {},
+	"profile.faction":        {},
+	"profile.currently":      {},
+	"profile.timezone":       {},
+	"profile.appearance":     {},
+	"profile.personality":    {},
+	"profile.biography":      {},
+	"profile.rumors":         {},
+	"profile.rp_preferences": {},
+}
+
+// UpdateCharacterProfileAttributes writes a character's profile attributes — the
+// entity_properties rows under the profile.* name prefix (01-SPEC §7.1/§7.2) —
+// and emits exactly one character_profile_update envelope in the SAME
+// transaction.
+//
+// attributes maps a §7.2 property name to its new value. A name with no row is
+// created, a name with a row is updated, and the EMPTY STRING removes the row so
+// a cleared field becomes ABSENT rather than present-and-empty.
+//
+// # The guard chain, in this order
+//
+//  0. expectedVersion <= 0 -> CHARACTER_VERSION_REQUIRED, BEFORE any read. The
+//     repository's expectedVersion == 0 unversioned-write affordance exists for
+//     repo-level callers; INV-WORLD-7 requires an existing-row character
+//     mutation to CARRY an expected version, and the executor's CAS is built on
+//     that guarantee — without this rejection the CAS would run against a
+//     meaningless version.
+//  1. The closed §7.2 name set, before any read or write (above).
+//  2. checkAccess with action "write" on the CHARACTER resource.
+//  3. Read the character, then read its existing rows through the propertyRepo
+//     READER view — the write itself goes through the executor — and partition
+//     the requested changes into creates, updates and deletes.
+//  4. The executor's version-guarded CAS carrying the CALLER's expectedVersion,
+//     never the freshly-read char.Version.
+//
+// The partition in step 3 reads OUTSIDE the write transaction, and that is safe
+// rather than a TOCTOU hole: the character-row CAS is the aggregate's lock, so a
+// concurrent profile write that would invalidate the partition must have bumped
+// the character version and is refused by step 4 before any property row is
+// touched. This command is the only production property writer, so no other
+// writer can move a profile row without moving that version.
+//
+// # Why the gate is on character:<id> and NOT on the property resource
+//
+// 01-SPEC §9.3 states the gate directly, and it is also the only one that can
+// work. access.PropertyResource takes a property id, which a not-yet-created row
+// does not have, and resolving resource.property.owner requires
+// PropertyProvider.ResolveResource to FETCH the row — which fails closed with
+// PROPERTY_FETCH_FAILED when there is none. A property-resource gate would
+// therefore default-deny the FIRST write of every profile attribute, so IDENT-02
+// could never work. One decision per command, on the character, before any read;
+// for an owning character it resolves against the shipped seed:player-self-access
+// permit.
+//
+// The created rows still carry Owner set to the owning character, so
+// seed:property-owner-write remains available as defense in depth for any later
+// per-row write path. No second per-property check is added here: a second gate
+// over coverage the character gate already has is the duplicate-gate cost
+// 01-SPEC §2.6 names.
+//
+// # Three things a later reader should not "fix"
+//
+// LENGTH CAPS ARE NOT ENFORCED HERE. This method validates the attribute NAME
+// set, never the value lengths. IDENT-02's server-enforced caps belong to the
+// facade handler (01-SPEC §9.3's CharacterAccessService.UpdateCharacterProfile
+// row), where the oops code and its §9.6 wire status live. Adding a second cap
+// here would give the same requirement two divergent enforcement points.
+//
+// A PROFILE-ONLY WRITE BUMPS THE CHARACTER VERSION. The profile is part of the
+// character aggregate and the aggregate carries exactly ONE optimistic-
+// concurrency token, so the guarded character update that fences this write also
+// moves characters.version even though no column on characters changed. That is
+// the intended aggregate-level behavior, not an accident.
+//
+// THIS IS THE FIRST PRODUCTION PROPERTY WRITER. Before it, the only production
+// use of the property repository was a ListByParent read and the delete-cascade
+// DeleteByParent, so there is no older property write path to stay consistent
+// with — the row-construction contract above is set here, not inherited.
+// # The optional ADMIN channels (opts) and where the description write sits
+//
+// opts is the TRAILING VARIADIC admin seam (options.go). Supplying none is the
+// player path, byte-identical to the shipped behaviour. WithDescription supplies
+// the in-world characters.description through a SEPARATE channel, so
+// `description` never enters attributes and step (1)'s closed §7.2 name-set
+// validation is untouched.
+//
+// FOUR RULES govern where that description write sits, because a
+// description-only mask puts NOTHING in attributes and would otherwise be
+// swallowed by the empty-partition return below:
+//
+//  1. descriptionChanged — the option was supplied AND its value differs from
+//     char.Description — is computed BEFORE the empty-partition check, and its
+//     value is validated there too, so an invalid description is refused whether
+//     or not any partition is non-empty.
+//  2. The empty-partition return fires only when all three partitions are empty
+//     AND !descriptionChanged. Its version-mismatch refusal (CodeConcurrentEdit)
+//     is unchanged and still runs first.
+//  3. When descriptionChanged is true, execution continues into the transaction
+//     as if a partition were non-empty: the CAS, the SINGLE version bump,
+//     "description" in changed, and the ONE envelope all happen exactly once.
+//     The column itself is written by the same characterWriter.Update the CAS
+//     already runs — no second statement, no second transaction.
+//  4. Option supplied but EQUAL to the stored value ⇒ descriptionChanged is
+//     false ⇒ the documented no-op, same as any other unchanged field.
+//
+// WithSkipUnchangedProperties additionally drops an equal-valued name from the
+// updates partition; see its doc comment for why that decision cannot live in a
+// handler precheck.
+func (s *Service) UpdateCharacterProfileAttributes(
+	ctx context.Context,
+	caller Caller,
+	characterID ulid.ULID,
+	expectedVersion int,
+	attributes map[string]string,
+	opts ...ProfileUpdateOption,
+) error {
+	resolved := resolveProfileUpdateOptions(opts)
+	// (0) Reject an absent/zero/negative caller version BEFORE any read.
+	if expectedVersion <= 0 {
+		return oops.Code("CHARACTER_VERSION_REQUIRED").
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			Errorf("a profile write requires a caller-supplied expected_version >= 1")
+	}
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").Errorf("character repository not configured")
+	}
+	if s.propertyRepo == nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").Errorf("property repository not configured")
+	}
+	// (1) The closed §7.2 name set, before any read or write.
+	names := make([]string, 0, len(attributes))
+	for name := range attributes {
+		if _, declared := profileAttributeNames[name]; !declared {
+			return oops.Code("CHARACTER_PROFILE_ATTRIBUTE_UNKNOWN").
+				With("character_id", characterID.String()).
+				With("attribute", name).
+				Errorf("%q is not one of the twelve profile attributes 01-SPEC §7.2 declares", name)
+		}
+		names = append(names, name)
+	}
+	// Sorted so the applied order is deterministic. The envelope payload is NOT
+	// taken from this slice — see `changed` below — but it inherits the order
+	// anyway, because the partition walks `names` and BuildCharacterProfileUpdatePayload
+	// sorts its own copy regardless.
+	slices.Sort(names)
+	// (2) Authorization on the CHARACTER resource (01-SPEC §9.3).
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, caller, "write", resource, prefixCharacter); err != nil {
+		return err
+	}
+	// (3) Read the character and its existing rows, then partition.
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", characterID)
+		}
+		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+	existing, err := s.propertyRepo.ListByParent(ctx, "character", characterID)
+	if err != nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+			Wrapf(err, "list properties for character %s", characterID)
+	}
+	byName := make(map[string]*EntityProperty, len(existing))
+	for _, p := range existing {
+		byName[p.Name] = p
+	}
+	var (
+		creates []*EntityProperty
+		updates []*EntityProperty
+		deletes []ulid.ULID
+		// changed is the envelope's changed_attributes, accumulated
+		// INDEPENDENTLY of the three write partitions rather than taken from the
+		// request. All three sets differ from `names`, and `changed` differs
+		// from the partitions in turn:
+		//
+		//   - a clear of a field with no row is a documented no-op below, so it
+		//     writes nothing AND changes nothing;
+		//   - a resubmit of the value already stored DOES rewrite the row (it
+		//     lands in `updates`, so the write, the CAS and the version bump are
+		//     unconditional) but changes nothing. This is the common case, not
+		//     an edge: a web edit form PUTs every field it rendered, of which
+		//     the user touched one.
+		//
+		// The payload carries no values, so a consumer (cache invalidation,
+		// moderation feed, search re-index) has no way to detect a false
+		// positive. changed_attributes is contracted as what the write CHANGED
+		// (payloads.go, outbox/taxonomy.go), and the schema puts no non-empty
+		// floor on it, so an all-identical resubmit shipping an empty list
+		// alongside a real row write is both representable and honest.
+		changed []string
+		now     = time.Now().UTC()
+	)
+	for _, name := range names {
+		value := attributes[name]
+		current, found := byName[name]
+		switch {
+		case value == "":
+			// The empty string REMOVES the row. With no row there is nothing to
+			// remove, so a clear of an unset field is a no-op rather than a create
+			// of an empty value — and a no-op is not a change.
+			if found {
+				deletes = append(deletes, current.ID)
+				changed = append(changed, name)
+			}
+		case found:
+			// THE ADMIN-ONLY SKIP (WithSkipUnchangedProperties). The comparison
+			// is against the row read INSIDE this method, under the CAS that
+			// follows — never against a value a handler read beforehand without
+			// a lock. Dropping the name here is what lets the empty-partition
+			// return below fire on a mask naming only equal-valued fields, so no
+			// row is rewritten, no version is bumped and no envelope is emitted.
+			// The player path supplies no options and keeps the unconditional
+			// rewrite documented below.
+			if resolved.skipUnchangedProperties && current.Value != nil && *current.Value == value {
+				continue
+			}
+			// Carry the row's ID, Owner, Visibility and CreatedAt forward
+			// unchanged and move only the value: an update must not silently
+			// re-home ownership or re-open visibility.
+			row := *current
+			newValue := value
+			row.Value = &newValue
+			updates = append(updates, &row)
+			// The ROW is rewritten either way — this stays in `updates`, so the
+			// write, the CAS and the version bump are unconditional and the
+			// empty-partition return below is unaffected. Only the CLAIM is
+			// gated: re-submitting the stored bytes changed nothing.
+			if current.Value == nil || *current.Value != value {
+				changed = append(changed, name)
+			}
+		default:
+			// Every field is set EXPLICITLY. PropertyRepository.Create passes
+			// p.Visibility straight into the INSERT and applies no visibility
+			// defaulting, so the column's DEFAULT 'public' never applies and an
+			// empty string fails the CHECK constraint. Visibility is "public"
+			// because the viewer path's term B permits exactly that; the
+			// withholding lever for a profile field is the per-attribute tier
+			// floor (01-SPEC §8.6), not this column. v0.13 has no game-configured
+			// property-visibility default to consult.
+			newValue := value
+			owner := characterID.String()
+			creates = append(creates, &EntityProperty{
+				ID:         idgen.New(),
+				ParentType: "character",
+				ParentID:   characterID,
+				Name:       name,
+				Value:      &newValue,
+				Owner:      &owner,
+				Visibility: "public",
+				CreatedAt:  now,
+			})
+			changed = append(changed, name)
+		}
+	}
+	// RULE 1 — descriptionChanged is computed BEFORE the empty-partition return,
+	// and its value is validated here, so an invalid description is refused
+	// whether or not any attribute partition has work. char.Description is the
+	// value read at step (3); comparing against it is what makes a
+	// supplied-but-equal description the documented no-op (RULE 4).
+	descriptionChanged := resolved.description != nil && *resolved.description != char.Description
+	if descriptionChanged {
+		// SetDescription owns the in-world description's BYTE cap and its
+		// control-character rule — the domain layer, per D-82, which is the
+		// opposite of the twelve profile.* caps the facade owns. Mutating char
+		// here is safe: descriptionChanged was already decided above, and the
+		// same characterWriter.Update the CAS runs writes the column, so there is
+		// no second statement and no second version bump.
+		if setErr := char.SetDescription(*resolved.description); setErr != nil {
+			return oops.Code(CodeCharacterInvalid).Wrap(setErr)
+		}
+		changed = append(changed, "description")
+	}
+	// The executor check stays AHEAD of the empty-partition return below: a
+	// misconfigured service must fail loudly on every call, not only on the ones
+	// that happen to have work.
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+			Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	// NOTHING TO WRITE — return before the executor. The partition can come out
+	// empty two ways: `attributes` empty outright, and every entry a clear of a
+	// field that has no row (`{"profile.pronouns": ""}` against a character with
+	// no pronouns row goes straight through the name check and the gate). Running
+	// the version-guarded characterWriter.Update anyway would advance
+	// characters.version — invalidating every other client's held
+	// expected_version for a write that touched no row — and ship a
+	// character_profile_update envelope with an empty changed set.
+	//
+	// It sits AFTER the version guard, the closed name set and the ABAC decision,
+	// so a stale or unauthorized caller is still refused rather than quietly
+	// succeeding, and a no-op cannot be used as an existence oracle.
+	//
+	// The facade short-circuits the empty-MASK case before this
+	// (characteraccess_write.go), but this method is the layer that closes the
+	// write surface — "a facade allowlist is defense in depth on top of this,
+	// never the only gate".
+	//
+	// A STALE CALLER IS STILL REFUSED. Skipping the write also skips the
+	// executor's CAS, so the staleness the CAS would have caught is checked
+	// against the version just read. That read is outside the write transaction
+	// and therefore weaker than the CAS — but only in the direction that costs
+	// nothing here: a race it misses ends in a call that wrote no row.
+	//
+	// This is ASYMMETRIC with the facade's own no-op, deliberately. The
+	// empty-MASK short-circuit in characteraccess_write.go answers a stale caller
+	// with SUCCESS. Both requests are semantically "nothing to do", so the
+	// difference is worth naming: that path's response carries the freshly-read
+	// character, version included, so a stale client is corrected by the answer
+	// itself. This method returns only an error, so it has no channel to hand the
+	// current version back — refusing is the only way its caller learns it is
+	// stale. Do not collapse the two without changing what each can answer with.
+	//
+	// RULE 2 — the !descriptionChanged conjunct is load-bearing. A
+	// description-only mask puts NOTHING in attributes, so all three partitions
+	// are empty; without it this return fires and the description is never
+	// written, silently, for exactly the mask the combined admin write exists to
+	// serve. The version-mismatch refusal below is unchanged and still runs
+	// first.
+	if len(creates) == 0 && len(updates) == 0 && len(deletes) == 0 && !descriptionChanged {
+		if char.Version != expectedVersion {
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				With("expected_version", expectedVersion).
+				Wrap(ErrConcurrentEdit)
+		}
+		return nil
+	}
+	// RULE 3 — from here the write proceeds exactly as if a partition were
+	// non-empty: one CAS, one version bump, "description" already in changed, one
+	// envelope. The payload carries NAMES only; the description's VALUE reaches
+	// no field of it (D-103).
+	payload, err := BuildCharacterProfileUpdatePayload(characterID, changed, resolved.audit)
+	if err != nil {
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+			Wrapf(err, "build character profile update payload %s", characterID)
+	}
+	// (4) The rows and their ONE envelope commit or roll back together. The CAS
+	// carries the CALLER's expectedVersion, never the freshly-read char.Version.
+	char.Version = expectedVersion
+	intent := s.buildIntent(kindCharacterProfileUpdate, wmodel.AggregateCharacter, characterID, caller.subject, payload)
+	if _, err := s.mutator.updateCharacterProfileAttributes(ctx, intent, char, creates, updates, deletes); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				With("expected_version", expectedVersion).
+				Wrap(err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update profile attributes for character %s", characterID)
+		}
+		return oops.Code("CHARACTER_PROFILE_UPDATE_FAILED").
+			Wrapf(err, "update profile attributes for character %s", characterID)
+	}
+	return nil
+}
+
+// RetireCharacter SOFT-retires a character: it writes characters.status =
+// retired, bumps the version, and emits exactly one character_retired envelope
+// in the SAME transaction (IDENT-04, IDENT-10).
+//
+// It destroys nothing. The row, its entity properties and its name reservation
+// all survive — retire, idle-out and purge are three distinct operations
+// (PORTAL-04), and only a hard DeleteCharacter writes a tombstone. The
+// operation is reversible through UnretireCharacter.
+//
+// # The guard chain, in this order
+//
+// The ORDER is load-bearing, not stylistic:
+//
+//  0. expectedVersion <= 0 -> CHARACTER_VERSION_REQUIRED, BEFORE any read. The
+//     repository's expectedVersion == 0 unversioned-write affordance exists for
+//     repo-level callers; INV-WORLD-7 requires an existing-row character
+//     mutation to CARRY an expected version, so this command makes that
+//     affordance unreachable rather than merely discouraged.
+//  1. checkAccess. The action is "retire", DISTINCT from "write" (D-40), so
+//     policy can grant retire without granting every character write. There is
+//     deliberately NO ownership predicate here: "their own character" is an
+//     ABAC policy decision, not a Go conditional (D-39).
+//  2. Get — its Version arms the precheck and its Status arms the lifecycle
+//     guard.
+//  3. Version precheck: a caller version that does not match the stored version
+//     is WORLD_CONCURRENT_EDIT. It runs BEFORE the lifecycle guard so a stale
+//     caller racing a writer that already retired the row sees the CONFLICT,
+//     not that writer's outcome (CHARACTER_ALREADY_RETIRED) — the conflict is
+//     the honest answer, and reporting the racing writer's state would tell the
+//     caller their own stale view was authoritative.
+//  4. Lifecycle guard (exhaustive switch over the closed vocabulary).
+//  5. CAS carrying the CALLER's expectedVersion — never the freshly-read
+//     char.Version, which would make step 3's guarantee vacuous at the write.
+//
+// Nothing is written and no envelope is emitted unless every step passes.
+//
+// # Why this body is not factored into a shared helper
+//
+// UnretireCharacter runs the SAME chain in the same order and the two bodies
+// are deliberately parallel rather than deduplicated. Two meta-tests require
+// it: the envelope census cross-checks that each registered command is a
+// *Service method whose own body references the s.mutator selector
+// (test/meta/world_envelope_census_test.go), and the caller-param census
+// requires each command's own body to call s.checkAccess
+// (test/meta/world_caller_census_test.go). A shared helper would hide both
+// signals from the AST and turn two green censuses red.
+// opts is the TRAILING VARIADIC admin seam (see options.go). A player caller
+// supplies nothing and gets the zero AuditContext, so the emitted payload's
+// section and action are empty — the shipped behaviour, unchanged.
+func (s *Service) RetireCharacter(ctx context.Context, caller Caller, characterID ulid.ULID, expectedVersion int, opts ...LifecycleOption) error {
+	resolved := resolveLifecycleOptions(opts)
+	// (0) Reject an absent/zero/negative caller version BEFORE any read.
+	if expectedVersion <= 0 {
+		return oops.Code("CHARACTER_VERSION_REQUIRED").
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			Errorf("retire requires a caller-supplied expected_version >= 1")
+	}
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_RETIRE_FAILED").Errorf("character repository not configured")
+	}
+	// (1) Authorization. D-39: no ownership predicate in Go — policy is the control.
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, caller, "retire", resource, prefixCharacter); err != nil {
+		return err
+	}
+	// (2) Read: Version arms the precheck, Status arms the lifecycle guard.
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", characterID)
+		}
+		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+	// (3) Version precheck — BEFORE any lifecycle-state guard.
+	if char.Version != expectedVersion {
+		return oops.Code(CodeConcurrentEdit).
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			With("current_version", char.Version).
+			Wrap(ErrConcurrentEdit)
+	}
+	// (4) Lifecycle guard, AFTER the version precheck. The switch is exhaustive
+	// over the closed vocabulary with a DENYING default arm (INV-WORLD-5): a
+	// fourth value added to Status later is refused by the same code path that
+	// refuses an unknown one, rather than silently acquiring whichever answer a
+	// shorthand predicate happened to give.
+	switch char.Status {
+	case StatusActive, StatusIdle:
+		// Both are legal exits into retired. v0.13 ships no transition INTO
+		// idle (D-43), but the missing transition is the inbound one — a row
+		// already in idle must still be retirable.
+	case StatusRetired:
+		return oops.Code("CHARACTER_ALREADY_RETIRED").
+			With("character_id", characterID.String()).
+			Errorf("character %s is already retired", characterID)
+	default:
+		return oops.Code("CHARACTER_RETIRE_FAILED").
+			With("character_id", characterID.String()).
+			With("status", string(char.Status)).
+			Errorf("character %s carries an unrecognized lifecycle status", characterID)
+	}
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_RETIRE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	// char.Status was read at step (2) and is still live here — the before-status
+	// costs no repository round trip. CharacterRepository.SetStatus uses
+	// RETURNING version only and could not yield it anyway.
+	payload, err := BuildCharacterLifecyclePayload(characterID, char.Status, StatusRetired, resolved.audit)
+	if err != nil {
+		return oops.Code("CHARACTER_RETIRE_FAILED").Wrapf(err, "build character lifecycle payload %s", characterID)
+	}
+	// (5) The status write and its ONE envelope commit or roll back together.
+	// The CAS carries the CALLER's expectedVersion, never char.Version.
+	intent := s.buildIntent(kindCharacterRetired, wmodel.AggregateCharacter, characterID, caller.subject, payload)
+	if _, err := s.mutator.setCharacterStatus(ctx, intent, characterID, StatusRetired, expectedVersion); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				With("expected_version", expectedVersion).
+				Wrap(err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "retire character %s", characterID)
+		}
+		return oops.Code("CHARACTER_RETIRE_FAILED").Wrapf(err, "retire character %s", characterID)
+	}
+	return nil
+}
+
+// UnretireCharacter returns a retired character to play: it writes
+// characters.status = active, bumps the version, and emits exactly one
+// character_unretired envelope in the SAME transaction. It is the reversal that
+// makes retirement a soft, recoverable operation (IDENT-04).
+//
+// It runs the SAME guard chain as RetireCharacter, in the same order, for the
+// same reasons — see RetireCharacter's doc comment, including why the two
+// bodies are deliberately parallel rather than factored into a helper. The
+// differences are exactly three: the ABAC action is "unretire" (D-40 splits it
+// from "retire" precisely so a policy may grant one without the other), the
+// target status is active, and the lifecycle guard refuses everything that is
+// not already retired.
+//
+// # It does NOT restore players.default_character_id
+//
+// Retire clears that pointer in its own transaction (D-34) and the old value is
+// not preserved anywhere, so unretire cannot put it back. The asymmetry is by
+// design: the player re-selects a default. Do not "fix" this by stashing the
+// prior value — that would make retire's clear no longer a clear.
+//
+// An already-active (or idle) character is a typed error rather than a silent
+// success: reporting success for a transition that did not happen would let a
+// caller believe it moved a character it did not move.
+// opts is the TRAILING VARIADIC admin seam (see options.go), exactly as on
+// RetireCharacter.
+func (s *Service) UnretireCharacter(ctx context.Context, caller Caller, characterID ulid.ULID, expectedVersion int, opts ...LifecycleOption) error {
+	resolved := resolveLifecycleOptions(opts)
+	// (0) Reject an absent/zero/negative caller version BEFORE any read.
+	if expectedVersion <= 0 {
+		return oops.Code("CHARACTER_VERSION_REQUIRED").
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			Errorf("unretire requires a caller-supplied expected_version >= 1")
+	}
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").Errorf("character repository not configured")
+	}
+	// (1) Authorization. D-39: no ownership predicate in Go — policy is the control.
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, caller, "unretire", resource, prefixCharacter); err != nil {
+		return err
+	}
+	// (2) Read: Version arms the precheck, Status arms the lifecycle guard.
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", characterID)
+		}
+		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+	// (3) Version precheck — BEFORE the lifecycle guard, so a stale caller
+	// racing a COMPLETED unretire sees the conflict rather than
+	// CHARACTER_NOT_RETIRED (which would report the racing writer's outcome as
+	// though the stale view were authoritative).
+	if char.Version != expectedVersion {
+		return oops.Code(CodeConcurrentEdit).
+			With("character_id", characterID.String()).
+			With("expected_version", expectedVersion).
+			With("current_version", char.Version).
+			Wrap(ErrConcurrentEdit)
+	}
+	// (4) Lifecycle guard: exhaustive over the closed vocabulary, denying default.
+	switch char.Status {
+	case StatusRetired:
+		// The only state unretire transitions FROM.
+	case StatusActive, StatusIdle:
+		return oops.Code("CHARACTER_NOT_RETIRED").
+			With("character_id", characterID.String()).
+			With("status", string(char.Status)).
+			Errorf("character %s is not retired", characterID)
+	default:
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").
+			With("character_id", characterID.String()).
+			With("status", string(char.Status)).
+			Errorf("character %s carries an unrecognized lifecycle status", characterID)
+	}
+	if s.mutator == nil {
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").Errorf("world write executor not configured (OutboxWriter + Transactor required)")
+	}
+	// char.Status was read at step (2) and is still live here — no second read.
+	payload, err := BuildCharacterLifecyclePayload(characterID, char.Status, StatusActive, resolved.audit)
+	if err != nil {
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").Wrapf(err, "build character lifecycle payload %s", characterID)
+	}
+	// (5) The status write and its ONE envelope commit or roll back together.
+	// The CAS carries the CALLER's expectedVersion, never char.Version.
+	intent := s.buildIntent(kindCharacterUnretired, wmodel.AggregateCharacter, characterID, caller.subject, payload)
+	if _, err := s.mutator.setCharacterStatus(ctx, intent, characterID, StatusActive, expectedVersion); err != nil {
+		if errors.Is(err, ErrConcurrentEdit) {
+			return oops.Code(CodeConcurrentEdit).
+				With("character_id", characterID.String()).
+				With("expected_version", expectedVersion).
+				Wrap(err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "unretire character %s", characterID)
+		}
+		return oops.Code("CHARACTER_UNRETIRE_FAILED").Wrapf(err, "unretire character %s", characterID)
 	}
 	return nil
 }
@@ -930,7 +1658,7 @@ func (s *Service) buildPreferencesIntent(characterID ulid.ULID, prefs []byte) (w
 // resource="location:<id>" with action="list_characters" per ADR #76 (Compound Resource Decomposition,
 // see docs/specs/2026-02-05-full-abac-design.md §7.3).
 // Error codes use LOCATION_* prefix (not CHARACTER_*) because the gated resource is the location.
-func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
+func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID Caller, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
@@ -950,7 +1678,7 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 // read surface (ListSceneParticipants) is KEPT.
 
 // ListSceneParticipants lists all participants in a scene after checking read authorization.
-func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, sceneID ulid.ULID) ([]SceneParticipant, error) {
+func (s *Service) ListSceneParticipants(ctx context.Context, subjectID Caller, sceneID ulid.ULID) ([]SceneParticipant, error) {
 	if s.sceneRepo == nil {
 		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Errorf("scene repository not configured")
 	}
@@ -982,7 +1710,7 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 // command failure: the move and its envelope are already durable, so the hook error
 // is logged + counted and MoveCharacter returns SUCCESS (the session's derived
 // location may lag until re-sync — see MovementHook).
-func (s *Service) MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error {
+func (s *Service) MoveCharacter(ctx context.Context, subjectID Caller, characterID, toLocationID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("character repository not configured")
 	}
@@ -1018,7 +1746,7 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 
 	// Build the intent-level, new-values-only envelope intent (no manifest, no
 	// epoch/feed_position — those are the writer's to allocate).
-	intent, err := s.buildMoveIntent(char, subjectID, characterID, toLocationID)
+	intent, err := s.buildMoveIntent(char, subjectID.subject, characterID, toLocationID)
 	if err != nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "build move intent for character %s", characterID)
 	}
@@ -1092,7 +1820,7 @@ func (s *Service) buildMoveIntent(char *Character, subjectID string, characterID
 
 // FindLocationByName searches for a location by name after checking read authorization.
 // Returns ErrNotFound if no location matches.
-func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string) (*Location, error) {
+func (s *Service) FindLocationByName(ctx context.Context, subjectID Caller, name string) (*Location, error) {
 	if s.locationRepo == nil {
 		return nil, oops.Code("LOCATION_FIND_FAILED").Errorf("location repository not configured")
 	}
@@ -1111,7 +1839,7 @@ func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string
 }
 
 // GetObjectsByLocation returns objects at a location after checking read authorization.
-func (s *Service) GetObjectsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*Object, error) {
+func (s *Service) GetObjectsByLocation(ctx context.Context, subjectID Caller, locationID ulid.ULID) ([]*Object, error) {
 	if s.objectRepo == nil {
 		return nil, oops.Code("OBJECT_QUERY_FAILED").Errorf("object repository not configured")
 	}
@@ -1141,7 +1869,7 @@ func (s *Service) GetObjectsByLocation(ctx context.Context, subjectID string, lo
 // Infra failures MUST be visible to callers; silently masking them as
 // "no visible properties" would create ghost-data scenarios. Per
 // holomush-72ou design spec INV-2 + INV-2b.
-func (s *Service) ListPropertiesByParent(ctx context.Context, subjectID, parentType string, parentID ulid.ULID) ([]*EntityProperty, error) {
+func (s *Service) ListPropertiesByParent(ctx context.Context, subjectID Caller, parentType string, parentID ulid.ULID) ([]*EntityProperty, error) {
 	if s.propertyRepo == nil {
 		return nil, oops.Code("PROPERTY_QUERY_FAILED").Errorf("property repository not configured")
 	}

@@ -47,6 +47,17 @@ const (
 	// New ids go at the END of this block: the stringer is linecomment-driven,
 	// so an insertion mid-block silently renumbers every later id.
 	SubsystemCharacterNameBlockList // character_name_blocklist
+	// SubsystemRetirementReactor owns the character-retirement fanout
+	// (IDENT-04, 03-02/03-04): an event-driven reactor consuming
+	// character_retired off events.<game>.character.> (D-36). DependsOn
+	// Database + EventBus + World + Sessions + Bootstrap — Bootstrap
+	// because the fanout's destination is StartLocationID(), which is not
+	// resolvable before bootstrap's Prepare has run.
+	SubsystemRetirementReactor // retirement_reactor
+	// SubsystemCharacterActivity owns the last_active_at JetStream KV
+	// (IDENT-10, 03-02/03-05): the durable activity listener plus the
+	// periodic flush ticker (D-42). DependsOn Database + EventBus.
+	SubsystemCharacterActivity // character_activity
 )
 
 // Subsystem is a top-level server component with lifecycle management

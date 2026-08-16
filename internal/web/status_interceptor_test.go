@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	characteraccessv1 "github.com/holomush/holomush/pkg/proto/holomush/characteraccess/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
@@ -29,6 +30,57 @@ func newInterceptorTestServer(t *testing.T, mc *mockCoreClient, sc *mockSceneAcc
 	t.Helper()
 	h := NewHandler(mc, WithSceneAccessClient(sc))
 	return newInterceptorTestServerFromHandler(t, h)
+}
+
+// newCharacterInterceptorTestServer starts the same interceptor-mounted server
+// wired with a character-access client, so a CHARACTER RPC's status code can be
+// asserted at the browser-facing boundary rather than only at the gRPC one.
+func newCharacterInterceptorTestServer(t *testing.T, cc *stubCharacterAccessClient) (webv1connect.WebServiceClient, func()) {
+	t.Helper()
+	h := NewHandler(&mockCoreClient{}, WithCharacterAccessClient(cc))
+	return newInterceptorTestServerFromHandler(t, h)
+}
+
+// stubCharacterAccessClient is a CharacterAccessClient that returns a preset
+// error from every method. It exists so the interceptor's translation of a
+// character-facade status can be observed end-to-end; nothing here models
+// facade behaviour.
+type stubCharacterAccessClient struct {
+	err error
+}
+
+var _ CharacterAccessClient = (*stubCharacterAccessClient)(nil)
+
+func (s *stubCharacterAccessClient) GetCharacterProfile(context.Context, *characteraccessv1.GetCharacterProfileRequest) (*characteraccessv1.GetCharacterProfileResponse, error) {
+	return nil, s.err
+}
+
+func (s *stubCharacterAccessClient) ListMyCharacters(context.Context, *characteraccessv1.ListMyCharactersRequest) (*characteraccessv1.ListMyCharactersResponse, error) {
+	return nil, s.err
+}
+
+func (s *stubCharacterAccessClient) GetMyCharacter(context.Context, *characteraccessv1.GetMyCharacterRequest) (*characteraccessv1.GetMyCharacterResponse, error) {
+	return nil, s.err
+}
+
+func (s *stubCharacterAccessClient) UpdateCharacterProfile(context.Context, *characteraccessv1.UpdateCharacterProfileRequest) (*characteraccessv1.UpdateCharacterProfileResponse, error) {
+	return nil, s.err
+}
+
+func (s *stubCharacterAccessClient) UpdateCharacterDescription(context.Context, *characteraccessv1.UpdateCharacterDescriptionRequest) (*characteraccessv1.UpdateCharacterDescriptionResponse, error) {
+	return nil, s.err
+}
+
+func (s *stubCharacterAccessClient) SetDefaultCharacter(context.Context, *characteraccessv1.SetDefaultCharacterRequest) (*characteraccessv1.SetDefaultCharacterResponse, error) {
+	return nil, s.err
+}
+
+func (s *stubCharacterAccessClient) ListCharacterDirectory(context.Context, *characteraccessv1.ListCharacterDirectoryRequest) (*characteraccessv1.ListCharacterDirectoryResponse, error) {
+	return nil, s.err
+}
+
+func (s *stubCharacterAccessClient) CreateCharacter(context.Context, *characteraccessv1.CreateCharacterRequest) (*characteraccessv1.CreateCharacterResponse, error) {
+	return nil, s.err
 }
 
 // newInterceptorTestServerFromHandler is the low-level helper used when the
@@ -63,6 +115,7 @@ func TestGrpcToConnectCodeMapsKnownCodes(t *testing.T) {
 		{"maps Unavailable", codes.Unavailable, connect.CodeUnavailable},
 		{"maps DeadlineExceeded", codes.DeadlineExceeded, connect.CodeDeadlineExceeded},
 		{"maps Canceled", codes.Canceled, connect.CodeCanceled},
+		{"maps Aborted", codes.Aborted, connect.CodeAborted},
 		{"maps Unknown to CodeInternal", codes.Unknown, connect.CodeInternal},
 		{"maps Internal to CodeInternal", codes.Internal, connect.CodeInternal},
 		{"maps OK to CodeInternal as safe default", codes.OK, connect.CodeInternal},
@@ -141,6 +194,33 @@ func TestStatusInterceptorMapsUnclassifiedGrpcErrorToCodeInternal(t *testing.T) 
 	require.ErrorAs(t, err, &ce)
 	assert.Equal(t, connect.CodeInternal, ce.Code(),
 		"unmapped grpc codes must become CodeInternal, never CodeUnknown")
+}
+
+// TestStatusInterceptorTranslatesCharacterConcurrentEditToConnectCodeAborted
+// drives a CHARACTER mutation RPC through the interceptor and asserts the
+// optimistic-concurrency loser reaches the browser as CodeAborted.
+//
+// This is the surface the facade's codes.Aborted exists FOR: it is surfaced
+// rather than retried precisely so the CLIENT re-reads and retries, a decision
+// the client cannot make from a CodeInternal / HTTP 500 that is indistinguishable
+// from a server fault. Asserting codes.Aborted at the gRPC boundary alone left
+// the whole gateway hop unpinned.
+func TestStatusInterceptorTranslatesCharacterConcurrentEditToConnectCodeAborted(t *testing.T) {
+	grpcErr := status.Error(codes.Aborted, "the character changed since you loaded it; reload and try again")
+	wrappedErr := oops.Code("RPC_FAILED").With("method", "UpdateCharacterProfile").Wrap(grpcErr)
+
+	client, cleanup := newCharacterInterceptorTestServer(t, &stubCharacterAccessClient{err: wrappedErr})
+	defer cleanup()
+
+	_, err := client.WebUpdateCharacterProfile(context.Background(),
+		connect.NewRequest(&webv1.WebUpdateCharacterProfileRequest{CharacterId: "01ARZ3NDEKTSV4RRFFQ69G5FAV"}))
+
+	require.Error(t, err)
+	var ce *connect.Error
+	require.ErrorAs(t, err, &ce)
+	assert.Equal(t, connect.CodeAborted, ce.Code(),
+		"a concurrent-edit conflict must stay distinguishable from a server fault at the browser")
+	assert.Equal(t, "the character changed since you loaded it; reload and try again", ce.Message())
 }
 
 // TestStatusInterceptorPassesThroughExistingConnectErrors asserts that errors

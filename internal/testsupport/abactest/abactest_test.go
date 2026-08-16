@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/testsupport/abactest"
@@ -307,4 +308,38 @@ func (s stubOwnerResolver) ResolveOwnerScopes(_ context.Context, characterIDs []
 		sort.Strings(out[playerID])
 	}
 	return out, nil
+}
+
+// TestNewSeedEngineLoadsTheCorpusWithTheActionGateLive is the site-4 regression
+// half of 02.2-04: registering `action` on NewSeedEngine's registry turns a
+// previously-skipped hard-error branch live over the WHOLE shipped corpus, so
+// this asserts the corpus survives that.
+//
+// The job provider is the pointed choice: plan 02.2-01's
+// seed:job-fixture-instance-scoped is the seed that binds action.job.trigger_*,
+// so it is the corpus entry most likely to trip the newly-live gate. If this goes
+// red, a shipped seed references an action.* key the audit missed — a REAL
+// finding to report, NOT a reason to widen ActionNamespaceSchema() until it
+// passes.
+func TestNewSeedEngineLoadsTheCorpusWithTheActionGateLive(t *testing.T) {
+	t.Parallel()
+
+	// Control: the seed this test exists to protect is actually in the corpus.
+	// Without it the assertion below would still pass while proving nothing.
+	var found bool
+	for _, seed := range policy.SeedPolicies() {
+		if seed.Name == "seed:job-fixture-instance-scoped" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found,
+		"control: seed:job-fixture-instance-scoped MUST be in the corpus — it is the seed "+
+			"binding action.job.trigger_*, and this test is vacuous without it")
+
+	engine := abactest.NewSeedEngine(t, attribute.NewJobProvider(nil))
+
+	require.NotNil(t, engine)
+	assert.False(t, engine.IsDegraded(),
+		"the whole corpus MUST still compile and load with the action gate live")
 }

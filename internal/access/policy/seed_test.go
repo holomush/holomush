@@ -25,8 +25,19 @@ func TestSeedPoliciesCount(t *testing.T) {
 	// added the two viewer-tier floors and profile reachability (49 → 52), then
 	// the five viewer read twins and the PROFILE-11 property widening (52 → 58)
 	// — one of the five twins is a forbid (9 → 10) — and seed:admin-section-access
-	// (58 → 59).
-	assert.Len(t, seeds, 59, "expected 59 seed policies (49 permit, 10 forbid)")
+	// (58 → 59). v0.13 phase 02.2 plan 01 added the background-job fixture grant
+	// seed:job-fixture-instance-scoped (59 → 60). v0.13 phase 03 plan 04 added
+	// the first REAL job grant, seed:job-retirement-instance-scoped (60 → 61).
+	// v0.13 phase 04 plan 01 discharged D-29's deferral with the two narrow
+	// read_description permits, seed:character-description-read and
+	// seed:viewer-character-description-read (61 → 63). v0.13 phase 04 plan 07
+	// added the viewer twin of the shipped character-directory permit,
+	// seed:viewer-directory-list-characters — 01-SPEC §9.2's tier floor on the
+	// directory resource (63 → 64).
+	// v0.13 phase 06 plan 05 added the world-layer gate for the admin character
+	// write surface, seed:admin-character-administration — without it every admin
+	// character write is default-denied inside world.Service (64 → 65).
+	assert.Len(t, seeds, 65, "expected 65 seed policies (55 permit, 10 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -83,7 +94,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 49, permitCount, "expected 49 permit policies (+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, +3 v0.13 phase-2 profile visibility: two viewer-tier floors and profile reachability, +4 viewer read twins, +1 PROFILE-11 property widening, +1 EXT-07 admin-section access, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
+	assert.Equal(t, 55, permitCount, "expected 55 permit policies (+1 v0.13 phase-06 admin character administration ADMIN-03/04/05, +1 v0.13 phase-04 §9.2 directory tier floor seed:viewer-directory-list-characters, +2 v0.13 phase-04 read_description permits discharging D-29: seed:character-description-read and seed:viewer-character-description-read,+11 holomush-kplrr plugin host-capability default-permit seeds, +1 holomush-xakba plugin instance-level stream read, +1 phase-1 channels plugin instance-level stream write HIGH-3, +1 character-directory INV-ACCESS-9, +3 v0.13 phase-2 profile visibility: two viewer-tier floors and profile reachability, +4 viewer read twins, +1 PROFILE-11 property widening, +1 EXT-07 admin-section access, +1 v0.13 phase-02.2 background-job fixture grant AUTHZ-02, +1 v0.13 phase-03 retirement-reactor job grant IDENT-04, −1 holomush-8m01u removed vestigial seed:player-scene-participant, −1 holomush-sjtlz removed vestigial seed:player-scene-read)")
 	assert.Equal(t, 10, forbidCount, "expected 10 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies + 2 phase-5 sub-epic D events.*.system.crypto_policy.* denies + 2 phase-5 sub-epic E events.*.system.* broad denies + 1 v0.13 phase-2 seed:viewer-property-restricted-excluded)")
 }
 
@@ -155,8 +166,18 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:plugin-stream-read",
 		// Plugin instance-level stream write (phase-1 channels; HIGH-3)
 		"seed:plugin-stream-subscribe",
+		// Background-job fixture (v0.13 phase 02.2, AUTHZ-02). A FIXTURE grant:
+		// no job named `fixture` is ever registered in production, so the
+		// liveness gate keeps it unmatchable. The real consumers
+		// (job:retirement, job:activity-flush) get their own grants in Phase 3.
+		"seed:job-fixture-instance-scoped",
+		// The retirement reactor's REAL job grant (v0.13 phase 03, IDENT-04).
+		// Same instance fence as the fixture; read is included because the
+		// reactor's status guard crosses the chokepoint too.
+		"seed:job-retirement-instance-scoped",
 		// Character directory (INV-ACCESS-9)
 		"seed:directory-list-characters",
+		"seed:viewer-directory-list-characters",
 		// Profile visibility: viewer-tier floors (01-SPEC §8.2.1, §8.6; D-03).
 		// TWO, not three: §8.6 seeds no name at the `player` rung and the DSL's
 		// list grammar forbids an empty `in []`. The conditional re-entry guard
@@ -172,11 +193,23 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		"seed:viewer-property-admin-read",
 		"seed:viewer-property-restricted-visible-to",
 		"seed:viewer-property-restricted-excluded",
-		// PROFILE-11 widening (D-10, D-11). The character half
-		// (seed:profile-public-read-character) is DEFERRED TO PHASE 4 by D-29.
+		// PROFILE-11 widening (D-10, D-11). The property half.
 		"seed:profile-public-read-property",
+		// PROFILE-11's characters.description half, landing in v0.13 phase 04
+		// (D-75, D-76). D-29 deferred the character half out of Phase 2 because
+		// the shape proposed there was `action in ["read"]`, which gates
+		// world.Service.GetCharacter and hands over the whole CharacterInfo
+		// projection. These two carry a DISTINCT NARROW ACTION instead, reaching
+		// only world.Service.GetCharacterDescription, whose return type has no
+		// field for a player id or a location id. The deferred name
+		// (seed:profile-public-read-character) is deliberately NOT what shipped.
+		"seed:character-description-read",
+		"seed:viewer-character-description-read",
 		// Admin sections (EXT-07, 01-SPEC §10.4, §10.5)
 		"seed:admin-section-access",
+		// Admin character administration (ADMIN-03/04/05, 01-SPEC §10.4) — the
+		// world-layer gate for the admin character write surface.
+		"seed:admin-character-administration",
 	}
 
 	seeds := SeedPolicies()

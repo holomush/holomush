@@ -246,6 +246,33 @@ func (r *PlayerRepository) UpdatePassword(ctx context.Context, id ulid.ULID, pas
 	return nil
 }
 
+// UpdateDefaultCharacter points the player's default_character_id column at
+// characterID, touching only that column and updated_at.
+//
+// IT IS DELIBERATELY NOT GetByID + Update. That pair issues the full-row UPDATE
+// above, which rewrites password_hash, email, failed_attempts and locked_until
+// from a struct read moments earlier and carries no version guard — so a
+// preference edit would silently revert a concurrent password change or lockout.
+// UpdatePassword is the shipped precedent for this shape and this is its twin.
+func (r *PlayerRepository) UpdateDefaultCharacter(ctx context.Context, id, characterID ulid.ULID) error {
+	result, err := r.pool.Exec(ctx, `
+		UPDATE players SET default_character_id = $2, updated_at = $3
+		WHERE id = $1
+	`, id.String(), characterID.String(), pgnanos.From(time.Now()))
+	if err != nil {
+		return oops.Code("PLAYER_UPDATE_DEFAULT_CHARACTER_FAILED").
+			With("operation", "update default character").
+			With("id", id.String()).
+			Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		return oops.Code("PLAYER_NOT_FOUND").
+			With("id", id.String()).
+			Wrap(auth.ErrNotFound)
+	}
+	return nil
+}
+
 // UpdatePasswordAndClearLockout atomically updates the password hash and
 // clears lockout state (failed_attempts = 0, locked_until = NULL).
 func (r *PlayerRepository) UpdatePasswordAndClearLockout(ctx context.Context, id ulid.ULID, passwordHash string) error {
