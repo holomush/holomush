@@ -683,7 +683,7 @@ the next milestone yet.
 
 ### Pending Todos
 
-None yet.
+6 pending — see `.planning/todos/pending/` (`/gsd-capture --list`).
 
 ### Blockers/Concerns
 
