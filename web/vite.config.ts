@@ -27,7 +27,14 @@ export default defineConfig({
 				resolve: { conditions: ['browser'] },
 				test: {
 					name: 'client',
-					include: ['src/**/*.svelte.test.ts']
+					include: ['src/**/*.svelte.test.ts'],
+					// Both entries are required: a project-level `setupFiles` REPLACES
+					// the inherited one rather than appending to it, so dropping the
+					// shared file here would silently un-polyfill localStorage.
+					// The client-only addition drains bits-ui's deferred body-scroll-lock
+					// cleanup, which otherwise outlives the jsdom environment and fails
+					// the run with an unhandled `document is not defined`.
+					setupFiles: ['./src/test-setup.ts', './src/test-setup.client.ts']
 				}
 			}
 		]
