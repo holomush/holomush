@@ -43,7 +43,7 @@
     "pg": "8.22.0",
     "svelte": "5.56.8",
     "svelte-check": "4.7.4",
-    "svelte-sonner": "^1.1.1",
+    "svelte-sonner": "1.1.1",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "vite": "8.1.5",
