@@ -4,7 +4,7 @@ go 1.26.6
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260709200747-435963d16310.1
-	buf.build/go/protovalidate v1.2.0
+	buf.build/go/protovalidate v1.3.0
 	connectrpc.com/connect v1.20.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/alecthomas/participle/v2 v2.1.4
@@ -26,9 +26,9 @@ require (
 	github.com/onsi/gomega v1.42.1
 	github.com/pashagolub/pgxmock/v5 v5.1.0
 	github.com/pquerna/otp v1.5.0
-	github.com/prometheus/client_golang v1.23.2
+	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.2
-	github.com/samber/oops v1.22.0
+	github.com/samber/oops v1.23.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -66,8 +66,8 @@ require (
 require github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 
 require (
-	github.com/getsentry/sentry-go v0.47.0
-	github.com/getsentry/sentry-go/otel/otlp v0.47.0
+	github.com/getsentry/sentry-go v0.48.0
+	github.com/getsentry/sentry-go/otel/otlp v0.48.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/moby/moby/client v0.5.0
