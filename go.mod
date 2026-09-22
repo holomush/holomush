@@ -55,7 +55,7 @@ require (
 	// op_args_hash cross-binary stability: pin protobuf-go since
 	// proto.MarshalOptions{Deterministic: true} is documented stable within
 	// a binary version but not guaranteed across releases (INV-CRYPTO-85).
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 	pgregory.net/rapid v1.3.0
 )
