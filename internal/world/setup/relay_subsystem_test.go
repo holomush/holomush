@@ -5,8 +5,12 @@ package setup
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -123,4 +127,122 @@ func TestOutboxRelaySubsystemRepeatedPrepareDoesNotRebuildRelay(t *testing.T) {
 
 	require.NoError(t, s.Prepare(context.Background()))
 	assert.Same(t, firstRelay, s.relay, "second Prepare must not rebuild the relay")
+}
+
+// fakeListenConn is a listenConn whose WaitForNotification blocks until its
+// ctx is done. It records whether Release was ever called while a
+// WaitForNotification was still in flight — the exact interleaving that is a
+// data race against a real pgconn (Release hands the connection to the pool
+// while the waiting goroutine still reads from it).
+type fakeListenConn struct {
+	inflight             atomic.Int32
+	releasedWhileWaiting atomic.Bool
+	entered              chan struct{}
+	enteredOnce          sync.Once
+	released             chan struct{}
+	releasedOnce         sync.Once
+}
+
+func newFakeListenConn() *fakeListenConn {
+	return &fakeListenConn{entered: make(chan struct{}), released: make(chan struct{})}
+}
+
+func (f *fakeListenConn) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func (f *fakeListenConn) WaitForNotification(ctx context.Context) (*pgconn.Notification, error) {
+	f.inflight.Add(1)
+	defer f.inflight.Add(-1)
+	f.enteredOnce.Do(func() { close(f.entered) })
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (f *fakeListenConn) Release() {
+	if f.inflight.Load() != 0 {
+		f.releasedWhileWaiting.Store(true)
+	}
+	f.releasedOnce.Do(func() { close(f.released) })
+}
+
+func fakeAcquire(conn *fakeListenConn) func(context.Context) (listenConn, error) {
+	return func(context.Context) (listenConn, error) { return conn, nil }
+}
+
+func TestOutboxWakerCloseUnblocksInFlightWaitBeforeReleasingConn(t *testing.T) {
+	t.Parallel()
+	conn := newFakeListenConn()
+	w := newOutboxWakerWithAcquire(fakeAcquire(conn))
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- w.Wait(context.Background()) }()
+	awaitClosed(t, conn.entered, "WaitForNotification entry")
+
+	w.Close()
+
+	select {
+	case err := <-errCh:
+		require.Error(t, err, "Close must unblock the in-flight Wait")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return after Close")
+	}
+	awaitClosed(t, conn.released, "release of the pinned connection")
+	assert.False(t, conn.releasedWhileWaiting.Load(),
+		"Release ran while WaitForNotification was still in flight — that is the pgconn data race")
+}
+
+// awaitClosed fails the test with a message instead of hanging the package
+// when a channel the test expects to close never does.
+func awaitClosed(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("%s did not happen within 5s", what)
+	}
+}
+
+func TestOutboxWakerWaitAfterCloseBlocksOnCallerCtxWithoutAcquiring(t *testing.T) {
+	t.Parallel()
+	acquired := false
+	w := newOutboxWakerWithAcquire(func(context.Context) (listenConn, error) {
+		acquired = true
+		return newFakeListenConn(), nil
+	})
+	w.Close()
+
+	// A closed waker must neither spin (return instantly) nor pin a new
+	// connection: it blocks until the caller's ctx is done, which is what
+	// makes the relay sweep-only instead of busy-looping.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := w.Wait(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.GreaterOrEqual(t, time.Since(start), 50*time.Millisecond, "Wait returned before the caller ctx was done")
+	assert.False(t, acquired, "a closed waker must not pin a new connection")
+}
+
+func TestOutboxWakerCallerCancelReleasesConnAfterWaitReturns(t *testing.T) {
+	t.Parallel()
+	conn := newFakeListenConn()
+	w := newOutboxWakerWithAcquire(fakeAcquire(conn))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- w.Wait(ctx) }()
+	awaitClosed(t, conn.entered, "WaitForNotification entry")
+	cancel()
+
+	select {
+	case err := <-errCh:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return after caller cancel")
+	}
+	awaitClosed(t, conn.released, "release of the pinned connection")
+	assert.False(t, conn.releasedWhileWaiting.Load())
+	// Close after the conn was already released on the error path is a no-op.
+	w.Close()
 }

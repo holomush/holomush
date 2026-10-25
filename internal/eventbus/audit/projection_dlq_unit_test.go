@@ -4,8 +4,11 @@
 package audit
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"sync"
 	"testing"
 
 	"github.com/nats-io/nats.go"
@@ -104,4 +107,42 @@ func TestHandleLeavesSubCapPoisonUnacked(t *testing.T) {
 	assert.Equal(t, 0, msg.termCalls, "no Term below the cap (unchanged AckWait backoff)")
 	assert.Equal(t, 0, msg.nakCalls, "MUST NOT Nak on the ordinary sub-cap poison path")
 	assert.Equal(t, 0, msg.ackCalls, "sub-cap poison stays unacked for AckWait redelivery")
+}
+
+// lockedBuffer is a goroutine-safe io.Writer: while this test holds the
+// process-wide default logger, a worker goroutine left over from an earlier
+// test in the package may still log, and bytes.Buffer alone would race.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// Not parallel: it swaps the process-wide default slog handler.
+func TestHandleFinalAttemptWarnCarriesPersistError(t *testing.T) { //nolint:paralleltest // swaps slog default
+	buf := &lockedBuffer{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	p := newDLQTestProjection(&fakeDLQCapturer{}, 2)
+	p.handle(poisonMsg(2)) // NumDelivered == MaxDeliver ⇒ final attempt
+
+	logged := buf.String()
+	assert.Contains(t, logged, "exhausted MaxDeliver")
+	// The sub-cap redelivery path logs nothing, so the final-attempt warning
+	// is the only place the persist failure cause is ever surfaced.
+	assert.Contains(t, logged, "AUDIT_MISSING_HEADER",
+		"final-attempt warning must carry the persist error, got: %s", logged)
 }

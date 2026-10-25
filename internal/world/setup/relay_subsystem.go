@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/holomush/holomush/internal/eventbus"
@@ -236,26 +237,85 @@ func (a checkpointStoreAdapter) Watermark(ctx context.Context, consumer, gameID 
 	return a.store.Watermark(ctx, consumer, gameID) //nolint:wrapcheck // adapter pass-through
 }
 
+// listenConn is the slice of a pinned pool connection the waker uses. It is
+// an interface so the Close/Wait ordering contract can be unit-tested against
+// a fake instead of a live Postgres.
+type listenConn interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	WaitForNotification(ctx context.Context) (*pgconn.Notification, error)
+	Release()
+}
+
+// poolListenConn adapts *pgxpool.Conn to listenConn: WaitForNotification lives
+// on the underlying *pgx.Conn, not on the pool wrapper.
+type poolListenConn struct{ conn *pgxpool.Conn }
+
+func (c poolListenConn) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return c.conn.Exec(ctx, sql, args...) //nolint:wrapcheck // adapter pass-through
+}
+
+func (c poolListenConn) WaitForNotification(ctx context.Context) (*pgconn.Notification, error) {
+	return c.conn.Conn().WaitForNotification(ctx) //nolint:wrapcheck // adapter pass-through
+}
+
+func (c poolListenConn) Release() { c.conn.Release() }
+
 // outboxWaker is the relay's dedicated LISTEN connection. It holds one pinned
 // pool connection LISTENing on the outbox NOTIFY channel and blocks in Wait until
 // a transaction-side pg_notify arrives or the context is done (the relay wraps
 // Wait with its sweep interval, so a missed NOTIFY still sweeps).
+//
+// Close MUST NOT release the pinned connection while a Wait is still blocked in
+// WaitForNotification on it: pgxpool.Conn.Release hands the connection back to
+// the pool (or destroys it) while the other goroutine is still reading from it,
+// which is a data race inside pgconn (surfaced by the nightly -race
+// integration lane). Close therefore cancels closeCtx so the in-flight Wait
+// unblocks, waits for it to return, and only then releases.
 type outboxWaker struct {
-	pool *pgxpool.Pool
-	mu   sync.Mutex
-	conn *pgxpool.Conn
+	acquire func(ctx context.Context) (listenConn, error)
+	mu      sync.Mutex
+	conn    listenConn
+	// closeCtx is cancelled by Close so an in-flight Wait unblocks; inflight
+	// counts Wait calls currently holding conn so Close can wait for them.
+	closeCtx    context.Context //nolint:containedctx // lifecycle ctx, not request ctx
+	closeCancel context.CancelFunc
+	inflight    sync.WaitGroup
 }
 
-func newOutboxWaker(pool *pgxpool.Pool) *outboxWaker { return &outboxWaker{pool: pool} }
+func newOutboxWaker(pool *pgxpool.Pool) *outboxWaker {
+	return newOutboxWakerWithAcquire(func(ctx context.Context) (listenConn, error) {
+		conn, err := pool.Acquire(ctx)
+		if err != nil {
+			return nil, err //nolint:wrapcheck // transient acquire failure; relay falls back to sweep
+		}
+		return poolListenConn{conn: conn}, nil
+	})
+}
 
-// Wait blocks until a NOTIFY on the outbox channel or ctx is done.
+// newOutboxWakerWithAcquire is the injection seam for tests that need a fake
+// LISTEN connection.
+func newOutboxWakerWithAcquire(acquire func(ctx context.Context) (listenConn, error)) *outboxWaker {
+	closeCtx, closeCancel := context.WithCancel(context.Background())
+	return &outboxWaker{acquire: acquire, closeCtx: closeCtx, closeCancel: closeCancel}
+}
+
+// Wait blocks until a NOTIFY on the outbox channel or ctx is done. Once Close
+// has run no NOTIFY can ever arrive, so Wait degrades to blocking on ctx alone:
+// the relay wraps Wait in its sweep-interval ctx, so a closed waker makes the
+// relay sweep-only rather than spinning Drain→Wait→Drain at CPU speed (which an
+// instant return here would cause for any caller still running).
 func (w *outboxWaker) Wait(ctx context.Context) error {
 	w.mu.Lock()
+	if w.closeCtx.Err() != nil {
+		w.mu.Unlock()
+		<-ctx.Done()
+		return ctx.Err() //nolint:wrapcheck // ctx-deadline signal; relay ignores it and re-drains
+	}
 	if w.conn == nil {
-		conn, err := w.pool.Acquire(ctx)
+		conn, err := w.acquire(ctx)
 		if err != nil {
 			w.mu.Unlock()
-			return err //nolint:wrapcheck // transient acquire failure; relay falls back to sweep
+			return err
 		}
 		if _, err := conn.Exec(ctx, "LISTEN "+worldpostgres.OutboxNotifyChannel); err != nil {
 			conn.Release()
@@ -265,9 +325,19 @@ func (w *outboxWaker) Wait(ctx context.Context) error {
 		w.conn = conn
 	}
 	conn := w.conn
+	// Add under mu, where closeCtx is known un-cancelled, so Close's cancel
+	// (also under mu) and its inflight.Wait happen-after this Add.
+	w.inflight.Add(1)
 	w.mu.Unlock()
+	defer w.inflight.Done()
 
-	_, err := conn.Conn().WaitForNotification(ctx)
+	// Unblock on Close as well as on the caller's ctx.
+	waitCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(w.closeCtx, cancel)
+	defer stop()
+
+	_, err := conn.WaitForNotification(waitCtx)
 	if err != nil {
 		// A benign ctx-deadline/cancel AND a dead pinned connection (Postgres
 		// failover/restart, proxy idle-kill) both land here. Release the pinned
@@ -286,8 +356,14 @@ func (w *outboxWaker) Wait(ctx context.Context) error {
 	return err //nolint:wrapcheck // ctx-deadline/notify signal; relay ignores it and re-drains
 }
 
-// Close releases the pinned LISTEN connection.
+// Close unblocks any in-flight Wait, waits for it to return, then releases the
+// pinned LISTEN connection. Idempotent.
 func (w *outboxWaker) Close() {
+	w.mu.Lock()
+	w.closeCancel()
+	w.mu.Unlock()
+	w.inflight.Wait()
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.conn != nil {

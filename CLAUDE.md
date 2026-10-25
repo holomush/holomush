@@ -74,7 +74,7 @@ Planning and execution run on **GSD** (`/gsd-*` commands; artifacts in `.plannin
 | 3     | `/gsd-plan-phase`                          | `gsd-plan-checker` — plan achieves phase goal  |
 | 4     | `/gsd-execute-phase`                       | `gsd-verifier` — phase goal met                |
 | 5     | domain gates (when applicable)             | `crypto-reviewer` / `abac-reviewer` — READY before push |
-| 6     | `/gsd-ship` → `gh pr create`               | `task pr-prep` green; `/autofix <PR#>` for CodeRabbit |
+| 6     | `/gsd-ship` → `gh pr create`               | `task pr-prep` green; every review thread answered    |
 
 Settings: `/gsd-config` (`--advanced`, `--integrations`, `--profile <name>`); toggles via `/gsd-settings`. **Skip the loop** for small fixes (typo, dependency bump, single-file bug) — `/gsd-quick` (atomic-commit guarantees) or `/gsd-fast` (trivial), or a direct issue → implementation → review → PR.
 
@@ -89,7 +89,7 @@ Primary code review is **`/gsd-code-review`** (GSD's `gsd-code-reviewer`). Two d
 | **MUST** address all findings   | Fix issues or document why not applicable                    |
 | **MUST NOT** skip review        | Even for "simple" changes                                    |
 
-**Responding to PR review comments:** address **every** thread, not just CodeRabbit's; after `/autofix`, check other reviewers (`octopus-fzymgc` bot, humans). Reply to **each thread individually** (fixed / won't-fix / deferred-issue link) so each resolves — a summary comment does **not** resolve individual threads.
+**Responding to PR review comments:** address **every** thread from every reviewer (`octopus-fzymgc` bot, humans). Reply to **each thread individually** (fixed / won't-fix / deferred-issue link) so each resolves — a summary comment does **not** resolve individual threads.
 
 ### Issue tracking (GitHub Issues)
 
