@@ -46,7 +46,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.58.0
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
 	golang.org/x/tools v0.52.0
@@ -55,7 +55,7 @@ require (
 	// op_args_hash cross-binary stability: pin protobuf-go since
 	// proto.MarshalOptions{Deterministic: true} is documented stable within
 	// a binary version but not guaranteed across releases (INV-CRYPTO-85).
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 	pgregory.net/rapid v1.3.0
 )
