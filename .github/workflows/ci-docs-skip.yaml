@@ -12,9 +12,7 @@ name: CI
 # EVERY ci.yaml-sourced context required by protect-main ruleset 11923801 MUST
 # have a job here. The ci.yaml-sourced contexts the ruleset requires are Build,
 # Lint, Test, Integration Test, E2E Test and Vuln — all six are this workflow's
-# responsibility; Conventional Commit (PR title) posts independently of ci.yaml.
-# (CodeRabbit was removed from the repo; its context must also be dropped from
-# the ruleset, or every PR stays BLOCKED on a check that never reports.) Adding a required check to the ruleset
+# responsibility; Conventional Commit (PR title) posts independently of ci.yaml. Adding a required check to the ruleset
 # without adding its stand-in here silently blocks every docs-only PR — GitHub
 # reports BLOCKED with nothing failing to point at (issue #4878; same failure
 # mode as the PR #4823 incident in .claude/rules/landing-the-plane.md).
