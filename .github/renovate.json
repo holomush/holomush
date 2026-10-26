@@ -46,20 +46,20 @@
       "rangeStrategy": "bump"
     },
     {
-      "description": "A go-directive MINOR bump (1.26.x -> 1.27.0) changes language semantics and can outrun the pinned golangci-lint/staticcheck build (.custom-gcl.yml), so it stays a manual merge; only patch bumps ride the gomod auto-merge rule below.",
+      "description": "Auto-merge minor/patch Go deps",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+      "addLabels": ["go"]
+    },
+    {
+      "description": "A go-directive MINOR bump (1.26.x -> 1.27.0) changes language semantics and can outrun the pinned golangci-lint/staticcheck build (.custom-gcl.yml), so it stays a manual merge; only patch bumps ride the gomod auto-merge rule above. Placed AFTER that rule on purpose: Renovate applies packageRules in order and the last matching rule wins, so this entry must come later to switch automerge back off for the go directive.",
       "matchManagers": ["gomod"],
       "matchDepNames": ["go"],
       "matchDepTypes": ["golang"],
       "matchUpdateTypes": ["minor", "major"],
       "automerge": false,
       "addLabels": ["major-update"]
-    },
-    {
-      "description": "Auto-merge minor/patch Go deps",
-      "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["minor", "patch", "digest"],
-      "automerge": true,
-      "addLabels": ["go"]
     },
     {
       "description": "Auto-merge GitHub Actions (minor/patch/digest)",
