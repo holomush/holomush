@@ -6,14 +6,12 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"golang.org/x/net/http2"
 
 	"connectrpc.com/connect"
 
@@ -147,27 +145,28 @@ func NewServer(cfg Config) (*Server, error) {
 		ReadHeaderTimeout: 10 * time.Second,
 		// ReadTimeout bounds the total time to read a request (headers + body),
 		// closing the slow-body window ReadHeaderTimeout alone leaves open. Under
-		// HTTP/2 (x/net/http2) this is applied per-stream as a request-body-read
-		// deadline that is disarmed once the body is consumed, so it does not
-		// truncate long-lived server-streaming responses like StreamEvents
-		// (GH-4785).
+		// HTTP/2 this is applied per-stream as a request-body-read deadline that
+		// is disarmed once the body is consumed, so it does not truncate
+		// long-lived server-streaming responses like StreamEvents (GH-4785).
 		ReadTimeout: 30 * time.Second,
 		IdleTimeout: 60 * time.Second,
-	}
-
-	// Configure HTTP/2 with keepalive pings to detect dead connections.
-	// These settings apply to TLS connections (production) where browsers
-	// negotiate HTTP/2 via ALPN. In dev mode (no TLS), browsers use
-	// HTTP/1.1 and the application-level heartbeat in StreamEvents
-	// handles disconnect detection instead.
-	// See: docs/specs/decisions/001-http2-required.md
-	h2s := &http2.Server{
-		ReadIdleTimeout:  30 * time.Second, // Send PING after 30s of silence
-		PingTimeout:      15 * time.Second, // Close if no PONG within 15s
-		WriteByteTimeout: 10 * time.Second, // Close if a write blocks >10s
-	}
-	if err := http2.ConfigureServer(httpServer, h2s); err != nil {
-		return nil, fmt.Errorf("configure http2: %w", err)
+		// Configure HTTP/2 with keepalive pings to detect dead connections.
+		// These settings apply to TLS connections (production) where browsers
+		// negotiate HTTP/2 via ALPN. In dev mode (no TLS), browsers use
+		// HTTP/1.1 and the application-level heartbeat in StreamEvents
+		// handles disconnect detection instead.
+		//
+		// net/http's bundled HTTP/2 server is configured directly: x/net/http2's
+		// Server + ConfigureServer are deprecated as of x/net v0.59 (staticcheck
+		// SA1019). Field mapping from the former http2.Server literal:
+		// ReadIdleTimeout → SendPingTimeout; PingTimeout and WriteByteTimeout
+		// keep their names.
+		// See: docs/specs/decisions/001-http2-required.md
+		HTTP2: &http.HTTP2Config{
+			SendPingTimeout:  30 * time.Second, // Send PING after 30s of silence
+			PingTimeout:      15 * time.Second, // Close if no PONG within 15s
+			WriteByteTimeout: 10 * time.Second, // Close if a write blocks >10s
+		},
 	}
 
 	return &Server{

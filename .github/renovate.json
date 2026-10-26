@@ -39,6 +39,13 @@
   ],
   "packageRules": [
     {
+      "description": "Propose bumps of the go.mod `go` directive (depType golang). Renovate skips these by default (docs: modules/manager/gomod#updating-of-go-mod-and-toolchain-directives), but the required Vuln check runs govulncheck under the Go version setup-go reads from this directive, so a stdlib CVE fixed only in a newer 1.x patch leaves main red until the directive moves. Patch/minor matches the gomod auto-merge rule below; CI proves the toolchain before merge.",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "rangeStrategy": "bump"
+    },
+    {
       "description": "Auto-merge minor/patch Go deps",
       "matchManagers": ["gomod"],
       "matchUpdateTypes": ["minor", "patch", "digest"],
@@ -147,6 +154,10 @@
       "allowedVersions": "<7"
     }
   ],
+  "vulnerabilityAlerts": {
+    "description": "Group every outstanding vulnerability fix into ONE PR per base branch (default is one PR per dependency). The required Vuln check runs govulncheck over the whole module, so a per-dependency fix PR can never go green while any other reachable vuln remains in go.mod: 2026-08 to 2026-10 left 17 [SECURITY] PRs mutually blocked that way. groupName here pulls in the group preset whose branchTopic collapses them into a single branch.",
+    "groupName": "security fixes"
+  },
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
   "commitMessagePrefix": "deps:",
   "commitMessageAction": "bump"
