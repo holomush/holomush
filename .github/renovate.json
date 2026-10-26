@@ -46,6 +46,15 @@
       "rangeStrategy": "bump"
     },
     {
+      "description": "A go-directive MINOR bump (1.26.x -> 1.27.0) changes language semantics and can outrun the pinned golangci-lint/staticcheck build (.custom-gcl.yml), so it stays a manual merge; only patch bumps ride the gomod auto-merge rule below.",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "matchUpdateTypes": ["minor", "major"],
+      "automerge": false,
+      "addLabels": ["major-update"]
+    },
+    {
       "description": "Auto-merge minor/patch Go deps",
       "matchManagers": ["gomod"],
       "matchUpdateTypes": ["minor", "patch", "digest"],
@@ -155,7 +164,7 @@
     }
   ],
   "vulnerabilityAlerts": {
-    "description": "Group every outstanding vulnerability fix into ONE PR per base branch (default is one PR per dependency). The required Vuln check runs govulncheck over the whole module, so a per-dependency fix PR can never go green while any other reachable vuln remains in go.mod: 2026-08 to 2026-10 left 17 [SECURITY] PRs mutually blocked that way. groupName here pulls in the group preset whose branchTopic collapses them into a single branch.",
+    "description": "Group every outstanding vulnerability fix into ONE PR per base branch (default is one PR per dependency). The required Vuln check runs govulncheck over the whole module, so a per-dependency Go fix PR can never go green while any other reachable vuln remains in go.mod: 2026-08 to 2026-10 left 17 [SECURITY] PRs mutually blocked that way. Known trade-off: vulnerabilityAlerts cannot be scoped per manager, so npm/Docker security fixes ride the same PR; a red non-Go member holds the Go fixes until it is fixed or dropped.",
     "groupName": "security fixes"
   },
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
