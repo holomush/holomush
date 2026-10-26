@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 )
@@ -30,6 +31,11 @@ import (
 // Implementation notes:
 //
 //   - Test uses the embedded bus + real PG audit projection.
+//   - Events are published through RenderingPublisher with a registered
+//     builtin type: the host audit projection rejects any message without
+//     the App-Rendering header (AUDIT_MISSING_HEADER) and never writes the
+//     row, so a raw-publisher soak sees every message exhaust MaxDeliver
+//     into the DLQ and the drain time out with zero rows persisted.
 //   - Publish rate is per-tick, not a tight loop, so the test targets
 //     throughput rather than starving the runtime.
 //   - At the end we assert:
@@ -64,8 +70,13 @@ var _ = Describe("Soak publish 1k/sec for 5 minutes", func() {
 		Expect(hostSub.Activate(ctx)).To(Succeed())
 		DeferCleanup(func() { _ = hostSub.Stop(context.Background()) })
 
-		pub := bus.Bus.Publisher()
+		registry, err := core.BootstrapVerbRegistry("test")
+		Expect(err).NotTo(HaveOccurred())
+		pub := eventbus.NewRenderingPublisher(bus.Bus.Publisher(), registry)
 		subject := eventbus.Subject("events.main.soak.s1")
+		// location_state is a builtin verb registration, so the rendering
+		// lookup succeeds and the projection has a rendering to persist.
+		const eventType = eventbus.Type("location_state")
 
 		// 1000 events/sec = one event per ms. Ten concurrent publishers
 		// smooths the load so no single goroutine has to spin.
@@ -99,7 +110,7 @@ var _ = Describe("Soak publish 1k/sec for 5 minutes", func() {
 					case <-ctx.Done():
 						return
 					case <-ticker.C:
-						evt := mintEvent(subject, "scene.pose", `{"k":"soak"}`)
+						evt := mintEvent(subject, eventType, `{"k":"soak"}`)
 						if err := pub.Publish(ctx, evt); err != nil {
 							// Publish errors are expected-ish under pressure;
 							// log and keep going so the loop measures

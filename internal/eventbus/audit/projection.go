@@ -6,6 +6,7 @@ package audit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -216,17 +217,24 @@ func (p *projection) handle(msg jetstream.Msg) {
 					"audit DLQ capture failed; leaving message un-acked and retained in source stream until MaxAge (not auto-retried past MaxDeliver)",
 					"subject", msg.Subject(),
 					"num_delivered", meta.NumDelivered,
-					"error", dlqErr.Error(),
+					"error", dlqErr,
+					"persist_error", err,
 				)
 				// Deliberate no-ack: not Term'd (never discard without a durable
 				// capture) and not Nak'd (redelivery is impossible past the cap).
 				return
 			}
+			// Carry the persist error AS A VALUE (not err.Error()): oops errors
+			// implement slog.LogValuer, so the code and context land in the line
+			// (error.code=AUDIT_…). The sub-cap path is deliberately silent
+			// (AckWait redelivery is the retry), so this is the only place an
+			// operator can learn WHY a message dead-lettered.
 			slog.WarnContext(
 				p.workerCtx,
 				"audit message exhausted MaxDeliver; captured to dead-letter stream",
 				"subject", msg.Subject(),
 				"num_delivered", meta.NumDelivered,
+				"error", err,
 			)
 			_ = msg.Term() //nolint:errcheck // Term failures are absorbed by max-deliver expiry
 			return
@@ -454,9 +462,22 @@ func (p *projection) awaitDrained(t AwaitT, timeout time.Duration) {
 		return
 	}
 	deadline := time.Now().Add(timeout)
+	// Keep the last SUCCESSFUL infos and the last Info error separately so the
+	// timeout message can report counters even when the final poll errored,
+	// and can say that Info itself was failing (a "stuck" signal of its own).
+	var lastC *jetstream.ConsumerInfo
+	var lastS *jetstream.StreamInfo
+	var lastErr error
 	for time.Now().Before(deadline) {
 		cInfo, cErr := p.consumer.Info(context.Background())
 		sInfo, sErr := stream.Info(context.Background())
+		lastErr = errors.Join(cErr, sErr)
+		if cErr == nil {
+			lastC = cInfo
+		}
+		if sErr == nil {
+			lastS = sInfo
+		}
 		if cErr == nil && sErr == nil &&
 			cInfo.NumAckPending == 0 &&
 			cInfo.AckFloor.Stream >= sInfo.State.LastSeq {
@@ -464,7 +485,18 @@ func (p *projection) awaitDrained(t AwaitT, timeout time.Duration) {
 		}
 		<-time.After(AwaitPollInterval)
 	}
-	t.Fatalf("audit projection did not drain within %s", timeout)
+	// Report the last observed counters so a timeout distinguishes "the
+	// projection is behind" (ack floor climbing, pending large) from "the
+	// projection is stuck" (ack floor flat, redeliveries climbing).
+	msg := "audit projection did not drain within " + timeout.String()
+	if lastC != nil && lastS != nil {
+		msg += fmt.Sprintf(": ack_floor=%d last_seq=%d pending=%d ack_pending=%d redelivered=%d",
+			lastC.AckFloor.Stream, lastS.State.LastSeq, lastC.NumPending, lastC.NumAckPending, lastC.NumRedelivered)
+	}
+	if lastErr != nil {
+		msg += fmt.Sprintf(" (last info error: %v)", lastErr)
+	}
+	t.Fatalf("%s", msg)
 }
 
 // eventMsFromULID renders a ULID's embedded millisecond timestamp to UnixNano.

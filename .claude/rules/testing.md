@@ -30,8 +30,8 @@ so there is no per-package coverage floor to satisfy.
 | **MUST NOT** lower whole-repo coverage | codecov's `project` status is a rising-floor ratchet (`target: auto, threshold: 1%`) — a PR MUST NOT drop project coverage more than 1 percentage point below the base commit. Legacy code is not retroactively blocked. Also POSTED, not currently required. |
 | **MUST** run `task test:cover` | Verify coverage locally before completing work. |
 
-The required protect-main checks are [Build, Lint, Test, CodeRabbit, Integration
-Test, E2E Test] plus the OPS-03 `Vuln` check (once the operator adds it). Classic
+The required protect-main checks are [Build, Lint, Test, Integration Test, E2E
+Test] plus the OPS-03 `Vuln` check (once the operator adds it). Classic
 branch protection is off, so `gh api repos/holomush/holomush/branches/main/protection`
 returning 404 is expected — the ruleset (`11923801`), not classic protection, is
 authoritative.
