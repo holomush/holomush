@@ -4,7 +4,10 @@
 package setup
 
 import (
+	"bytes"
 	"context"
+	"log"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -127,6 +130,47 @@ func TestOutboxRelaySubsystemRepeatedPrepareDoesNotRebuildRelay(t *testing.T) {
 
 	require.NoError(t, s.Prepare(context.Background()))
 	assert.Same(t, firstRelay, s.relay, "second Prepare must not rebuild the relay")
+}
+
+// lockedBuffer is a goroutine-safe io.Writer for the default logger: a relay
+// goroutine left over from an earlier test can still log while it is installed.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// Not parallel: it swaps the process-wide default slog handler.
+func TestOutboxRelaySubsystemStopGivesUpOnAStuckRelayLoopAfterTimeoutAndWarns(t *testing.T) {
+	buf := &lockedBuffer{}
+	prev, prevOut, prevFlags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(prev)
+		log.SetOutput(prevOut)
+		log.SetFlags(prevFlags)
+	})
+
+	synctest.Test(t, func(t *testing.T) {
+		s := &OutboxRelaySubsystem{done: make(chan struct{})} // a relay loop that never exits
+		start := time.Now()
+
+		require.NoError(t, s.Stop(context.Background()))
+
+		assert.Equal(t, relayStopTimeout, time.Since(start), "Stop waits relayStopTimeout, then returns")
+	})
+	assert.Contains(t, buf.String(), "outbox relay loop did not stop within timeout")
 }
 
 // fakeListenConn is a listenConn whose WaitForNotification returns nil when
