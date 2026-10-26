@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log"
 	"log/slog"
 	"sync"
 	"testing"
@@ -129,20 +130,46 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-// Not parallel: it swaps the process-wide default slog handler.
-func TestHandleFinalAttemptWarnCarriesPersistError(t *testing.T) { //nolint:paralleltest // swaps slog default
+// captureDefaultLog routes the process-wide default logger into a buffer for
+// the rest of the test. Cleanup restores slog and the log package's output
+// and flags, which slog.SetDefault also changes.
+func captureDefaultLog(t *testing.T) *lockedBuffer {
+	t.Helper()
 	buf := &lockedBuffer{}
-	prev := slog.Default()
+	prev, prevOut, prevFlags := slog.Default(), log.Writer(), log.Flags()
 	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Cleanup(func() {
+		slog.SetDefault(prev)
+		log.SetOutput(prevOut)
+		log.SetFlags(prevFlags)
+	})
+	return buf
+}
+
+// Not parallel: it swaps the process-wide default slog handler.
+func TestHandleFinalAttemptWarnCarriesPersistError(t *testing.T) {
+	buf := captureDefaultLog(t)
 
 	p := newDLQTestProjection(&fakeDLQCapturer{}, 2)
 	p.handle(poisonMsg(2)) // NumDelivered == MaxDeliver ⇒ final attempt
 
 	logged := buf.String()
 	assert.Contains(t, logged, "exhausted MaxDeliver")
-	// The sub-cap redelivery path logs nothing, so the final-attempt warning
-	// is the only place the persist failure cause is ever surfaced.
 	assert.Contains(t, logged, "AUDIT_MISSING_HEADER",
 		"final-attempt warning must carry the persist error, got: %s", logged)
+}
+
+// Not parallel: it swaps the process-wide default slog handler.
+func TestHandleDLQCaptureFailureLogCarriesBothErrors(t *testing.T) {
+	buf := captureDefaultLog(t)
+
+	p := newDLQTestProjection(&fakeDLQCapturer{err: errors.New("dlq publish failed")}, 2)
+	p.handle(poisonMsg(2))
+
+	logged := buf.String()
+	assert.Contains(t, logged, "DLQ capture failed")
+	assert.Contains(t, logged, "dlq publish failed",
+		"capture-failure line must carry the DLQ error, got: %s", logged)
+	assert.Contains(t, logged, "AUDIT_MISSING_HEADER",
+		"capture-failure line must carry the persist error, got: %s", logged)
 }

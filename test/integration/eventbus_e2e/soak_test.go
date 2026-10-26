@@ -34,14 +34,15 @@ import (
 //   - Events are published through RenderingPublisher with a registered
 //     builtin type: the host audit projection rejects any message without
 //     the App-Rendering header (AUDIT_MISSING_HEADER) and never writes the
-//     row, so a raw-publisher soak sees every message exhaust MaxDeliver
-//     into the DLQ and the drain time out with zero rows persisted.
+//     row.
 //   - Publish rate is per-tick, not a tight loop, so the test targets
 //     throughput rather than starving the runtime.
 //   - At the end we assert:
-//     (a) goroutine count is back near baseline (leak check),
+//     (a) at least half the target events were published and at most 1%
+//     of publishes failed,
 //     (b) events_audit row count matches publish count,
-//     (c) RSS growth stays under the documented 50 MB ceiling.
+//     (c) goroutine count is back near baseline (leak check),
+//     (d) RSS growth stays under the documented 50 MB ceiling.
 //
 // The full 5-minute run is heavy; callers can shorten via env
 // SOAK_DURATION (e.g. "30s" for a local smoke run). The nightly CI sets
@@ -83,7 +84,7 @@ var _ = Describe("Soak publish 1k/sec for 5 minutes", func() {
 		const publishers = 10
 		ratePerPublisher := time.Second / (1000 / publishers) // 10ms per publisher
 
-		var published int64
+		var published, failed int64
 		var pubMu sync.Mutex
 		var wg sync.WaitGroup
 		// stopCh must close so every publisher goroutine observes the stop
@@ -112,10 +113,13 @@ var _ = Describe("Soak publish 1k/sec for 5 minutes", func() {
 					case <-ticker.C:
 						evt := mintEvent(subject, eventType, `{"k":"soak"}`)
 						if err := pub.Publish(ctx, evt); err != nil {
-							// Publish errors are expected-ish under pressure;
-							// log and keep going so the loop measures
-							// end-to-end throughput instead of failing.
+							// A few publish errors under pressure are tolerated
+							// (bounded after the loop); keep going so the loop
+							// measures end-to-end throughput.
 							GinkgoWriter.Printf("soak publish: %v\n", err)
+							pubMu.Lock()
+							failed++
+							pubMu.Unlock()
 							continue
 						}
 						pubMu.Lock()
@@ -126,6 +130,14 @@ var _ = Describe("Soak publish 1k/sec for 5 minutes", func() {
 			}()
 		}
 		wg.Wait()
+
+		// A publish path that rejects every event (an unregistered type, a
+		// tighter rendering rule) would leave the parity check below at 0 == 0.
+		minPublished := int64(duration/time.Millisecond) / 2
+		Expect(published).To(BeNumerically(">=", minPublished),
+			"published %d events, want at least %d (%d publish errors)", published, minPublished, failed)
+		Expect(failed).To(BeNumerically("<=", (published+failed)/100),
+			"%d of %d publishes failed", failed, published+failed)
 
 		// Give the projection generous time to drain after publish stop.
 		hostSub.AwaitDrained(suiteT, 60*time.Second)
