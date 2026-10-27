@@ -277,18 +277,25 @@ export async function findAuditEventsContaining(
   return rows;
 }
 
-// getAuditEventsSince lists audit rows stamped at or after sinceMs (event_ms,
-// epoch milliseconds) whose subject contains the given fragment, newest last.
+// getAuditEventsSince lists audit rows whose subject contains the given
+// fragment and whose event time is at or after sinceMs (epoch milliseconds),
+// oldest first. The filter column is event_ms, the partition key migration
+// 000052 added: despite the name it holds the event ULID's embedded time as
+// epoch NANOSECONDS (internal/eventbus/audit/projection.go eventMsFromULID →
+// UnixNano), so the millisecond bound is scaled before comparison. The older
+// `timestamp` column is JetStream store time, not event time, which is why it
+// is not used here.
 export async function getAuditEventsSince(
   subjectFragment: string,
   sinceMs: number,
 ): Promise<Array<{ subject: string; type: string; codec: string; event_ms: string }>> {
+  const sinceNs = BigInt(Math.floor(sinceMs)) * 1_000_000n;
   const { rows } = await getPool().query<{ subject: string; type: string; codec: string; event_ms: string }>(
     `SELECT subject, type, codec, event_ms
        FROM events_audit
       WHERE subject LIKE $1 AND event_ms >= $2
       ORDER BY event_ms`,
-    [`%${subjectFragment}%`, sinceMs],
+    [`%${subjectFragment}%`, sinceNs.toString()],
   );
   return rows;
 }
