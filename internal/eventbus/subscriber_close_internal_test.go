@@ -63,3 +63,26 @@ func TestSessionStreamHandleDropsMessageAfterClose(t *testing.T) {
 		t.Fatal("handle() blocked on a closed stream")
 	}
 }
+
+// TestSessionStreamCloseUnblocksPendingNext covers the other half of the
+// teardown contract: a Next already parked on an empty inbox is released by
+// Close through the done signal and reports ErrMsgIteratorClosed, so a gRPC
+// Subscribe handler blocked in Next cannot outlive its session.
+func TestSessionStreamCloseUnblocksPendingNext(t *testing.T) {
+	j := newDetachedSessionStream(0)
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := j.Next(context.Background())
+		result <- err
+	}()
+
+	require.NoError(t, j.Close())
+
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, jetstream.ErrMsgIteratorClosed)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Next() did not return after Close()")
+	}
+}
