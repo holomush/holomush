@@ -223,6 +223,76 @@ export async function getAuditEventsBySubjectSuffix(
   return rows;
 }
 
+// ── Focus-routing diagnostics ──────────────────────────────────
+//
+// Read-only snapshot of the focus state behind a game session: the
+// session-scoped PresentingFocus + FocusMemberships (sessions table) and every
+// live connection's per-connection focus_key (session_connections). Used by
+// the second-tab isolation spec's failure dump so a routing fault (a say
+// redirected into a scene because the terminal connection unexpectedly
+// carried a scene FocusKey) is distinguishable from a delivery delay.
+
+export interface DbSessionFocusState {
+  presenting_focus: unknown;
+  focus_memberships: unknown;
+  connections: Array<{
+    id: string;
+    client_type: string;
+    streams: string[];
+    focus_key: unknown;
+  }>;
+}
+
+export async function getSessionFocusState(sessionId: string): Promise<DbSessionFocusState | null> {
+  const session = await getPool().query<{ presenting_focus: unknown; focus_memberships: unknown }>(
+    'SELECT presenting_focus, focus_memberships FROM sessions WHERE id = $1',
+    [sessionId],
+  );
+  if (!session.rows[0]) return null;
+  const conns = await getPool().query<DbSessionFocusState['connections'][number]>(
+    `SELECT id, client_type, streams, focus_key
+       FROM session_connections
+      WHERE session_id = $1
+      ORDER BY connected_at`,
+    [sessionId],
+  );
+  return { ...session.rows[0], connections: conns.rows };
+}
+
+// findAuditEventsContaining returns the subject/type/codec of every audit row
+// whose stored envelope contains the given plaintext. A plaintext location say
+// is found by its token; an encrypted scene say is NOT (the payload is
+// ciphertext), so an empty result paired with a fresh scene-subject row is
+// itself the signal that the say was redirected into the scene.
+export async function findAuditEventsContaining(
+  text: string,
+): Promise<Array<{ subject: string; type: string; codec: string }>> {
+  const { rows } = await getPool().query<{ subject: string; type: string; codec: string }>(
+    `SELECT subject, type, codec
+       FROM events_audit
+      WHERE position(convert_to($1, 'UTF8') IN envelope) > 0
+      ORDER BY event_ms`,
+    [text],
+  );
+  return rows;
+}
+
+// getAuditEventsSince lists audit rows stamped at or after sinceMs (event_ms,
+// epoch milliseconds) whose subject contains the given fragment, newest last.
+export async function getAuditEventsSince(
+  subjectFragment: string,
+  sinceMs: number,
+): Promise<Array<{ subject: string; type: string; codec: string; event_ms: string }>> {
+  const { rows } = await getPool().query<{ subject: string; type: string; codec: string; event_ms: string }>(
+    `SELECT subject, type, codec, event_ms
+       FROM events_audit
+      WHERE subject LIKE $1 AND event_ms >= $2
+      ORDER BY event_ms`,
+    [`%${subjectFragment}%`, sinceMs],
+  );
+  return rows;
+}
+
 // ── Command history queries ────────────────────────────────────
 
 export async function getCommandHistory(sessionId: string): Promise<string[]> {
