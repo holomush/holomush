@@ -24,9 +24,19 @@ func TestProtoDeterministicMarshalLockedToVendoredProtobuf(t *testing.T) {
 	// dependency is a chain-breaking master-spec amendment per INV-CRYPTO-75 —
 	// the test must fail loudly when the version changes so that the
 	// op_args_hash audit chain is re-validated against the new encoder.
-	re := regexp.MustCompile(`google\.golang\.org/protobuf v1\.36\.11\b`)
+	//
+	// Amendment log (each bump re-validated by
+	// TestOpArgsHashAlgorithmStableAgainstGolden passing unchanged):
+	//   v1.36.11 -> v1.36.12 (2026-10-26): golden vectors byte-identical; the
+	//   release touches protojson/prototext/protodelim/protodesc only, not the
+	//   binary wire encoder. Required under minimum version selection: the
+	//   OpenTelemetry v1.47 exporters pull in genproto/googleapis/rpc
+	//   2026-09-28, which requires v1.36.12 (as does the buf.build
+	//   protovalidate generated module), so every dependency PR touching the
+	//   Google module family failed this test under v1.36.11.
+	re := regexp.MustCompile(`google\.golang\.org/protobuf v1\.36\.12\b`)
 	if !re.MatchString(src) {
-		t.Fatalf("go.mod must pin google.golang.org/protobuf to v1.36.11 per INV-CRYPTO-85 / INV-CRYPTO-75 (chain-breaking on bump)")
+		t.Fatalf("go.mod must pin google.golang.org/protobuf to v1.36.12 per INV-CRYPTO-85 / INV-CRYPTO-75 (chain-breaking on bump)")
 	}
 	// Negate: no replace directive without explicit master-spec amendment.
 	if strings.Contains(src, "replace google.golang.org/protobuf") {

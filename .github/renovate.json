@@ -39,11 +39,27 @@
   ],
   "packageRules": [
     {
+      "description": "Propose bumps of the go.mod `go` directive (depType golang). Renovate skips these by default (docs: modules/manager/gomod#updating-of-go-mod-and-toolchain-directives), but the required Vuln check runs govulncheck under the Go version setup-go reads from this directive, so a stdlib CVE fixed only in a newer 1.x patch leaves main red until the directive moves. Patch/minor matches the gomod auto-merge rule below; CI proves the toolchain before merge.",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "rangeStrategy": "bump"
+    },
+    {
       "description": "Auto-merge minor/patch Go deps",
       "matchManagers": ["gomod"],
       "matchUpdateTypes": ["minor", "patch", "digest"],
       "automerge": true,
       "addLabels": ["go"]
+    },
+    {
+      "description": "A go-directive MINOR bump (1.26.x -> 1.27.0) changes language semantics and can outrun the pinned golangci-lint/staticcheck build (.custom-gcl.yml), so it stays a manual merge; only patch bumps ride the gomod auto-merge rule above. Placed AFTER that rule on purpose: Renovate applies packageRules in order and the last matching rule wins, so this entry must come later to switch automerge back off for the go directive.",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "matchUpdateTypes": ["minor", "major"],
+      "automerge": false,
+      "addLabels": ["major-update"]
     },
     {
       "description": "Auto-merge GitHub Actions (minor/patch/digest)",
@@ -147,6 +163,10 @@
       "allowedVersions": "<7"
     }
   ],
+  "vulnerabilityAlerts": {
+    "description": "Group every outstanding vulnerability fix into ONE PR per base branch (default is one PR per dependency). The required Vuln check runs govulncheck over the whole module, so a per-dependency Go fix PR can never go green while any other reachable vuln remains in go.mod: 2026-08 to 2026-10 left 17 [SECURITY] PRs mutually blocked that way. Known trade-off: vulnerabilityAlerts cannot be scoped per manager, so npm/Docker security fixes ride the same PR; a red non-Go member holds the Go fixes until it is fixed or dropped.",
+    "groupName": "security fixes"
+  },
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
   "commitMessagePrefix": "deps:",
   "commitMessageAction": "bump"

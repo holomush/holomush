@@ -36,7 +36,7 @@ last_mapped_at: 2026-08-13
 
 **Core:**
 - gRPC `google.golang.org/grpc v1.82.1` + ConnectRPC `connectrpc.com/connect v1.20.0` — dual RPC surface (`internal/grpc/`, `internal/web/`)
-- `google.golang.org/protobuf v1.36.11` — pinned deliberately for cross-binary `op_args_hash` determinism (INV-CRYPTO-85, comment in `go.mod`)
+- `google.golang.org/protobuf v1.36.12` — pinned deliberately for cross-binary `op_args_hash` determinism (INV-CRYPTO-85, comment in `go.mod`)
 - `buf.build/go/protovalidate v1.2.0` (+ CEL via `google/cel-go`) — proto-level request validation
 - `github.com/jackc/pgx/v5 v5.10.0` — PostgreSQL driver; `github.com/exaring/otelpgx` for tracing
 - `github.com/pressly/goose/v3 v3.27.3` — migration engine (`internal/store/migrate.go`)

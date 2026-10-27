@@ -23,7 +23,8 @@ Neither HTTP/1.1 nor HTTP/2 automatically notifies the server when a TCP
 peer silently dies. Detection requires active probing:
 
 - **HTTP/2 (TLS, production):** Server PING/PONG frames detect dead peers
-  in ~45 seconds via `ReadIdleTimeout` + `PingTimeout` on `http2.Server`.
+  in ~45 seconds via `SendPingTimeout` + `PingTimeout` on `net/http`'s
+  `Server.HTTP2` (`http.HTTP2Config`).
 - **HTTP/1.1 (no TLS, dev):** No transport-level ping mechanism. Browsers
   only negotiate HTTP/2 via TLS ALPN — they do NOT support h2c (HTTP/2
   cleartext). In dev mode without TLS, browser connections are HTTP/1.1.
@@ -34,12 +35,14 @@ Use a two-layer detection strategy:
 
 **Layer 1 — HTTP/2 server pings (production, TLS):**
 
-Configure `http2.Server` with keepalive settings. When browsers negotiate
+Configure `http.Server.HTTP2` (`http.HTTP2Config`) with keepalive settings;
+this replaced `x/net/http2.Server` + `http2.ConfigureServer`, deprecated since
+x/net v0.59 (2026-10). When browsers negotiate
 HTTP/2 via TLS ALPN, server pings detect dead peers in ~45 seconds.
 
 | Setting            | Value | Purpose                        |
 | ------------------ | ----- | ------------------------------ |
-| `ReadIdleTimeout`  | 30s   | Send PING after 30s of silence |
+| `SendPingTimeout`  | 30s   | Send PING after 30s of silence |
 | `PingTimeout`      | 15s   | Close if no PONG within 15s    |
 | `WriteByteTimeout` | 10s   | Close if write blocks >10s     |
 
@@ -98,7 +101,7 @@ in dev mode. This was rejected because:
 
 | Component                 | Change                                                |
 | ------------------------- | ----------------------------------------------------- |
-| `internal/web/server.go`  | `http2.ConfigureServer` with ping/timeout settings    |
+| `internal/web/server.go`  | `http.Server.HTTP2` (`HTTP2Config`) ping/timeouts    |
 | `internal/web/handler.go` | Heartbeat + `ctx.Done()` select in stream loop        |
 | `internal/web/handler.go` | Defer calls core `Disconnect` RPC on stream close     |
 | `terminal/+page.svelte`   | `onDestroy` calls `client.disconnect()`               |
@@ -107,4 +110,4 @@ in dev mode. This was rejected because:
 ## References
 
 - [ConnectRPC #668: detect if client closed stream](https://github.com/connectrpc/connect-go/issues/668)
-- [Go x/net/http2.Server](https://pkg.go.dev/golang.org/x/net/http2#Server)
+- [Go net/http.HTTP2Config](https://pkg.go.dev/net/http#HTTP2Config)

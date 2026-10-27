@@ -31,7 +31,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otellog "go.opentelemetry.io/otel/log"
-	logglobal "go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -162,7 +161,7 @@ func Init(ctx context.Context, serviceName, serviceVersion string, logCfg config
 			lpOpts = append(lpOpts, sdklog.WithProcessor(p))
 		}
 		lp = sdklog.NewLoggerProvider(lpOpts...)
-		logglobal.SetLoggerProvider(lp)
+		otel.SetLoggerProvider(lp)
 		logHandler = otelslog.NewHandler(serviceName, otelslog.WithLoggerProvider(lp))
 		// The bridge gate floor = min effective level across the enabled OTel
 		// sinks (spec §3), so a per-sink level below global still reaches its
