@@ -89,7 +89,7 @@ func TestDeliveryMetadataForTestReturnsMetadataForJetstreamImpl(t *testing.T) {
 }
 
 // TestSessionStreamNextReturnsIteratorClosedErrorAfterClose exercises the
-// "inbox closed, receiver in Next sees ok=false" branch that Close
+// "stream closed, Next observes the done signal" branch that Close
 // deliberately engineers. Previously the subscriber test suite only
 // exercised the ctx.Done() branch of Next.
 func TestSessionStreamNextReturnsIteratorClosedErrorAfterClose(t *testing.T) {
@@ -104,7 +104,7 @@ func TestSessionStreamNextReturnsIteratorClosedErrorAfterClose(t *testing.T) {
 
 	// Next() MUST return the concrete closed-iterator sentinel, not any
 	// error. Using errors.Is pins the branch that Close() deliberately
-	// engineers (inbox closed → ok=false → wrap jetstream.ErrMsgIteratorClosed).
+	// engineers (done closed → wrap jetstream.ErrMsgIteratorClosed).
 	_, err = stream.Next(context.Background())
 	require.ErrorIs(t, err, jetstream.ErrMsgIteratorClosed)
 }

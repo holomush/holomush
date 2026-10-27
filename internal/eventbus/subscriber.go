@@ -235,6 +235,7 @@ func newSessionStream(
 		inactiveTTL:  inactiveTTL,
 		cons:         cons,
 		inbox:        make(chan jetstream.Msg, bufSize),
+		done:         make(chan struct{}),
 	}
 	cc, err := cons.Consume(s.handle, jetstream.PullMaxMessages(maxPending))
 	if err != nil {
@@ -283,40 +284,43 @@ type jetStreamSessionStream struct {
 	cons   jetstream.Consumer
 	cc     jetstream.ConsumeContext
 	inbox  chan jetstream.Msg
-	closed atomic.Bool // guards Close idempotency against concurrent Close + pending Next
+	done   chan struct{} // closed exactly once by Close; the only teardown signal
+	closed atomic.Bool   // guards Close idempotency against concurrent Close + pending Next
 }
 
 // handle is the Consume callback. Pushes the raw jetstream.Msg onto the
 // session's inbox channel; Next reads from the inbox on demand. Blocking on
 // the channel send is intentional: it provides the natural backpressure
 // between JetStream's MaxAckPending and our per-session consumer.
+//
+// Teardown is signalled through j.done, never by closing the inbox: nats.go
+// runs this callback on the subscription's waitForMsgs goroutine and does
+// not join it before ConsumeContext.Closed fires, so Close can run while a
+// send is parked here. Selecting on done lets that send abandon the message
+// (JetStream redelivers after AckWait if the consumer rebinds) without the
+// close-vs-send data race that closing the inbox would create (#5057).
 func (j *jetStreamSessionStream) handle(msg jetstream.Msg) {
-	// A closed inbox means Close was called; drop the message — JS will
-	// redeliver after AckWait if the consumer rebinds.
-	defer func() {
-		// Recover from send-on-closed-channel in the rare case of a
-		// race between the Consume goroutine and Close. The recovered
-		// value is intentionally discarded: the only possible panic
-		// here is "send on closed channel", which is a normal
-		// teardown outcome, not a caller-actionable error.
-		if r := recover(); r != nil {
-			_ = r
-		}
-	}()
-	j.inbox <- msg
+	select {
+	case j.inbox <- msg:
+	case <-j.done:
+	}
 }
 
 // Next blocks on the inbox channel until a delivery arrives, ctx is
 // cancelled, or the iterator is drained/closed. Decodes the payload via the
 // registered codec and returns a Delivery typed handle.
 func (j *jetStreamSessionStream) Next(ctx context.Context) (Delivery, error) {
+	// Check before selecting so a Next after Close is deterministic even
+	// when buffered deliveries are still sitting in the inbox.
+	if j.closed.Load() {
+		return nil, oops.Wrap(jetstream.ErrMsgIteratorClosed)
+	}
 	select {
 	case <-ctx.Done():
 		return nil, oops.Wrap(ctx.Err())
-	case msg, ok := <-j.inbox:
-		if !ok {
-			return nil, oops.Wrap(jetstream.ErrMsgIteratorClosed)
-		}
+	case <-j.done:
+		return nil, oops.Wrap(jetstream.ErrMsgIteratorClosed)
+	case msg := <-j.inbox:
 		event, metaOnly, err := decodeDeliveryWithAuth(ctx, msg, j.selector, j.identity, j.authGuard, j.dekManager, j.auditEmitter)
 		if err != nil {
 			return nil, err
@@ -376,29 +380,29 @@ func (j *jetStreamSessionStream) SetFilters(ctx context.Context, filters []Subje
 // consumer — it persists across reconnects so the session resumes from the
 // last acked seq. Idempotent: safe to call multiple times.
 //
-// Concurrency: Close may race with in-flight Next / handle callbacks. We
-// must NOT set j.inbox = nil: readers in Next already hold a reference to
-// the channel, and nilling it racily is undefined. Instead we close the
-// channel and let the closed-state propagate (receivers see ok=false).
-// handle() guards against a second close via recover.
+// Concurrency: Close may race with in-flight Next / handle callbacks. The
+// inbox itself is never closed or nilled — a parked handle() send or a
+// Next() receive may still hold it. Teardown is a single close of j.done,
+// which both handle() and Next() select on, so neither side ever touches a
+// closed channel (#5057).
 func (j *jetStreamSessionStream) Close() error {
 	if j.closed.Swap(true) {
 		return nil
 	}
 	if j.cc != nil {
 		j.cc.Stop()
-		// Wait for Consume to finish draining so handle() can't race
-		// a channel close below. Bounded by the AckWait on the
-		// consumer config so a slow server cannot pin Close forever.
+		// Let the pull loop wind down so no further pulls are issued
+		// against the durable. Closed() does NOT imply handle() has
+		// returned (nats.go fires it from the unsubscribing goroutine),
+		// which is why teardown below goes through done rather than
+		// closing the inbox. Bounded by the AckWait on the consumer
+		// config so a slow server cannot pin Close forever.
 		select {
 		case <-j.cc.Closed():
 		case <-time.After(j.ackWait + time.Second):
 		}
 	}
-	// Close (but do NOT nil) the inbox. Pending receivers in Next see
-	// ok=false and return ErrMsgIteratorClosed. A concurrent send from
-	// handle() is guarded by the recover() there.
-	close(j.inbox)
+	close(j.done)
 	return nil
 }
 
