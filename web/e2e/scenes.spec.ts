@@ -580,6 +580,7 @@ test.describe('Scenes workspace (E9.5)', () => {
         (r) => r.url().includes('/SendCommand') && r.request().method() === 'POST',
         { timeout: 30000 },
       );
+      const sayAtMs = Date.now();
       await sendCommand(terminalPage, `say ${token2}`);
       // This asserts the real invariant: the terminal (grid focus) KEEPS its
       // location subscription after the comms_hub connection focuses a scene.
@@ -617,6 +618,9 @@ test.describe('Scenes workspace (E9.5)', () => {
           diag.sendCommand = await sendCommandResponse.then(
             async (r) => ({
               status: r.status(),
+              // The Connect transport posts JSON, so the request body shows the
+              // connection_id the terminal tab actually routed the say through.
+              request: r.request().postData(),
               body: await r.text().catch(() => '<unreadable>'),
             }),
             (e: unknown) => `no response: ${e instanceof Error ? e.message : String(e)}`,
@@ -636,6 +640,23 @@ test.describe('Scenes workspace (E9.5)', () => {
             .locator('[data-testid="event"]')
             .allTextContents()
             .then((all) => all.filter((t) => t.includes(token2)));
+          // The scene log renders PoseCard/OocLine, not [data-testid="event"];
+          // a say redirected into the scene shows up in the workspace text.
+          diag.workspaceShowsToken2 = await workspacePage
+            .locator('[data-testid="scenes-workspace"]')
+            .innerText()
+            .then((t) => t.includes(token2));
+          // Server-side truth: which connection carried a scene FocusKey, what
+          // the session's PresentingFocus was, and which subject the say landed
+          // on in the audit tier (a plaintext location say is found by token; an
+          // encrypted scene say is not, but leaves a fresh scene-subject row).
+          const terminalSessionId = await getClientSessionId(terminalPage);
+          diag.terminalSessionId = terminalSessionId;
+          diag.sessionFocusState = terminalSessionId
+            ? await db.getSessionFocusState(terminalSessionId)
+            : null;
+          diag.auditRowsWithToken2 = await db.findAuditEventsContaining(token2);
+          diag.sceneAuditRowsSinceSay = await db.getAuditEventsSince(`.scene.${sceneId}`, sayAtMs);
           diag.tab1Streams = tab1Streams;
           diag.tab1Console = tab1Console;
         } catch (diagErr) {
