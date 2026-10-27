@@ -599,10 +599,14 @@ tasks:
       # `--force` because `proto` declares sources/generates and would otherwise
       # be skipped as up-to-date. `git status --porcelain` (not `git diff`) so a
       # NEW stub from an added .proto, which is untracked, fails the gate too.
+      # The pathspecs name the generated patterns only: hand-written files live
+      # beside the stubs (pkg/proto/**/*_test.go), and an uncommitted edit to one
+      # of those is not codegen drift. Plain git pathspec `*` matches `/`, so
+      # these globs cover every nesting level.
       - |
         set -euo pipefail
         task --force proto
-        DRIFT=$(git status --porcelain -- pkg/proto internal/eventbus/cursor/cursorv1)
+        DRIFT=$(git status --porcelain -- 'pkg/proto/*.pb.go' 'pkg/proto/*.connect.go' 'internal/eventbus/cursor/cursorv1/*.pb.go')
         if [ -n "$DRIFT" ]; then
           echo "$DRIFT" >&2
           echo "Generated Go protobuf code out of sync with api/proto + buf.gen*.yaml pins. Run 'task proto' and commit." >&2
@@ -713,10 +717,12 @@ tasks:
   web:generate:check:
     desc: Verify committed web Connect clients match `task web:generate` output (CI stale-diff gate, #5059)
     cmds:
+      # Generated pattern only (hand-written errors.ts / errors.test.ts share the
+      # directory); plain git pathspec `*` matches `/`, so this is recursive.
       - |
         set -euo pipefail
         task --force web:generate
-        DRIFT=$(git status --porcelain -- web/src/lib/connect)
+        DRIFT=$(git status --porcelain -- 'web/src/lib/connect/*_pb.ts')
         if [ -n "$DRIFT" ]; then
           echo "$DRIFT" >&2
           echo "Generated web Connect clients out of sync with api/proto + web/buf.gen.yaml pin. Run 'task web:generate' and commit." >&2
