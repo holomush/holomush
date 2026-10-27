@@ -23,7 +23,8 @@ plugins:
   # (holomush-pw76v) — a bare remote ref drifts to the latest BSR generator and
   # silently re-stamps cursor.pb.go on an unrelated `task proto` run. The
   # `# renovate:` annotation wires this pin into Renovate's customManager so it
-  # bumps in lockstep with the go.mod runtime (holomush-9vyc3).
+  # bumps in lockstep with the go.mod runtime (holomush-9vyc3); `task proto:check`
+  # in CI fails if the committed cursorv1 stubs drift from this pin (#5059).
   # renovate: datasource=go depName=google.golang.org/protobuf
   - remote: buf.build/protocolbuffers/go:v1.36.11
     out: internal/eventbus/cursor/cursorv1

@@ -235,13 +235,15 @@ task test:int                                     # integration tests (needs Doc
 
 ### Generated code
 
-Some generated output is committed; regenerate + commit it in the **same change** or CI fails a stale-diff check:
+Some generated output is committed; regenerate + commit it in the **same change** or CI fails a stale-diff check (the `Lint` job and the `pr-prep` fast lane run `task proto:check` + `task web:generate:check`, which regenerate and fail on any modified or untracked stub):
 
-| After changing         | Run                               | Commit                                 |
-| ---------------------- | --------------------------------- | -------------------------------------- |
-| `api/proto/**` schemas | `task proto && task web:generate` | `pkg/proto/**/*.pb.go` + web `*_pb.ts` |
+| After changing                                          | Run                               | Commit                                                               |
+| ------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------- |
+| `api/proto/**` schemas                                  | `task proto && task web:generate` | `pkg/proto/**/*.pb.go` + web `*_pb.ts`                               |
+| `buf.gen.yaml` / `buf.gen.internal.yaml` plugin pins    | `task proto`                      | `pkg/proto/**/*.pb.go` + `internal/eventbus/cursor/cursorv1/*.pb.go` |
+| `web/buf.gen.yaml` es pin (+ `@bufbuild/protoc-gen-es`) | `task web:generate`               | `web/src/lib/connect/**/*_pb.ts`                                     |
 
-`task lint:proto` MUST be green after any proto change.
+Generator versions are stamped into every stub header, so a Renovate codegen pin bump goes red on that gate until the regenerated output is pushed to the bump PR; the gate is what lets those groups auto-merge once they carry it. `task lint:proto` MUST be green after any proto change.
 
 ### Session isolation
 

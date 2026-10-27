@@ -87,6 +87,22 @@ jobs:
       - name: Verify EBNF is current
         run: task generate:ebnf:check
 
+      # Regenerate the committed protobuf/Connect stubs and fail on any drift
+      # (modified or untracked). This is the gate that lets Renovate's codegen
+      # pin bumps auto-merge: a pin that does not match the committed output
+      # cannot go green (#5059). `buf generate` pulls remote BSR plugins;
+      # authenticate so it uses the token's rate limit, not the anonymous one
+      # (holomush-k1kb), as the e2e and build jobs do.
+      - name: Verify generated protobuf code is current
+        run: task proto:check
+        env:
+          BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
+
+      - name: Verify generated web Connect clients are current
+        run: task web:generate:check
+        env:
+          BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
+
       - name: Check license headers
         run: task license:check
 
