@@ -513,6 +513,27 @@ test.describe('Scenes workspace (E9.5)', () => {
     try {
       // ── Tab 1: register and enter terminal ──
       const terminalPage = await ctx.newPage();
+      // Failure diagnostics. This spec failed 2/2 on the Playwright 1.62 -> 1.64
+      // image bump (Chromium 151 -> 156) with only "predicate timeout" to go on,
+      // and the trace artifact is not always reachable from where the failure is
+      // triaged. Record what the terminal tab saw so the job log alone can tell a
+      // dropped stream, a rejected SendCommand or a never-delivered event apart.
+      const tab1Console: string[] = [];
+      terminalPage.on('console', (msg) => {
+        if (msg.type() === 'error' || msg.type() === 'warning') {
+          tab1Console.push(`[${msg.type()}] ${msg.text()}`);
+        }
+      });
+      terminalPage.on('pageerror', (err) => tab1Console.push(`[pageerror] ${err.message}`));
+      terminalPage.on('requestfailed', (req) =>
+        tab1Console.push(`[requestfailed] ${req.url()} ${req.failure()?.errorText ?? ''}`),
+      );
+      const tab1Streams: string[] = [];
+      terminalPage.on('response', (r) => {
+        if (r.url().includes('/StreamEvents')) {
+          tab1Streams.push(`${new Date().toISOString()} ${r.status()} ${r.url()}`);
+        }
+      });
       await registerAndEnterTerminal(terminalPage, 'iso');
 
       // Create a scene from the terminal so the workspace has something to load.
@@ -555,6 +576,10 @@ test.describe('Scenes workspace (E9.5)', () => {
       await terminalPage.bringToFront();
       const token2 = `iso-after-${Date.now()}`;
       const sayAfter = await currentEventCount(terminalPage);
+      const sendCommandResponse = terminalPage.waitForResponse(
+        (r) => r.url().includes('/SendCommand') && r.request().method() === 'POST',
+        { timeout: 30000 },
+      );
       await sendCommand(terminalPage, `say ${token2}`);
       // This asserts the real invariant: the terminal (grid focus) KEEPS its
       // location subscription after the comms_hub connection focuses a scene.
@@ -576,12 +601,49 @@ test.describe('Scenes workspace (E9.5)', () => {
       // #4493's, a Go-only diff — pure load variance). 30s on CI matches this
       // test's other budgets (the 30s WebGetScene wait, the 150s test ceiling);
       // a genuine delivery regression never arrives, so 30s still fails it.
-      await waitForOutputMatching(
-        terminalPage,
-        new RegExp(token2),
-        sayAfter,
-        process.env.CI ? 30000 : 10000,
-      );
+      try {
+        await waitForOutputMatching(
+          terminalPage,
+          new RegExp(token2),
+          sayAfter,
+          process.env.CI ? 30000 : 10000,
+        );
+      } catch (err) {
+        // Dump the terminal tab's view of the world before rethrowing. Everything
+        // here is best-effort: a diagnostic that throws would mask the failure.
+        const diag: Record<string, unknown> = { token2, sayAfter };
+        try {
+          diag.browser = browser.version();
+          diag.sendCommand = await sendCommandResponse.then(
+            async (r) => ({
+              status: r.status(),
+              body: await r.text().catch(() => '<unreadable>'),
+            }),
+            (e: unknown) => `no response: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          diag.visibility = await terminalPage.evaluate(() => ({
+            visibilityState: document.visibilityState,
+            hasFocus: document.hasFocus(),
+          }));
+          diag.connPill = await terminalPage
+            .locator('[data-testid="conn-pill"]')
+            .getAttribute('data-status');
+          const events = terminalPage.locator('[data-testid="event"]');
+          const count = await events.count();
+          diag.eventCount = count;
+          diag.eventsSinceSay = await events.allTextContents().then((all) => all.slice(sayAfter));
+          diag.workspaceEvents = await workspacePage
+            .locator('[data-testid="event"]')
+            .allTextContents()
+            .then((all) => all.filter((t) => t.includes(token2)));
+          diag.tab1Streams = tab1Streams;
+          diag.tab1Console = tab1Console;
+        } catch (diagErr) {
+          diag.diagnosticsError = diagErr instanceof Error ? diagErr.message : String(diagErr);
+        }
+        console.log(`[iso-diag] ${JSON.stringify(diag, null, 2)}`);
+        throw err;
+      }
 
       // Terminal page shows no scenes-workspace UI.
       await expect(
