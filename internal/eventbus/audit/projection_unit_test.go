@@ -6,12 +6,15 @@ package audit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus/consumer"
@@ -219,4 +222,84 @@ func TestNewProjectionWrapSurfacesUnderlyingNATSError(t *testing.T) {
 	require.ErrorContains(t, wrapped, "no stream matches subject",
 		"wrapped error chain MUST contain the underlying NATS message")
 	errutil.AssertErrorContext(t, wrapped, "nats_err", permanent.Error())
+}
+
+// drainPoll is one scripted awaitDrained poll: the consumer and stream Info
+// results.
+type drainPoll struct {
+	c    *jetstream.ConsumerInfo
+	cErr error
+	s    *jetstream.StreamInfo
+	sErr error
+}
+
+// drainScript replays one drainPoll per Info call and repeats the last one.
+type drainScript struct {
+	polls         []drainPoll
+	consumerCalls int
+	streamCalls   int
+}
+
+func (d *drainScript) poll(i int) drainPoll { return d.polls[min(i, len(d.polls)-1)] }
+
+type drainJS struct {
+	jetstream.JetStream
+	script *drainScript
+}
+
+func (j drainJS) Stream(context.Context, string) (jetstream.Stream, error) {
+	return drainStream{script: j.script}, nil
+}
+
+type drainStream struct {
+	jetstream.Stream
+	script *drainScript
+}
+
+func (s drainStream) Info(context.Context, ...jetstream.StreamInfoOpt) (*jetstream.StreamInfo, error) {
+	p := s.script.poll(s.script.streamCalls)
+	s.script.streamCalls++
+	return p.s, p.sErr
+}
+
+type drainConsumer struct {
+	jetstream.Consumer
+	script *drainScript
+}
+
+func (c drainConsumer) Info(context.Context) (*jetstream.ConsumerInfo, error) {
+	p := c.script.poll(c.script.consumerCalls)
+	c.script.consumerCalls++
+	return p.c, p.cErr
+}
+
+// fatalRecorder is an AwaitT that records the Fatalf message.
+type fatalRecorder struct{ msg string }
+
+func (*fatalRecorder) Helper() {}
+
+func (r *fatalRecorder) Fatalf(format string, args ...any) { r.msg = fmt.Sprintf(format, args...) }
+
+func TestAwaitDrainedTimeoutReportsLastConsistentSnapshotAndInfoErrors(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		ackPending := func(floor uint64) *jetstream.ConsumerInfo {
+			return &jetstream.ConsumerInfo{NumAckPending: 2, AckFloor: jetstream.SequenceInfo{Stream: floor}}
+		}
+		stream := &jetstream.StreamInfo{State: jetstream.StreamState{LastSeq: 5}}
+		script := &drainScript{polls: []drainPoll{
+			{c: ackPending(3), s: stream},
+			{cErr: errors.New("consumer info down"), s: stream},
+			{c: ackPending(4), sErr: errors.New("stream info down")},
+		}}
+		p := &projection{js: drainJS{script: script}, consumer: drainConsumer{script: script}}
+		rec := &fatalRecorder{}
+
+		p.awaitDrained(rec, 3*AwaitPollInterval)
+
+		require.Equal(t, 3, script.consumerCalls, "the timeout allows exactly three polls")
+		assert.Contains(t, rec.msg, "ack_floor=3 last_seq=5",
+			"the snapshot comes from the last poll in which both Info calls succeeded")
+		assert.Contains(t, rec.msg, "(2 polls had an info error; last: stream info down)")
+	})
 }

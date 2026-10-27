@@ -32,7 +32,7 @@ name: Issue Gate
 # THIS SAME JOB. A path-filtered workflow does not run at all on a filtered PR,
 # which leaves its required context permanently `Pending` — GitHub then reports
 # the PR as BLOCKED with nothing failing to point at. That is the #4878 failure
-# mode recorded verbatim in ci-docs-skip.yaml:12-18.
+# mode recorded verbatim in ci-docs-skip.yaml:12-17.
 #
 # It follows that this workflow needs NO ci-docs-skip.yaml-style stand-in, and
 # must not be given one: GitHub merges same-named checks across workflows, so a
@@ -116,7 +116,7 @@ jobs:
 
       # Checks out the BASE ref (the `pull_request_target` default), i.e.
       # trusted code already on main. The PR head is never fetched or checked
-      # out. `persist-credentials: false` mirrors ci-docs-skip.yaml:69-74
+      # out. `persist-credentials: false` mirrors ci-docs-skip.yaml:68-73
       # (zizmor artipacked hardening).
       - name: Check out base ref
         if: github.event.pull_request.draft != true

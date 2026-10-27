@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/consumer"
 	"github.com/holomush/holomush/internal/pgnanos"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // HeaderMsgID is the Nats-Msg-Id header carrying the event ULID — the
@@ -212,12 +213,12 @@ func (p *projection) handle(msg jetstream.Msg) {
 		meta, mErr := msg.Metadata()
 		if mErr == nil && p.cfg.MaxDeliver > 0 && meta.NumDelivered >= uint64(p.cfg.MaxDeliver) {
 			if dlqErr := p.dlq.Capture(p.workerCtx, msg); dlqErr != nil {
-				slog.ErrorContext(
+				errutil.LogErrorContext(
 					p.workerCtx,
 					"audit DLQ capture failed; leaving message un-acked and retained in source stream until MaxAge (not auto-retried past MaxDeliver)",
+					dlqErr,
 					"subject", msg.Subject(),
 					"num_delivered", meta.NumDelivered,
-					"error", dlqErr,
 					"persist_error", err,
 				)
 				// Deliberate no-ack: not Term'd (never discard without a durable
@@ -227,8 +228,8 @@ func (p *projection) handle(msg jetstream.Msg) {
 			// Carry the persist error AS A VALUE (not err.Error()): oops errors
 			// implement slog.LogValuer, so the code and context land in the line
 			// (error.code=AUDIT_…). The sub-cap path is deliberately silent
-			// (AckWait redelivery is the retry), so this is the only place an
-			// operator can learn WHY a message dead-lettered.
+			// (AckWait redelivery is the retry), so this line and the capture-
+			// failure line above are the only places the cause is logged.
 			slog.WarnContext(
 				p.workerCtx,
 				"audit message exhausted MaxDeliver; captured to dead-letter stream",
@@ -462,39 +463,37 @@ func (p *projection) awaitDrained(t AwaitT, timeout time.Duration) {
 		return
 	}
 	deadline := time.Now().Add(timeout)
-	// Keep the last SUCCESSFUL infos and the last Info error separately so the
-	// timeout message can report counters even when the final poll errored,
-	// and can say that Info itself was failing (a "stuck" signal of its own).
+	// lastC and lastS come from the last poll in which both Info calls
+	// succeeded, so the timeout message reports one consistent snapshot.
+	// lastErr is the most recent Info error and failedPolls counts the polls
+	// that had one.
 	var lastC *jetstream.ConsumerInfo
 	var lastS *jetstream.StreamInfo
 	var lastErr error
+	failedPolls := 0
 	for time.Now().Before(deadline) {
 		cInfo, cErr := p.consumer.Info(context.Background())
 		sInfo, sErr := stream.Info(context.Background())
-		lastErr = errors.Join(cErr, sErr)
-		if cErr == nil {
-			lastC = cInfo
-		}
-		if sErr == nil {
-			lastS = sInfo
-		}
-		if cErr == nil && sErr == nil &&
-			cInfo.NumAckPending == 0 &&
-			cInfo.AckFloor.Stream >= sInfo.State.LastSeq {
-			return
+		if err := errors.Join(cErr, sErr); err != nil {
+			lastErr = err
+			failedPolls++
+		} else {
+			if cInfo.NumAckPending == 0 && cInfo.AckFloor.Stream >= sInfo.State.LastSeq {
+				return
+			}
+			lastC, lastS = cInfo, sInfo
 		}
 		<-time.After(AwaitPollInterval)
 	}
-	// Report the last observed counters so a timeout distinguishes "the
-	// projection is behind" (ack floor climbing, pending large) from "the
-	// projection is stuck" (ack floor flat, redeliveries climbing).
+	// The snapshot (ack floor vs last seq, pending, ack-pending, redelivered)
+	// helps tell a slow projection from a stuck one.
 	msg := "audit projection did not drain within " + timeout.String()
 	if lastC != nil && lastS != nil {
 		msg += fmt.Sprintf(": ack_floor=%d last_seq=%d pending=%d ack_pending=%d redelivered=%d",
 			lastC.AckFloor.Stream, lastS.State.LastSeq, lastC.NumPending, lastC.NumAckPending, lastC.NumRedelivered)
 	}
 	if lastErr != nil {
-		msg += fmt.Sprintf(" (last info error: %v)", lastErr)
+		msg += fmt.Sprintf(" (%d polls had an info error; last: %v)", failedPolls, lastErr)
 	}
 	t.Fatalf("%s", msg)
 }

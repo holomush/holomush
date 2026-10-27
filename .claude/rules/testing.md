@@ -31,7 +31,7 @@ so there is no per-package coverage floor to satisfy.
 | **MUST** run `task test:cover` | Verify coverage locally before completing work. |
 
 The required protect-main checks are [Build, Lint, Test, Integration Test, E2E
-Test] plus the OPS-03 `Vuln` check (once the operator adds it). Classic
+Test, Vuln] plus Conventional Commit (PR title). Classic
 branch protection is off, so `gh api repos/holomush/holomush/branches/main/protection`
 returning 404 is expected — the ruleset (`11923801`), not classic protection, is
 authoritative.
