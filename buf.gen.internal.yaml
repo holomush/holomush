@@ -26,7 +26,7 @@ plugins:
   # bumps in lockstep with the go.mod runtime (holomush-9vyc3); `task proto:check`
   # in CI fails if the committed cursorv1 stubs drift from this pin (#5059).
   # renovate: datasource=go depName=google.golang.org/protobuf
-  - remote: buf.build/protocolbuffers/go:v1.36.11
+  - remote: buf.build/protocolbuffers/go:v1.36.12
     out: internal/eventbus/cursor/cursorv1
     opt: paths=source_relative
 inputs:
