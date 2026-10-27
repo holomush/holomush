@@ -44,7 +44,7 @@ services:
     # runner from a different minor cannot find them and every spec fails to
     # launch. Renovate tracks the two halves independently (npm package vs
     # Docker image), so a bump arrives as two PRs — bump both together by hand.
-    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
+    image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
     working_dir: /work
     volumes:
       - ./web:/work
