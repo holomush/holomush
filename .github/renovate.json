@@ -39,11 +39,13 @@
   ],
   "packageRules": [
     {
-      "description": "Propose bumps of the go.mod `go` directive (depType golang). Renovate skips these by default (docs: modules/manager/gomod#updating-of-go-mod-and-toolchain-directives), but the required Vuln check runs govulncheck under the Go version setup-go reads from this directive, so a stdlib CVE fixed only in a newer 1.x patch leaves main red until the directive moves. Patch/minor matches the gomod auto-merge rule below; CI proves the toolchain before merge.",
+      "description": "Propose bumps of the go.mod `go` directive (depType golang). Renovate skips these by default (docs: modules/manager/gomod#updating-of-go-mod-and-toolchain-directives), but the required Vuln check runs govulncheck under the Go version setup-go reads from this directive, so a stdlib CVE fixed only in a newer 1.x patch leaves main red until the directive moves. groupName keeps the directive OUT of the all-non-major groups: PR #5014 showed a go 1.26 -> 1.27 bump riding that group and breaking every job (x/net drops http2.TrailerPrefix under go1.27 build tags). allowedVersions caps it below 1.27 until the pinned golangci-lint/staticcheck build (.custom-gcl.yml, honnef v0.7.0) supports Go 1.27 — it panics in buildir today; lift the cap together with that bump.",
       "matchManagers": ["gomod"],
       "matchDepNames": ["go"],
       "matchDepTypes": ["golang"],
-      "rangeStrategy": "bump"
+      "rangeStrategy": "bump",
+      "groupName": "Go toolchain",
+      "allowedVersions": "<1.27"
     },
     {
       "description": "Auto-merge minor/patch Go deps",
@@ -58,6 +60,7 @@
       "matchDepNames": ["go"],
       "matchDepTypes": ["golang"],
       "matchUpdateTypes": ["minor", "major"],
+      "groupName": "Go toolchain",
       "automerge": false,
       "addLabels": ["major-update"]
     },
@@ -83,6 +86,13 @@
       "groupName": "npm dependencies",
       "automerge": true,
       "addLabels": ["npm"]
+    },
+    {
+      "description": "Docs site (site/: bun + .bun-version) bumps get their own PR and are never auto-merged. The Starlight plugins are pre-1.0 (every minor is the breaking channel) and the site build (site.yml `Build site`) is NOT a required check, so inside the all-non-major group a broken docs build rode in unseen on PR #5014. A human runs `task docs:build` on this group's PR.",
+      "matchManagers": ["bun", "bun-version"],
+      "groupName": "docs site",
+      "automerge": false,
+      "addLabels": ["docs"]
     },
     {
       "description": "Group OpenTelemetry packages",
