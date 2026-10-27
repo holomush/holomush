@@ -33,7 +33,9 @@ plugins:
   # (both same version as the runtime), protoc-gen-go-grpc in its own
   # google.golang.org/grpc/cmd/protoc-gen-go-grpc submodule. See
   # .github/renovate.json customManagers + "buf codegen go" packageRule
-  # (holomush-9vyc3).
+  # (holomush-9vyc3). CI's Lint job runs `task proto:check`, which regenerates
+  # and fails on drift, so a pin bump MUST land together with the regenerated
+  # `*.pb.go` (#5059).
   # renovate: datasource=go depName=google.golang.org/protobuf
   - remote: buf.build/protocolbuffers/go:v1.36.11
     out: pkg/proto

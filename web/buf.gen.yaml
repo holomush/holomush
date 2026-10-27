@@ -19,6 +19,8 @@ plugins:
   # `@bufbuild/protoc-gen-es` pin in package.json; bump both together — the
   # `# renovate:` annotation below wires that into Renovate
   # (see .github/renovate.json customManagers + "buf codegen" packageRule).
+  # CI's Lint job runs `task web:generate:check`, which regenerates and fails
+  # on drift, so a pin bump MUST land with the regenerated `_pb.ts` (#5059).
   #
   # connect-es v2 derives clients directly from the `GenService` descriptors in
   # the `_pb.ts` stubs (`createClient(SomeService, transport)`), so the v1

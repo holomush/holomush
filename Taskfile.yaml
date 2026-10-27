@@ -593,6 +593,22 @@ tasks:
       - pkg/proto/**/*.pb.go
       - internal/eventbus/cursor/cursorv1/*.pb.go
 
+  proto:check:
+    desc: Verify committed Go protobuf/gRPC/Connect stubs match `task proto` output (CI stale-diff gate, #5059)
+    cmds:
+      # `--force` because `proto` declares sources/generates and would otherwise
+      # be skipped as up-to-date. `git status --porcelain` (not `git diff`) so a
+      # NEW stub from an added .proto, which is untracked, fails the gate too.
+      - |
+        set -euo pipefail
+        task --force proto
+        DRIFT=$(git status --porcelain -- pkg/proto internal/eventbus/cursor/cursorv1)
+        if [ -n "$DRIFT" ]; then
+          echo "$DRIFT" >&2
+          echo "Generated Go protobuf code out of sync with api/proto + buf.gen*.yaml pins. Run 'task proto' and commit." >&2
+          exit 1
+        fi
+
   generate:schema:
     desc: Generate plugin JSON Schema from Go types
     cmds:
@@ -693,6 +709,19 @@ tasks:
       - api/proto/**/*.proto
     generates:
       - web/src/lib/connect/**/*.ts
+
+  web:generate:check:
+    desc: Verify committed web Connect clients match `task web:generate` output (CI stale-diff gate, #5059)
+    cmds:
+      - |
+        set -euo pipefail
+        task --force web:generate
+        DRIFT=$(git status --porcelain -- web/src/lib/connect)
+        if [ -n "$DRIFT" ]; then
+          echo "$DRIFT" >&2
+          echo "Generated web Connect clients out of sync with api/proto + web/buf.gen.yaml pin. Run 'task web:generate' and commit." >&2
+          exit 1
+        fi
 
   web:build:
     desc: Build SvelteKit static site
@@ -1138,6 +1167,9 @@ tasks:
             echo "ERROR: Lua bindings or editor stub out of sync. Run 'task generate:luabridge' and commit."
             exit 1
           fi
+      - echo "▸ Verifying generated protobuf + web Connect code is current..."
+      - task: proto:check
+      - task: web:generate:check
       - echo "▸ Checking license headers..."
       - task: license:check
       - echo "▸ Building binary plugins..."
