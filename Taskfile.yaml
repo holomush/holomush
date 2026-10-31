@@ -817,7 +817,7 @@ tasks:
   lint:markdown:
     desc: Lint Markdown files
     cmds:
-      - rumdl check --exclude 'site,.git,.serena,.claude,.planning' .
+      - rumdl check --exclude 'site,.git,.serena,.claude,.agents,.planning' .
       - rumdl check --config site/.rumdl.toml site/
 
   lint:yaml:
@@ -1060,7 +1060,7 @@ tasks:
   fmt:markdown:
     desc: Format Markdown files
     cmds:
-      - rumdl fmt --exclude 'site,.git,.serena,.claude,.planning' .
+      - rumdl fmt --exclude 'site,.git,.serena,.claude,.agents,.planning' .
       - rumdl fmt --config site/.rumdl.toml site/
 
   fmt:yaml:
@@ -1077,7 +1077,7 @@ tasks:
     desc: Check formatting without modifying
     cmds:
       - dprint check
-      - rumdl fmt --check --exclude 'site,.git,.serena,.claude,.planning' .
+      - rumdl fmt --check --exclude 'site,.git,.serena,.claude,.agents,.planning' .
       - rumdl fmt --check --config site/.rumdl.toml site/
       # gofumpt is run via the same pinned go-tool version as fmt:go, so this
       # gate can never disagree with `task fmt` (no local-vs-CI skew). Lists
