@@ -56,7 +56,7 @@ const webPackageJSON = "web/package.json"
 // implicit in the toolchain. This test keeps it chosen and keeps it declared.
 //
 // Gap G-06.1-6 in
-// .planning/phases/06.1-admin-portal-web-surface-shadcn-components-and-the-single-ro/06.1-VERIFICATION.md.
+// .planning/milestones/v0.13-phases/06.1-admin-portal-web-surface-shadcn-components-and-the-single-ro/06.1-VERIFICATION.md.
 //
 // # Where the declared numbers come from
 //
