@@ -30,6 +30,7 @@ vars:
     site/**
     docs/**
     .planning/**
+    openspec/**
     **/*.md
     .claude/agents/**
     .claude/commands/**
