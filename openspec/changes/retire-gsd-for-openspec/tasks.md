@@ -29,7 +29,7 @@
 
 ## 5. Branch verification
 
-- [ ] 5.1 Run the acceptance command from proposal.md in the worktree, then `task pr-prep`. Verify: both exit 0.
+- [x] 5.1 Run the acceptance command from proposal.md in the worktree, then `task pr-prep`. Verify: both exit 0.
 
 ## 6. After merge
 
