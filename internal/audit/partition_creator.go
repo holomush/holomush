@@ -27,9 +27,7 @@ func NewPostgresPartitionCreator(pool *pgxpool.Pool) *PostgresPartitionCreator {
 // specified number of future months. Uses IF NOT EXISTS for idempotency.
 // Partition naming follows spec convention: access_audit_log_YYYY_MM.
 func (c *PostgresPartitionCreator) EnsurePartitions(ctx context.Context, months int) error {
-	now := time.Now().UTC()
-	for i := 0; i < months; i++ {
-		t := now.AddDate(0, i, 0)
+	for _, t := range partitionMonths(time.Now().UTC(), months) {
 		name, start, end := partitionRange(t)
 
 		// access_audit_log.timestamp is BIGINT epoch-ns (post-gfo6 Phase 4).
@@ -50,6 +48,19 @@ func (c *PostgresPartitionCreator) EnsurePartitions(ctx context.Context, months 
 		}
 	}
 	return nil
+}
+
+// partitionMonths returns the first day of each month to partition: the month
+// containing now, then months-1 following months.
+func partitionMonths(now time.Time, months int) []time.Time {
+	// Step from day 1: AddDate normalizes an overflowed day (Oct 31 + 1 month
+	// is Dec 1), which would skip a month on the 29th to 31st.
+	first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	out := make([]time.Time, 0, max(months, 0))
+	for i := 0; i < months; i++ {
+		out = append(out, first.AddDate(0, i, 0))
+	}
+	return out
 }
 
 // partitionRange returns the partition name and date boundaries for the month

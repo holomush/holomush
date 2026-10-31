@@ -91,15 +91,22 @@ func NewEventsAuditPartitionManager(pool *pgxpool.Pool, retainWindow time.Durati
 // SAME-NAMED NON-CHILD that CREATE ... IF NOT EXISTS silently skipped is NEVER
 // stamped — EnsurePartitions FAILS CLOSED with a structured oops instead.
 func (m *EventsAuditPartitionManager) EnsurePartitions(ctx context.Context, months int) error {
-	now := time.Now().UTC()
-	start := monthStart(now.Add(-m.retainWindow))
-	end := monthStart(now.AddDate(0, months, 0))
+	start, end := partitionWindow(time.Now().UTC(), m.retainWindow, months)
 	for ms := start; !ms.After(end); ms = ms.AddDate(0, 1, 0) {
 		if err := m.ensureMonthPartition(ctx, ms); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// partitionWindow returns the first and last month starts (both inclusive)
+// that EnsurePartitions covers: back to the month containing now-retainWindow,
+// forward to the month that is months after the month containing now.
+func partitionWindow(now time.Time, retainWindow time.Duration, months int) (start, end time.Time) {
+	// Step from day 1: AddDate normalizes an overflowed day (Oct 31 + 1 month
+	// is Dec 1), which would overshoot by a month on the 29th to 31st.
+	return monthStart(now.Add(-retainWindow)), monthStart(now).AddDate(0, months, 0)
 }
 
 // ensureMonthPartition creates (idempotently) the partition covering the month

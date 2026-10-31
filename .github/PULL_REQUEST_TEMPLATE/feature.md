@@ -122,7 +122,7 @@ Documentation lives in `site/src/content/docs/`, organized by audience.
 - [ ] PR title follows [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`)
 - [ ] `task fmt` run and any resulting edits committed (SPDX headers, table reflow)
 - [ ] No unnecessary external dependencies added
-- [ ] No `[ci skip]` / `[skip ci]` in any commit on this branch
+- [ ] No CI-skip directive in any commit on this branch (the words `ci skip` or `skip ci` in square brackets; see `.claude/rules/landing-the-plane.md`)
 
 ## Breaking changes
 

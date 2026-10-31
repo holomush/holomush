@@ -176,7 +176,7 @@ func TestEnsurePartitionsLandsChildrenInPublicUnderLeakedSearchPath(t *testing.T
 	require.NoError(t, mgr.EnsurePartitions(ctx, 1),
 		"EnsurePartitions must not fail closed under a leaked non-public search_path")
 
-	pastMonth := monthStart(time.Now().UTC().AddDate(0, -5, 0))
+	pastMonth := monthStart(time.Now().UTC()).AddDate(0, -5, 0)
 	pastName := partitionNameForMonth(pastMonth)
 
 	// The child must be a genuine current child of public.events_audit.
@@ -207,8 +207,8 @@ func TestDetachRenameDropByNameAge(t *testing.T) {
 	mgr := NewEventsAuditPartitionManager(pool, 90*24*time.Hour)
 
 	now := time.Now().UTC()
-	oldA := monthStart(now.AddDate(0, -6, 0))
-	oldB := monthStart(now.AddDate(0, -5, 0))
+	oldA := monthStart(now).AddDate(0, -6, 0)
+	oldB := monthStart(now).AddDate(0, -5, 0)
 	recent := monthStart(now)
 
 	require.NoError(t, mgr.ensureMonthPartition(ctx, oldA))
@@ -223,7 +223,7 @@ func TestDetachRenameDropByNameAge(t *testing.T) {
 	recentName := partitionNameForMonth(recent)
 
 	// Detach everything older than 3 months ago.
-	renamed, err := mgr.DetachExpiredPartitions(ctx, now.AddDate(0, -3, 0))
+	renamed, err := mgr.DetachExpiredPartitions(ctx, monthStart(now).AddDate(0, -3, 0))
 	require.NoError(t, err)
 	require.Len(t, renamed, 2, "both old partitions detached: %v", renamed)
 
@@ -272,7 +272,7 @@ func TestReconcileCrashOrphanedPartition(t *testing.T) {
 	mgr := NewEventsAuditPartitionManager(pool, 90*24*time.Hour)
 
 	now := time.Now().UTC()
-	orphanMonth := monthStart(now.AddDate(0, -8, 0))
+	orphanMonth := monthStart(now).AddDate(0, -8, 0)
 	require.NoError(t, mgr.ensureMonthPartition(ctx, orphanMonth))
 	orphanName := partitionNameForMonth(orphanMonth)
 
@@ -285,7 +285,7 @@ func TestReconcileCrashOrphanedPartition(t *testing.T) {
 	require.True(t, relExists(t, pool, orphanName), "orphan keeps its canonical name")
 
 	// Next cycle reconciles it into the _detached_<unix> form.
-	renamed, err := mgr.DetachExpiredPartitions(ctx, now.AddDate(0, -3, 0))
+	renamed, err := mgr.DetachExpiredPartitions(ctx, monthStart(now).AddDate(0, -3, 0))
 	require.NoError(t, err)
 	require.True(t, containsPrefix(renamed, orphanName), "orphan reconciled: %v", renamed)
 	assert.False(t, relExists(t, pool, orphanName), "orphan canonical name freed by reconcile rename")
@@ -341,7 +341,7 @@ func TestStampTimeGateRefusesSameNamedNonChild(t *testing.T) {
 	mgr := NewEventsAuditPartitionManager(pool, 90*24*time.Hour)
 
 	// Occupy a within-window month (2 months back) with a same-named non-child.
-	occupiedMonth := monthStart(time.Now().UTC().AddDate(0, -2, 0))
+	occupiedMonth := monthStart(time.Now().UTC()).AddDate(0, -2, 0)
 	occupiedName := partitionNameForMonth(occupiedMonth)
 	_, err := pool.Exec(ctx, fmt.Sprintf("CREATE TABLE %s (id bytea)", pgx.Identifier{occupiedName}.Sanitize()))
 	require.NoError(t, err)
@@ -371,7 +371,7 @@ func TestFinalizeInterruptedConcurrentDetach(t *testing.T) {
 	mgr := NewEventsAuditPartitionManager(pool, 90*24*time.Hour)
 
 	now := time.Now().UTC()
-	pendMonth := monthStart(now.AddDate(0, -7, 0))
+	pendMonth := monthStart(now).AddDate(0, -7, 0)
 	require.NoError(t, mgr.ensureMonthPartition(ctx, pendMonth))
 	pendName := partitionNameForMonth(pendMonth)
 
@@ -414,7 +414,7 @@ func TestFinalizeInterruptedConcurrentDetach(t *testing.T) {
 	require.True(t, pending, "partition must be left inhdetachpending=true")
 
 	// The next cycle FINALIZEs and renames it.
-	renamed, err := mgr.DetachExpiredPartitions(ctx, now.AddDate(0, -3, 0))
+	renamed, err := mgr.DetachExpiredPartitions(ctx, monthStart(now).AddDate(0, -3, 0))
 	require.NoError(t, err)
 	require.True(t, containsPrefix(renamed, pendName), "pending child finalized+renamed: %v", renamed)
 	assert.False(t, isChildOfEventsAudit(t, pool, pendName), "finalized child no longer a child")

@@ -50,3 +50,35 @@ func TestPartitionRange(t *testing.T) {
 		})
 	}
 }
+
+func TestPartitionMonths(t *testing.T) {
+	tests := []struct {
+		name   string
+		now    time.Time
+		months int
+		want   []string
+	}{
+		{
+			"steps whole months from the 31st of october", time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC), 3,
+			[]string{"2026-10-01", "2026-11-01", "2026-12-01"},
+		},
+		{
+			"does not skip february from the 31st of january", time.Date(2027, 1, 31, 0, 0, 0, 0, time.UTC), 2,
+			[]string{"2027-01-01", "2027-02-01"},
+		},
+		{
+			"does not skip february from the 29th of january", time.Date(2027, 1, 29, 0, 0, 0, 0, time.UTC), 3,
+			[]string{"2027-01-01", "2027-02-01", "2027-03-01"},
+		},
+		{"returns no months for zero", time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC), 0, []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := []string{}
+			for _, m := range partitionMonths(tt.now, tt.months) {
+				got = append(got, m.Format("2006-01-02"))
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
