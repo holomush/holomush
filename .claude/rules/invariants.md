@@ -13,7 +13,8 @@ paths:
   - "internal/invregistry/**"
   - "docs/specs/**/*.md"
   - "docs/superpowers/specs/**/*.md"
-  - ".planning/phases/**/*-SPEC.md"
+  - "openspec/specs/**/*.md"
+  - "openspec/changes/**/*.md"
 ---
 
 # Invariant Registry
@@ -30,7 +31,7 @@ spec is where invariants are *born*, and the registry is where they must land.
 | `internal/invregistry/` | The single Go schema definition shared by the tooling. |
 
 The full design is `docs/superpowers/specs/2026-05-31-invariant-registry-design.md`.
-The binding-backfill program is tracked in GSD (`.planning/ROADMAP.md` → `## Backlog`, Phase 999.11; epic `holomush-hz0v4`).
+The binding-backfill program is tracked in GitHub issues (historical epic `holomush-hz0v4`).
 
 ## What rises to a registry invariant
 
@@ -58,9 +59,10 @@ When **authoring or reviewing a spec**:
 
 A new invariant ships `binding: pending` (no test yet) or `binding: bound`
 (test exists; see below) — never as bare prose only. The meta-test's
-orphan check fails CI if a spec **under `docs/superpowers/specs/`** references an
-`INV-<migrated-scope>-N` that is not in the registry. Note the limit: the check
-walks only `docs/superpowers/specs/` — invariants introduced in a `docs/specs/`
+orphan check fails CI if a spec under `docs/superpowers/specs/`, `openspec/specs/`
+or `openspec/changes/` (archive included) references an `INV-<migrated-scope>-N`
+that is not in the registry. Note the limit: the check walks only those trees —
+invariants introduced in a `docs/specs/`
 spec (or in code; see below) are NOT auto-caught and MUST be registered by hand.
 
 ## Implementation-time: the binding ratchet
@@ -85,11 +87,12 @@ An invariant is only *proven* when a test asserts it. The mechanism:
 
 ### Known escape hatches — register these by hand
 
-The orphan check walks only `docs/superpowers/specs/`; invariants introduced
-in `docs/specs/` or code MUST be registered by hand.
+The orphan check walks only `docs/superpowers/specs/`, `openspec/specs/` and
+`openspec/changes/`; invariants introduced in `docs/specs/` or code MUST be
+registered by hand.
 
-A GSD milestone SPEC under `.planning/phases/**/*-SPEC.md` is likewise outside
-that walk root, so its `INV-<SCOPE>-N` ids are **not** auto-caught and MUST be
-hand-registered in `docs/architecture/invariants.yaml`.
+The frozen GSD archive under `.planning/` is also outside the walk. Its
+`INV-<SCOPE>-N` ids were hand-registered in `docs/architecture/invariants.yaml`;
+no new spec work lands there.
 
 Deep reference: `.claude/rules/references/invariants-detail.md` (read on demand).

@@ -4,6 +4,7 @@
 package meta
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
@@ -313,7 +316,7 @@ func TestEveryRegistryInvariantHasBinding(t *testing.T) {
 	}
 	t.Logf("registry: %d invariant(s) marked binding: pending (verification backfill tracked separately)", pendingCount)
 
-	// 4. Orphan detection: scan specs/ for INV-<SCOPE>-<N> references that belong
+	// 4. Orphan detection: scan the spec trees (specOrphanRoots) for INV-<SCOPE>-<N> references that belong
 	// to a MIGRATED scope but are missing from the registry. Restricting to
 	// migrated scopes makes the check incremental-migration-safe:
 	//   - legacy family tokens (INV-RB-11, INV-TS-1, …) match the canonical regex
@@ -327,50 +330,125 @@ func TestEveryRegistryInvariantHasBinding(t *testing.T) {
 	// be registered. Surfaced by INV-PRESENCE as the first migrated scope
 	// (holomush-hz0v4.14.5); before any scope landed this whole test skipped, so
 	// the over-broad match was latent.
+	orphans, err := findSpecOrphans(root, reg)
+	if err != nil {
+		t.Fatalf("walk specs: %v", err)
+	}
+	for id, n := range orphans {
+		t.Errorf("orphan invariant %s referenced %d time(s) in spec trees but not in invariants.yaml", id, n)
+	}
+}
+
+// specOrphanRoots are the spec trees the orphan check scans, relative to the
+// repository root. openspec/changes includes openspec/changes/archive. The
+// frozen GSD archive under .planning/ is deliberately absent: invariants born
+// there are registered by hand.
+var specOrphanRoots = []string{
+	filepath.Join("docs", "superpowers", "specs"),
+	filepath.Join("openspec", "specs"),
+	filepath.Join("openspec", "changes"),
+}
+
+// findSpecOrphans returns every INV-<SCOPE>-N id referenced from a Markdown
+// file under specOrphanRoots whose scope is migrated but which is missing from
+// the registry, with its reference count. A root that does not exist is
+// treated as empty.
+func findSpecOrphans(root string, reg registryDoc) (map[string]int, error) {
 	migratedScopes := make(map[string]bool, len(reg.Scopes))
 	for _, sc := range reg.Scopes {
 		if sc.Status == "migrated" {
 			migratedScopes[sc.Name] = true
 		}
 	}
-	byID := make(map[string]registryEntry, len(reg.Invariants))
+	known := make(map[string]bool, len(reg.Invariants))
 	for _, e := range reg.Invariants {
-		byID[e.ID] = e
+		known[e.ID] = true
 	}
 	orphans := make(map[string]int)
-	err = filepath.WalkDir(filepath.Join(root, "docs", "superpowers", "specs"), func(path string, d fs.DirEntry, err error) error {
+	for _, rel := range specOrphanRoots {
+		dir := filepath.Join(root, rel)
+		if _, statErr := os.Stat(dir); errors.Is(statErr, fs.ErrNotExist) {
+			continue
+		}
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
+				return nil
+			}
+			specData, readErr := os.ReadFile(path) //nolint:gosec // G122: meta-test walker reads in-repo doc files for invariant-ref grep; no symlink concern
+			if readErr != nil {
+				return readErr
+			}
+			for _, m := range registryInvRefRE.FindAllSubmatch(specData, -1) {
+				id := string(m[1])
+				parts := strings.SplitN(id, "-", 3)
+				if len(parts) < 2 || !migratedScopes[parts[0]+"-"+parts[1]] {
+					continue // not a migrated scope's canonical ID — not an orphan yet
+				}
+				if !known[id] {
+					orphans[id]++
+				}
+			}
+			return nil
+		})
 		if err != nil {
-			return err
+			return nil, fmt.Errorf("walk %s: %w", rel, err)
 		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(d.Name(), ".md") {
-			return nil
-		}
-		specData, readErr := os.ReadFile(path) //nolint:gosec // G122: meta-test walker reads in-repo doc files for invariant-ref grep; no symlink concern
-		if readErr != nil {
-			return readErr
-		}
-		matches := registryInvRefRE.FindAllSubmatch(specData, -1)
-		for _, m := range matches {
-			id := string(m[1])
-			parts := strings.SplitN(id, "-", 3)
-			if len(parts) < 2 || !migratedScopes[parts[0]+"-"+parts[1]] {
-				continue // not a migrated scope's canonical ID — not an orphan yet
+	}
+	return orphans, nil
+}
+
+// TestOrphanWalkScansEveryLiveSpecTree proves the orphan check reads every live
+// spec tree (superpowers specs, OpenSpec main specs, OpenSpec changes including
+// the archive), tolerates a missing tree, and ignores the frozen .planning/
+// archive.
+func TestOrphanWalkScansEveryLiveSpecTree(t *testing.T) {
+	reg := registryDoc{
+		Scopes: []scopeRecord{
+			{Name: "INV-ACCESS", Status: "migrated"},
+			{Name: "INV-DOCS", Status: "pending"},
+		},
+		Invariants: []registryEntry{{ID: "INV-ACCESS-1", Scope: "INV-ACCESS"}},
+	}
+	tests := []struct {
+		name    string
+		file    string
+		content string
+		want    []string
+	}{
+		{"reports an orphan in docs/superpowers/specs", "docs/superpowers/specs/a.md", "INV-ACCESS-999", []string{"INV-ACCESS-999"}},
+		{"reports an orphan in openspec/specs", "openspec/specs/cap/spec.md", "INV-ACCESS-998", []string{"INV-ACCESS-998"}},
+		{"reports an orphan in openspec/changes", "openspec/changes/c/design.md", "INV-ACCESS-997", []string{"INV-ACCESS-997"}},
+		{"reports an orphan in an archived openspec change", "openspec/changes/archive/2026-10-31-c/proposal.md", "INV-ACCESS-996", []string{"INV-ACCESS-996"}},
+		{"accepts a registered id", "openspec/specs/cap/spec.md", "INV-ACCESS-1", nil},
+		{"tolerates an unmigrated scope", "openspec/changes/c/spec.md", "INV-DOCS-5", nil},
+		{"ignores the .planning archive", ".planning/phases/01/01-SPEC.md", "INV-ACCESS-995", nil},
+		{"ignores non-markdown files", "openspec/changes/c/notes.txt", "INV-ACCESS-994", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, filepath.FromSlash(tt.file))
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+			require.NoError(t, os.WriteFile(path, []byte("cites "+tt.content+"\n"), 0o600))
+
+			orphans, err := findSpecOrphans(root, reg)
+			require.NoError(t, err)
+			var got []string
+			for id := range orphans {
+				got = append(got, id)
 			}
-			if _, known := byID[id]; !known {
-				orphans[id]++
-			}
-		}
-		return nil
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+
+	t.Run("treats a missing spec tree as empty", func(t *testing.T) {
+		orphans, err := findSpecOrphans(t.TempDir(), reg)
+		require.NoError(t, err)
+		assert.Empty(t, orphans)
 	})
-	if err != nil {
-		t.Fatalf("walk specs: %v", err)
-	}
-	for id, n := range orphans {
-		t.Errorf("orphan invariant %s referenced %d time(s) in specs/ but not in invariants.yaml", id, n)
-	}
 }
 
 // TestRegistryBindingChecks is a table-driven test of the registry structural
