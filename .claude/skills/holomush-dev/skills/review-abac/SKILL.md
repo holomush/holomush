@@ -1,14 +1,13 @@
 ---
 name: review-abac
-description: Adversarially review ABAC-domain code changes against the access-control spec before /gsd-code-review runs
+description: Adversarially review ABAC-domain code changes against the access-control spec before the generic pre-push code review runs
 ---
 
 @agent-abac-reviewer Review the ABAC-domain code changes described below
 against the access-control architecture in `internal/access/`. This gate runs
-ALONGSIDE `/gsd-code-review` for any change touching the access control surface
+BEFORE the generic pre-push code review (`/suite-review` or `dev-flow:review-pr`) for any change touching the access control surface
 (`internal/access/`, policy DSL, attribute providers, authorization decision
-points, seed policies). For purely ABAC-scoped changes, run it BEFORE
-`/gsd-code-review` since it carries the dispositive verdict.
+points, seed policies). It carries the dispositive verdict for that surface.
 
 **Target:** $ARGUMENTS
 
@@ -29,6 +28,6 @@ Apply the adversarial stance and review checklist from your agent prompt.
 Produce findings grounded in `path:line` for code claims, with a binary
 verdict.
 
-**Ordering:** this gate runs alongside `/gsd-code-review` (or before, when a
-change is purely ABAC-scoped). After abac-reviewer returns its verdict, then
-run `/gsd-code-review` for the generic adversarial pass.
+**Ordering:** this gate runs before the generic pre-push code review. After
+abac-reviewer returns its verdict, then run the generic review for the generic
+adversarial pass.

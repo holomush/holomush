@@ -8,8 +8,8 @@
 These are un-curated review learnings preserved verbatim-in-substance from the
 now-retired `design-reviewer` agent's memory (its `MEMORY.md` plus per-finding
 feedback notes) — patterns of good and bad HoloMUSH specs discovered during
-adversarial design review. They are kept for reference by GSD's
-`gsd-plan-checker` and human reviewers. This file is **not** auto-loaded; read
+adversarial design review. They are kept for anyone reviewing an OpenSpec
+change's proposal, delta specs or design, or an older spec. This file is **not** auto-loaded; read
 it on demand when reviewing a spec or design. jj-specific mechanics from the
 original notes have been converted to native-git equivalents or dropped.
 

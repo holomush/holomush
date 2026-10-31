@@ -1,12 +1,12 @@
 ---
 name: review-crypto
-description: Adversarially review crypto-domain code changes against the master spec invariants before /gsd-code-review runs
+description: Adversarially review crypto-domain code changes against the master spec invariants before the generic pre-push code review runs
 ---
 
 @agent-crypto-reviewer Review the crypto-domain code changes described below
 against `docs/superpowers/specs/2026-04-25-event-payload-crypto-design.md` (the
 master spec) and the Phase 3a/3d grounding docs. This gate runs BEFORE
-`/gsd-code-review` for any change touching the event-payload-cryptography surface
+the generic pre-push code review (`/suite-review` or `dev-flow:review-pr`) for any change touching the event-payload-cryptography surface
 (`internal/eventbus/crypto/`, `internal/eventbus/codec/`,
 `internal/eventbus/history/dispatcher.go`,
 `internal/eventbus/history/cold_postgres.go`,
@@ -39,8 +39,8 @@ also persists the full report to `.claude/agent-memory/crypto-reviewer/reports/`
 when it has memory configured. Do NOT spawn a second agent to "retrieve full
 findings"; subagents are stateless across invocations.
 
-**Ordering:** this gate runs BEFORE `/gsd-code-review`. After crypto-reviewer
-returns READY, then run `/gsd-code-review` for the generic adversarial pass.
-If crypto-reviewer returns NOT READY, address findings before running
-`/gsd-code-review` (so it doesn't waste a pass on code that's still
+**Ordering:** this gate runs BEFORE the generic pre-push code review. After
+crypto-reviewer returns READY, then run the generic review for the generic
+adversarial pass. If crypto-reviewer returns NOT READY, address findings before
+running the generic review (so it doesn't waste a pass on code that's still
 crypto-broken).

@@ -118,9 +118,9 @@ workflow. Do NOT mint ad-hoc invariant families in prose.
 
 Naming: `YYYY-MM-DD-<feature-name>.md`
 
-### Strategic planning (GSD-owned)
+### Strategic planning
 
-Strategic planning lives in **GSD** (`.planning/ROADMAP.md` — the `## Backlog` `999.x` entries + per-phase docs), not a standalone roadmap file. The former `docs/roadmap.md` was retired 2026-07-11. `theme:<slug>` GitHub issue labels remain as lightweight grouping tags with no narrative-doc obligation; enduring theme/architecture rationale goes in ADRs (`docs/adr/`). Full rules: root `CLAUDE.md` "Strategic Themes" section.
+Release planning lives in **GitHub milestones** and the holomush org **project #1**, not in a roadmap file. New multi-task work is an OpenSpec change under `openspec/changes/`. The former `docs/roadmap.md` was retired 2026-07-11, and `.planning/` (the retired GSD workflow, including `.planning/ROADMAP.md`) is a read-only archive. `theme:<slug>` GitHub issue labels remain as lightweight grouping tags with no narrative-doc obligation; enduring theme/architecture rationale goes in ADRs (`docs/adr/`). Full rules: root `CLAUDE.md` "Strategic Themes" section.
 
 ## Nested Code Blocks
 

@@ -116,8 +116,8 @@ def main() -> int:
     out.append("## Theme context")
     out.append("")
     out.append("Map referenced issues' theme:* labels to their narrative 'why' via the")
-    out.append("matching ADRs in docs/adr/ and the GSD backlog (.planning/ROADMAP.md).")
-    out.append("(docs/roadmap.md was retired 2026-07-11; GSD owns planning.)")
+    out.append("matching ADRs in docs/adr/ and the release's GitHub milestone description.")
+    out.append("(docs/roadmap.md was retired 2026-07-11; GitHub milestones own planning.)")
 
     print("\n".join(out))
     return 0
