@@ -316,8 +316,8 @@ func TestEveryRegistryInvariantHasBinding(t *testing.T) {
 	}
 	t.Logf("registry: %d invariant(s) marked binding: pending (verification backfill tracked separately)", pendingCount)
 
-	// 4. Orphan detection: scan the spec trees (specOrphanRoots) for INV-<SCOPE>-<N> references that belong
-	// to a MIGRATED scope but are missing from the registry. Restricting to
+	// 4. Orphan detection: scan the spec trees (specOrphanRoots) for
+	// INV-<SCOPE>-<N> references that belong to a MIGRATED scope but are missing from the registry. Restricting to
 	// migrated scopes makes the check incremental-migration-safe:
 	//   - legacy family tokens (INV-RB-11, INV-TS-1, …) match the canonical regex
 	//     but their prefix is not a declared scope — they migrate to a real scope
@@ -330,6 +330,14 @@ func TestEveryRegistryInvariantHasBinding(t *testing.T) {
 	// be registered. Surfaced by INV-PRESENCE as the first migrated scope
 	// (holomush-hz0v4.14.5); before any scope landed this whole test skipped, so
 	// the over-broad match was latent.
+	// findSpecOrphans skips a missing root, so a renamed or misspelled root
+	// would silently pass. In the real repository every root is tracked (via
+	// .gitkeep where empty), so require each one to exist.
+	for _, rel := range specOrphanRoots {
+		if info, statErr := os.Stat(filepath.Join(root, rel)); statErr != nil || !info.IsDir() {
+			t.Fatalf("orphan-check spec root %s is missing from the repository: %v", rel, statErr)
+		}
+	}
 	orphans, err := findSpecOrphans(root, reg)
 	if err != nil {
 		t.Fatalf("walk specs: %v", err)
@@ -422,7 +430,8 @@ func TestOrphanWalkScansEveryLiveSpecTree(t *testing.T) {
 		{"reports an orphan in openspec/specs", "openspec/specs/cap/spec.md", "INV-ACCESS-998", []string{"INV-ACCESS-998"}},
 		{"reports an orphan in openspec/changes", "openspec/changes/c/design.md", "INV-ACCESS-997", []string{"INV-ACCESS-997"}},
 		{"reports an orphan in an archived openspec change", "openspec/changes/archive/2026-10-31-c/proposal.md", "INV-ACCESS-996", []string{"INV-ACCESS-996"}},
-		{"accepts a registered id", "openspec/specs/cap/spec.md", "INV-ACCESS-1", nil},
+		{"accepts a registered id in openspec/specs", "openspec/specs/cap/spec.md", "INV-ACCESS-1", nil},
+		{"accepts a registered id in openspec/changes", "openspec/changes/c/proposal.md", "INV-ACCESS-1", nil},
 		{"tolerates an unmigrated scope", "openspec/changes/c/spec.md", "INV-DOCS-5", nil},
 		{"ignores the .planning archive", ".planning/phases/01/01-SPEC.md", "INV-ACCESS-995", nil},
 		{"ignores non-markdown files", "openspec/changes/c/notes.txt", "INV-ACCESS-994", nil},
@@ -436,13 +445,46 @@ func TestOrphanWalkScansEveryLiveSpecTree(t *testing.T) {
 
 			orphans, err := findSpecOrphans(root, reg)
 			require.NoError(t, err)
-			var got []string
+			got := make([]string, 0, len(orphans))
 			for id := range orphans {
 				got = append(got, id)
 			}
 			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
+
+	t.Run("scans every root, not only the first", func(t *testing.T) {
+		root := t.TempDir()
+		files := map[string]string{
+			"docs/superpowers/specs/a.md":             "INV-ACCESS-901",
+			"openspec/specs/cap/spec.md":              "INV-ACCESS-902",
+			"openspec/changes/c/design.md":            "INV-ACCESS-903",
+			"openspec/changes/archive/2026-c/tasks.md": "INV-ACCESS-904",
+		}
+		for rel, id := range files {
+			path := filepath.Join(root, filepath.FromSlash(rel))
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+			require.NoError(t, os.WriteFile(path, []byte(id+"\n"), 0o600))
+		}
+		orphans, err := findSpecOrphans(root, reg)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]int{"INV-ACCESS-901": 1, "INV-ACCESS-902": 1, "INV-ACCESS-903": 1, "INV-ACCESS-904": 1}, orphans)
+	})
+
+	t.Run("scans the remaining roots when openspec/specs is missing", func(t *testing.T) {
+		root := t.TempDir()
+		for rel, id := range map[string]string{
+			"docs/superpowers/specs/a.md":  "INV-ACCESS-905",
+			"openspec/changes/c/design.md": "INV-ACCESS-906",
+		} {
+			path := filepath.Join(root, filepath.FromSlash(rel))
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+			require.NoError(t, os.WriteFile(path, []byte(id+"\n"), 0o600))
+		}
+		orphans, err := findSpecOrphans(root, reg)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]int{"INV-ACCESS-905": 1, "INV-ACCESS-906": 1}, orphans)
+	})
 
 	t.Run("treats a missing spec tree as empty", func(t *testing.T) {
 		orphans, err := findSpecOrphans(t.TempDir(), reg)

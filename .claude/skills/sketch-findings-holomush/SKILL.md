@@ -24,7 +24,7 @@ copy saying so.
 Reference points are **grounded in-repo**, not borrowed from outside products:
 `shell/SectionRail.svelte`, `nav/sections.ts` (the `as const satisfies` registry pattern the
 SPEC says to mirror), `(authed)/characters/+page.svelte`, `web/svelte.config.js`, and
-`.planning/phases/01-portal-spec/01-SPEC.md`.
+`.planning/milestones/v0.13-phases/01-portal-spec/01-SPEC.md`.
 
 Sketch sessions wrapped: **2026-08-01** — round 1 (001–004, admin) and round 2 (005–010, two
 consistency sketches + four frontier sketches opening the player-facing half). **All ten

@@ -186,7 +186,7 @@ These are the grounding sources; prefer them over anything borrowed from outside
 | Platform-brand-is-not-the-game constraint | `.claude/rules/branding.md` INV-6 |
 | The game's display name (server-side only) | `internal/plugin/manifest.go:211` |
 | Static adapter ⇒ every route is HTTP 200 + `index.html` | `web/svelte.config.js` |
-| Normative admin registry, descriptor, gating contract | `.planning/phases/01-portal-spec/01-SPEC.md` §10 |
+| Normative admin registry, descriptor, gating contract | `.planning/milestones/v0.13-phases/01-portal-spec/01-SPEC.md` §10 |
 
 **`nav/sections.ts` already implements the registry pattern the SPEC says to mirror — do not
 add a library for it.** It also already carries `requiresPlayer`, which is the gate the

@@ -33,7 +33,7 @@ on:
       - site/**
       - docs/**
       - .planning/**
-      - openspec/**
+      - openspec/**/*.yaml
       - "**/*.md"
       - .claude/agents/**
       - .claude/commands/**
@@ -47,7 +47,7 @@ on:
       - site/**
       - docs/**
       - .planning/**
-      - openspec/**
+      - openspec/**/*.yaml
       - "**/*.md"
       - .claude/agents/**
       - .claude/commands/**

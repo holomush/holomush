@@ -12,7 +12,7 @@ HoloMUSH adopted OpenSpec in #5066, but every agent instruction still sends sess
 - Replace the "MUST NOT use GitHub Projects" rule. GitHub milestones and project #1 (with its Priority field kept in sync with the `priority::*` labels) become the release-planning surface that `.planning/ROADMAP.md` was.
 - Freeze `.planning/` as a read-only archive with a short README marker. Nothing in it moves, so the code comments and `invariants.yaml` `origin_spec` entries that cite it stay valid.
 - Extend the invariant orphan check to walk `openspec/specs/` and `openspec/changes/` as well as `docs/superpowers/specs/`.
-- Treat `openspec/**` as docs-only in the CI path filters (`ci.yaml`, `ci-docs-skip.yaml`, `Taskfile.yaml` `DOCS_ONLY_PATHS`, and the PR template's list).
+- Treat `openspec/**/*.yaml` as docs-only in the CI path filters (`ci.yaml`, `ci-docs-skip.yaml`, `Taskfile.yaml` `DOCS_ONLY_PATHS`, the PR template and `CONTRIBUTING.md`). OpenSpec Markdown already matches `**/*.md`. Run the orphan guard in the docs-only lane, so an OpenSpec-only PR still runs it.
 - Retire the two engram rules that mention GSD (`2f2r70zqwz`, `a32nfcekfc`), with the user's consent at that step.
 
 Out of scope: migrating old `.planning/` or `docs/superpowers/specs/` content into `openspec/specs/`, uninstalling GSD from contributor machines, and changing what `crypto-reviewer` or `abac-reviewer` check.

@@ -158,7 +158,7 @@ This rule binds everyone, including maintainers and AI-agent-driven work.
 Three kinds of PR skip the typed template and the issue-first gate:
 
 - **Documentation-only** — the diff is confined to `site/**`, `docs/**`, `**/*.md`,
-  `.planning/**`, `openspec/**`, `.claude/{agents,commands,rules,agent-memory}/**`, `LICENSE`, or
+  `.planning/**`, `openspec/**/*.yaml`, `.claude/{agents,commands,rules,agent-memory}/**`, `LICENSE`, or
   `LICENSE_HEADER`. This list mirrors `DOCS_ONLY_PATHS` in
   [`Taskfile.yaml`](Taskfile.yaml), which is the authoritative version.
 - **Dependency-only** — the diff is confined to dependency manifests and lockfiles, defined

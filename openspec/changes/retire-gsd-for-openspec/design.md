@@ -59,9 +59,13 @@ Alternative: hard-require one command. The repository does not install either sk
 
 The walk becomes a loop over three roots: `docs/superpowers/specs`, `openspec/specs` and `openspec/changes`. A root that does not exist is skipped. The per-file logic does not change. A table-driven unit test feeds a temporary directory tree to the extracted walker. The test proves that an orphan under each root fails and that `.planning/` is not read. The rule file and the `invariants.yaml` comments that describe the old walk root change in the same commit.
 
-### 5. Add `openspec/**` to the docs-only set, and not `.agents/**`
+### 5. Add `openspec/**/*.yaml` to the docs-only set, and not `.agents/**`
 
-`openspec/**` holds proposals, specs and `config.yaml`. None of them affect a build or a test, so the full CI run gives no signal for them. `.agents/**` holds generated skills. Its Markdown files already match `**/*.md`, and a future skill can carry a script, so this design does not list the directory.
+`openspec/` holds Markdown proposals and specs plus YAML metadata. None of them affect a build or a test, so the full CI run gives no signal for them. The Markdown already matches `**/*.md`, so only the YAML needs an entry. The entry names the file type, so a Go file under `openspec/` still runs full CI. The issue gate reads the same Taskfile variable, so OpenSpec-only PRs are also exempt from the issue-first gate. That is intended: they carry no code, like any other docs-only PR, and the change's proposal names its issue.
+
+The orphan guard scans docs-only trees, so `task pr-prep:docs` runs it. Without that step, an OpenSpec-only PR can merge an unregistered id and break the next code PR.
+
+The previous text of this decision listed `openspec/**`. The suite review found that it matched every file type, so this design narrowed it. `.agents/**` holds generated skills. Its Markdown files already match `**/*.md`, and a future skill can carry a script, so this design does not list the directory.
 
 ### 6. Files to rewrite
 
@@ -69,7 +73,7 @@ The walk becomes a loop over three roots: `docs/superpowers/specs`, `openspec/sp
 | --- | --- |
 | `CLAUDE.md` | Rewrite eight sections: Documentation Structure, Spec-Driven Development, Workflow, Code review, Issue tracking, Strategic Themes, Pre-Push Review Gates, Landing the Plane. Fix the TDD row in Testing. Replace "MUST NOT use GitHub Projects" with the milestone and project rule. |
 | `docs/CLAUDE.md` | Replace "Strategic planning (GSD-owned)". |
-| `.claude/rules/landing-the-plane.md` | Replace "Skipping the chain" and the GSD sentence in the CI-skip rule. |
+| `.claude/rules/landing-the-plane.md` | Replace "Skipping the chain" and the GSD sentence in the CI-skip rule, and name the #5050 template incident there, because the rule now applies to templates as well as tools. |
 | `.claude/rules/invariants.md` | Add the OpenSpec paths to `paths:`, update the walk-root text, and keep `.planning/` as a hand-registered archive note. Point the backlog sentence at GitHub issues. |
 | `.claude/rules/references/plan-review-learnings.md`, `design-review-learnings.md` | Header only: the reader is a plan or spec reviewer, not `gsd-plan-checker`. |
 | `.claude/agents/crypto-reviewer.md`, `abac-reviewer.md` | Replace `/gsd-code-review` with "the generic code review". |
@@ -79,7 +83,9 @@ The walk becomes a loop over three roots: `docs/superpowers/specs`, `openspec/sp
 | `.claude/skills/bug-triage/SKILL.md` | Strategic planning lives in milestones and the project. |
 | `.claude/hooks/remind-pre-action-review.sh` | Same gate wording as `CLAUDE.md`. |
 | `site/src/content/docs/contributing/how-to/pr-prep.md` | Describe `.planning/**` as an archive and add `openspec/**`. |
-| `.github/PULL_REQUEST_TEMPLATE.md` | Add `openspec/**` to the docs-only list. |
+| `.github/PULL_REQUEST_TEMPLATE.md`, `CONTRIBUTING.md` | Add `openspec/**/*.yaml` to the docs-only list. |
+| `.claude/rules/references/invariants-detail.md` | Name the three walk roots, like `.claude/rules/invariants.md`. |
+| `.claude/skills/sketch-findings-holomush/` | Repoint the moved `.planning/phases/01-portal-spec/` citations. |
 
 ### 7. Retire the engram rules last, with consent
 
@@ -89,5 +95,6 @@ Rules `2f2r70zqwz` and `a32nfcekfc` name GSD. After the instructions merge, the 
 
 - A contributor with GSD installed can still run `/gsd-*` and write into `.planning/`. The README and `CLAUDE.md` say not to, but nothing enforces it. A lint that fails on new files under `.planning/` is possible later. It is not in this change.
 - `AGENTS.md` is a symlink to `CLAUDE.md`, so Codex sessions get the same text. `task lint:docs-symmetry` keeps that true.
+- An acceptance command is shell in a Markdown file, and agents run it, also on `main` after merge. A maintainer reviews it in the PR like any other file, and the agent shows the command before it runs it. This is the same trust as a Taskfile change.
 - `openspec/config.yaml` changes no longer run full CI. If it ever gains a field that affects a build, this decision must change.
 - This change is itself docs-only except for the meta-test, so its PR runs full CI because of the Go test file.

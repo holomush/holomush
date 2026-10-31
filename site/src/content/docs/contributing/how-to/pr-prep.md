@@ -185,7 +185,7 @@ globs:
 - `site/**`
 - `docs/**`
 - `.planning/**` (the frozen archive of the retired GSD workflow; inert Markdown and JSON with no code coupling)
-- `openspec/**` (OpenSpec changes and specs; inert Markdown and YAML with no build coupling)
+- `openspec/**/*.yaml` (OpenSpec configuration and change metadata, which nothing builds; OpenSpec Markdown already matches `**/*.md`)
 - `**/*.md` (including `README.md`, `web/CLAUDE.md`, `.github/PULL_REQUEST_TEMPLATE.md`)
 - `.claude/agents/**`
 - `.claude/commands/**`

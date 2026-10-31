@@ -2473,8 +2473,8 @@ invariants:
       - "test/integration/access/admin_characters_write_test.go"
 
   # Hand-registered for the same reason INV-PRIVACY-11 records: the orphan check does not
-  # walk the frozen .planning/ archive, and this invariant is born in a GSD milestone plan under
-  # .planning/phases/**.
+  # walk the frozen .planning/ archive, and this invariant is born in a GSD milestone plan in
+  # the .planning/ archive.
   - id: INV-PRIVACY-14
     scope: INV-PRIVACY
     origin_spec: ".planning/milestones/v0.13-phases/06.1-admin-portal-web-surface-shadcn-components-and-the-single-ro/06.1-01-PLAN.md"

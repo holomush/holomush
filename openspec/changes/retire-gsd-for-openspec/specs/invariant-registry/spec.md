@@ -1,3 +1,9 @@
+# Spec Delta
+
+## Purpose
+
+The invariant registry guard fails CI when a live spec references a registered-scope invariant id that the registry does not list.
+
 ## ADDED Requirements
 
 ### Requirement: Orphan check scans every live spec tree
@@ -37,3 +43,21 @@ The guard MUST NOT scan `.planning/`. Invariants born in `.planning/` stay regis
 
 - **WHEN** a file under `.planning/` references a migrated-scope id that is not in the registry
 - **THEN** the guard does not report it
+
+### Requirement: The guard runs on docs-only changes
+
+The docs-only lane (`task pr-prep:docs`, which the docs stand-in CI workflow runs) MUST run the orphan guard. A docs-only pull request that adds an orphan MUST fail.
+
+#### Scenario: OpenSpec-only change with an orphan fails CI
+
+- **WHEN** a pull request changes only Markdown under `openspec/changes/` and adds an orphan
+- **THEN** the docs stand-in workflow fails
+
+### Requirement: Every spec root exists in the repository
+
+In the real repository, each scanned spec tree MUST exist, so that a renamed or misspelled root fails the guard instead of passing silently.
+
+#### Scenario: Renamed root fails the guard
+
+- **WHEN** a scanned root is renamed and the root list is not updated
+- **THEN** the guard fails and names the missing root

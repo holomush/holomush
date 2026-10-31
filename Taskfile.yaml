@@ -30,7 +30,7 @@ vars:
     site/**
     docs/**
     .planning/**
-    openspec/**
+    openspec/**/*.yaml
     **/*.md
     .claude/agents/**
     .claude/commands/**
@@ -1343,6 +1343,9 @@ tasks:
       - task: fmt:check
       - task: license:check
       - task: lint:docs-paths-sync
+      # The invariant orphan check scans spec trees that are docs-only, so it
+      # must also run here or a docs-only PR can merge an unregistered id.
+      - go test ./test/meta/ -run 'TestEveryRegistryInvariantHasBinding|TestOrphanWalkScansEveryLiveSpecTree'
       - echo "✓ Docs lane passed."
 
   # ──────────────────────────────────────────
