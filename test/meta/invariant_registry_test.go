@@ -456,9 +456,9 @@ func TestOrphanWalkScansEveryLiveSpecTree(t *testing.T) {
 	t.Run("scans every root, not only the first", func(t *testing.T) {
 		root := t.TempDir()
 		files := map[string]string{
-			"docs/superpowers/specs/a.md":             "INV-ACCESS-901",
-			"openspec/specs/cap/spec.md":              "INV-ACCESS-902",
-			"openspec/changes/c/design.md":            "INV-ACCESS-903",
+			"docs/superpowers/specs/a.md":              "INV-ACCESS-901",
+			"openspec/specs/cap/spec.md":               "INV-ACCESS-902",
+			"openspec/changes/c/design.md":             "INV-ACCESS-903",
 			"openspec/changes/archive/2026-c/tasks.md": "INV-ACCESS-904",
 		}
 		for rel, id := range files {
