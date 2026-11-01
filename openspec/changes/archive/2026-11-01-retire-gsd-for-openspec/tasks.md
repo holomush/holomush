@@ -33,7 +33,7 @@
 
 ## 6. After merge
 
-- [ ] 6.1 Run the acceptance command from proposal.md on `main` after the merge. Verify: it exits 0.
+- [x] 6.1 Run the acceptance command from proposal.md on `main` after the merge. Verify: it exits 0.
 
 ## Workflow follow-up
 
