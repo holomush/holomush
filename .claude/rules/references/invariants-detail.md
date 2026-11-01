@@ -24,7 +24,8 @@ out and renumber. Don't recreate that debt.
 
 ## Known escape hatches — register these by hand
 
-The orphan check walks only `docs/superpowers/specs/`. It does **not** scan code,
-and it does **not** scan `docs/specs/`. So a new canonical-form `INV-<SCOPE>-N`
+The orphan check walks only `docs/superpowers/specs/`, `openspec/specs/` and
+`openspec/changes/`. It does **not** scan code, `docs/specs/`, or the frozen
+`.planning/` archive. So a new canonical-form `INV-<SCOPE>-N`
 introduced only in code/tests, or only in a `docs/specs/` spec, is NOT auto-caught
 and will silently be missing from the registry — the meta-test will not remind you.

@@ -22,7 +22,8 @@
 # (DOCS_ONLY_PATHS, DEPENDENCY_ONLY_PATHS, REPO_CONFIG_ONLY_PATHS), which are
 # the single source of truth. Matching is done by GIT's own glob engine via
 # `:(glob)` pathspec — this script contains NO glob compiler. See
-# .planning/quick/260731-ea8-.../260731-ea8-RESEARCH.md Q3 for why every
+# .planning/quick/260731-ea8-implement-the-issue-first-gate-enforceme/
+# 260731-ea8-RESEARCH.md Q3 for why every
 # hand-written or library alternative was rejected (they mis-handle `**/go.mod`
 # against a root-level go.mod, or `go.tool*.mod`, SILENTLY).
 #

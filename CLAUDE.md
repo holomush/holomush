@@ -19,7 +19,7 @@ HoloMUSH is a modern MUSH platform: Go core with event-oriented architecture, du
 
 ## Documentation Structure
 
-`site/src/content/docs/` is the public Astro-Starlight website, by audience: `guide/` (players/designers), `operating/` (server operators), `extending/` (plugin devs), `contributing/` (codebase contributors), `reference/` (auto-generated API/event refs). Internal contributor docs: `.planning/ROADMAP.md` (GSD-owned strategic backlog + phases), `.planning/phases/<phase>/<NN>-SPEC.md` (**GSD milestone specs — where new specs go**), `docs/plans/` + `docs/superpowers/plans/` (plans), `docs/specs/` + `docs/superpowers/specs/` (**historical** specs — still authoritative for what they describe, but not where new work lands).
+`site/src/content/docs/` is the public Astro-Starlight website, by audience: `guide/` (players/designers), `operating/` (server operators), `extending/` (plugin devs), `contributing/` (codebase contributors), `reference/` (auto-generated API/event refs). Internal contributor docs: `openspec/changes/<name>/` (**OpenSpec changes — where new specs go**), `openspec/specs/` (current capability specs), `.planning/` (read-only archive of the retired GSD workflow), `docs/plans/` + `docs/superpowers/plans/` (plans), `docs/specs/` + `docs/superpowers/specs/` (**historical** specs — still authoritative for what they describe, but not where new work lands).
 
 **Branding:** software brand (logo, favicon, palette) defined in `.claude/rules/branding.md` + `site/CLAUDE.md` — cyan tile + `>holomush_` wordmark, amber cursor only.
 
@@ -49,7 +49,7 @@ Tests MUST be written before implementation and MUST pass before a task is compl
 
 ### Spec-Driven Development
 
-Work MUST NOT start without a spec/design/plan. **GSD milestone specs live at `.planning/phases/<phase>/<NN>-SPEC.md`** — that is where a new spec goes. `docs/specs/` and `docs/superpowers/specs/` are **historical**: the specs already there remain authoritative for what they describe and are not being rewritten, but new spec work does not land in them. Plans live in `docs/plans/` or `docs/superpowers/plans/` (the `docs/superpowers/` subdirs are AI-tooling-generated and equally valid). All specs and plans MUST use RFC2119 keywords. When a spec introduces or changes a **system-level invariant**, capture it in the registry (`docs/architecture/invariants.yaml`), consulting existing entries first (`.claude/rules/invariants.md`) — do NOT mint ad-hoc invariant families.
+Work MUST NOT start without a spec/design/plan. **New spec work is an OpenSpec change at `openspec/changes/<name>/`** (proposal, delta specs, design, tasks) — that is where a new spec goes. `docs/specs/`, `docs/superpowers/specs/` and `.planning/` are **historical**: the specs already there remain authoritative for what they describe and are not being rewritten, but new spec work does not land in them. Older plans live in `docs/plans/` and `docs/superpowers/plans/`; a new change's plan is its `tasks.md`. All specs and plans MUST use RFC2119 keywords. When a spec introduces or changes a **system-level invariant**, capture it in the registry (`docs/architecture/invariants.yaml`), consulting existing entries first (`.claude/rules/invariants.md`) — do NOT mint ad-hoc invariant families.
 
 ### RFC2119 Keywords
 
@@ -63,28 +63,31 @@ Work MUST NOT start without a spec/design/plan. **GSD milestone specs live at `.
 
 ## Workflow
 
-Planning and execution run on **GSD** (`/gsd-*` commands; artifacts in `.planning/`). Issue tracking lives in **GitHub Issues** (`gh issue`; always pass `-R holomush/holomush` from a worktree). The two are complementary: GSD owns the phase loop, its artifacts, and the strategic backlog (`.planning/ROADMAP.md` → `## Backlog`, 999.x entries); GitHub Issues own discrete work items, bugs, and their labels.
+Planning runs on **OpenSpec** (`/opsx:*` commands; artifacts in `openspec/`). Issue tracking lives in **GitHub Issues** (`gh issue`; always pass `-R holomush/holomush` from a worktree). Release planning lives in **GitHub milestones** and the holomush org **project #1**. A GitHub issue says what needs doing and why; an OpenSpec change says how a multi-task piece of work will be built, and it links the issue it implements.
 
-### GSD-native loop (multi-task work)
+The GSD workflow and its slash commands are **retired** (#5069). `.planning/` is a read-only archive: do not run GSD commands or add files under it.
 
-| Stage | Command / Action                          | Gate before next stage                         |
-| ----- | ----------------------------------------- | ---------------------------------------------- |
-| 1     | `/gsd-new-project` / `/gsd-new-milestone` → roadmap | roadmap reviewed                       |
-| 2     | `/gsd-discuss-phase`                       | gray areas surfaced + captured                 |
-| 3     | `/gsd-plan-phase`                          | `gsd-plan-checker` — plan achieves phase goal  |
-| 4     | `/gsd-execute-phase`                       | `gsd-verifier` — phase goal met                |
-| 5     | domain gates (when applicable)             | `crypto-reviewer` / `abac-reviewer` — READY before push |
-| 6     | `/gsd-ship` → `gh pr create`               | `task pr-prep` green; every review thread answered    |
+### OpenSpec loop (multi-task work)
 
-Settings: `/gsd-config` (`--advanced`, `--integrations`, `--profile <name>`); toggles via `/gsd-settings`. **Skip the loop** for small fixes (typo, dependency bump, single-file bug) — `/gsd-quick` (atomic-commit guarantees) or `/gsd-fast` (trivial), or a direct issue → implementation → review → PR.
+| Stage | Command / Action                                  | Gate before next stage                                         |
+| ----- | ------------------------------------------------- | -------------------------------------------------------------- |
+| 1     | `/opsx:explore` (optional)                        | scope and open questions settled with the user                 |
+| 2     | `/opsx:propose` → `openspec/changes/<name>/`      | `openspec validate <name> --strict` green; user approves the plan |
+| 3     | `/opsx:apply`                                     | every task's own verification passes; the proposal's acceptance command passes on the branch |
+| 4     | domain gates (when applicable)                    | `crypto-reviewer` / `abac-reviewer` — READY before push        |
+| 5     | pre-push code review (see `### Code review`)      | every finding fixed or answered                                |
+| 6     | `task pr-prep` → `gh pr create`                   | `task pr-prep` green; every review thread answered             |
+| 7     | after merge: acceptance command on `main`, then `/opsx:archive` | delta specs merged into `openspec/specs/`              |
+
+Adoption is **gradual**: there is no bulk migration. An existing capability gets an `openspec/specs/` entry only when a change touches it. **Skip the loop** for small fixes (typo, dependency bump, single-file bug): issue → implementation → review → PR, with no OpenSpec change.
 
 ### Code review
 
-Primary code review is **`/gsd-code-review`** (GSD's `gsd-code-reviewer`). Two domain-specialized adversarial gates layer on top for their surfaces (see `## Pre-Push Review Gates`).
+Before every push, run an adversarial code review over the branch diff. The default is `/suite-review`; `dev-flow:review-pr` is the alternative when that skill is not installed. Two domain-specialized adversarial gates run first for their surfaces (see `## Pre-Push Review Gates`). The `octopus-fzymgc` bot reviews the PR after it opens.
 
 | Requirement                     | Description                                                   |
 | ------------------------------- | ------------------------------------------------------------ |
-| **MUST** review before merge    | Run `/gsd-code-review` over the phase's changed files        |
+| **MUST** review before push     | Run the pre-push code review over the branch's changed files |
 | **MUST** run domain gates       | `crypto-reviewer` / `abac-reviewer` when their surfaces are touched |
 | **MUST** address all findings   | Fix issues or document why not applicable                    |
 | **MUST NOT** skip review        | Even for "simple" changes                                    |
@@ -93,24 +96,24 @@ Primary code review is **`/gsd-code-review`** (GSD's `gsd-code-reviewer`). Two d
 
 ### Issue tracking (GitHub Issues)
 
-GitHub Issues track discrete work items independently of GSD's phase artifacts. File discovered work with `gh issue create -R holomush/holomush` (labels: `bug`/`enhancement`, `priority::critical|high|medium|low`, topical + `theme:*`). Strategic not-yet-scheduled clusters live in the ROADMAP `## Backlog` (promote with `/gsd-review-backlog`), not as issues. The **beads (bd) tracker was retired 2026-07-09**: the full export, triage verdicts, and bead-id → issue mapping live in `.planning/archive/beads/`; historical `holomush-xxxx` ids in docs/commits resolve there.
+GitHub Issues track discrete work items, bugs, and not-yet-scheduled strategic work. File discovered work with `gh issue create -R holomush/holomush` (labels: `bug`/`enhancement`, exactly one `priority::critical|high|medium|low`, topical + `theme:*`). The former ROADMAP `## Backlog` (`999.x`) entries are issues #5070–#5160. The **beads (bd) tracker was retired 2026-07-09**: the full export, triage verdicts, and bead-id → issue mapping live in `.planning/archive/beads/`; historical `holomush-xxxx` ids in docs/commits resolve there.
 
 ## Strategic Themes
 
-**GSD owns strategic planning.** The strategic "why" — substrate-and-uses framing, sequencing, risks — lives in GSD artifacts: `.planning/ROADMAP.md` (`## Backlog`, the `999.x` parking-lot entries) and the per-phase `.planning/` docs. The standalone `docs/roadmap.md` was **retired 2026-07-11**; do not recreate it. Historic theme rationale is preserved in ADRs (`docs/adr/`).
+**GitHub milestones and project #1 own release planning.** A milestone carries a release's scope (its description states the release theme, e.g. v0.14 hardening, v0.15 web portal); project #1 carries each issue's Priority, kept in sync with its `priority::*` label. The standalone `docs/roadmap.md` was **retired 2026-07-11** and `.planning/ROADMAP.md` is archived; do not recreate either. Enduring theme and architecture rationale lives in ADRs (`docs/adr/`).
 
 `theme:<slug>` GitHub issue labels remain as a lightweight **grouping/query tag** for multi-epic clusters (e.g. `theme:social-spaces`). They carry no narrative-doc obligation.
 
 | Requirement                       | Description                                                                                                                                  |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | **MAY** add a `theme:*` label     | When 2+ epics or a 5+ issue cluster share a strategic frame and grouping them for queries is useful. Purely a tag — no roadmap section required. |
-| **SHOULD** route strategy to GSD  | Not-yet-scheduled strategic clusters live in `.planning/ROADMAP.md` `## Backlog` (`999.x`); promote with `/gsd-review-backlog`. New milestones/phases go through the GSD loop, not a roadmap doc. |
+| **SHOULD** plan releases with milestones | Assign scheduled issues to a milestone (`gh issue edit -R holomush/holomush --milestone <name>`); leave unscheduled work without one. |
+| **MUST** keep Priority in sync    | When you change an issue's `priority::*` label, set the same value in project #1's Priority field (and the reverse).                          |
 | **SHOULD** capture an ADR         | Record enduring theme/architecture framing as an ADR in `docs/adr/` — the ADR carries the durable rationale (there is no roadmap doc to carry it). |
-| **MUST NOT** use GitHub Projects   | Until team size or external visibility makes the double-entry cost worthwhile; issue labels + GSD (`.planning/`) is the project-management surface. |
 
 ## Pre-Push Review Gates
 
-GSD's own gates run inside the loop: `gsd-plan-checker` (plan quality, before execute) and `gsd-verifier` (phase-goal achievement, after execute). Two **domain-specialized** adversarial sub-agents layer on top BEFORE the PR surface — GSD has no equivalent for these. Agent/command/memory locations: [pr-guide](site/src/content/docs/contributing/how-to/pr-guide.md).
+OpenSpec's own gates run inside the loop: `openspec validate --strict` (before apply) and the change's acceptance command (after apply). Two **domain-specialized** adversarial sub-agents run BEFORE the generic code review and the PR surface. Agent/command/memory locations: [pr-guide](site/src/content/docs/contributing/how-to/pr-guide.md).
 
 | Agent             | Fires before                                                                           | Invocation                              |
 | ----------------- | -------------------------------------------------------------------------------------- | --------------------------------------- |
@@ -185,7 +188,7 @@ Detail in `.claude/rules/testing.md` (auto-loads on test files): coverage, ACE n
 
 | Always-on rule                                    | Description                                                                                                              |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **MUST** write tests before impl                  | TDD — write the test first. GSD `tdd_mode` enforces RED/GREEN/REFACTOR gates when enabled (toggle via `/gsd-settings`) |
+| **MUST** write tests before impl                  | TDD — write the test first and watch it fail (RED) before the implementation turns it GREEN |
 | **SHOULD** cover changed lines; **MUST NOT** drop project coverage | codecov measures **patch** (changed lines, target 80%) and **project** (whole-repo, `target: auto` rising-floor ratchet, 1-point regression allowance) — **not** per-package. Both POST PR statuses but are **not** required protect-main checks today (they gate merges only when added to ruleset `11923801`). Verify locally with `task test:cover` |
 | **MUST** use Ginkgo/Gomega for full-stack integration tests | Build tag `//go:build integration`; runs via `task test:int`                                               |
 | **MUST** run `task test:int` on refactors         | `task test` does NOT compile integration files — refactors of shared types break silently otherwise                      |

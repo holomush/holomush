@@ -368,7 +368,7 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	// ResolveSubject/ResolveResource would return (nil, nil) purely to carry a
 	// Schema(). attribute.ActionNamespaceSchema is the single source of truth for
 	// the key set; its provenance is
-	// .planning/phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md.
+	// .planning/milestones/v0.13-phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md.
 	//
 	// STATUS: LOAD-BEARING as of 02.2-04 (D-66). The compiler built immediately
 	// below is constructed on schemaReg.Schema(), so validateAttributes sees

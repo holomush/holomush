@@ -18,9 +18,10 @@ holomush-jfb9x).
    gaps, and the theme-context pointer.
 
 2. **Read the theme rationale** for the referenced issues' `theme:*` labels from
-   the matching ADRs (`docs/adr/`) and the GSD backlog (`.planning/ROADMAP.md`) —
-   these carry the *why* and become the narrative headlines. (`docs/roadmap.md`
-   was retired 2026-07-11; GSD owns planning.)
+   the matching ADRs (`docs/adr/`) and the release's GitHub milestone description
+   (`gh api repos/holomush/holomush/milestones --jq '.[] | {title, description}'`)
+   — these carry the *why* and become the narrative headlines. (`docs/roadmap.md`
+   was retired 2026-07-11; GitHub milestones and project #1 own release planning.)
 
 3. **Draft the narrative** to a temp file. Structure: a 2–3 sentence TLDR, then
    theme-grouped Features, then Fixes, then an "Other changes" catch-all that

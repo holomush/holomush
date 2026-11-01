@@ -13,7 +13,7 @@ import (
 )
 
 // auditedActionDeclareSet is the DECLARE set of
-// .planning/phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md
+// .planning/milestones/v0.13-phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md
 // §1, transcribed here so drift between the audit and the code is a test
 // failure rather than a boot failure.
 //

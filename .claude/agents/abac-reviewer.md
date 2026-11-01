@@ -1,7 +1,7 @@
 ---
 name: abac-reviewer
 description: |
-  MUST run alongside `/gsd-code-review` for any change touching `internal/access/`,
+  MUST run before the generic pre-push code review for any change touching `internal/access/`,
   access control policies, attribute providers, or authorization decisions.
   Adversarial reviewer specialized in HoloMUSH ABAC invariants — default-deny
   integrity, policy bypass risks, DSL safety, and audit trail completeness.

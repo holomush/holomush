@@ -49,7 +49,7 @@ the correct template is used.
 Three kinds of PR skip the typed template and the issue-first gate:
 
 - **Documentation-only** — the diff is confined to `site/**`, `docs/**`, `**/*.md`,
-  `.planning/**`, `.claude/{agents,commands,rules,agent-memory}/**`, `LICENSE`, or
+  `.planning/**`, `openspec/**/*.yaml`, `.claude/{agents,commands,rules,agent-memory}/**`, `LICENSE`, or
   `LICENSE_HEADER`.
 - **Dependency-only** — the diff is confined to dependency manifests and lockfiles, defined
   by file *shape* rather than by a fixed enumeration. **Lockfiles:** `**/go.sum`,

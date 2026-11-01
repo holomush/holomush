@@ -180,7 +180,7 @@ func mapEffect(effect string) (types.PolicyEffect, error) {
 //
 // The declared key set and its per-key provenance live in
 // attribute.ActionNamespaceSchema(), whose audit is
-// .planning/phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md.
+// .planning/milestones/v0.13-phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md.
 func (c *Compiler) validateAttributes(cb *dsl.ConditionBlock) ([]ValidationWarning, error) {
 	refs := collectAttrRefs(cb)
 	warnings := make([]ValidationWarning, 0, len(refs))

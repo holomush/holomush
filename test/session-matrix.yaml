@@ -81,7 +81,7 @@
 #   issue number). Neither is a payload key, so neither can imply a disposition.
 #
 # SOURCE MATRIX: the `holomush-izk0` table reproduced verbatim in
-# .planning/phases/09-test-quality-code-health-sweep/09-RESEARCH.md
+# .planning/milestones/v0.12-phases/09-test-quality-code-health-sweep/09-RESEARCH.md
 # ("The holomush-izk0 matrix, verbatim from the archive"). Column totals read
 # directly off that table: web-guest 9, web-char 11, telnet 12,
 # multi-session 6 = 38 populated cells, plus 10 n/a = 48 positions.

@@ -41,20 +41,20 @@ fi
 
 # Review-gate trigger: anything that implies the work is leaving the session.
 if [ "$handoff_intent" = "1" ]; then
-  reminders+=("**Pre-hand-off gate:** Before you run \`git push\` or \`gh pr create\` for this work, run \`/gsd-code-review\` over the branch's changed files if it has not already run for the current branch tip. To skip, the user must explicitly say so (e.g. \"skip review\").")
+  reminders+=("**Pre-hand-off gate:** Before you run \`git push\` or \`gh pr create\` for this work, run the pre-push code review (\`/suite-review\` or \`dev-flow:review-pr\`) over the branch's changed files if it has not already run for the current branch tip. To skip, the user must explicitly say so (e.g. \"skip review\").")
 fi
 
 # crypto-reviewer triggers: handoff intent AND (crypto-domain mention in prompt
 # OR crypto-domain paths in the diff). Path-based detection closes the gap
 # where a generic handoff like "push this branch" would otherwise miss the
 # crypto gate when the diff actually touches the crypto surface. Combines
-# with the /gsd-code-review reminder so the user gets BOTH: crypto-reviewer
-# first, then /gsd-code-review.
+# with the pre-push code review reminder so the user gets BOTH: crypto-reviewer
+# first, then the generic review.
 if [ "$handoff_intent" = "1" ] && {
      printf '%s' "$lower" | grep -qE '(internal/eventbus/crypto|internal/eventbus/codec|internal/eventbus/history/dispatcher|internal/eventbus/history/cold_postgres|internal/plugin/event_emitter|internal/eventbus/audit/projection|crypto_keys|events_audit|\baad\b|\bdek\b|authguard|rekey|encrypt|decrypt|crypto\.emits)' ||
      printf '%s' "$changed_paths" | grep -qE '(internal/eventbus/crypto/|internal/eventbus/codec/|internal/eventbus/history/dispatcher\.go|internal/eventbus/history/cold_postgres\.go|internal/plugin/event_emitter\.go|internal/eventbus/audit/projection\.go|migrations/.*crypto_keys|migrations/.*events_audit)';
    }; then
-  reminders+=("**Pre-hand-off crypto gate:** Changes touch the event-payload-cryptography surface. \`crypto-reviewer\` MUST run BEFORE \`/gsd-code-review\`. Invoke \`/holomush-dev:review-crypto\` (or \`Agent\` with \`subagent_type: crypto-reviewer\`) first; address NOT-READY findings; then run \`/gsd-code-review\`. To skip, the user must explicitly say so (e.g. \"skip crypto review\").")
+  reminders+=("**Pre-hand-off crypto gate:** Changes touch the event-payload-cryptography surface. \`crypto-reviewer\` MUST run BEFORE the generic pre-push code review. Invoke \`/holomush-dev:review-crypto\` (or \`Agent\` with \`subagent_type: crypto-reviewer\`) first; address NOT-READY findings; then run the generic review. To skip, the user must explicitly say so (e.g. \"skip crypto review\").")
 fi
 
 # abac-reviewer triggers: handoff intent AND (access-control mention in prompt
@@ -64,7 +64,7 @@ if [ "$handoff_intent" = "1" ] && {
      printf '%s' "$lower" | grep -qE '(internal/access|access[[:space:]]*control|abac|access[[:space:]]+policy|policy[[:space:]]+dsl|attribute[[:space:]]+provider|access[[:space:]]+decision)' ||
      printf '%s' "$changed_paths" | grep -qE '(internal/access/)';
    }; then
-  reminders+=("**Pre-hand-off ABAC gate:** Changes touch the access-control surface. \`abac-reviewer\` MUST run alongside \`/gsd-code-review\`. Invoke \`/holomush-dev:review-abac\` (or \`Agent\` with \`subagent_type: abac-reviewer\`) before pushing. To skip, the user must explicitly say so (e.g. \"skip ABAC review\").")
+  reminders+=("**Pre-hand-off ABAC gate:** Changes touch the access-control surface. \`abac-reviewer\` MUST run BEFORE the generic pre-push code review. Invoke \`/holomush-dev:review-abac\` (or \`Agent\` with \`subagent_type: abac-reviewer\`) before pushing. To skip, the user must explicitly say so (e.g. \"skip ABAC review\").")
 fi
 
 # int/e2e surface nudge: handoff intent AND the diff touches integration/E2E

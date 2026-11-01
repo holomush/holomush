@@ -70,6 +70,24 @@ run_helper() {
   [ "$status" -ne 0 ]
 }
 
+@test "regex matches openspec YAML at the root and nested (openspec/**/*.yaml)" {
+  run_helper
+  echo "openspec/config.yaml" | grep -E "$REGEX"
+  echo "openspec/changes/c/.openspec.yaml" | grep -E "$REGEX"
+}
+
+@test "regex does NOT match a non-docs file under openspec/" {
+  run_helper
+  run bash -c "echo openspec/changes/c/x_test.go | grep -E '$REGEX'"
+  [ "$status" -ne 0 ]
+}
+
+@test "regex does NOT match openspec YAML outside openspec/" {
+  run_helper
+  run bash -c "echo notopenspec/config.yaml | grep -E '$REGEX'"
+  [ "$status" -ne 0 ]
+}
+
 @test "regex matches literal LICENSE (no extension)" {
   run_helper
   echo "LICENSE" | grep -E "$REGEX"

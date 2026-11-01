@@ -8,8 +8,9 @@
 These are un-curated review learnings preserved verbatim-in-substance from the
 now-retired `plan-reviewer` agent's memory (its `MEMORY.md` plus per-finding
 feedback notes) — patterns of good and bad HoloMUSH plans discovered during
-adversarial plan review. They are kept for reference by GSD's `gsd-plan-checker`
-and human reviewers. This file is **not** auto-loaded; read it on demand when
+adversarial plan review. They are kept for anyone reviewing an OpenSpec
+change's `tasks.md` or an older plan. Entries that name GSD steps or
+`.planning/` paths describe the retired GSD workflow; the lesson still applies. This file is **not** auto-loaded; read it on demand when
 reviewing a plan. jj-specific mechanics from the original notes have been
 converted to native-git equivalents or dropped.
 
@@ -38,7 +39,7 @@ converted to native-git equivalents or dropped.
   (`/gsd-discuss-phase 4`, v0.13): three grades of ceremony were offered for
   authoring a `characters.description` exposure audit demanded by Phase 4
   criterion 6 — while
-  `.planning/phases/02-abac-schema-vocabulary/02-AUDIT-profile-public-read.sql`
+  `.planning/milestones/v0.13-phases/02-abac-schema-vocabulary/02-AUDIT-profile-public-read.sql`
   already covered it. Its result sets **(4)** (`:149-160`, non-empty
   descriptions) and **(5)** (`:163-174`, guest-provisioned characters) read
   `characters.description` directly, and its own header names "the two

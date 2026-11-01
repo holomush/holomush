@@ -12,7 +12,7 @@ import (
 //
 // THIS FUNCTION IS THE SINGLE SOURCE OF TRUTH FOR THE ACTION KEY SET.
 // Its provenance is the audit at
-// .planning/phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md,
+// .planning/milestones/v0.13-phases/02.2-background-job-authorization-model/02.2-ACTION-AUDIT.md,
 // which enumerates every action.* reference reachable from the tree with a
 // declare / do-not-declare verdict per key. Adding a key here without adding it
 // to that audit — or the reverse — is a drift bug, and

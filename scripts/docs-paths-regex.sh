@@ -46,6 +46,18 @@ while IFS= read -r glob; do
       prefix_re="${prefix//./\\.}"
       alt="${prefix_re}/.*"
       ;;
+    *'/**/*.'*)
+      # foo/**/*.ext -> foo/(.*/)?[^/]*\.ext  (** matches zero or more dirs)
+      prefix="${glob%%/\*\*/*}"
+      ext="${glob##*/\*.}"
+      case "$ext" in
+        *'/'* | *'*'* | '')
+          echo "ERROR: glob '$glob' has an unsupported suffix after '**/'" >&2
+          exit 1
+          ;;
+      esac
+      alt="${prefix//./\\.}/(.*/)?[^/]*\\.${ext//./\\.}"
+      ;;
     *'**'*)
       echo "ERROR: glob '$glob' has unsupported '**' position" >&2
       exit 1

@@ -111,7 +111,8 @@ stacktrace-at-WARN noise" is a *better* triage than a manufactured P1.
   tagged (`plugin`, `web`, `observability`, `handler`, `crypto`, …). A
   `theme:*` label is a lightweight grouping tag — attach one only if an
   existing theme genuinely groups the work; don't invent a new theme for a
-  single issue. (Strategic planning lives in GSD, not a roadmap doc.)
+  single issue. (Release planning lives in GitHub milestones and project #1,
+  not a roadmap doc.)
 
 ### 6. Scope it — class, not site; leave decisions open
 

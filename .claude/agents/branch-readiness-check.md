@@ -52,7 +52,7 @@ You are the HoloMUSH branch-readiness checker. Your one job is to inspect the cu
 - For `.claude/` or doc-only changes, the docs lane runs automatically AND `task lint:docs-symmetry` MUST pass when `CLAUDE.md` or `AGENTS.md` were touched.
 
 ### 5. Code review
-- Has `/gsd-code-review` run on this branch's changed files? If not, NOT READY (CLAUDE.md mandates pre-push code review).
+- Has a pre-push code review (`/suite-review` or `dev-flow:review-pr`) run on this branch's changed files? If not, NOT READY (CLAUDE.md mandates pre-push code review).
 - For changes touching `internal/access/` → `abac-reviewer` must also have run.
 - For changes touching `internal/eventbus/crypto/`, `internal/eventbus/codec/`, `internal/eventbus/history/dispatcher.go`, `internal/eventbus/history/cold_postgres.go`, `internal/plugin/event_emitter.go::Emit`, `internal/eventbus/audit/projection.go`, plugin manifest `crypto.emits`, or migrations on `crypto_keys` / `events_audit` → `crypto-reviewer` must also have run.
 

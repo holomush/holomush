@@ -7,6 +7,7 @@ on:
       - site/**
       - docs/**
       - .planning/**
+      - openspec/**/*.yaml
       - "**/*.md"
       - .claude/agents/**
       - .claude/commands/**
@@ -20,6 +21,7 @@ on:
       - site/**
       - docs/**
       - .planning/**
+      - openspec/**/*.yaml
       - "**/*.md"
       - .claude/agents/**
       - .claude/commands/**
