@@ -9,7 +9,7 @@
 # (Postgres logical dump), supercronic (container-native scheduler,
 # runs without root).
 
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
 # kopia is distributed as a single static binary from their GitHub releases;
 # pull it in the build step. Pin the version here and bump deliberately.
