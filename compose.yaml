@@ -146,7 +146,7 @@ services:
         condition: service_healthy
 
   grafana:
-    image: grafana/grafana:latest@sha256:ab5cb380e3ff3172d6c8bd2e7cfd31cce977d2881b260e1f5bc089bf0b759b43
+    image: grafana/grafana:latest@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205
     profiles: [observability]
     ports:
       - "3001:3000"
