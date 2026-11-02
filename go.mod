@@ -63,7 +63,7 @@ require (
 // crypto.policy_set chain hashing: SHA-256 over RFC 8785 JCS-canonicalized
 // JSON. Pin pseudo-version is load-bearing — switching libraries is a
 // chain-breaking master-spec amendment per INV-CRYPTO-80.
-require github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
+require github.com/cyberphone/json-canonicalization v0.0.0-20261011152517-32a48195b9b2
 
 require (
 	github.com/getsentry/sentry-go v0.50.0
