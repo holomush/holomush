@@ -162,7 +162,7 @@ services:
       - jaeger
 
   dozzle:
-    image: amir20/dozzle:latest@sha256:01f9018ffdaa0ec523f9a91dea3eff65b25cdb5f0566ac6d5a2cb4cf591e35e9
+    image: amir20/dozzle:latest@sha256:d23d23ce02c8cc96416dfbad4a7de225d01fdc03ad310203d64d580034dd120d
     profiles: [observability]
     ports:
       - "8888:8080"
