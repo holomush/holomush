@@ -45,7 +45,7 @@ plugins:
     out: pkg/proto
     opt: paths=source_relative
   # renovate: datasource=go depName=connectrpc.com/connect
-  - remote: buf.build/connectrpc/go:v1.20.0
+  - remote: buf.build/connectrpc/go:v1.21.1
     out: pkg/proto
     opt: paths=source_relative
 inputs:
